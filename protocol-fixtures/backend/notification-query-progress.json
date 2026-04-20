@@ -1,0 +1,10 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "notification",
+  "method": "query.progress",
+  "params": {
+    "queryExecutionId": "exec-fixture-1",
+    "percent": 40,
+    "message": "Running"
+  }
+}

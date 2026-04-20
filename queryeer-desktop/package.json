@@ -1,0 +1,77 @@
+{
+  "name": "queryeer-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Incremental Electron shell for Queryeer migration",
+  "main": "out/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:protocol-fixtures": "node scripts/backend-protocol-fixtures-check.mjs",
+    "dev:plugin:stage": "node scripts/dev-plugin-stage.mjs",
+    "dev:plugin:watch": "node scripts/dev-plugin-watch.mjs",
+    "dev:with-plugins": "node scripts/dev-with-plugins.mjs",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "lint": "eslint . --ext .ts,.tsx",
+    "dist": "npm run build && electron-builder",
+    "dist:dir": "npm run build && electron-builder --dir"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.24.0",
+    "@types/node": "^22.15.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^3.2.4",
+    "electron": "^41.2.1",
+    "electron-builder": "^26.8.1",
+    "electron-vite": "^3.1.0",
+    "eslint": "^9.24.0",
+    "globals": "^16.0.0",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.30.1",
+    "vite": "^6.3.3",
+    "vitest": "^3.2.4"
+  },
+  "build": {
+    "appId": "com.queryeer.electron",
+    "productName": "Queryeer",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "resources/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ]
+    }
+  }
+}

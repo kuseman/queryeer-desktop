@@ -1,0 +1,10 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "response",
+  "id": "req-fixture-connection-upsert-1",
+  "result": {
+    "connectionId": "conn-fixture-1",
+    "version": 1,
+    "credentialStatus": "missing"
+  }
+}

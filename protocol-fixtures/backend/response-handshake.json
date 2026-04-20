@@ -1,0 +1,21 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "response",
+  "id": "req-fixture-handshake-1",
+  "result": {
+    "server": {
+      "name": "queryeer-java-backend",
+      "version": "0.1.0"
+    },
+    "selectedProtocolVersion": "1.0.0",
+    "supportedCapabilities": [
+      "health.ping",
+      "query.execute",
+      "query.cancel",
+      "query.progress",
+      "query.resultChunk",
+      "query.completed",
+      "query.failed"
+    ]
+  }
+}

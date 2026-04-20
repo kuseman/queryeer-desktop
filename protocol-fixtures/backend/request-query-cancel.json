@@ -1,0 +1,10 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "request",
+  "id": "req-fixture-query-cancel-1",
+  "method": "query.cancel",
+  "params": {
+    "queryExecutionId": "exec-fixture-1",
+    "reason": "user requested cancel"
+  }
+}

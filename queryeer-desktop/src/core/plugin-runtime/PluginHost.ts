@@ -1,0 +1,113 @@
+import type { Plugin, PluginContext } from "../../contracts/plugin/Plugin";
+import type { PluginManifestFile } from "../../contracts/plugin/PluginManifestFile";
+import { ExtensionRegistry } from "./ExtensionRegistry";
+import type { PluginDiagnostics } from "./PluginDiagnostics";
+import { PluginRegistry } from "./PluginRegistry";
+import {
+  orderPluginsByDependencies,
+  validateDependencies,
+  validateRequiredCapabilities
+} from "./PluginValidation";
+
+export type PluginHostState = {
+  startedAt: string;
+  loadedPluginIds: string[];
+};
+
+export class PluginHost {
+  private readonly pluginRegistry = new PluginRegistry();
+  private readonly extensionRegistry = new ExtensionRegistry();
+  private readonly activePlugins: Plugin[] = [];
+  private startedAt: Date | null = null;
+  private diagnostics: PluginDiagnostics = {
+    discoveredManifestIds: [],
+    activationOrder: [],
+    providedCapabilities: [],
+    pluginManifests: []
+  };
+
+  public register(plugin: Plugin): void {
+    this.pluginRegistry.register(plugin);
+  }
+
+  public async start(discoveredManifests: PluginManifestFile[] = []): Promise<void> {
+    const allPlugins = this.pluginRegistry.all();
+    validateDependencies(allPlugins);
+    validateRequiredCapabilities(allPlugins);
+    const orderedPlugins = orderPluginsByDependencies(allPlugins);
+
+    const providedCapabilities = new Set<string>();
+    for (const plugin of allPlugins) {
+      for (const capability of plugin.manifest.providesCapabilities ?? []) {
+        providedCapabilities.add(capability);
+      }
+    }
+
+    this.diagnostics = {
+      discoveredManifestIds: discoveredManifests.map((manifest) => manifest.id),
+      activationOrder: orderedPlugins.map((plugin) => plugin.manifest.id),
+      providedCapabilities: [...providedCapabilities].sort(),
+      pluginManifests: discoveredManifests.map((manifest) => ({
+        id: manifest.id,
+        modulePath: manifest.modulePath,
+        dependencies: manifest.dependencies ?? [],
+        providesCapabilities: manifest.providesCapabilities ?? [],
+        requiredCapabilities: manifest.requiredCapabilities ?? []
+      }))
+    };
+
+    const context: PluginContext = {
+      commands: this.extensionRegistry.createCommandRegistry(),
+      panels: this.extensionRegistry.createPanelRegistry(),
+      filesystems: this.extensionRegistry.createFileSystemRegistry()
+    };
+
+    for (const plugin of orderedPlugins) {
+      await plugin.activate(context);
+      this.activePlugins.push(plugin);
+    }
+
+    this.startedAt = new Date();
+  }
+
+  public setExternalLoadErrors(
+    errors: {
+      pluginId: string;
+      modulePath: string;
+      message: string;
+    }[]
+  ): void {
+    this.diagnostics = {
+      ...this.diagnostics,
+      externalLoadErrors: errors
+    };
+  }
+
+  public async stop(): Promise<void> {
+    for (const plugin of [...this.activePlugins].reverse()) {
+      if (plugin.deactivate) {
+        await plugin.deactivate();
+      }
+    }
+    this.activePlugins.length = 0;
+  }
+
+  public getState(): PluginHostState {
+    return {
+      startedAt: this.startedAt?.toISOString() ?? "not-started",
+      loadedPluginIds: this.activePlugins.map((plugin) => plugin.manifest.id)
+    };
+  }
+
+  public getExtensions() {
+    return this.extensionRegistry.snapshot();
+  }
+
+  public async executeCommand(commandId: string) {
+    return this.extensionRegistry.executeCommand(commandId);
+  }
+
+  public getDiagnostics(): PluginDiagnostics {
+    return this.diagnostics;
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "request",
+  "id": "req-fixture-handshake-1",
+  "method": "backend.handshake",
+  "params": {
+    "client": {
+      "name": "queryeer-desktop",
+      "version": "0.1.0"
+    },
+    "supportedProtocolMajors": [1],
+    "requestedCapabilities": [
+      "health.ping",
+      "query.execute",
+      "query.cancel",
+      "query.progress",
+      "query.resultChunk",
+      "query.completed",
+      "query.failed"
+    ]
+  }
+}

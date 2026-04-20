@@ -1,0 +1,286 @@
+# Queryeer Desktop Session Handoff
+
+## Current snapshot
+
+- Desktop shell is booting and running under `queryeer-desktop`.
+- Plugin runtime baseline exists with:
+  - manifest-based discovery
+  - plugin dependency/capability validation
+  - activation ordering
+  - runtime diagnostics UI
+- Backend gateway scaffold exists in desktop main process (`mock-stdio` mode):
+  - handshake + ping loop
+  - preload API exposes backend status
+  - renderer diagnostics panel shows backend state/capabilities/logs
+- `stdio-process` mode now includes a backend log panel feed sourced from transport + gateway diagnostics for startup triage.
+- Java backend standalone reactor exists under `queryeer-backend` with initial module skeleton.
+- Desktop external frontend discovery now supports both folder and `.zip` plugin sources from `QUERYEER_PLUGINS_PATH`.
+- Desktop plugin merge now hardens duplicate plugin ids by keeping built-in/internal manifests first and surfacing external duplicate ids as load diagnostics.
+- Backend runner discovery now fails fast on duplicate plugin ids across discovered sources.
+- Backend runner startup logs now include correlation metadata (`runId`, optional `pluginId`) and redaction for simple secret-like key/value fragments.
+- Desktop zip handling is now fully cross-platform and in-process (`jszip`) for runtime extraction and tests (no OS archive shell dependency).
+- Core boundary decision documented: core remains host/shell/platform; query/engine/output functionality is external-plugin owned.
+- Core shell no longer owns direct query probe actions; dev query probe moved into a dedicated feature plugin.
+- Development workflow now includes scripted external plugin staging/watch/run commands for dual-target dev probe package.
+- Desktop renderer external module loading now supports dev-server-safe `/@fs` resolution + Vite fs allow-list for repo-level `plugins` directory.
+- `dev.query-probe` capability dependency is no longer hard-required at startup (prevents capability validation boot failure in current plugin graph).
+- GitHub CI workflow now uses two broad validation jobs: full desktop validation and full backend reactor `clean verify`.
+
+## What changed in this session
+
+- Hardened plugin discovery/wiring rules end-to-end:
+  - backend runner now rejects duplicate plugin ids during manifest-first discovery (`PluginDiscoveryService`)
+  - desktop discovery merge now ignores conflicting external plugin ids and records a load error for diagnostics (`src/plugins/discovery.ts`)
+- Added zip-based external frontend plugin loading in desktop main process:
+  - `discoverExternalFrontendPlugins()` now scans folder + zip sources
+  - zip plugins are extracted to OS temp storage and loaded via validated `plugin.json` + `frontend.entryModule`
+  - path safety guard added to prevent module path escape outside extracted/folder plugin root
+  - added tests in `src/main/plugins/frontend-plugin-discovery.test.ts` for folder, zip, and duplicate-id behavior
+- Added backend observability/test coverage improvements:
+  - `RequestDispatcher` unknown-method errors now include structured `details` (`requestId`, `method`)
+  - new `RequestDispatcherTest` covers dispatch routing + unknown-method mapping
+  - backend-runner logs now include correlated prefixes and simple secret redaction
+  - added runner test coverage for duplicate plugin id detection across plugin sources
+- Removed desktop OS-specific archive dependencies:
+  - runtime zip plugin extraction now uses in-process `jszip` extraction instead of `Expand-Archive` / `unzip`
+  - zip fixture generation in plugin discovery tests now uses `jszip` instead of shell commands
+  - this eliminates win32-specific test/runtime behavior for frontend plugin package handling
+- Desktop validation now runs successfully in this environment:
+  - `npm run typecheck` pass
+  - `npm run lint` pass
+  - `npm run test` pass
+  - `npm run build` pass
+- Added boundary guidance artifact:
+  - `queryeer-desktop/documentation/CORE_BOUNDARY.md`
+  - defines internal core responsibilities, recommended core plugin set, external-plugin-only domains, and enforcement checklist
+- Implemented boundary decision in code by extracting query probe behavior from shell UI:
+  - removed bundled/internal `dev.query-probe` plugin from desktop manifests/module loaders
+  - added fully external dual-target plugin package scaffold under `plugins/dev-query-probe`
+  - frontend probe now lives in external module (`plugins/dev-query-probe/frontend/module.mjs`)
+  - backend companion plugin now exists as standalone reactor module (`backend-plugin-devprobe`)
+  - `ShellApp` backend diagnostics section now remains generic and no longer directly triggers query execute/cancel
+- Added streamlined development workflow scripts for external dev probe package:
+  - `npm run dev:plugin:stage` builds/stages backend devprobe jar(s) into `plugins/dev-query-probe/lib`
+  - `npm run dev:plugin:watch` watches backend module + plugin package files and re-stages automatically
+  - `npm run dev:with-plugins` launches desktop with `QUERYEER_PLUGINS_PATH=<repo>/plugins`
+  - documented in `plugins/dev-query-probe/README.md`
+- Fixed external plugin dev loading issues for desktop renderer:
+  - external module URL mapping now uses Vite `/@fs` path in dev-server mode
+  - `electron.vite.config.ts` now allows filesystem access to repo-level `plugins` folder
+- Updated backend runner manifest model to accept `description` from plugin manifests, aligning with schema and external package manifests.
+- Updated `.github/workflows/queryeer-desktop-ci.yml` job structure:
+  - desktop job remains full desktop checks (`test`, protocol fixtures, `typecheck`, `lint`, `build`)
+  - backend job now runs full backend reactor verification (`./mvnw -f queryeer-backend/pom.xml clean verify`)
+
+- Renamed desktop project folder from `electron-shell` to `queryeer-desktop` and updated naming references.
+- Added Java backend standalone Maven reactor scaffold under `queryeer-backend`:
+  - `backend-api`
+  - `backend-contract`
+  - `backend-core`
+  - `backend-transport-stdio`
+  - `backend-runner`
+  - `backend-plugin-payloadbuilder`
+  - `backend-plugin-jdbc`
+- Added root `AGENTS.md` with mandatory session update instructions.
+- Added backend quality gates in `queryeer-backend`:
+  - Spotless Maven plugin configured and applied
+  - Checkstyle Maven plugin configured with `queryeer-backend/checkstyle.xml`
+  - `queryeer-backend` verify now enforces formatting + style at `validate` phase
+- Implemented first end-to-end backend plugin communication flow in desktop mock path:
+  - gateway now supports IPC methods `backend:execute-query` and `backend:cancel-query`
+  - mock backend now handles `query.execute` / `query.cancel`
+  - progress/chunk/completed/failed notifications update execution state in gateway
+  - renderer diagnostics can run/cancel mock queries and display recent execution states
+- Implemented Java stdio transport scaffold for first protocol set:
+  - NDJSON read/write loop in `backend-transport-stdio`
+  - method handlers for `backend.handshake`, `health.ping`, `query.execute`, `query.cancel`
+  - mocked query notifications (`progress`, `resultChunk`, `completed`, `failed`)
+  - backend runner now launches transport on `System.in` / `System.out`
+- Refactored Java transport into manual DI/wiring composition:
+  - split transport responsibilities into `EnvelopeCodec`, `ResponseWriter`, `NotificationPublisher`,
+    `RequestDispatcher`, `MockQueryExecutionService`, `StdioTransportServer`
+  - moved mock query execution behavior out of transport server into dedicated service
+  - runner now acts as composition root wiring transport components
+  - protocol DTO packages reorganized by concern (`handshake`, `health`, `query`)
+- Added desktop backend transport abstraction with pluggable runtime modes:
+  - `MockBackendTransport` (existing in-memory behavior)
+  - `StdioProcessBackendTransport` (spawns `backend-runner` via Maven exec)
+  - gateway selects transport via env var `QUERYEER_BACKEND_STDIO=1`
+- Added backend observability slice in desktop gateway/renderer:
+  - `BackendGatewayStatus` now carries `backendLogs` ring buffer entries
+  - transport now emits structured diagnostics (`debug|info|warn|error` + source)
+  - gateway records lifecycle/request/timeout events to an in-memory capped log buffer
+  - renderer diagnostics view now renders a backend log panel (timestamp/level/source/message)
+- Refactored backend gateway internals into focused main-process modules to reduce complexity:
+  - `BackendStatusStore`
+  - `BackendExecutionStore`
+  - `BackendPendingRequestMap`
+  - `BackendLogBuffer`
+  - `BackendGateway` now orchestrates these components rather than owning all state directly
+- Fixed Java/TS wire compatibility issue in backend envelopes:
+  - Java `EnvelopeType` now serializes/deserializes lowercase wire values (`request|response|notification`)
+  - this unblocks desktop handshake request decoding in Java stdio transport
+  - added `jackson-annotations` dependency to `backend-contract` for enum JSON mapping annotations
+- Added first cross-runtime protocol fixture harness (handshake/ping):
+  - shared fixtures introduced under `protocol-fixtures/backend/`
+  - desktop script `npm run test:protocol-fixtures` validates fixture envelope shape + ids + methods
+  - backend `backend-contract` JUnit test validates fixture decode + DTO mapping compatibility
+  - this creates an early guardrail against TS/Java protocol drift
+- Centralized backend test/dependency version management in root reactor POM:
+  - moved Jackson/JUnit/Surefire version ownership to `queryeer-backend/pom.xml`
+  - `backend-contract`, `backend-transport-stdio`, and `backend-runner` now inherit Jackson versioning from root `dependencyManagement`
+- Added proper unit-test harness to desktop project:
+  - introduced Vitest config (`vitest.config.ts`) with separate `main` (node) and `renderer` (jsdom) projects
+  - added scripts: `npm run test`, `npm run test:watch`, `npm run test:coverage`
+  - added initial unit tests for backend main-process helper modules:
+    - `BackendLogBuffer`
+    - `BackendStatusStore`
+    - `BackendExecutionStore`
+    - `BackendPendingRequestMap`
+  - fixture check script remains available as `npm run test:protocol-fixtures`
+- Added first gateway orchestration unit tests in desktop:
+  - `backend-gateway.ts` now supports injectable transport factory for testability
+  - new tests validate startup handshake/ping transition to `healthy`
+  - new tests validate `query.execute` request dispatch and execution status tracking
+- Expanded shared protocol fixture coverage and cross-runtime checks:
+  - added fixtures for `query.execute` and `query.cancel` request/response pairs
+  - added fixtures for `query.progress`, `query.resultChunk`, `query.completed`, `query.failed` notifications
+  - extended desktop fixture script to validate execute/cancel and notification fixtures
+  - extended backend `ProtocolFixtureCompatibilityTest` to decode/validate execute/cancel and all query notifications
+- Added gateway negative-path tests in desktop:
+  - handshake timeout (`backend.handshake` no response)
+  - `query.execute` send failure path
+  - `query.execute` timeout path
+  - unknown response id warning log path
+  - ping loop failure path (error response -> unavailable)
+- Added CI workflow for migration guardrails:
+  - `.github/workflows/queryeer-migration-ci.yml`
+  - runs desktop unit tests + protocol fixture script + typecheck + lint + build
+  - runs backend `backend-contract` fixture compatibility tests
+- Added first security hardening for diagnostics logging:
+  - introduced `backend-log-redaction.ts` and integrated it into gateway/transport log paths
+  - sensitive tokens/credentials are now masked before writing to backend log buffer/status panel
+  - added unit tests for redaction behavior (`backend-log-redaction.test.ts`)
+  - protocol document updated with explicit sensitive-field redaction and no-raw-secret guidance
+- Added first credential-handle contract scaffolding across TS + Java:
+  - new request methods: `connection.upsert`, `credential.store`
+  - TS backend contracts now define params/results for connection metadata upsert and credential store
+  - Java backend-contract now includes corresponding DTOs/enums under `connection` and `credential` packages
+  - Java stdio dispatcher now mocks handling for `connection.upsert` and `credential.store`
+  - handshake capabilities now include new methods
+  - shared protocol fixtures and dual-side fixture checks now include connection/credential method pairs
+  - protocol documentation updated with explicit method specs and secret-handling constraints
+- Refactored capability/request dispatch ownership to reduce central orchestration coupling:
+  - desktop now has centralized capability constants in `src/contracts/backend/Capabilities.ts`
+  - gateway handshake capability request list now references shared constants (not inline literal list)
+  - Java stdio request handling moved from one large switch implementation to per-method handler classes:
+    - `HandshakeRequestHandler`
+    - `HealthPingRequestHandler`
+    - `QueryExecuteRequestHandler`
+    - `QueryCancelRequestHandler`
+    - `ConnectionUpsertRequestHandler`
+    - `CredentialStoreRequestHandler`
+  - `RequestDispatcher` now routes using handler registry (`RequestHandler` interface + method map)
+  - backend handshake supported capabilities centralized in `BackendCapabilities`
+- Added backend platform skeleton v1 in Java backend core:
+  - introduced default platform services and plugin context composition in `backend-core`
+    - `DefaultLoggerService`
+    - `InMemoryConfigService`
+    - `NoopSecretService`
+    - `InMemoryEventBus`
+    - `InlineSchedulerService`
+    - `InMemoryQueryEngineRegistry`
+    - `InMemoryMetadataRegistry`
+    - `BackendPlatformServices` + `DefaultBackendPluginContext`
+  - `PluginRuntime` now supports `activateAll` / `deactivateAll` lifecycle orchestration
+  - `backend-runner` now wires platform services and activates/deactivates plugins via runtime
+  - added architecture-focused tests for runtime activation/deactivation behavior in
+    `backend-core/src/test/java/com/queryeer/backend/core/PluginRuntimeArchitectureTest.java`
+- Expanded backend-core plugin governance layer with validation + status model:
+  - added dependency validation and topological activation planning (`PluginValidation.planActivation`)
+  - added required-capability validation against provided-capability set
+  - added cycle detection for dependency graph
+  - added runtime status model (`PluginRuntimeState`, `PluginRuntimeStatus`) exposed from `PluginRuntime.statuses()`
+  - runtime now marks plugins as `LOADED`, `SKIPPED`, `ACTIVATED`, `FAILED`, `DEACTIVATED` with reasons
+  - activation failures are captured as `FAILED` and runtime continues activating remaining planned plugins
+  - added architecture tests for missing dependency, missing capability, cycle detection, failure status propagation,
+    and dependency-ordered activation
+- Added backend runtime diagnostics endpoint and startup summary logging:
+  - new protocol method `backend.runtimeStatus` added to TS/Java contracts
+  - runner now logs startup summary counts (`activated/skipped/failed`) and per-plugin runtime state lines
+  - new stdio request handler `RuntimeStatusRequestHandler` exposes runtime status snapshot
+  - runtime status payload includes `startedAt`, `pluginStatuses`, `activatedPluginIds`, and optional `providedCapabilities`
+  - handshake capability declarations now include `backend.runtimeStatus`
+  - desktop gateway now fetches runtime status after startup and on ping refresh when capability is advertised
+  - renderer diagnostics panel now shows runtime plugin status table
+  - shared fixtures + dual-side fixture checks now include `backend.runtimeStatus`
+- Implemented plugin discovery step 1+2 (manifest-first + folder/zip source discovery):
+  - backend-runner now supports manifest-first discovery from plugin sources (`plugin.json`)
+  - folder and `.zip` sources under plugin path are discovered via filesystem scan
+  - each discovered plugin is loaded with an isolated `URLClassLoader`
+  - manifest metadata now drives runtime descriptor contract (`id`, `version`, deps, capabilities)
+  - entrypoint class is instantiated reflectively from manifest `entrypointClass`
+  - added discovery component split in runner package:
+    - `PluginSourceExplorer`
+    - `PluginManifestLoader`
+    - `PluginClasspathFactory`
+    - `PluginFactory`
+    - `PluginDiscoveryService`
+    - `PluginManifestBackedPlugin`
+  - plugin path can be provided via `-Dqueryeer.plugins.path=...` or `QUERYEER_PLUGINS_PATH`
+  - fallback to built-in plugin registration remains when no external plugin path is provided
+  - startup diagnostics now include discovered plugin source (`builtin` or path) and isolation flag
+  - added runner tests for manifest discovery behavior (`PluginManifestDiscoveryTest`)
+- Added plugin manifest v1 schema + target resolver contracts for next packaging evolution:
+  - new shared schema file: `plugin-schema/plugin.json.schema.v1.json`
+  - runner manifest now supports optional `backend` and `frontend` sections under one plugin identity
+  - added manifest validation enforcing:
+    - schemaVersion=1
+    - required base fields (`id`, `name`, `version`)
+    - at least one target (`backend` or `frontend`)
+    - required target entrypoints (`backend.entrypointClass`, `frontend.entryModule`)
+  - introduced target-specific resolver interfaces in runner:
+    - `BackendPluginResolver`
+    - `FrontendPluginResolver`
+  - added manifest-based resolver implementations and `PluginDiscoveryService.DiscoveryResult`
+    separating backend vs frontend discoveries
+  - current runtime wires backend-discovered plugins and logs frontend discoveries for future desktop wiring
+- Wired desktop frontend plugin discovery path for external plugin packages:
+  - main process now exposes `plugins:get-frontend-targets` IPC and discovers external frontend targets from plugin folders
+    under `QUERYEER_PLUGINS_PATH` (manifest-first `plugin.json`, schemaVersion=1)
+  - preload now exposes `getExternalFrontendPlugins()`
+  - renderer bootstrap now merges external frontend manifests into plugin discovery input
+  - plugin discovery now supports dynamic external module loading via manifest module path (`frontend.entryModule`)
+    while preserving internal static module loaders
+  - external manifest metadata is normalized into existing `PluginManifestFile` shape for runtime diagnostics/lifecycle
+
+## Next 3 tasks
+
+1. Extend Java transport correlation coverage from runner logs to request-level transport lifecycle logs (dispatcher/server paths).
+2. Add runtime guardrails/tests to detect manifest/runtime metadata drift (manifest vs descriptor overlap) while consolidation is ongoing.
+3. Document external plugin package layout rules (manifest location, frontend entryModule path conventions, duplicate-id precedence).
+
+## Known gaps / temporary scaffolds
+
+- Desktop defaults to mock transport unless `QUERYEER_BACKEND_STDIO=1` is set.
+- Java stdio transport protocol handling is real, but execution internals and credential persistence remain mocked/stubbed.
+- Backend-core validation currently enforces only unique plugin id; dependency/capability/status validations are pending.
+- Backend-core now validates unique ids/dependencies/required capabilities and tracks runtime status, but plugin status snapshots are not yet surfaced over transport.
+- Runtime status is now surfaced over transport and renderer diagnostics; correlation-aware logging and redaction on Java side are still pending.
+- External plugin discovery currently focuses on manifest-first loading and isolated classloaders; signature validation and hot-reload are intentionally deferred.
+- Frontend target discovery is now represented in runner contracts but Java-side frontend targets are still not consumed directly by desktop runtime.
+- Shared TS/Java fixtures and CI checks are in place for handshake/ping/query/connection+credential contract shapes.
+- Java-side diagnostics redaction and request-correlation logging are still pending (desktop-side redaction is implemented).
+- Renderer-side unit tests now include bootstrap and external plugin diagnostics wiring, but broader UI interaction coverage is still minimal.
+- Migration CI coexists with legacy workflows; overlap consolidation is still pending.
+- `PluginDescriptor` metadata still overlaps with manifest metadata in backend API/runtime path; ownership consolidation is documented but not yet fully implemented.
+
+## Validation commands
+
+- Desktop (from `queryeer-desktop`):
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm run build`
+- Backend (from repo root):
+  - `./mvnw -f queryeer-backend/pom.xml -DskipTests=true clean verify`
+  - `./mvnw -f queryeer-backend/pom.xml spotless:apply` (when formatting is needed)

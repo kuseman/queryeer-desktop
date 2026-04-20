@@ -1,0 +1,26 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "notification",
+  "method": "query.resultChunk",
+  "params": {
+    "queryExecutionId": "exec-fixture-1",
+    "chunkIndex": 0,
+    "schema": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer"
+        }
+      ]
+    },
+    "rows": [
+      [
+        1
+      ],
+      [
+        2
+      ]
+    ],
+    "isLastChunk": false
+  }
+}

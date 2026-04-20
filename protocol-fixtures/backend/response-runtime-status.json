@@ -1,0 +1,27 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "response",
+  "id": "req-fixture-runtime-status-1",
+  "result": {
+    "startedAt": "2026-01-01T00:00:00.000Z",
+    "pluginStatuses": [
+      {
+        "pluginId": "query.payloadbuilder",
+        "state": "activated",
+        "reason": "Activated"
+      },
+      {
+        "pluginId": "query.jdbc",
+        "state": "activated",
+        "reason": "Activated"
+      }
+    ],
+    "activatedPluginIds": [
+      "query.payloadbuilder",
+      "query.jdbc"
+    ],
+    "providedCapabilities": [
+      "query.execute"
+    ]
+  }
+}

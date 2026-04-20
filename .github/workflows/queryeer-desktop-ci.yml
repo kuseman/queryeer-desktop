@@ -1,0 +1,63 @@
+name: Queryeer Desktop CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "**"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  desktop-validation:
+    name: Desktop Tests and Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: queryeer-desktop
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: queryeer-desktop/package-lock.json
+
+      - name: Install desktop dependencies
+        run: npm ci
+
+      - name: Run desktop unit tests
+        run: npm run test
+
+      - name: Run desktop protocol fixture checks
+        run: npm run test:protocol-fixtures
+
+      - name: Run desktop typecheck
+        run: npm run typecheck
+
+      - name: Run desktop lint
+        run: npm run lint
+
+      - name: Run desktop build
+        run: npm run build
+
+  backend-validation:
+    name: Backend Verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "zulu"
+          cache: maven
+
+      - name: Run backend clean verify
+        run: ./mvnw -f queryeer-backend/pom.xml clean verify

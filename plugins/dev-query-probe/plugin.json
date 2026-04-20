@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "dev.query-probe",
+  "name": "Dev Query Probe",
+  "version": "0.1.0",
+  "description": "External developer probe plugin with frontend panel and backend companion",
+  "dependencies": [],
+  "providesCapabilities": [
+    "dev.query.probe"
+  ],
+  "requiredCapabilities": [],
+  "backend": {
+    "entrypointClass": "com.queryeer.backend.plugin.devprobe.DevProbeBackendPlugin",
+    "classpath": {
+      "root": "lib",
+      "include": [
+        "*.jar"
+      ]
+    },
+    "minJavaVersion": "17"
+  },
+  "frontend": {
+    "entryModule": "frontend/module.mjs",
+    "moduleFormat": "esm",
+    "apiVersion": "0.1"
+  },
+  "packaging": {
+    "layout": {
+      "jarsDir": "lib",
+      "typescriptDir": "frontend"
+    }
+  }
+}

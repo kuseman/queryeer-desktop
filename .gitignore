@@ -1,0 +1,57 @@
+.claude
+
+# Node/Electron artifacts (desktop)
+**/node_modules/
+queryeer-desktop/out/
+queryeer-desktop/release/
+queryeer-desktop/dist/
+queryeer-desktop/coverage/
+
+# Dev plugin staged backend jars (external dual-target package)
+plugins/dev-query-probe/lib/
+
+# Logs and local env files
+*.log
+*.local
+*.env
+*.env.*
+
+# Maven build outputs
+**/target/
+**/target/**
+*/bin/**
+**/META-INF/
+!.mvn/wrapper/maven-wrapper.jar
+
+### STS ###
+.apt_generated
+.classpath
+.checkstyle
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+.checkstyle
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/build/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+.DS_Store
+
+### Legacy
+queryeer-api/
+queryeer-catalog/
+queryeer-ide/
+queryeer-dist/

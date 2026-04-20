@@ -1,0 +1,9 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "request",
+  "id": "req-fixture-runtime-status-1",
+  "method": "backend.runtimeStatus",
+  "params": {
+    "includeCapabilities": true
+  }
+}

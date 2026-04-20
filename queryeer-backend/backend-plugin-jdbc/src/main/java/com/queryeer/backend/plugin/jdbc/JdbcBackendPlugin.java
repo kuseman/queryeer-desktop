@@ -1,0 +1,33 @@
+package com.queryeer.backend.plugin.jdbc;
+
+import java.util.List;
+
+import com.queryeer.backend.api.BackendPlugin;
+import com.queryeer.backend.api.BackendPluginContext;
+import com.queryeer.backend.api.PluginDescriptor;
+import com.queryeer.backend.api.QueryEngineProvider;
+
+public final class JdbcBackendPlugin implements BackendPlugin
+{
+    @Override
+    public PluginDescriptor descriptor()
+    {
+        return new PluginDescriptor("query.jdbc", "JDBC Query Engine", "0.1.0", List.of(), List.of("query.execute"), List.of());
+    }
+
+    @Override
+    public void activate(BackendPluginContext context)
+    {
+        context.queryEngines()
+                .register(new QueryEngineProvider()
+                {
+                    @Override
+                    public String engineId()
+                    {
+                        return "jdbc";
+                    }
+                });
+        context.logger()
+                .info("Activated jdbc backend plugin");
+    }
+}

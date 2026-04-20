@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "types": [
+      "node",
+      "electron",
+      "vitest/globals"
+    ]
+  },
+  "include": [
+    "electron.vite.config.ts",
+    "src/contracts/**/*.ts",
+    "src/main/**/*.ts",
+    "src/preload/**/*.ts"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "request",
+  "id": "req-fixture-query-execute-1",
+  "method": "query.execute",
+  "params": {
+    "queryExecutionId": "exec-fixture-1",
+    "engineId": "payloadbuilder",
+    "connectionId": "connection-1",
+    "text": "select 1",
+    "parameters": [1, "two"],
+    "options": {
+      "maxRows": 100,
+      "timeoutMs": 15000
+    }
+  }
+}

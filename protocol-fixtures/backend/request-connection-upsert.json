@@ -1,0 +1,17 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "request",
+  "id": "req-fixture-connection-upsert-1",
+  "method": "connection.upsert",
+  "params": {
+    "engineId": "jdbc",
+    "name": "Local Postgres",
+    "host": "localhost",
+    "port": 5432,
+    "database": "appdb",
+    "username": "app_user",
+    "options": {
+      "ssl": false
+    }
+  }
+}

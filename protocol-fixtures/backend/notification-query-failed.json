@@ -1,0 +1,15 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "notification",
+  "method": "query.failed",
+  "params": {
+    "queryExecutionId": "exec-fixture-1",
+    "error": {
+      "code": "INTERNAL",
+      "message": "Fixture failure",
+      "details": {
+        "source": "fixture"
+      }
+    }
+  }
+}

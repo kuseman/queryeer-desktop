@@ -1,0 +1,9 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "response",
+  "id": "req-fixture-query-cancel-1",
+  "result": {
+    "accepted": true,
+    "queryExecutionId": "exec-fixture-1"
+  }
+}

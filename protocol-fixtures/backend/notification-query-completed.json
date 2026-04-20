@@ -1,0 +1,12 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "notification",
+  "method": "query.completed",
+  "params": {
+    "queryExecutionId": "exec-fixture-1",
+    "metrics": {
+      "durationMs": 120,
+      "rowCount": 2
+    }
+  }
+}
