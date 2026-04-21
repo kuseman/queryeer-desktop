@@ -22,6 +22,7 @@ export type FileMediatorOptions = {
   filesRegistry: FilesRegistry;
   executeBackendQuery: BackendQueryExecutor;
   backendSync?: FileBackendSync;
+  onFileChanged?: (file: FileEntity, text: string) => void;
   changeDebounceMs?: number;
   generateQueryExecutionId?: () => string;
   now?: () => number;
@@ -41,6 +42,7 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
     filesRegistry,
     executeBackendQuery,
     backendSync,
+    onFileChanged,
     changeDebounceMs = DEFAULT_DEBOUNCE_MS,
     generateQueryExecutionId = defaultExecutionId
   } = options;
@@ -142,6 +144,7 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
         return;
       }
 
+      onFileChanged?.(file, text);
       pendingTexts.set(fileId, text);
       const existing = pendingChanges.get(fileId);
       if (existing !== undefined) {
@@ -201,6 +204,43 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
         queryExecutionId: result.queryExecutionId,
         accepted: result.accepted
       };
+    },
+
+    async reloadFile(fileId) {
+      const file = filesRegistry.getFile(fileId);
+      if (!file) {
+        return undefined;
+      }
+      // TODO(workspace #4+): re-read disk content here and replace the buffer.
+      return filesRegistry.updateFile(fileId, {
+        externallyModified: false,
+        reloadPending: false,
+        dirtyVsDisk: false
+      });
+    },
+
+    async acceptExternalChange(fileId) {
+      const file = filesRegistry.getFile(fileId);
+      if (!file) {
+        return undefined;
+      }
+      return filesRegistry.updateFile(fileId, {
+        externallyModified: false,
+        reloadPending: false,
+        dirtyVsDisk: false
+      });
+    },
+
+    async discardExternalChange(fileId) {
+      const file = filesRegistry.getFile(fileId);
+      if (!file) {
+        return undefined;
+      }
+      return filesRegistry.updateFile(fileId, {
+        externallyModified: false,
+        reloadPending: false,
+        dirtyVsDisk: true
+      });
     }
   };
 }

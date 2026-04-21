@@ -2,11 +2,11 @@
 
 This document defines the `core.workspace` plugin — responsible for session state, persistence, external-change handling, and autosave/backup.
 
-Status: architecture draft.
+Status: implemented (5/5 increments). The user-facing modal UX for external-change and crash-recovery prompts is intentionally deferred to a future plugin; the WorkspaceService API exposes the data that modal would consume (`listPendingRestores`, `readBackup`, `discardBackup`, `reloadFile` / `acceptExternalChange` / `discardExternalChange` on the mediator).
 
 ## 1. Goals
 
-- Track which files are open, which one is active, and per-file UI state (cursor/scroll).
+- Track which files are open, which one is active, and per-file UI state (viewState bag).
 - Persist session on change; restore on startup.
 - Detect external changes to open files (via `core.fileWatcher`) and surface them to the user with a deterministic UX.
 - Autosave edits (including untitled files) so crashes don't lose work.
@@ -35,30 +35,28 @@ Non-goals (for now):
   "activeFileId": "f-001",
   "files": [
     {
-      "fileId": "f-001",
       "uri": "file:///path/to/query.pb",
       "mimeType": "application/x-payloadbuilder",
       "engineBinding": {
         "engineId": "payloadbuilder",
         "connectionId": "conn-001"
       },
-      "backupUri": "app-data:///backups/f-001-abcd.bak",
-      "cursor": { "line": 12, "column": 4 },
-      "scroll": { "top": 240, "left": 0 }
+      "backupFileId": "f-m8p9abcd-1"
     }
   ],
   "layout": {
     "visibleZones": ["menuBar", "toolBar", "statusBar", "primarySidebar", "mainArea"],
-    "sidebarWidths": { "primary": 280, "secondary": 320 },
-    "viewsByZone": { "primarySidebar": ["core.layout.view.primary"], "secondarySidebar": [] },
-    "activeViewByZone": { "primarySidebar": "core.layout.view.primary" },
-    "editorGroupIds": []
-  },
-  "recentFiles": [
-    { "uri": "file:///path/to/query.pb", "lastOpenedAt": "2026-04-21T11:59:00.000Z" }
-  ]
+    "sidebarWidths": { "primary": 280, "secondary": 320 }
+  }
 }
 ```
+
+Notes on what is persisted vs deferred:
+
+- `editorId` and `viewState` are part of the `PersistedFileEntry` type but typically empty until an editor exists to populate them.
+- `viewsByZone` / `activeViewByZone` / `editorGroupIds` from the original draft are **not** persisted yet — view ordering and editor groups follow contribution order at runtime. They will be added when user-driven view moves land.
+- `recentFiles` is **not** implemented yet.
+- `backupFileId` (not `backupUri`) is the stable cross-session link to backup files; the actual `backupUri` is recomputed from `BackupStore.readLatestBackup` on hydrate.
 
 ### 2.3 Versioning and migration
 
@@ -76,10 +74,11 @@ type FileEntity = {
   externallyModified?: boolean;   // disk changed since last open/save/reload
   reloadPending?: boolean;        // non-active file: will prompt on activate
   backupUri?: string;             // if autosave has written a backup
-  cursor?: { line: number; column: number };
-  scroll?: { top: number; left: number };
+  viewState?: Record<string, unknown>;  // editor-namespaced bag (see FILE_ENTITY_MODEL §3.1)
 };
 ```
+
+Editors persist view state by writing under their own key inside `viewState` (e.g. `viewState["editor.monaco"] = { cursor, scroll }`). Non-text editors (image viewers, result grids, diagrams) use the same mechanism with their own shapes. Core and workspace never interpret the bag's contents.
 
 ### 3.1 Untitled files
 
@@ -179,35 +178,41 @@ On app startup:
 
 ## 9. Plugin surface
 
-Exposed via `PluginContext.workspace`:
+Currently the `RendererWorkspaceService` is held by the runtime (`bootstrap.ts` constructs it and passes the instance to `ShellApp`). It is **not** exposed through `PluginContext` yet — plugins can't directly read or mutate workspace state. All writes flow indirectly through the file mediator (open/close/notifyChanged) and the layout registry, which the workspace observes via `FilesRegistry.subscribe`.
+
+The service exposes the following methods, intended for the bootstrap, ShellApp, and a future modal/notification plugin (which will need a `PluginContext.workspace` slot when it lands):
 
 ```ts
-type WorkspaceService = {
-  getRecentFiles: () => Array<{ uri: string; lastOpenedAt: string }>;
-  clearRecentFiles: () => void;
-  subscribe: (subscriber: (state: WorkspaceSnapshot) => void) => () => void;
-};
-
-type WorkspaceSnapshot = {
-  activeFileId?: string;
-  openFileIds: string[];
-  recentFiles: Array<{ uri: string; lastOpenedAt: string }>;
-};
+class RendererWorkspaceService {
+  hydrate(): Promise<void>;
+  hasRestoredFiles(): boolean;
+  restoredActiveFileId(): string | null;
+  setActiveFileId(fileId: string | null): void;
+  restoredLayout(): PersistedLayoutSnapshot | null;
+  setLayout(layout: PersistedLayoutSnapshot): void;
+  handleFileChanged(file: FileEntity, text: string): void;  // wired as FileMediator.onFileChanged
+  listPendingRestores(): PendingRestoreEntry[];
+  readBackup(fileId: string): Promise<{ text; savedAt; backupUri } | null>;
+  discardBackup(fileId: string): Promise<void>;
+  flush(): Promise<void>;
+  dispose(): void;
+}
 ```
 
-Plugins don't get direct access to write workspace state — all writes flow through the file mediator or layout registry, which the workspace observes.
+Recent-files tracking is **not** implemented yet — when it lands it will live on this service.
 
 ## 10. Incremental rollout
 
-Five increments, each independently merge-able:
+Five increments, each independently merge-able. **All landed.**
 
-| # | Increment | Scope |
-|---|---|---|
-| 1 | Persistence scaffold | Main-process `workspace.json` writer (atomic, debounced). Renderer pushes snapshots on state change. Read on startup; restore open files, active file, layout. No backups, no watcher. |
-| 2 | FileEntity flags + mediator methods | Add `externallyModified`, `reloadPending`, `backupUri`, `cursor`, `scroll` to `FileEntity`. Add `reloadFile` / `acceptExternalChange` / `discardExternalChange` to mediator. No watcher integration yet. |
-| 3 | FileWatcher integration | Workspace subscribes to `core.fileWatcher` for every open disk-URI file. On events, set flags + trigger notification UX. Depends on `core.fileWatcher` increment 2. |
-| 4 | Autosave + backup | Backup storage + retention + dual-trigger autosave. Updates `backupUri`. Cleanup on close/save. |
-| 5 | Crash recovery | On startup, detect backups, prompt user for restore/discard, apply choices. |
+| # | Increment | Status | Scope |
+|---|---|---|---|
+| 1a | Persistence scaffold (files) | done | Main-process `workspace.json` writer (atomic, debounced). Read on startup; restore open files + active file. |
+| 1b | Layout folding | done | `PersistedLayoutSnapshot` (visibleZones + sidebarWidths) inside the workspace doc. ShellApp reads on init, pushes on change. |
+| 2 | FileEntity flags + mediator methods | done | Added `externallyModified`, `reloadPending`, `backupUri`, `hasRecoveredBackup`, `viewState` to `FileEntity`. Added `reloadFile` / `acceptExternalChange` / `discardExternalChange` to mediator (reload is currently a flag-reset stub; real disk re-read lands once an editor exists to apply content). |
+| 3 | FileWatcher integration | done | Workspace subscribes to `core.fileWatcher` per open disk-URI file. Four-branch event matrix (active-clean → silent reload; active-dirty → externallyModified; non-active-clean → reloadPending; non-active-dirty → externallyModified only). `setActiveFileId` auto-reloads reloadPending-clean files. |
+| 4 | Autosave + backup | done | `BackupStore` under `<userData>/backups/`. 3s debounce + 30s max-interval. Retention cap = 5 per fileId. Updates `FileEntity.backupUri`. Cleanup on close + on dirty→clean transitions. |
+| 5 | Crash recovery | done (data only) | `PersistedFileEntry.backupFileId` survives restart. `WorkspaceService.listPendingRestores()` / `readBackup()` / `discardBackup()` API exposed for a future modal UX. **Modal/notification UI is intentionally deferred** until a UI plugin exists to consume the API. |
 
 ## 11. Key decisions (locked)
 

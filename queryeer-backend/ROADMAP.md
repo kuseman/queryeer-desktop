@@ -5,6 +5,8 @@
 ## backend-api
 
 - [x] Initial plugin SPI scaffold (`BackendPlugin`, `BackendPluginContext`, descriptors)
+- [x] Add `FileSession` + `FileSessionHandler` + `FileSessionHandlerRegistry` + `FileRegistry` SPI for the file entity model
+- [x] Expose `BackendPluginContext.fileSessions()` for engine plugins to register `FileSessionHandler`
 - [ ] Finalize service interfaces and naming
 - [ ] Add JavaDoc contract guarantees for plugin authors
 
@@ -19,6 +21,10 @@
 - [x] Add fixture compatibility tests for handshake/ping shared with desktop fixtures
 - [x] Add DTOs for `connection.upsert` / `credential.store` credential-handle flow
 - [x] Add DTOs for `backend.runtimeStatus` runtime diagnostics flow
+- [x] Add DTOs for `file.open` / `file.close` / `file.bind` request flow
+- [x] Add DTO for `file.change` notification
+- [x] Add fixture compatibility tests for `file.*` shapes
+- [x] Add optional `fileId` to `QueryExecuteParams` for parse-tree reuse
 
 ## backend-core
 
@@ -29,6 +35,7 @@
 - [x] Add plugin status model (`loaded`, `failed`, `skipped`)
 - [x] Add default platform service implementations and composed plugin context
 - [x] Add architecture tests for runtime lifecycle/wiring behavior
+- [x] Add `DefaultFileRegistry` implementing `FileRegistry` + `FileSessionHandlerRegistry`; routes lifecycle events to engine handlers by engineId
 
 ## backend-transport-stdio
 
@@ -42,6 +49,9 @@
 - [x] Refactor request dispatch into handler registry + per-method handlers
 - [x] Add `backend.runtimeStatus` dispatch handler exposing runtime snapshot
 - [x] Add unit tests for request dispatcher routing + unknown-method error mapping
+- [x] Add `file.open` / `file.close` / `file.bind` request handlers
+- [x] Add `NotificationHandler` + `NotificationDispatcher` and route `file.change` notifications
+- [x] Switch `backend-transport-stdio` dependency from `backend-core` to `backend-api` (preserves architectural boundary)
 
 ## backend-runner
 
@@ -59,11 +69,14 @@
 
 - [x] Initial plugin scaffold and engine registration placeholder
 - [ ] Implement real engine adapter integration
+- [ ] Implement `FileSessionHandler` (engineId = `payloadbuilder`) caching parse trees per `fileId`
+- [ ] Wire `query.execute.fileId` to reuse cached parse tree
 
 ## backend-plugin-jdbc
 
 - [x] Initial plugin scaffold and engine registration placeholder
 - [ ] Implement real JDBC adapter integration
+- [ ] Implement `FileSessionHandler` (engineId = `jdbc`) for cached prepared statements (or skip if not applicable)
 
 ## Cross-cutting
 
@@ -94,6 +107,17 @@
 - [ ] Add compatibility checks for TS/Java contract drift
 - [ ] Add decision log for plugin discovery mechanism (ServiceLoader vs explicit scan)
 - [ ] Complete package move physically to subdirectories for `backend-contract` (currently package names updated)
+
+## Desktop-side companion track (file entity / workspace / file watcher)
+
+The Java backend's `file.*` protocol surface and `FileRegistry`/`FileSessionHandler` SPI exist to be consumed by the renderer. The companion desktop work landed in parallel:
+
+- `core.files` plugin owns the renderer `FileRegistry` + `FileMediator`.
+- `core.fileWatcher` plugin runs chokidar in Electron main with dedup + ref-count + active per-URI mute timers.
+- `core.workspace` plugin persists session to `<userData>/workspace.json` (atomic, debounced); autosaves dirty buffers to `<userData>/backups/`; detects surviving backups on restart (crash recovery API).
+- See `queryeer-desktop/documentation/{FILE_ENTITY_MODEL,CORE_FILE_WATCHER_MODEL,CORE_WORKSPACE_MODEL,PROCESS_BOUNDARIES}.md`.
+
+No engine plugin implements `FileSessionHandler` yet — the SPI is ready, but parse-tree reuse is deferred until an editor + output plugin land to drive real query flow.
 
 ## Current blockers / decisions
 

@@ -27,4 +27,7 @@ export type FileMediator = {
     connectionId?: string
   ) => Promise<FileEntity | undefined>;
   executeFile: (fileId: string, text: string) => Promise<FileExecuteResult>;
+  reloadFile: (fileId: string) => Promise<FileEntity | undefined>;
+  acceptExternalChange: (fileId: string) => Promise<FileEntity | undefined>;
+  discardExternalChange: (fileId: string) => Promise<FileEntity | undefined>;
 };

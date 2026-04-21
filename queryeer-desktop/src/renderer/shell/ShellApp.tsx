@@ -3,11 +3,14 @@ import type { ExtensionSnapshot } from "../../core/plugin-runtime/ExtensionRegis
 import type { PluginDiagnostics } from "../../core/plugin-runtime/PluginDiagnostics";
 import type { PluginHostState } from "../../core/plugin-runtime/PluginHost";
 import type { BackendGatewayStatus } from "../../contracts/backend";
+import type { LayoutZone } from "../../contracts/extensions/LayoutExtension";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { FileMediator } from "../../contracts/files/FileMediator";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
+import type { WorkspaceSnapshot } from "../../contracts/workspace/WorkspaceSnapshot";
 import type { ExternalFrontendPluginManifest } from "../../contracts/plugin/ExternalFrontendPluginManifest";
 import type { CommandExecutionResult } from "../../contracts/plugin/Plugin";
+import type { RendererWorkspaceService } from "../workspace/workspace-service";
 import { GenericActionIcon, layoutToolbarIconMap } from "../icons/LayoutIcons";
 
 declare global {
@@ -26,6 +29,19 @@ declare global {
         queryExecutionId: string;
         reason?: string;
       }) => Promise<{ accepted: boolean; queryExecutionId: string }>;
+      getWorkspace: () => Promise<WorkspaceSnapshot>;
+      saveWorkspace: (snapshot: WorkspaceSnapshot) => Promise<{ accepted: boolean }>;
+      saveWorkspaceBackup: (params: {
+        fileId: string;
+        text: string;
+      }) => Promise<{ backupUri: string }>;
+      purgeWorkspaceBackups: (params: { fileId: string }) => Promise<{ purged: number }>;
+      listWorkspaceBackups: (params: {
+        fileId: string;
+      }) => Promise<{ backupPaths: string[] }>;
+      readLatestWorkspaceBackup: (params: {
+        fileId: string;
+      }) => Promise<{ text: string; savedAt: string; backupUri: string } | null>;
       openBackendFile: (params: {
         fileId: string;
         uri: string;
@@ -74,6 +90,7 @@ type ShellAppProps = {
   extensions: ExtensionSnapshot;
   filesRegistry: FilesRegistry;
   fileMediator: FileMediator;
+  workspaceService: RendererWorkspaceService;
   commandExecution: CommandExecutionResult;
   diagnostics: PluginDiagnostics;
 };
@@ -83,69 +100,67 @@ export function ShellApp({
   extensions,
   filesRegistry,
   fileMediator,
+  workspaceService,
   commandExecution,
   diagnostics
 }: ShellAppProps): JSX.Element {
   const [backendStatus, setBackendStatus] = useState<BackendGatewayStatus | null>(null);
-  const [zoneOverrides, setZoneOverrides] = useState<
-    Partial<Record<"menuBar" | "toolBar" | "statusBar" | "primarySidebar" | "secondarySidebar" | "mainArea", boolean>>
-  >({});
-  const [primarySidebarWidth, setPrimarySidebarWidth] = useState(
-    extensions.layout.shellDefaults.sidebarWidths?.primary ?? 280
-  );
-  const [secondarySidebarWidth, setSecondarySidebarWidth] = useState(
-    extensions.layout.shellDefaults.sidebarWidths?.secondary ?? 320
-  );
-  const [files, setFiles] = useState<FileEntity[]>(() => filesRegistry.listFiles());
-  const [openFileIds, setOpenFileIds] = useState<string[]>([]);
-  const [activeFileId, setActiveFileId] = useState<string | null>(null);
-  const layoutRef = useRef<HTMLElement | null>(null);
-
-  const defaultVisibleZones = useMemo(() => {
+  const [visibleZones, setVisibleZones] = useState<Set<LayoutZone>>(() => {
+    const restored = workspaceService.restoredLayout()?.visibleZones;
+    if (restored) {
+      const set = new Set<LayoutZone>(restored);
+      set.add("mainArea");
+      set.add("statusBar");
+      return set;
+    }
     const defaults = extensions.layout.shellDefaults.visibleZones;
-    const zones = new Set(
+    const set = new Set<LayoutZone>(
       defaults.length > 0
         ? defaults
         : ["menuBar", "toolBar", "statusBar", "primarySidebar", "mainArea"]
     );
-
     if (extensions.layout.views.some((view) => view.defaultZone === "secondarySidebar")) {
-      zones.add("secondarySidebar");
+      set.add("secondarySidebar");
     }
-
     if (extensions.layout.views.some((view) => view.defaultZone === "primarySidebar")) {
-      zones.add("primarySidebar");
+      set.add("primarySidebar");
     }
+    set.add("mainArea");
+    set.add("statusBar");
+    return set;
+  });
+  const [primarySidebarWidth, setPrimarySidebarWidth] = useState(
+    () =>
+      workspaceService.restoredLayout()?.sidebarWidths?.primary ??
+      extensions.layout.shellDefaults.sidebarWidths?.primary ??
+      280
+  );
+  const [secondarySidebarWidth, setSecondarySidebarWidth] = useState(
+    () =>
+      workspaceService.restoredLayout()?.sidebarWidths?.secondary ??
+      extensions.layout.shellDefaults.sidebarWidths?.secondary ??
+      320
+  );
+  const [files, setFiles] = useState<FileEntity[]>(() => filesRegistry.listFiles());
+  const [openFileIds, setOpenFileIds] = useState<string[]>(() =>
+    filesRegistry.listFiles().map((file) => file.fileId)
+  );
+  const [activeFileId, setActiveFileId] = useState<string | null>(
+    () => workspaceService.restoredActiveFileId() ?? filesRegistry.listFiles()[0]?.fileId ?? null
+  );
+  const layoutRef = useRef<HTMLElement | null>(null);
 
-    zones.add("mainArea");
-    zones.add("statusBar");
-    return zones;
-  }, [extensions.layout.shellDefaults.visibleZones, extensions.layout.views]);
-
-  const visibleZones = useMemo(() => {
-    const zones = new Set(defaultVisibleZones);
-    for (const [zone, visible] of Object.entries(zoneOverrides)) {
-      if (visible === undefined) {
-        continue;
-      }
-      if (visible) {
-        zones.add(zone as keyof typeof zoneOverrides);
+  const toggleZone = (zone: LayoutZone) => {
+    setVisibleZones((previous) => {
+      const next = new Set(previous);
+      if (next.has(zone)) {
+        next.delete(zone);
       } else {
-        zones.delete(zone as keyof typeof zoneOverrides);
+        next.add(zone);
       }
-    }
-    zones.add("mainArea");
-    zones.add("statusBar");
-    return zones;
-  }, [defaultVisibleZones, zoneOverrides]);
-
-  const toggleZone = (zone: "primarySidebar" | "secondarySidebar") => {
-    setZoneOverrides((previous) => {
-      const currentlyVisible = previous[zone] ?? defaultVisibleZones.has(zone);
-      return {
-        ...previous,
-        [zone]: !currentlyVisible
-      };
+      next.add("mainArea");
+      next.add("statusBar");
+      return next;
     });
   };
 
@@ -154,7 +169,7 @@ export function ShellApp({
     "core.layout.toggleSecondarySidebar": "secondarySidebar"
   };
 
-  const isZoneVisible = (zone: "primarySidebar" | "secondarySidebar") => {
+  const isZoneVisible = (zone: LayoutZone) => {
     return visibleZones.has(zone);
   };
 
@@ -291,6 +306,9 @@ export function ShellApp({
     if (editors.length === 0) {
       return;
     }
+    if (workspaceService.hasRestoredFiles()) {
+      return;
+    }
     if (filesRegistry.listFiles().length > 0) {
       return;
     }
@@ -298,7 +316,21 @@ export function ShellApp({
     void fileMediator.openFile(`untitled:${firstEditor.id}`, {
       editorId: firstEditor.id
     });
-  }, [editors, filesRegistry, fileMediator]);
+  }, [editors, filesRegistry, fileMediator, workspaceService]);
+
+  useEffect(() => {
+    workspaceService.setActiveFileId(activeFileId);
+  }, [activeFileId, workspaceService]);
+
+  useEffect(() => {
+    workspaceService.setLayout({
+      visibleZones: [...visibleZones],
+      sidebarWidths: {
+        primary: primarySidebarWidth,
+        secondary: secondarySidebarWidth
+      }
+    });
+  }, [visibleZones, primarySidebarWidth, secondarySidebarWidth, workspaceService]);
 
   useEffect(() => {
     return filesRegistry.subscribe((next) => {

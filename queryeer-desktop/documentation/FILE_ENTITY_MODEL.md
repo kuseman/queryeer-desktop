@@ -2,7 +2,7 @@
 
 This document defines the `FileEntity` concept and the mediator pattern that coordinates file state between the renderer and the Java backend.
 
-Status: architecture draft.
+Status: implemented (4/5 increments). Increment #5 (engine binding + execute reuse of parse trees, payloadbuilder first) is deferred — see §7.
 
 ## 1. Goals
 
@@ -42,12 +42,18 @@ type FileEntity = {
   };
   dirtyVsBackend: boolean;    // frontend version > last acknowledged backend version
   dirtyVsDisk: boolean;       // frontend version > last saved disk version
+  externallyModified?: boolean;
+  reloadPending?: boolean;
+  backupUri?: string;
+  viewState?: Record<string, unknown>;  // editor-namespaced bag; see below
   version: number;            // bumped on every local change
   backendVersion?: number;    // last version acknowledged by backend
   diskVersion?: number;       // last version persisted to disk
   openedAt: string;
 };
 ```
+
+**`viewState`** is an editor-namespaced bag. Each editor contribution owns a key and the value shape inside it — e.g. `viewState["editor.monaco"] = { cursor, scroll }`, `viewState["image.viewer"] = { zoom, pan }`, `viewState["result.grid"] = { scrolledRow, selectedCell }`. Core never interprets the contents. Workspace persistence round-trips the bag verbatim.
 
 ### 3.2 Responsibilities
 
@@ -215,15 +221,15 @@ Engine plugins (`query.payloadbuilder`, `query.jdbc`) register both a mime resol
 
 ## 8. Incremental rollout
 
-Five independently merge-able increments. The app stays bootable after each.
+Five independently merge-able increments. The app stays bootable after each. **Increments 1-4 landed; #5 deferred.**
 
-| # | Increment | Scope |
-|---|---|---|
-| 1 | Core FE registry | Add `core.files` plugin, `FileEntity` type, `FileRegistry`, wire into `PluginContext`. Replace `openEditorIds` state in `ShellApp.tsx` with `openFileIds`. No backend touch, no mediator yet. |
-| 2 | Resolvers + mime | `MimeResolver` / `EditorResolver` chains; extend `LayoutEditorContribution` with `supportedMimeTypes`. Update `dev-query-probe` as first consumer. |
-| 3 | Mediator | Add `FileMediator`, route all open/close/change through it. Backend still unaware. |
-| 4 | Protocol + Java registry | Add `file.open/close/change/bind` DTOs on both sides, fixtures, `FileRegistry` + `FileSessionHandler` SPI in `backend-api`, default impl in `backend-core`. No engine plugins wire in yet. |
-| 5 | Engine binding + execute | `files.registerEngineResolver`; payloadbuilder implements `FileSessionHandler` and caches parse trees; `query.execute` accepts optional `fileId`. |
+| # | Increment | Status | Scope |
+|---|---|---|---|
+| 1 | Core FE registry | done | `core.files` plugin, `FileEntity` type, `FileRegistry`, wired into `PluginContext`. `ShellApp.tsx` now drives tabs from `openFileIds`. |
+| 2 | Resolvers + mime | done | `MimeResolver` / `EditorResolver` chains; `LayoutEditorContribution.supportedMimeTypes` added. `dev-query-probe` declares `application/x-payloadbuilder`. |
+| 3 | Mediator | done | `FileMediator` with openFile / closeFile / saveFile / notifyChanged / bindEngine / executeFile / reloadFile / acceptExternalChange / discardExternalChange. Backend-sync hook + onFileChanged hook for workspace autosave. Owns the change debouncing. |
+| 4 | Protocol + Java registry | done | `file.open/close/bind` requests + `file.change` notification on both sides. Fixtures + Java `ProtocolFixtureCompatibilityTest`. `FileRegistry` + `FileSessionHandler` + `FileSessionHandlerRegistry` SPI in `backend-api`. `DefaultFileRegistry` in `backend-core`. Request/notification handlers in `backend-transport-stdio`. `query.execute` accepts optional `fileId`. |
+| 5 | Engine binding + execute | **deferred** | `files.registerEngineResolver`; payloadbuilder implements `FileSessionHandler` and caches parse trees; backend reuses cached parse tree via `query.execute.fileId`. Premature without an editor + output wiring; revisit when those land. |
 
 ## 9. Key decisions (locked)
 

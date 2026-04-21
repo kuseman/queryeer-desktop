@@ -42,6 +42,16 @@ describe("bootstrapShell diagnostics wiring", () => {
       ],
       executeBackendQuery: async () => ({ accepted: true, queryExecutionId: "q-1" }),
       cancelBackendQuery: async () => ({ accepted: true, queryExecutionId: "q-1" }),
+      getWorkspace: async () => ({
+        schemaVersion: 1 as const,
+        savedAt: "1970-01-01T00:00:00.000Z",
+        files: []
+      }),
+      saveWorkspace: async () => ({ accepted: true }),
+      saveWorkspaceBackup: async () => ({ backupUri: "file:///backup" }),
+      purgeWorkspaceBackups: async () => ({ purged: 0 }),
+      listWorkspaceBackups: async () => ({ backupPaths: [] }),
+      readLatestWorkspaceBackup: async () => null,
       openBackendFile: async () => ({ fileId: "f-1", backendVersion: 0 }),
       closeBackendFile: async () => ({ fileId: "f-1", accepted: true }),
       bindBackendFile: async () => ({ fileId: "f-1", engineId: "payloadbuilder", backendVersion: 1 }),

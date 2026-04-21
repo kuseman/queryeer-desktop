@@ -117,6 +117,7 @@ export class FileRegistry {
       dirtyVsDisk: false,
       version: 0,
       diskVersion: input.diskVersion,
+      viewState: input.viewState,
       openedAt: new Date().toISOString()
     };
 

@@ -10,6 +10,7 @@ async function startApp(): Promise<void> {
     extensions,
     filesRegistry,
     fileMediator,
+    workspaceService,
     commandExecution,
     diagnostics
   } = await bootstrapShell();
@@ -21,6 +22,7 @@ async function startApp(): Promise<void> {
         extensions={extensions}
         filesRegistry={filesRegistry}
         fileMediator={fileMediator}
+        workspaceService={workspaceService}
         commandExecution={commandExecution}
         diagnostics={diagnostics}
       />

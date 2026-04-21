@@ -69,25 +69,6 @@ export type LayoutShellDefaults = {
   statusBarHeight?: number;
 };
 
-export type PersistedLayoutState = {
-  schemaVersion: 1;
-  visibleZones: LayoutZone[];
-  sidebarWidths: {
-    primary: number;
-    secondary: number;
-  };
-  viewsByZone: {
-    primarySidebar: string[];
-    secondarySidebar: string[];
-  };
-  activeViewByZone: {
-    primarySidebar?: string;
-    secondarySidebar?: string;
-  };
-  activeEditorId?: string;
-  editorGroupIds: string[];
-};
-
 export type LayoutRegistry = {
   registerMenuItem: (contribution: LayoutMenuItemContribution) => void;
   registerToolbarAction: (contribution: LayoutToolbarActionContribution) => void;

@@ -1,7 +1,9 @@
 import { PluginHost } from "../../core/plugin-runtime/PluginHost";
 import type { FileBackendSync } from "../../core/plugin-runtime/FileMediator";
+import type { FileEntity } from "../../contracts/files/FileEntity";
 import { toPluginManifestFile } from "../../contracts/plugin/PluginManifestFile";
 import { RendererFileWatcherService } from "../file-watcher/file-watcher-service";
+import { RendererWorkspaceService } from "../workspace/workspace-service";
 import { discoverPluginModules } from "../../plugins/discovery";
 
 export async function bootstrapShell() {
@@ -47,10 +49,16 @@ export async function bootstrapShell() {
     onFileWatcherEvent: (listener) => window.appShell.onFileWatcherEvent(listener)
   });
 
+  let workspaceService: RendererWorkspaceService | null = null;
+  const onFileChanged = (file: FileEntity, text: string): void => {
+    workspaceService?.handleFileChanged(file, text);
+  };
+
   const host = new PluginHost({
     executeBackendQuery: (params) => window.appShell.executeBackendQuery(params),
     fileWatcher,
-    backendSync
+    backendSync,
+    onFileChanged
   });
 
   const externalFrontendPlugins = await window.appShell.getExternalFrontendPlugins();
@@ -64,6 +72,23 @@ export async function bootstrapShell() {
   await host.start(discovery.manifests);
   host.setExternalLoadErrors(discovery.loadErrors);
 
+  workspaceService = new RendererWorkspaceService({
+    bridge: {
+      getWorkspace: () => window.appShell.getWorkspace(),
+      saveWorkspace: (snapshot) => window.appShell.saveWorkspace(snapshot),
+      saveBackup: (fileId, text) =>
+        window.appShell.saveWorkspaceBackup({ fileId, text }),
+      purgeBackups: (fileId) => window.appShell.purgeWorkspaceBackups({ fileId }),
+      listBackups: (fileId) => window.appShell.listWorkspaceBackups({ fileId }),
+      readLatestBackup: (fileId) =>
+        window.appShell.readLatestWorkspaceBackup({ fileId })
+    },
+    filesRegistry: host.getFilesRegistry(),
+    fileMediator: host.getFileMediator(),
+    fileWatcher
+  });
+  await workspaceService.hydrate();
+
   const commandExecution = await host.executeCommand("core.commands.about");
 
   return {
@@ -71,6 +96,7 @@ export async function bootstrapShell() {
     extensions: host.getExtensions(),
     filesRegistry: host.getFilesRegistry(),
     fileMediator: host.getFileMediator(),
+    workspaceService,
     commandExecution,
     diagnostics: host.getDiagnostics()
   };

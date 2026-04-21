@@ -18,6 +18,7 @@ import type {
   FileWatcherWatchOptions
 } from "../contracts/files/FileWatcher";
 import type { ExternalFrontendPluginManifest } from "../contracts/plugin/ExternalFrontendPluginManifest";
+import type { WorkspaceSnapshot } from "../contracts/workspace/WorkspaceSnapshot";
 
 type AppShellApi = {
   platform: NodeJS.Platform;
@@ -30,6 +31,19 @@ type AppShellApi = {
   closeBackendFile: (params: FileCloseParams) => Promise<FileCloseResult>;
   bindBackendFile: (params: FileBindParams) => Promise<FileBindResult>;
   notifyBackendFileChange: (params: FileChangeNotification) => Promise<void>;
+  getWorkspace: () => Promise<WorkspaceSnapshot>;
+  saveWorkspace: (snapshot: WorkspaceSnapshot) => Promise<{ accepted: boolean }>;
+  saveWorkspaceBackup: (params: {
+    fileId: string;
+    text: string;
+  }) => Promise<{ backupUri: string }>;
+  purgeWorkspaceBackups: (params: { fileId: string }) => Promise<{ purged: number }>;
+  listWorkspaceBackups: (params: {
+    fileId: string;
+  }) => Promise<{ backupPaths: string[] }>;
+  readLatestWorkspaceBackup: (params: {
+    fileId: string;
+  }) => Promise<{ text: string; savedAt: string; backupUri: string } | null>;
   watchFile: (params: {
     uri: string;
     options: FileWatcherWatchOptions;
@@ -67,6 +81,24 @@ const appShellApi: AppShellApi = {
   },
   notifyBackendFileChange: async (params) => {
     return ipcRenderer.invoke("backend:file-change", params);
+  },
+  getWorkspace: async () => {
+    return ipcRenderer.invoke("workspace:get");
+  },
+  saveWorkspace: async (snapshot) => {
+    return ipcRenderer.invoke("workspace:save", snapshot);
+  },
+  saveWorkspaceBackup: async (params) => {
+    return ipcRenderer.invoke("workspace:save-backup", params);
+  },
+  purgeWorkspaceBackups: async (params) => {
+    return ipcRenderer.invoke("workspace:purge-backups", params);
+  },
+  listWorkspaceBackups: async (params) => {
+    return ipcRenderer.invoke("workspace:list-backups", params);
+  },
+  readLatestWorkspaceBackup: async (params) => {
+    return ipcRenderer.invoke("workspace:read-backup", params);
   },
   watchFile: async (params) => {
     return ipcRenderer.invoke("file-watcher:watch", params);

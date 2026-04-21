@@ -38,16 +38,23 @@ Top-level zones are fixed and not plugin-defined.
 - Editors target `mainArea` tab groups.
 - Welcome contributions render when no active editor is present.
 
-## Persistence model (planned)
+## Persistence model
 
-Persisted layout state shape (`PersistedLayoutState`):
+Layout state is persisted as part of the workspace document (`<userData>/workspace.json`) via `core.workspace`, not as a standalone file. The active subset of `PersistedLayoutSnapshot` (in `src/contracts/workspace/WorkspaceSnapshot.ts`):
 
-- visible zones
-- sidebar widths
+- `visibleZones: LayoutZone[]`
+- `sidebarWidths: { primary?: number; secondary?: number }`
+
+ShellApp seeds these from `workspaceService.restoredLayout()` on init and pushes updates back via `workspaceService.setLayout()` (debounced through the shared workspace save).
+
+Not persisted yet (planned, but no consumer driving the need):
+
 - ordered views by sidebar zone
 - active view per sidebar zone
 - active editor id
 - editor group ids
+
+The `PersistedLayoutState` type previously sketched in `LayoutExtension.ts` is obsolete — the canonical persisted shape lives next to the workspace snapshot. View ordering and editor groups will be added when user-driven view-move actions land.
 
 ## Migration note
 

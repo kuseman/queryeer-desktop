@@ -27,6 +27,7 @@ export type PluginHostOptions = {
   executeBackendQuery: BackendQueryExecutor;
   fileWatcher: FileWatcherService;
   backendSync?: FileBackendSync;
+  onFileChanged?: (file: FileEntity, text: string) => void;
 };
 
 export class PluginHost {
@@ -48,7 +49,8 @@ export class PluginHost {
     this.fileMediator = createFileMediator({
       filesRegistry: this.extensionRegistry.createFilesRegistry(),
       executeBackendQuery: options.executeBackendQuery,
-      backendSync: options.backendSync
+      backendSync: options.backendSync,
+      onFileChanged: options.onFileChanged
     });
   }
 
