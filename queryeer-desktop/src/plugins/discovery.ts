@@ -11,7 +11,8 @@ const moduleLoaders: Partial<Record<string, PluginLoader>> = {
   "./core.fileWatcher/module": async () => import("./core.fileWatcher/module"),
   "./core.files/module": async () => import("./core.files/module"),
   "./core.workspace/module": async () => import("./core.workspace/module"),
-  "./core.commands/module": async () => import("./core.commands/module")
+  "./core.commands/module": async () => import("./core.commands/module"),
+  "./core.observability/module": async () => import("./core.observability/module")
 };
 
 export type PluginDiscoveryResult = {

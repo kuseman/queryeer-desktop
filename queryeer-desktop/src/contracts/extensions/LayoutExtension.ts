@@ -32,6 +32,7 @@ export type LayoutStatusItemContribution = {
   id: string;
   alignment?: "left" | "right";
   order?: number;
+  commandId?: string;
   render: () => ReactNode;
 };
 

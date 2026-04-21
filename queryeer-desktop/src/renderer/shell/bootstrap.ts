@@ -5,6 +5,7 @@ import { toPluginManifestFile } from "../../contracts/plugin/PluginManifestFile"
 import { RendererFileWatcherService } from "../file-watcher/file-watcher-service";
 import { RendererWorkspaceService } from "../workspace/workspace-service";
 import { discoverPluginModules } from "../../plugins/discovery";
+import { setRuntimeData } from "../../plugins/core.observability/runtime-data";
 
 export async function bootstrapShell() {
   const backendSync: FileBackendSync = {
@@ -91,6 +92,13 @@ export async function bootstrapShell() {
 
   const commandExecution = await host.executeCommand("core.commands.about");
 
+  setRuntimeData({
+    hostState: host.getState(),
+    diagnostics: host.getDiagnostics(),
+    extensions: host.getExtensions(),
+    commandExecution
+  });
+
   return {
     hostState: host.getState(),
     extensions: host.getExtensions(),
@@ -98,6 +106,7 @@ export async function bootstrapShell() {
     fileMediator: host.getFileMediator(),
     workspaceService,
     commandExecution,
+    executeCommand: (commandId: string) => host.executeCommand(commandId),
     diagnostics: host.getDiagnostics()
   };
 }
