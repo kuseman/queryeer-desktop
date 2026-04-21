@@ -1,6 +1,7 @@
 import { PluginHost } from "../../core/plugin-runtime/PluginHost";
 import type { FileBackendSync } from "../../core/plugin-runtime/FileMediator";
 import { toPluginManifestFile } from "../../contracts/plugin/PluginManifestFile";
+import { RendererFileWatcherService } from "../file-watcher/file-watcher-service";
 import { discoverPluginModules } from "../../plugins/discovery";
 
 export async function bootstrapShell() {
@@ -39,8 +40,16 @@ export async function bootstrapShell() {
     }
   };
 
+  const fileWatcher = new RendererFileWatcherService({
+    watchFile: (params) => window.appShell.watchFile(params),
+    unwatchFile: (params) => window.appShell.unwatchFile(params),
+    muteFileWatcherPath: (params) => window.appShell.muteFileWatcherPath(params),
+    onFileWatcherEvent: (listener) => window.appShell.onFileWatcherEvent(listener)
+  });
+
   const host = new PluginHost({
     executeBackendQuery: (params) => window.appShell.executeBackendQuery(params),
+    fileWatcher,
     backendSync
   });
 

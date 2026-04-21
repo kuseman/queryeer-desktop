@@ -1,11 +1,20 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, webContents } from "electron";
 import { join } from "node:path";
 import { ipcMain } from "electron";
 import { BackendGateway } from "./backend/backend-gateway";
+import { chokidarWatcherFactory } from "./file-watcher/chokidar-watcher-factory";
+import { FileWatcherMainService } from "./file-watcher/file-watcher-service";
 import { discoverExternalFrontendPlugins } from "./plugins/frontend-plugin-discovery";
 
 const isDev = !app.isPackaged;
 const backendGateway = new BackendGateway();
+const fileWatcherService = new FileWatcherMainService({
+  watcherFactory: chokidarWatcherFactory,
+  webContentsLookup: (id) => {
+    const sink = webContents.fromId(id);
+    return sink ?? null;
+  }
+});
 
 function createMainWindow(): void {
   const window = new BrowserWindow({
@@ -38,6 +47,7 @@ function createMainWindow(): void {
 
 app.whenReady().then(() => {
   backendGateway.wireIpc();
+  fileWatcherService.wireIpc();
   ipcMain.handle("plugins:get-frontend-targets", async () => discoverExternalFrontendPlugins());
   void backendGateway.start();
 

@@ -1,6 +1,7 @@
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { FileMediator } from "../../contracts/files/FileMediator";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
+import type { FileWatcherService } from "../../contracts/files/FileWatcher";
 import type { Plugin, PluginContext } from "../../contracts/plugin/Plugin";
 import type { PluginManifestFile } from "../../contracts/plugin/PluginManifestFile";
 import { ExtensionRegistry } from "./ExtensionRegistry";
@@ -24,6 +25,7 @@ export type PluginHostState = {
 
 export type PluginHostOptions = {
   executeBackendQuery: BackendQueryExecutor;
+  fileWatcher: FileWatcherService;
   backendSync?: FileBackendSync;
 };
 
@@ -31,6 +33,7 @@ export class PluginHost {
   private readonly pluginRegistry = new PluginRegistry();
   private readonly extensionRegistry = new ExtensionRegistry();
   private readonly fileMediator: FileMediator;
+  private readonly fileWatcher: FileWatcherService;
   private readonly activePlugins: Plugin[] = [];
   private startedAt: Date | null = null;
   private diagnostics: PluginDiagnostics = {
@@ -41,6 +44,7 @@ export class PluginHost {
   };
 
   constructor(options: PluginHostOptions) {
+    this.fileWatcher = options.fileWatcher;
     this.fileMediator = createFileMediator({
       filesRegistry: this.extensionRegistry.createFilesRegistry(),
       executeBackendQuery: options.executeBackendQuery,
@@ -83,6 +87,7 @@ export class PluginHost {
       filesystems: this.extensionRegistry.createFileSystemRegistry(),
       files: this.extensionRegistry.createFilesRegistry(),
       fileMediator: this.fileMediator,
+      fileWatcher: this.fileWatcher,
       layout: this.extensionRegistry.createLayoutRegistry()
     };
 
@@ -133,6 +138,10 @@ export class PluginHost {
 
   public getFileMediator(): FileMediator {
     return this.fileMediator;
+  }
+
+  public getFileWatcher(): FileWatcherService {
+    return this.fileWatcher;
   }
 
   public subscribeToFiles(subscriber: (files: FileEntity[]) => void): () => void {

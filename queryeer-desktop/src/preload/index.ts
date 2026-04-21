@@ -13,6 +13,10 @@ import type {
   QueryExecuteParams,
   QueryExecuteResult
 } from "../contracts/backend";
+import type {
+  FileWatcherEvent,
+  FileWatcherWatchOptions
+} from "../contracts/files/FileWatcher";
 import type { ExternalFrontendPluginManifest } from "../contracts/plugin/ExternalFrontendPluginManifest";
 
 type AppShellApi = {
@@ -26,6 +30,15 @@ type AppShellApi = {
   closeBackendFile: (params: FileCloseParams) => Promise<FileCloseResult>;
   bindBackendFile: (params: FileBindParams) => Promise<FileBindResult>;
   notifyBackendFileChange: (params: FileChangeNotification) => Promise<void>;
+  watchFile: (params: {
+    uri: string;
+    options: FileWatcherWatchOptions;
+  }) => Promise<{ subscriptionId: string }>;
+  unwatchFile: (params: { subscriptionId: string }) => Promise<{ removed: boolean }>;
+  muteFileWatcherPath: (params: { uri: string; durationMs: number }) => Promise<{ muted: boolean }>;
+  onFileWatcherEvent: (
+    listener: (params: { subscriptionId: string; event: FileWatcherEvent }) => void
+  ) => () => void;
 };
 
 const appShellApi: AppShellApi = {
@@ -54,6 +67,28 @@ const appShellApi: AppShellApi = {
   },
   notifyBackendFileChange: async (params) => {
     return ipcRenderer.invoke("backend:file-change", params);
+  },
+  watchFile: async (params) => {
+    return ipcRenderer.invoke("file-watcher:watch", params);
+  },
+  unwatchFile: async (params) => {
+    return ipcRenderer.invoke("file-watcher:unwatch", params);
+  },
+  muteFileWatcherPath: async (params) => {
+    return ipcRenderer.invoke("file-watcher:mute", params);
+  },
+  onFileWatcherEvent: (listener) => {
+    const channel = "file-watcher:event";
+    const wrapped = (
+      _event: Electron.IpcRendererEvent,
+      payload: { subscriptionId: string; event: FileWatcherEvent }
+    ): void => {
+      listener(payload);
+    };
+    ipcRenderer.on(channel, wrapped);
+    return () => {
+      ipcRenderer.off(channel, wrapped);
+    };
   }
 };
 

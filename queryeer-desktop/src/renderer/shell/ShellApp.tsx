@@ -46,6 +46,25 @@ declare global {
         version: number;
         text: string;
       }) => Promise<void>;
+      watchFile: (params: {
+        uri: string;
+        options: { recursive?: boolean };
+      }) => Promise<{ subscriptionId: string }>;
+      unwatchFile: (params: { subscriptionId: string }) => Promise<{ removed: boolean }>;
+      muteFileWatcherPath: (params: {
+        uri: string;
+        durationMs: number;
+      }) => Promise<{ muted: boolean }>;
+      onFileWatcherEvent: (
+        listener: (params: {
+          subscriptionId: string;
+          event: {
+            type: "add" | "modify" | "delete" | "rename";
+            uri: string;
+            timestamp: string;
+          };
+        }) => void
+      ) => () => void;
     };
   }
 }
