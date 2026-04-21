@@ -4,6 +4,7 @@ import coreFilesManifest from "./manifests/core.files.json";
 import coreFileSystemManifest from "./manifests/core.filesystem.json";
 import coreFileWatcherManifest from "./manifests/core.fileWatcher.json";
 import coreLayoutManifest from "./manifests/core.layout.json";
+import coreWorkspaceManifest from "./manifests/core.workspace.json";
 
 export function loadPluginManifests(): PluginManifestFile[] {
   return [
@@ -11,6 +12,7 @@ export function loadPluginManifests(): PluginManifestFile[] {
     coreFileSystemManifest as PluginManifestFile,
     coreFileWatcherManifest as PluginManifestFile,
     coreFilesManifest as PluginManifestFile,
+    coreWorkspaceManifest as PluginManifestFile,
     coreCommandsManifest as PluginManifestFile
   ];
 }

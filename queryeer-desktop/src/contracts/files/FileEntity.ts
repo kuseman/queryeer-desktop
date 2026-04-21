@@ -3,6 +3,8 @@ export type EngineBinding = {
   connectionId?: string;
 };
 
+export type ViewStateBag = Record<string, unknown>;
+
 export type FileEntity = {
   fileId: string;
   uri: string;
@@ -11,6 +13,11 @@ export type FileEntity = {
   engineBinding?: EngineBinding;
   dirtyVsBackend: boolean;
   dirtyVsDisk: boolean;
+  externallyModified?: boolean;
+  reloadPending?: boolean;
+  backupUri?: string;
+  hasRecoveredBackup?: boolean;
+  viewState?: ViewStateBag;
   version: number;
   backendVersion?: number;
   diskVersion?: number;
@@ -23,6 +30,7 @@ export type FileOpenInput = {
   editorId?: string;
   engineBinding?: EngineBinding;
   diskVersion?: number;
+  viewState?: ViewStateBag;
 };
 
 export type FileEntityUpdate = Partial<
@@ -35,5 +43,10 @@ export type FileEntityUpdate = Partial<
     | "diskVersion"
     | "dirtyVsBackend"
     | "dirtyVsDisk"
+    | "externallyModified"
+    | "reloadPending"
+    | "backupUri"
+    | "hasRecoveredBackup"
+    | "viewState"
   >
 >;

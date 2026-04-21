@@ -2,7 +2,7 @@
 
 This document defines the `core.fileWatcher` platform service — a shared, deduplicated, subscription-based file watcher that any plugin can consume.
 
-Status: architecture draft.
+Status: implemented (4/5 increments). Increment #5 (event normalization) is deferred — see §7 for the rationale.
 
 ## 1. Goals
 
@@ -90,15 +90,15 @@ Platform smoothing performed by the service (not by consumers):
 
 ## 7. Incremental rollout
 
-Five small increments, each independently merge-able:
+Five small increments, each independently merge-able. **Increments 1-4 landed; #5 deferred.**
 
-| # | Increment | Scope |
-|---|---|---|
-| 1 | Service scaffold + IPC | Add `core.fileWatcher` plugin + preload bridge with a no-op implementation. Contract types land; no chokidar yet. |
-| 2 | Single-path watch | Wire chokidar in main; one watcher per subscription, no deduplication. Events flow end-to-end. |
-| 3 | Dedup + refcount | Share a single chokidar watcher across subscribers with overlapping `uri + recursive`; close watcher when last subscriber unsubscribes. |
-| 4 | Mute API | Add `mutePath` with per-URI timers; suppress events during the window. |
-| 5 | Event normalization | Collapse delete+add sequences on atomic save; log inotify limit warnings on Linux. |
+| # | Increment | Status | Scope |
+|---|---|---|---|
+| 1 | Service scaffold + IPC | done | `core.fileWatcher` plugin + preload bridge with a no-op factory. Contract types live in `src/contracts/files/FileWatcher.ts`. |
+| 2 | Single-path watch | done | chokidar v4 wired in `src/main/file-watcher/chokidar-watcher-factory.ts` with `awaitWriteFinish`, `followSymlinks: false`, depth cap. WatcherFactory + WebContentsLookup are injectable for testing. |
+| 3 | Dedup + refcount | done | `sharedWatchers` map keyed by `${uri}|recursive=${0|1}`; subscriberIds tracked; close on last unsubscribe. |
+| 4 | Mute API | done | Active per-URI `setTimeout` cleanup. `mutePath` resets on re-call; `unmutePath` cancels; `dispose` clears. |
+| 5 | Event normalization | **deferred** | Collapse Windows atomic-save delete+add sequences; log inotify limit warnings on Linux. Revisit once a real consumer (workspace + an editor) exists on Windows to confirm the actual UX gap. Tracked here; do not extract into a separate ticket. |
 
 ## 8. Key decisions (locked)
 

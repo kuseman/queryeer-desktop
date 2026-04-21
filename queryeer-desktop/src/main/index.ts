@@ -5,6 +5,11 @@ import { BackendGateway } from "./backend/backend-gateway";
 import { chokidarWatcherFactory } from "./file-watcher/chokidar-watcher-factory";
 import { FileWatcherMainService } from "./file-watcher/file-watcher-service";
 import { discoverExternalFrontendPlugins } from "./plugins/frontend-plugin-discovery";
+import { BackupStore, defaultBackupsDir } from "./workspace/backup-store";
+import {
+  defaultWorkspaceFilePath,
+  WorkspaceStore
+} from "./workspace/workspace-store";
 
 const isDev = !app.isPackaged;
 const backendGateway = new BackendGateway();
@@ -15,6 +20,8 @@ const fileWatcherService = new FileWatcherMainService({
     return sink ?? null;
   }
 });
+let workspaceStore: WorkspaceStore | null = null;
+let backupStore: BackupStore | null = null;
 
 function createMainWindow(): void {
   const window = new BrowserWindow({
@@ -48,6 +55,14 @@ function createMainWindow(): void {
 app.whenReady().then(() => {
   backendGateway.wireIpc();
   fileWatcherService.wireIpc();
+  workspaceStore = new WorkspaceStore({
+    workspaceFilePath: defaultWorkspaceFilePath(app.getPath("userData"))
+  });
+  workspaceStore.wireIpc();
+  backupStore = new BackupStore({
+    backupsDir: defaultBackupsDir(app.getPath("userData"))
+  });
+  backupStore.wireIpc();
   ipcMain.handle("plugins:get-frontend-targets", async () => discoverExternalFrontendPlugins());
   void backendGateway.start();
 
@@ -63,6 +78,7 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     void backendGateway.stop();
+    void workspaceStore?.flush();
     app.quit();
   }
 });

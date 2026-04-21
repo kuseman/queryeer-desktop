@@ -230,3 +230,59 @@ describe("FileMediator.executeFile", () => {
     expect(result.accepted).toBe(true);
   });
 });
+
+describe("FileMediator.reloadFile / acceptExternalChange / discardExternalChange", () => {
+  it("reloadFile clears externallyModified, reloadPending, and dirtyVsDisk", async () => {
+    const { mediator, registry } = setupHarness();
+    const file = await mediator.openFile("file:///r.txt", { mimeType: "text/plain" });
+    registry.createFilesRegistry().updateFile(file.fileId, {
+      externallyModified: true,
+      reloadPending: true,
+      dirtyVsDisk: true
+    });
+
+    const result = await mediator.reloadFile(file.fileId);
+
+    expect(result?.externallyModified).toBe(false);
+    expect(result?.reloadPending).toBe(false);
+    expect(result?.dirtyVsDisk).toBe(false);
+  });
+
+  it("acceptExternalChange behaves like reloadFile", async () => {
+    const { mediator, registry } = setupHarness();
+    const file = await mediator.openFile("file:///a.txt", { mimeType: "text/plain" });
+    registry.createFilesRegistry().updateFile(file.fileId, {
+      externallyModified: true,
+      reloadPending: true,
+      dirtyVsDisk: true
+    });
+
+    const result = await mediator.acceptExternalChange(file.fileId);
+
+    expect(result?.externallyModified).toBe(false);
+    expect(result?.reloadPending).toBe(false);
+    expect(result?.dirtyVsDisk).toBe(false);
+  });
+
+  it("discardExternalChange clears the external flags but marks dirtyVsDisk", async () => {
+    const { mediator, registry } = setupHarness();
+    const file = await mediator.openFile("file:///d.txt", { mimeType: "text/plain" });
+    registry.createFilesRegistry().updateFile(file.fileId, {
+      externallyModified: true,
+      reloadPending: false
+    });
+
+    const result = await mediator.discardExternalChange(file.fileId);
+
+    expect(result?.externallyModified).toBe(false);
+    expect(result?.reloadPending).toBe(false);
+    expect(result?.dirtyVsDisk).toBe(true);
+  });
+
+  it("returns undefined when fileId is unknown", async () => {
+    const { mediator } = setupHarness();
+    expect(await mediator.reloadFile("ghost")).toBeUndefined();
+    expect(await mediator.acceptExternalChange("ghost")).toBeUndefined();
+    expect(await mediator.discardExternalChange("ghost")).toBeUndefined();
+  });
+});

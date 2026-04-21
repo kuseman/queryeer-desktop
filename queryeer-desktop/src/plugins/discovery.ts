@@ -10,6 +10,7 @@ const moduleLoaders: Partial<Record<string, PluginLoader>> = {
   "./core.filesystem/module": async () => import("./core.filesystem/module"),
   "./core.fileWatcher/module": async () => import("./core.fileWatcher/module"),
   "./core.files/module": async () => import("./core.files/module"),
+  "./core.workspace/module": async () => import("./core.workspace/module"),
   "./core.commands/module": async () => import("./core.commands/module")
 };
 

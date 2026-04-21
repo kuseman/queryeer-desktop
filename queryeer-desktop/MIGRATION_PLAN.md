@@ -44,20 +44,30 @@ Fixed-zone layout contribution model draft is defined in `queryeer-desktop/docum
   - provided capabilities
   - per-plugin manifest diagnostics
 
+#### Increment 4 - File entity + workspace + file watcher (substantially complete)
+
+Three model docs introduced and implemented:
+
+- `documentation/FILE_ENTITY_MODEL.md` — `core.files` plugin, FileEntity, FileMediator, mime/editor resolvers, file.* protocol, Java `FileRegistry` + `FileSessionHandler` SPI.
+- `documentation/CORE_FILE_WATCHER_MODEL.md` — `core.fileWatcher` plugin, chokidar in Electron main, dedup + ref-count, mute API.
+- `documentation/CORE_WORKSPACE_MODEL.md` — `core.workspace` plugin, `workspace.json` persistence, layout folding, autosave + backup, crash recovery.
+
+Cross-cutting boundary doc added: `documentation/PROCESS_BOUNDARIES.md`.
+
 ### In progress now
 
-- Java backend integration over stdio contracts is active (handshake/ping/query/cancel/runtime status + fixture coverage)
-- Plugin packaging/discovery hardening is active (folder+zip, duplicate-id handling, diagnostics surfacing)
-- Backend observability hardening is active (status/logging/correlation workstream)
-- Core-boundary enforcement is active (query probe behavior moved out of shell core into fully external dual-target plugin package)
+- Plugin packaging/discovery hardening (folder+zip, duplicate-id handling, diagnostics surfacing)
+- Backend observability hardening (status/logging/correlation workstream)
+- Core-boundary enforcement (query probe behavior moved out of shell core into fully external dual-target plugin package)
 
 ### Not started yet
 
-- Monaco editor plugin
+- Monaco editor plugin (or any text-editor plugin) — first real consumer of FileEntity + viewState
+- Modal/notification UI plugin — surfaces external-change prompt + crash-recovery prompt; consumes `WorkspaceService.listPendingRestores`/`readBackup`/`discardBackup`
 - Real query engine adapters wired end-to-end to persisted backend state
 - Output plugins and result routing
 - Credential encryption/persistence and full connection lifecycle
-- Engine-specific `FileSessionHandler` implementations (payloadbuilder first) — increment 5 of the file entity model
+- Engine-specific `FileSessionHandler` implementations (payloadbuilder first) — increment 5 of the file entity model; deferred until editor + output wiring land
 
 ### File entity model progress
 
@@ -65,9 +75,30 @@ Fixed-zone layout contribution model draft is defined in `queryeer-desktop/docum
 - Increment 2 — resolvers + mime classification: done
 - Increment 3 — FileMediator: done
 - Increment 4 — protocol + Java `DefaultFileRegistry` + `FileSessionHandler` SPI: done
-- Increment 5 — engine binding + execute reuse of parse trees: not started
+- Increment 5 — engine binding + execute reuse of parse trees: deferred (premature without editor/output wiring)
 
-Design reference: `queryeer-desktop/documentation/FILE_ENTITY_MODEL.md`.
+Design reference: `documentation/FILE_ENTITY_MODEL.md`.
+
+### File watcher model progress
+
+- Increment 1 — service scaffold + IPC: done
+- Increment 2 — chokidar single-path watch: done
+- Increment 3 — dedup + refcount per `(uri, recursive)`: done
+- Increment 4 — active per-URI mute timers (`mutePath` / `unmutePath` / `dispose`): done
+- Increment 5 — event normalization (Windows atomic-save delete+add coalescing, inotify-limit warning): deferred until first real-world Windows feedback from a workspace consumer
+
+Design reference: `documentation/CORE_FILE_WATCHER_MODEL.md`.
+
+### Workspace model progress
+
+- Increment 1a — file state persistence + restore: done
+- Increment 1b — layout folding into workspace doc: done
+- Increment 2 — FileEntity flags (externallyModified, reloadPending, backupUri, hasRecoveredBackup) + mediator reload/accept/discard: done
+- Increment 3 — fileWatcher integration (per-file subs, four-branch flag matrix, auto-reload-on-activate): done
+- Increment 4 — autosave + backup (3s debounce + 30s max-interval, separate backups folder, retention=5, dirty/close cleanup): done
+- Increment 5 — crash recovery (persist backupFileId, detect surviving backups on hydrate, expose `listPendingRestores`/`readBackup`/`discardBackup` for future modal UX): done
+
+Design reference: `documentation/CORE_WORKSPACE_MODEL.md`.
 
 ## Current focus (next 2 sprints)
 

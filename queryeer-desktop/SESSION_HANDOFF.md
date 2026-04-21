@@ -28,8 +28,71 @@
 - `core.layout` now has a fixed-zone layout contribution contract draft and registry wiring (`menuBar`, `toolBar`, `statusBar`, `primarySidebar`, `secondarySidebar`, `mainArea`).
 - Renderer shell now maps layout contribution snapshots into fixed UI zones (menu/toolbar/status/sidebars/main) with legacy panel compatibility mapping.
 - Editor group infrastructure implemented: tab bar rendering, active editor state management, CSS styling for tabs/content.
+- File entity / mediator infrastructure is live:
+  - `core.files` plugin owns the renderer `FileRegistry` + `FileMediator`
+  - mime/editor resolver chains; editor contributions declare `supportedMimeTypes`
+  - FileEntity carries dirty flags, engine binding, external-modification flags, viewState bag
+  - `file.open`, `file.close`, `file.bind`, `file.change` protocol methods + Java `FileRegistry` / `FileSessionHandler` SPI + `DefaultFileRegistry`
+- `core.fileWatcher` plugin runs chokidar in Electron main, dedup+refcounts watchers by (uri, recursive), fans out events, per-URI mute API with active timers.
+- `core.workspace` plugin persists session to `<userData>/workspace.json` atomically (files + activeFileUri + layout + backupFileId). Subscribes to fileWatcher per open disk file. Autosave with 3s debounce + 30s max-interval to `<userData>/backups/`. Crash recovery detects surviving backups and exposes `listPendingRestores` / `readBackup` / `discardBackup` API for a future modal UX.
+- Layout state (visibleZones + sidebar widths) is folded into workspace persistence; `zoneOverrides` delta-state in `ShellApp` was replaced with a direct `Set<LayoutZone>` seeded from restored layout.
+- `PROCESS_BOUNDARIES.md` documents the horizontal "Electron main owns disk; Java owns engines; renderer owns UI + in-memory file state" boundary, plus secrets and state-authority tables.
 
 ## What changed in this session
+
+### File entity + mediator model (FILE_ENTITY_MODEL.md)
+
+- `src/contracts/files/FileEntity.ts` + `FileOpenInput` + `FileEntityUpdate`. Fields: id, uri, mimeType, editorId, engineBinding, dirtyVsBackend, dirtyVsDisk, externallyModified, reloadPending, backupUri, hasRecoveredBackup, viewState, version counters, openedAt.
+- `viewState: Record<string, unknown>` — editor-namespaced bag. Replaced earlier text-specific `cursor`/`scroll` fields so non-text editors (image viewers, result grids, diagrams) fit natively.
+- `src/contracts/files/FilesRegistry.ts` + `core/plugin-runtime/FileRegistry.ts` — open/close/list/update/subscribe + resolver registration + `classifyUri`/`resolveEditor`.
+- `src/contracts/files/Resolvers.ts` — MimeResolver/EditorResolver/MimeHint + baseline mime resolver in `core.files` (extension map for common types). `LayoutEditorContribution` gained `supportedMimeTypes?: string[]`.
+- `src/contracts/files/FileMediator.ts` + `core/plugin-runtime/FileMediator.ts` — openFile (classifies, lazy backend-bind), closeFile (dirty check), saveFile (disk-version stamp; stub for real disk write), notifyChanged (debounced backend `file.change`), bindEngine, executeFile, reloadFile, acceptExternalChange, discardExternalChange. `onFileChanged` callback option for workspace autosave hook.
+- TS protocol additions (`src/contracts/backend/`): `file.open` / `file.close` / `file.bind` requests + `file.change` notification + optional `fileId` on `query.execute`.
+- Preload + `BackendGateway` IPC handlers for the new protocol methods; `MockBackendTransport` responds success.
+- Java contracts (`queryeer-backend/backend-contract/.../file/`): `FileOpenParams/Result`, `FileCloseParams/Result`, `FileBindParams/Result`, `FileChangeNotification`, `FileEngineBindingParams`. `QueryExecuteParams` extended with `fileId`.
+- Java SPI (`backend-api`): `FileSession`, `FileSessionHandler`, `FileSessionHandlerRegistry`, `FileRegistry`. `BackendPluginContext.fileSessions()` added.
+- `backend-core/DefaultFileRegistry` implements both interfaces; wired through `BackendPlatformServices` + `DefaultBackendPluginContext`.
+- Transport: `FileOpenRequestHandler`, `FileCloseRequestHandler`, `FileBindRequestHandler`, `FileChangeNotificationHandler`. New `NotificationHandler` + `NotificationDispatcher`; `StdioTransportServer` routes notifications. `BackendCapabilities` lists the new methods.
+- `backend-transport-stdio` pom now depends on `backend-api` (not `backend-core`) — preserves the architectural boundary.
+- Protocol fixtures under `protocol-fixtures/backend/`: `request-file-open.json`/`response-file-open.json`, `request-file-close.json`/`response-file-close.json`, `request-file-bind.json`/`response-file-bind.json`, `notification-file-change.json`. Java `ProtocolFixtureCompatibilityTest` + TS `scripts/backend-protocol-fixtures-check.mjs` cover them.
+
+### core.fileWatcher plugin (CORE_FILE_WATCHER_MODEL.md)
+
+- Service runs chokidar (v4) in Electron main with `awaitWriteFinish`, `followSymlinks: false`, `ignoreInitial: true`, non-recursive depth cap.
+- Subscription-based contract via `PluginContext.fileWatcher`; preload bridges `watchFile`/`unwatchFile`/`muteFileWatcherPath` + single event channel `file-watcher:event`.
+- Dedup by `(uri, recursive)`: one chokidar per unique key, fan-out to subscribers; ref-counted close on last unwatch.
+- `mutePath(uri, durationMs)` with active per-URI setTimeout cleanup; `unmutePath` + `dispose`.
+- Event normalization (#5) deferred until workspace has real-world Windows atomic-save feedback.
+- WebContents lookup + watcher factory are injectable for unit testing.
+
+### core.workspace plugin (CORE_WORKSPACE_MODEL.md)
+
+- Persistence: `<userData>/workspace.json` with `schemaVersion: 1`, atomic write (temp + rename + fsync), 500ms debounce + flush on quit. Reader tolerates ENOENT + schema-version mismatch (fresh session) and `workspace.json.broken-<timestamp>` rename for corrupt files (migration path placeholder).
+- Hydrate: re-opens persisted files via mediator, seeds `activeFileId` and layout state, starts filesRegistry subscription that pushes snapshots on changes.
+- ShellApp auto-open suppressed when workspace restored files. Cursor-free seeded initial `openFileIds`/`activeFileId`. `zoneOverrides` delta-state replaced with direct `Set<LayoutZone>`.
+- Layout state folded in (visibleZones + sidebar widths); `PersistedLayoutSnapshot` in `WorkspaceSnapshot.ts`.
+- File watcher integration: per-open-disk-file subscriptions; on event: active+clean → silent `mediator.reloadFile`; else `externallyModified: true` + `reloadPending: !active && !dirty`. `setActiveFileId` auto-reloads reloadPending-clean files.
+- Autosave: dual trigger (3s debounced edit + 30s max-interval), `BackupStore` under `<userData>/backups/` with `<fileId>.<timestampMs>.bak` naming + retention cap of 5. `fireBackup` skips clean files, updates `FileEntity.backupUri`. `syncBackups` purges on close + on dirty→clean transitions.
+- Crash recovery: `PersistedFileEntry.backupFileId` survives restart. On hydrate, `readLatestBackup` detects surviving backups and sets `hasRecoveredBackup` + `backupUri`. Service exposes `listPendingRestores()`, `readBackup(fileId)`, `discardBackup(fileId)` for future modal UI. `syncBackups` skips auto-purge for recovered entities.
+- Bootstrap late-binds the `onFileChanged` callback to the workspace (service construction follows host construction).
+
+### Process boundary documentation (PROCESS_BOUNDARIES.md)
+
+- New doc. Horizontal Electron-main / renderer / Java-backend boundary.
+- Disk ownership rule: Electron main is sole disk authority; backend sees strings.
+- Secrets boundary: plaintext only inside `credential.store`; all subsequent calls use `connectionId` handle.
+- State-authority table: who owns what (files/layout/watchers/backups/engine sessions/executions/connections).
+- Open questions flagged: engine-initiated file reads, large/binary content.
+
+### Validation
+
+- `npm run typecheck` / `lint` / `test` (142 passed, 4 skipped across 18 test files) / `build` all green.
+- `node scripts/backend-protocol-fixtures-check.mjs` green.
+- `./mvnw -f queryeer-backend/pom.xml clean verify` — 9/9 modules SUCCESS (earlier in the session when file.* protocol landed).
+
+---
+
+### Previous session(s)
 
 - Hardened plugin discovery/wiring rules end-to-end:
   - backend runner now rejects duplicate plugin ids during manifest-first discovery (`PluginDiscoveryService`)
@@ -287,22 +350,30 @@
 
 ## Next 3 tasks
 
-1. Add command palette actions for layout zones/views (toggle sidebar, focus/move view, reset layout defaults).
-2. Wire editor open command to actual editor state changes (command palette integration).
-3. Extend Java transport correlation coverage from runner logs to request-level transport lifecycle logs (dispatcher/server paths).
+1. Monaco editor plugin (or a simple text-editor plugin) — first real consumer of FileEntity + viewState, enables actual `reloadFile` disk-read wiring + real notifyChanged text flow.
+2. Modal/notification UI plugin — drives the active+dirty external-change prompt (Reload/Keep/Diff) and the crash-recovery prompt (Restore/Discard). WorkspaceService already exposes the data via `listPendingRestores` / `readBackup`.
+3. Engine-specific `FileSessionHandler` implementations (payloadbuilder first) — increment 5 of the file entity model, unlocks parse-tree reuse via `query.execute.fileId`. Deferred until editor + output wiring land.
 
 ## Known gaps / temporary scaffolds
 
+### File entity / workspace / file watcher
+- `FileMediator.reloadFile` currently just resets flags — real disk re-read waits for a `readFile` IPC + an editor that can apply content to its buffer.
+- `FileMediator.saveFile` currently just stamps `diskVersion = version` and clears `dirtyVsDisk` — no disk write yet. Save flow ties into `PROCESS_BOUNDARIES.md` disk-ownership rule; implementation follows when an editor produces text to write.
+- `notifyChanged(fileId, text)` is called by editors passing text explicitly. No editor model exists yet; the shape is ready.
+- No UI surfaces the external-change prompt (active+dirty) or crash-recovery prompt. Workspace service exposes the data via `listPendingRestores` / `readBackup` / `discardBackup` — a future modal plugin consumes them.
+- `core.fileWatcher` increment 5 (atomic-save delete+add event normalization + inotify-limit warning) is deferred. Noted in `CORE_FILE_WATCHER_MODEL.md`.
+- Backups from previous sessions can orphan if the user doesn't discard — `BackupStore` retention caps within-session but doesn't purge stale per-fileId across sessions. Acceptable until modal UX lands.
+- `hasRecoveredBackup` stays true until explicit `discardBackup` or a future `applyBackup`; the "auto-purge on clean" branch skips recovered entities to avoid silently revoking the user's choice.
+
+### Older gaps (still relevant)
 - Desktop defaults to mock transport unless `QUERYEER_BACKEND_STDIO=1` is set.
 - Java stdio transport protocol handling is real, but execution internals and credential persistence remain mocked/stubbed.
-- Backend-core validation currently enforces only unique plugin id; dependency/capability/status validations are pending.
-- Backend-core now validates unique ids/dependencies/required capabilities and tracks runtime status, but plugin status snapshots are not yet surfaced over transport.
-- Runtime status is now surfaced over transport and renderer diagnostics; correlation-aware logging and redaction on Java side are still pending.
+- `FileSessionHandler` SPI exists in `backend-api`, but no engine plugin implements it yet — parse-tree reuse via `query.execute.fileId` is not live.
 - External plugin discovery currently focuses on manifest-first loading and isolated classloaders; signature validation and hot-reload are intentionally deferred.
 - Frontend target discovery is now represented in runner contracts but Java-side frontend targets are still not consumed directly by desktop runtime.
-- Shared TS/Java fixtures and CI checks are in place for handshake/ping/query/connection+credential contract shapes.
+- Shared TS/Java fixtures and CI checks cover handshake/ping/query/connection/credential/file.* contract shapes.
 - Java-side diagnostics redaction and request-correlation logging are still pending (desktop-side redaction is implemented).
-- Renderer-side unit tests now include bootstrap and external plugin diagnostics wiring, but broader UI interaction coverage is still minimal.
+- Renderer-side unit tests now cover bootstrap, external plugin diagnostics, FileRegistry, FileMediator, FileWatcher (main + renderer), WorkspaceStore, WorkspaceService (incl. autosave + crash recovery), BackupStore — but broader UI interaction coverage is still minimal.
 - Migration CI coexists with legacy workflows; overlap consolidation is still pending.
 - `PluginDescriptor` metadata still overlaps with manifest metadata in backend API/runtime path; ownership consolidation is documented but not yet fully implemented.
 
