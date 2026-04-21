@@ -34,7 +34,7 @@ and then update:
 
 When applicable, run and report:
 
-- Desktop: `npm run typecheck && npm run lint && npm run build` (from `queryeer-desktop`)
+- Desktop: `npm run typecheck && npm run lint && npm run build && npm run test:integration` (from `queryeer-desktop`)
 - Backend: `./mvnw -f queryeer-backend/pom.xml -DskipTests=true clean verify`
 
 ## Handoff quality bar

@@ -44,6 +44,8 @@ export class StdioProcessBackendTransport implements BackendTransport {
   private lastErrorLine: string | null = null;
   private stdinBroken = false;
   private dependenciesPrepared = false;
+  private stdout: ReturnType<typeof createInterface> | null = null;
+  private stderr: ReturnType<typeof createInterface> | null = null;
 
   public constructor(
     onEnvelope: (envelope: BackendEnvelope) => void,
@@ -125,8 +127,8 @@ export class StdioProcessBackendTransport implements BackendTransport {
       });
     });
 
-    const stdout = createInterface({ input: this.process.stdout });
-    stdout.on("line", (line) => {
+    this.stdout = createInterface({ input: this.process.stdout });
+    this.stdout.on("line", (line) => {
       const trimmed = line.trim();
       if (!trimmed.startsWith("{")) {
         if (trimmed) {
@@ -150,8 +152,8 @@ export class StdioProcessBackendTransport implements BackendTransport {
       }
     });
 
-    const stderr = createInterface({ input: this.process.stderr });
-    stderr.on("line", (line) => {
+    this.stderr = createInterface({ input: this.process.stderr });
+    this.stderr.on("line", (line) => {
       if (line.trim()) {
         this.lastErrorLine = redactLogMessage(line.trim());
         this.onDiagnostic({
@@ -297,7 +299,53 @@ export class StdioProcessBackendTransport implements BackendTransport {
     if (!this.process) {
       return;
     }
-    this.process.kill();
+
+    if (this.stdout) {
+      this.stdout.close();
+      this.stdout = null;
+    }
+    if (this.stderr) {
+      this.stderr.close();
+      this.stderr = null;
+    }
+
+    const pid = this.process.pid;
+    this.stdinBroken = true;
+
+    try {
+      this.process.stdin.end();
+    } catch {
+      // stdin already closed
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    try {
+      this.process.stdout?.destroy();
+      this.process.stderr?.destroy();
+      this.process.stdin?.destroy();
+    } catch {
+      // streams already closed
+    }
+
+    if (process.platform === "win32" && pid) {
+      await new Promise<void>((resolve) => {
+        const kill = spawn("cmd.exe", ["/c", `taskkill /f /t /pid ${pid}`], {
+          stdio: "ignore",
+          windowsHide: true
+        });
+        kill.on("close", () => resolve());
+        kill.on("error", () => resolve());
+        setTimeout(resolve, 2000);
+      });
+    } else if (pid) {
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch {
+        // process already terminated
+      }
+    }
+
     this.process = null;
   }
 
