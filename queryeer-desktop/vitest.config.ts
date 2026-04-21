@@ -23,6 +23,18 @@ export default defineConfig({
           include: ["src/renderer/**/*.test.ts", "src/renderer/**/*.test.tsx"],
           environment: "jsdom"
         }
+      },
+      {
+        test: {
+          name: "integration",
+          include: ["src/main/backend/backend-integration.test.ts"],
+          environment: "node",
+          pool: "forks",
+          poolOptions: {
+            forks: { singleFork: true }
+          },
+          isolate: false
+        }
       }
     ],
     coverage: {
