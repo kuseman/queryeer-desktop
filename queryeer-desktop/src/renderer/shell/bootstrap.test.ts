@@ -45,7 +45,11 @@ describe("bootstrapShell diagnostics wiring", () => {
       openBackendFile: async () => ({ fileId: "f-1", backendVersion: 0 }),
       closeBackendFile: async () => ({ fileId: "f-1", accepted: true }),
       bindBackendFile: async () => ({ fileId: "f-1", engineId: "payloadbuilder", backendVersion: 1 }),
-      notifyBackendFileChange: async () => {}
+      notifyBackendFileChange: async () => {},
+      watchFile: async () => ({ subscriptionId: "fw-test-1" }),
+      unwatchFile: async () => ({ removed: true }),
+      muteFileWatcherPath: async () => ({ muted: true }),
+      onFileWatcherEvent: () => () => {}
     };
 
     (discoverPluginModules as MockedDiscovery).mockResolvedValue({

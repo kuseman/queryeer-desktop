@@ -1,5 +1,6 @@
 import type { FileMediator } from "../files/FileMediator";
 import type { FilesRegistry } from "../files/FilesRegistry";
+import type { FileWatcherService } from "../files/FileWatcher";
 import type { LayoutRegistry } from "../extensions/LayoutExtension";
 import type { PluginManifest } from "./PluginManifest";
 
@@ -14,6 +15,7 @@ export type PluginContext = {
   filesystems: FileSystemRegistry;
   files: FilesRegistry;
   fileMediator: FileMediator;
+  fileWatcher: FileWatcherService;
   layout: LayoutRegistry;
 };
 
