@@ -6,25 +6,21 @@ import "./styles/base.css";
 
 async function startApp(): Promise<void> {
   const {
-    hostState,
     extensions,
     filesRegistry,
     fileMediator,
     workspaceService,
-    commandExecution,
-    diagnostics
+    executeCommand
   } = await bootstrapShell();
 
   createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <ShellApp
-        hostState={hostState}
         extensions={extensions}
         filesRegistry={filesRegistry}
         fileMediator={fileMediator}
         workspaceService={workspaceService}
-        commandExecution={commandExecution}
-        diagnostics={diagnostics}
+        executeCommand={executeCommand}
       />
     </React.StrictMode>
   );

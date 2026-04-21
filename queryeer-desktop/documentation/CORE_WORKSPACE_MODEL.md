@@ -41,7 +41,10 @@ Non-goals (for now):
         "engineId": "payloadbuilder",
         "connectionId": "conn-001"
       },
-      "backupFileId": "f-m8p9abcd-1"
+      "backupUri": "app-data:///backups/f-001-abcd.bak",
+      "viewState": {
+        "editor.monaco": { "cursor": { "line": 12, "column": 4 }, "scroll": { "top": 240, "left": 0 } }
+      }
     }
   ],
   "layout": {

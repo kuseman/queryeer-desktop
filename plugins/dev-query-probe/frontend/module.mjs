@@ -65,12 +65,13 @@ export const pluginModule = {
       providesCapabilities: ["dev.query.probe"],
       requiredCapabilities: []
     },
+
     activate: (context) => {
-      context.layout.registerEditor({
+      context.layout.registerView({
         id: "dev.query-probe.editor",
         title: "Query Probe",
+        defaultZone: "secondarySidebar",
         order: 10,
-        supportedMimeTypes: ["application/x-payloadbuilder"],
         render: () => React.createElement(QueryProbePanel)
       });
 

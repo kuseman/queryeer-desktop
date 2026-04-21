@@ -1,14 +1,16 @@
 import type { PluginManifestFile } from "../contracts/plugin/PluginManifestFile";
 import coreCommandsManifest from "./manifests/core.commands.json";
-import coreFilesManifest from "./manifests/core.files.json";
 import coreFileSystemManifest from "./manifests/core.filesystem.json";
 import coreFileWatcherManifest from "./manifests/core.fileWatcher.json";
+import coreFilesManifest from "./manifests/core.files.json";
 import coreLayoutManifest from "./manifests/core.layout.json";
+import coreObservabilityManifest from "./manifests/core.observability.json";
 import coreWorkspaceManifest from "./manifests/core.workspace.json";
 
 export function loadPluginManifests(): PluginManifestFile[] {
   return [
     coreLayoutManifest as PluginManifestFile,
+    coreObservabilityManifest as PluginManifestFile,
     coreFileSystemManifest as PluginManifestFile,
     coreFileWatcherManifest as PluginManifestFile,
     coreFilesManifest as PluginManifestFile,

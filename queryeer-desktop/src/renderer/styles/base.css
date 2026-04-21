@@ -562,6 +562,22 @@ body.is-resizing-layout {
   color: var(--text-1);
 }
 
+.shell-status-item-interactive {
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 1px 4px;
+  transition: background 0.1s ease;
+}
+
+.shell-status-item-interactive:hover {
+  background: rgba(173, 194, 219, 0.12);
+}
+
+.shell-status-item-interactive:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
 @media (max-width: 640px) {
   .shell-topbar {
     padding: 12px 14px;
@@ -622,4 +638,8 @@ body.is-resizing-layout {
     grid-template-columns: 1fr;
     gap: 4px;
   }
+}
+.shell-editor-tab.is-active .shell-editor-tab-close { 
+  border-top: 1px solid var(--accent);
+  margin-top: 0px;
 }
