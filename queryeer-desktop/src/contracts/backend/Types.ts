@@ -14,7 +14,11 @@ export type Capability =
   | "query.progress"
   | "query.resultChunk"
   | "query.completed"
-  | "query.failed";
+  | "query.failed"
+  | "file.open"
+  | "file.close"
+  | "file.bind"
+  | "file.change";
 
 export type ClientIdentity = {
   name: string;
@@ -75,6 +79,7 @@ export type QueryExecuteParams = {
   queryExecutionId: string;
   engineId: string;
   connectionId?: string;
+  fileId?: string;
   text: string;
   parameters?: unknown[];
   options?: {
@@ -156,6 +161,51 @@ export type QueryFailedNotification = {
   error: BackendError;
 };
 
+export type FileEngineBindingParams = {
+  engineId: string;
+  connectionId?: string;
+};
+
+export type FileOpenParams = {
+  fileId: string;
+  uri: string;
+  mimeType: string;
+  engineBinding?: FileEngineBindingParams;
+  initialText?: string;
+};
+
+export type FileOpenResult = {
+  fileId: string;
+  backendVersion: number;
+};
+
+export type FileCloseParams = {
+  fileId: string;
+};
+
+export type FileCloseResult = {
+  fileId: string;
+  accepted: boolean;
+};
+
+export type FileBindParams = {
+  fileId: string;
+  engineId: string;
+  connectionId?: string;
+};
+
+export type FileBindResult = {
+  fileId: string;
+  engineId: string;
+  backendVersion: number;
+};
+
+export type FileChangeNotification = {
+  fileId: string;
+  version: number;
+  text: string;
+};
+
 export type BackendMethodParamsMap = {
   "backend.handshake": HandshakeParams;
   "backend.runtimeStatus": RuntimeStatusParams;
@@ -164,6 +214,9 @@ export type BackendMethodParamsMap = {
   "query.cancel": QueryCancelParams;
   "connection.upsert": ConnectionUpsertParams;
   "credential.store": CredentialStoreParams;
+  "file.open": FileOpenParams;
+  "file.close": FileCloseParams;
+  "file.bind": FileBindParams;
 };
 
 export type BackendMethodResultMap = {
@@ -174,6 +227,9 @@ export type BackendMethodResultMap = {
   "query.cancel": QueryCancelResult;
   "connection.upsert": ConnectionUpsertResult;
   "credential.store": CredentialStoreResult;
+  "file.open": FileOpenResult;
+  "file.close": FileCloseResult;
+  "file.bind": FileBindResult;
 };
 
 export type BackendNotificationParamsMap = {
@@ -181,6 +237,7 @@ export type BackendNotificationParamsMap = {
   "query.resultChunk": QueryResultChunkNotification;
   "query.completed": QueryCompletedNotification;
   "query.failed": QueryFailedNotification;
+  "file.change": FileChangeNotification;
 };
 
 export type RequestParamsOf<TMethod extends BackendRequestMethod> =

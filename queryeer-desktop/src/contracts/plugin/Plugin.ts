@@ -1,3 +1,6 @@
+import type { FileMediator } from "../files/FileMediator";
+import type { FilesRegistry } from "../files/FilesRegistry";
+import type { LayoutRegistry } from "../extensions/LayoutExtension";
 import type { PluginManifest } from "./PluginManifest";
 
 export type Plugin = {
@@ -8,8 +11,10 @@ export type Plugin = {
 
 export type PluginContext = {
   commands: CommandRegistry;
-  panels: PanelRegistry;
   filesystems: FileSystemRegistry;
+  files: FilesRegistry;
+  fileMediator: FileMediator;
+  layout: LayoutRegistry;
 };
 
 export type CommandExecutionResult = {
@@ -25,15 +30,6 @@ export type CommandRegistry = {
     handler: () => void | Promise<void>;
   }) => void;
   executeCommand: (commandId: string) => Promise<CommandExecutionResult>;
-};
-
-export type PanelRegistry = {
-  registerPanel: (panel: {
-    id: string;
-    title: string;
-    placement: "left" | "right" | "bottom" | "center";
-    render: () => import("react").ReactNode;
-  }) => void;
 };
 
 export type FileSystemRegistry = {

@@ -4,6 +4,9 @@ import {
   type BackendNotificationEnvelope,
   type BackendRequestEnvelope,
   type BackendResponseEnvelope,
+  type FileBindResult,
+  type FileCloseResult,
+  type FileOpenResult,
   type HandshakeResult,
   type QueryCancelResult,
   type QueryExecuteResult,
@@ -53,6 +56,21 @@ export class MockJavaBackend {
       return;
     }
 
+    if (envelope.method === "file.open") {
+      this.respondFileOpen(envelope as BackendRequestEnvelope<"file.open">);
+      return;
+    }
+
+    if (envelope.method === "file.close") {
+      this.respondFileClose(envelope as BackendRequestEnvelope<"file.close">);
+      return;
+    }
+
+    if (envelope.method === "file.bind") {
+      this.respondFileBind(envelope as BackendRequestEnvelope<"file.bind">);
+      return;
+    }
+
     this.sink({
       protocolVersion: BACKEND_PROTOCOL_VERSION,
       type: "response",
@@ -79,7 +97,11 @@ export class MockJavaBackend {
         "query.progress",
         "query.resultChunk",
         "query.completed",
-        "query.failed"
+        "query.failed",
+        "file.open",
+        "file.close",
+        "file.bind",
+        "file.change"
       ]
     };
 
@@ -296,5 +318,48 @@ export class MockJavaBackend {
         }
       }
     });
+  }
+
+  private respondFileOpen(request: BackendRequestEnvelope<"file.open">): void {
+    const params = request.params as { fileId: string };
+    const result: FileOpenResult = {
+      fileId: params.fileId,
+      backendVersion: 0
+    };
+    this.sink({
+      protocolVersion: BACKEND_PROTOCOL_VERSION,
+      type: "response",
+      id: request.id,
+      result
+    } satisfies BackendResponseEnvelope<FileOpenResult>);
+  }
+
+  private respondFileClose(request: BackendRequestEnvelope<"file.close">): void {
+    const params = request.params as { fileId: string };
+    const result: FileCloseResult = {
+      fileId: params.fileId,
+      accepted: true
+    };
+    this.sink({
+      protocolVersion: BACKEND_PROTOCOL_VERSION,
+      type: "response",
+      id: request.id,
+      result
+    } satisfies BackendResponseEnvelope<FileCloseResult>);
+  }
+
+  private respondFileBind(request: BackendRequestEnvelope<"file.bind">): void {
+    const params = request.params as { fileId: string; engineId: string };
+    const result: FileBindResult = {
+      fileId: params.fileId,
+      engineId: params.engineId,
+      backendVersion: 0
+    };
+    this.sink({
+      protocolVersion: BACKEND_PROTOCOL_VERSION,
+      type: "response",
+      id: request.id,
+      result
+    } satisfies BackendResponseEnvelope<FileBindResult>);
   }
 }

@@ -1,6 +1,14 @@
+import type { FileEntity } from "../../contracts/files/FileEntity";
+import type { FileMediator } from "../../contracts/files/FileMediator";
+import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import type { Plugin, PluginContext } from "../../contracts/plugin/Plugin";
 import type { PluginManifestFile } from "../../contracts/plugin/PluginManifestFile";
 import { ExtensionRegistry } from "./ExtensionRegistry";
+import {
+  createFileMediator,
+  type BackendQueryExecutor,
+  type FileBackendSync
+} from "./FileMediator";
 import type { PluginDiagnostics } from "./PluginDiagnostics";
 import { PluginRegistry } from "./PluginRegistry";
 import {
@@ -14,9 +22,15 @@ export type PluginHostState = {
   loadedPluginIds: string[];
 };
 
+export type PluginHostOptions = {
+  executeBackendQuery: BackendQueryExecutor;
+  backendSync?: FileBackendSync;
+};
+
 export class PluginHost {
   private readonly pluginRegistry = new PluginRegistry();
   private readonly extensionRegistry = new ExtensionRegistry();
+  private readonly fileMediator: FileMediator;
   private readonly activePlugins: Plugin[] = [];
   private startedAt: Date | null = null;
   private diagnostics: PluginDiagnostics = {
@@ -25,6 +39,14 @@ export class PluginHost {
     providedCapabilities: [],
     pluginManifests: []
   };
+
+  constructor(options: PluginHostOptions) {
+    this.fileMediator = createFileMediator({
+      filesRegistry: this.extensionRegistry.createFilesRegistry(),
+      executeBackendQuery: options.executeBackendQuery,
+      backendSync: options.backendSync
+    });
+  }
 
   public register(plugin: Plugin): void {
     this.pluginRegistry.register(plugin);
@@ -58,8 +80,10 @@ export class PluginHost {
 
     const context: PluginContext = {
       commands: this.extensionRegistry.createCommandRegistry(),
-      panels: this.extensionRegistry.createPanelRegistry(),
-      filesystems: this.extensionRegistry.createFileSystemRegistry()
+      filesystems: this.extensionRegistry.createFileSystemRegistry(),
+      files: this.extensionRegistry.createFilesRegistry(),
+      fileMediator: this.fileMediator,
+      layout: this.extensionRegistry.createLayoutRegistry()
     };
 
     for (const plugin of orderedPlugins) {
@@ -101,6 +125,18 @@ export class PluginHost {
 
   public getExtensions() {
     return this.extensionRegistry.snapshot();
+  }
+
+  public getFilesRegistry(): FilesRegistry {
+    return this.extensionRegistry.createFilesRegistry();
+  }
+
+  public getFileMediator(): FileMediator {
+    return this.fileMediator;
+  }
+
+  public subscribeToFiles(subscriber: (files: FileEntity[]) => void): () => void {
+    return this.extensionRegistry.subscribeToFiles(subscriber);
   }
 
   public async executeCommand(commandId: string) {

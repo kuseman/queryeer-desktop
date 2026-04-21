@@ -11,6 +11,13 @@ import org.junit.jupiter.api.Test;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.contract.connection.ConnectionUpsertResult;
 import com.queryeer.backend.contract.credential.CredentialStoreResult;
+import com.queryeer.backend.contract.file.FileBindParams;
+import com.queryeer.backend.contract.file.FileBindResult;
+import com.queryeer.backend.contract.file.FileChangeNotification;
+import com.queryeer.backend.contract.file.FileCloseParams;
+import com.queryeer.backend.contract.file.FileCloseResult;
+import com.queryeer.backend.contract.file.FileOpenParams;
+import com.queryeer.backend.contract.file.FileOpenResult;
 import com.queryeer.backend.contract.handshake.HandshakeResult;
 import com.queryeer.backend.contract.health.PingResult;
 import com.queryeer.backend.contract.query.QueryCancelResult;
@@ -225,6 +232,87 @@ class ProtocolFixtureCompatibilityTest
         Assertions.assertNotNull(params.error());
         Assertions.assertEquals(BackendErrorCode.INTERNAL, params.error()
                 .code());
+    }
+
+    @Test
+    void fileOpenFixturesAreCompatible() throws IOException
+    {
+        BackendEnvelope request = readFixture("request-file-open.json");
+        BackendEnvelope response = readFixture("response-file-open.json");
+
+        assertEnvelopeBase(request);
+        assertEnvelopeBase(response);
+        Assertions.assertEquals(EnvelopeType.REQUEST, request.type());
+        Assertions.assertEquals(EnvelopeType.RESPONSE, response.type());
+        Assertions.assertEquals("file.open", request.method());
+        Assertions.assertEquals(request.id(), response.id());
+        Assertions.assertNotNull(response.result());
+
+        FileOpenParams params = objectMapper.convertValue(request.params(), FileOpenParams.class);
+        Assertions.assertEquals("file-fixture-1", params.fileId());
+        Assertions.assertEquals("application/x-payloadbuilder", params.mimeType());
+        Assertions.assertNotNull(params.engineBinding());
+        Assertions.assertEquals("payloadbuilder", params.engineBinding()
+                .engineId());
+
+        FileOpenResult result = objectMapper.convertValue(response.result(), FileOpenResult.class);
+        Assertions.assertEquals("file-fixture-1", result.fileId());
+        Assertions.assertEquals(0L, result.backendVersion());
+    }
+
+    @Test
+    void fileCloseFixturesAreCompatible() throws IOException
+    {
+        BackendEnvelope request = readFixture("request-file-close.json");
+        BackendEnvelope response = readFixture("response-file-close.json");
+
+        assertEnvelopeBase(request);
+        assertEnvelopeBase(response);
+        Assertions.assertEquals(EnvelopeType.REQUEST, request.type());
+        Assertions.assertEquals(EnvelopeType.RESPONSE, response.type());
+        Assertions.assertEquals("file.close", request.method());
+        Assertions.assertEquals(request.id(), response.id());
+
+        FileCloseParams params = objectMapper.convertValue(request.params(), FileCloseParams.class);
+        FileCloseResult result = objectMapper.convertValue(response.result(), FileCloseResult.class);
+        Assertions.assertEquals(params.fileId(), result.fileId());
+        Assertions.assertTrue(result.accepted());
+    }
+
+    @Test
+    void fileBindFixturesAreCompatible() throws IOException
+    {
+        BackendEnvelope request = readFixture("request-file-bind.json");
+        BackendEnvelope response = readFixture("response-file-bind.json");
+
+        assertEnvelopeBase(request);
+        assertEnvelopeBase(response);
+        Assertions.assertEquals(EnvelopeType.REQUEST, request.type());
+        Assertions.assertEquals(EnvelopeType.RESPONSE, response.type());
+        Assertions.assertEquals("file.bind", request.method());
+        Assertions.assertEquals(request.id(), response.id());
+
+        FileBindParams params = objectMapper.convertValue(request.params(), FileBindParams.class);
+        FileBindResult result = objectMapper.convertValue(response.result(), FileBindResult.class);
+        Assertions.assertEquals(params.fileId(), result.fileId());
+        Assertions.assertEquals(params.engineId(), result.engineId());
+        Assertions.assertTrue(result.backendVersion() >= 0L);
+    }
+
+    @Test
+    void fileChangeNotificationFixtureIsCompatible() throws IOException
+    {
+        BackendEnvelope notification = readFixture("notification-file-change.json");
+
+        assertEnvelopeBase(notification);
+        Assertions.assertEquals(EnvelopeType.NOTIFICATION, notification.type());
+        Assertions.assertEquals("file.change", notification.method());
+        Assertions.assertNotNull(notification.params());
+
+        FileChangeNotification params = objectMapper.convertValue(notification.params(), FileChangeNotification.class);
+        Assertions.assertEquals("file-fixture-1", params.fileId());
+        Assertions.assertEquals(3L, params.version());
+        Assertions.assertNotNull(params.text());
     }
 
     private void assertEnvelopeBase(BackendEnvelope envelope)

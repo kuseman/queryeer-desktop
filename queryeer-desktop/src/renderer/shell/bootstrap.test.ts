@@ -41,7 +41,11 @@ describe("bootstrapShell diagnostics wiring", () => {
         }
       ],
       executeBackendQuery: async () => ({ accepted: true, queryExecutionId: "q-1" }),
-      cancelBackendQuery: async () => ({ accepted: true, queryExecutionId: "q-1" })
+      cancelBackendQuery: async () => ({ accepted: true, queryExecutionId: "q-1" }),
+      openBackendFile: async () => ({ fileId: "f-1", backendVersion: 0 }),
+      closeBackendFile: async () => ({ fileId: "f-1", accepted: true }),
+      bindBackendFile: async () => ({ fileId: "f-1", engineId: "payloadbuilder", backendVersion: 1 }),
+      notifyBackendFileChange: async () => {}
     };
 
     (discoverPluginModules as MockedDiscovery).mockResolvedValue({
@@ -70,8 +74,22 @@ describe("bootstrapShell diagnostics wiring", () => {
               version: "0.1.0",
               kind: "core"
             },
-            activate: async () => {
-              // noop
+            activate: async (context: {
+              layout: {
+                registerView: (view: {
+                  id: string;
+                  title: string;
+                  defaultZone: "primarySidebar" | "secondarySidebar";
+                  render: () => string;
+                }) => void;
+              };
+            }) => {
+              context.layout.registerView({
+                id: "test.view",
+                title: "Test View",
+                defaultZone: "primarySidebar",
+                render: () => "test"
+              });
             }
           }
         }

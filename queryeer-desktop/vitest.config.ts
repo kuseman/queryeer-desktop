@@ -12,6 +12,13 @@ export default defineConfig({
       },
       {
         test: {
+          name: "core",
+          include: ["src/core/**/*.test.ts"],
+          environment: "node"
+        }
+      },
+      {
+        test: {
           name: "renderer",
           include: ["src/renderer/**/*.test.ts", "src/renderer/**/*.test.tsx"],
           environment: "jsdom"

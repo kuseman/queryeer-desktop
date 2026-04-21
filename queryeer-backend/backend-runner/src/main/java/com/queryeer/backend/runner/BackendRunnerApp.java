@@ -21,9 +21,15 @@ import com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderBackendPlugin;
 import com.queryeer.backend.transport.stdio.ConnectionUpsertRequestHandler;
 import com.queryeer.backend.transport.stdio.CredentialStoreRequestHandler;
 import com.queryeer.backend.transport.stdio.EnvelopeCodec;
+import com.queryeer.backend.transport.stdio.FileBindRequestHandler;
+import com.queryeer.backend.transport.stdio.FileChangeNotificationHandler;
+import com.queryeer.backend.transport.stdio.FileCloseRequestHandler;
+import com.queryeer.backend.transport.stdio.FileOpenRequestHandler;
 import com.queryeer.backend.transport.stdio.HandshakeRequestHandler;
 import com.queryeer.backend.transport.stdio.HealthPingRequestHandler;
 import com.queryeer.backend.transport.stdio.MockQueryExecutionService;
+import com.queryeer.backend.transport.stdio.NotificationDispatcher;
+import com.queryeer.backend.transport.stdio.NotificationHandler;
 import com.queryeer.backend.transport.stdio.NotificationPublisher;
 import com.queryeer.backend.transport.stdio.QueryCancelRequestHandler;
 import com.queryeer.backend.transport.stdio.QueryExecuteRequestHandler;
@@ -76,11 +82,15 @@ public final class BackendRunnerApp
         List<RequestHandler> handlers = List.of(new HandshakeRequestHandler(responseWriter), new RuntimeStatusRequestHandler(responseWriter, codec, () -> runtimeStatusSnapshot(runtime)),
                 new HealthPingRequestHandler(startedAt, responseWriter, codec), new QueryExecuteRequestHandler(responseWriter, codec, queryExecutionService),
                 new QueryCancelRequestHandler(responseWriter, codec, queryExecutionService), new ConnectionUpsertRequestHandler(responseWriter, codec),
-                new CredentialStoreRequestHandler(responseWriter, codec));
+                new CredentialStoreRequestHandler(responseWriter, codec), new FileOpenRequestHandler(responseWriter, codec, services.fileRegistryView()),
+                new FileCloseRequestHandler(responseWriter, codec, services.fileRegistryView()), new FileBindRequestHandler(responseWriter, codec, services.fileRegistryView()));
 
         RequestDispatcher requestDispatcher = new RequestDispatcher(responseWriter, handlers);
 
-        StdioTransportServer transportServer = new StdioTransportServer(System.in, codec, responseWriter, requestDispatcher);
+        List<NotificationHandler> notificationHandlers = List.of(new FileChangeNotificationHandler(codec, services.fileRegistryView()));
+        NotificationDispatcher notificationDispatcher = new NotificationDispatcher(notificationHandlers);
+
+        StdioTransportServer transportServer = new StdioTransportServer(System.in, codec, responseWriter, requestDispatcher, notificationDispatcher);
         System.err.println(withCorrelation("Queryeer backend runner started (stdio mode).", null));
         try
         {

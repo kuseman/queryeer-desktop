@@ -109,6 +109,46 @@ const testConnectionUpsertFixtures = () => {
   assert(typeof response.result.connectionId === "string", "connection.upsert connectionId missing");
 };
 
+const testFileOpenFixtures = () => {
+  const request = readFixture("request-file-open.json");
+  const response = readFixture("response-file-open.json");
+
+  assertEnvelopeBase(request);
+  assertEnvelopeBase(response);
+  assert(request.method === "file.open", "Unexpected file.open method");
+  assert(request.id === response.id, "file.open request/response id mismatch");
+  assert(typeof request.params?.fileId === "string", "file.open fileId missing");
+  assert(typeof request.params?.uri === "string", "file.open uri missing");
+  assert(typeof request.params?.mimeType === "string", "file.open mimeType missing");
+  assert(request.params.fileId === response.result?.fileId, "file.open fileId mismatch");
+  assert(typeof response.result?.backendVersion === "number", "file.open backendVersion missing");
+};
+
+const testFileCloseFixtures = () => {
+  const request = readFixture("request-file-close.json");
+  const response = readFixture("response-file-close.json");
+
+  assertEnvelopeBase(request);
+  assertEnvelopeBase(response);
+  assert(request.method === "file.close", "Unexpected file.close method");
+  assert(request.id === response.id, "file.close request/response id mismatch");
+  assert(request.params?.fileId === response.result?.fileId, "file.close fileId mismatch");
+  assert(response.result?.accepted === true, "file.close accepted must be true");
+};
+
+const testFileBindFixtures = () => {
+  const request = readFixture("request-file-bind.json");
+  const response = readFixture("response-file-bind.json");
+
+  assertEnvelopeBase(request);
+  assertEnvelopeBase(response);
+  assert(request.method === "file.bind", "Unexpected file.bind method");
+  assert(request.id === response.id, "file.bind request/response id mismatch");
+  assert(request.params?.fileId === response.result?.fileId, "file.bind fileId mismatch");
+  assert(request.params?.engineId === response.result?.engineId, "file.bind engineId mismatch");
+  assert(typeof response.result?.backendVersion === "number", "file.bind backendVersion missing");
+};
+
 const testCredentialStoreFixtures = () => {
   const request = readFixture("request-credential-store.json");
   const response = readFixture("response-credential-store.json");
@@ -138,7 +178,11 @@ testExecuteFixtures();
 testCancelFixtures();
 testConnectionUpsertFixtures();
 testCredentialStoreFixtures();
+testFileOpenFixtures();
+testFileCloseFixtures();
+testFileBindFixtures();
 testNotificationFixture("notification-query-progress.json", "query.progress");
 testNotificationFixture("notification-query-result-chunk.json", "query.resultChunk");
 testNotificationFixture("notification-query-completed.json", "query.completed");
 testNotificationFixture("notification-query-failed.json", "query.failed");
+testNotificationFixture("notification-file-change.json", "file.change");

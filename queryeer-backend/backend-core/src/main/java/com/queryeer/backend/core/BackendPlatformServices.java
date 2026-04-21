@@ -5,6 +5,7 @@ import java.util.Map;
 import com.queryeer.backend.api.BackendPluginContext;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.EventBus;
+import com.queryeer.backend.api.FileSessionHandlerRegistry;
 import com.queryeer.backend.api.LoggerService;
 import com.queryeer.backend.api.MetadataRegistry;
 import com.queryeer.backend.api.QueryEngineRegistry;
@@ -18,18 +19,20 @@ public final class BackendPlatformServices
     private final NoopSecretService secrets;
     private final InMemoryQueryEngineRegistry queryEngines;
     private final InMemoryMetadataRegistry metadata;
+    private final DefaultFileRegistry fileRegistry;
     private final InMemoryEventBus events;
     private final InlineSchedulerService scheduler;
     private final BackendPluginContext pluginContext;
 
     private BackendPlatformServices(DefaultLoggerService logger, InMemoryConfigService config, NoopSecretService secrets, InMemoryQueryEngineRegistry queryEngines, InMemoryMetadataRegistry metadata,
-            InMemoryEventBus events, InlineSchedulerService scheduler, BackendPluginContext pluginContext)
+            DefaultFileRegistry fileRegistry, InMemoryEventBus events, InlineSchedulerService scheduler, BackendPluginContext pluginContext)
     {
         this.logger = logger;
         this.config = config;
         this.secrets = secrets;
         this.queryEngines = queryEngines;
         this.metadata = metadata;
+        this.fileRegistry = fileRegistry;
         this.events = events;
         this.scheduler = scheduler;
         this.pluginContext = pluginContext;
@@ -47,12 +50,13 @@ public final class BackendPlatformServices
         NoopSecretService secrets = new NoopSecretService();
         InMemoryQueryEngineRegistry queryEngines = new InMemoryQueryEngineRegistry();
         InMemoryMetadataRegistry metadata = new InMemoryMetadataRegistry();
+        DefaultFileRegistry fileRegistry = new DefaultFileRegistry();
         InMemoryEventBus events = new InMemoryEventBus();
         InlineSchedulerService scheduler = new InlineSchedulerService(logger);
 
-        BackendPluginContext context = new DefaultBackendPluginContext(logger, config, secrets, queryEngines, metadata, events, scheduler);
+        BackendPluginContext context = new DefaultBackendPluginContext(logger, config, secrets, queryEngines, metadata, fileRegistry, events, scheduler);
 
-        return new BackendPlatformServices(logger, config, secrets, queryEngines, metadata, events, scheduler, context);
+        return new BackendPlatformServices(logger, config, secrets, queryEngines, metadata, fileRegistry, events, scheduler, context);
     }
 
     public BackendPluginContext pluginContext()
@@ -85,6 +89,11 @@ public final class BackendPlatformServices
         return metadata;
     }
 
+    public FileSessionHandlerRegistry fileSessions()
+    {
+        return fileRegistry;
+    }
+
     public EventBus events()
     {
         return events;
@@ -103,5 +112,10 @@ public final class BackendPlatformServices
     public InMemoryMetadataRegistry metadataRegistryView()
     {
         return metadata;
+    }
+
+    public DefaultFileRegistry fileRegistryView()
+    {
+        return fileRegistry;
     }
 }

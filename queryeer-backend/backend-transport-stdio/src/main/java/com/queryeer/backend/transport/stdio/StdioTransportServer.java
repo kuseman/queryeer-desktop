@@ -19,13 +19,15 @@ public final class StdioTransportServer
     private final EnvelopeCodec codec;
     private final ResponseWriter responseWriter;
     private final RequestDispatcher requestDispatcher;
+    private final NotificationDispatcher notificationDispatcher;
 
-    public StdioTransportServer(InputStream input, EnvelopeCodec codec, ResponseWriter responseWriter, RequestDispatcher requestDispatcher)
+    public StdioTransportServer(InputStream input, EnvelopeCodec codec, ResponseWriter responseWriter, RequestDispatcher requestDispatcher, NotificationDispatcher notificationDispatcher)
     {
         this.reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8));
         this.codec = codec;
         this.responseWriter = responseWriter;
         this.requestDispatcher = requestDispatcher;
+        this.notificationDispatcher = notificationDispatcher;
     }
 
     public void start() throws IOException
@@ -46,7 +48,14 @@ public final class StdioTransportServer
         try
         {
             BackendEnvelope envelope = codec.decode(line);
-            requestDispatcher.dispatch(envelope);
+            if (envelope.type() == EnvelopeType.REQUEST)
+            {
+                requestDispatcher.dispatch(envelope);
+            }
+            else if (envelope.type() == EnvelopeType.NOTIFICATION)
+            {
+                notificationDispatcher.dispatch(envelope);
+            }
         }
         catch (Exception error)
         {

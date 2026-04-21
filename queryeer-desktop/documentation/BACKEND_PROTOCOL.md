@@ -293,6 +293,88 @@ Rules:
 - Request MUST NOT include secret fields such as `password`, `token`, or `clientSecret`.
 - Secret material is handled exclusively via `credential.store`.
 
+## 5.6a `file.open`
+
+Purpose: tell the backend a file has been opened so an engine-bound session + parse cache can be created.
+
+Request params:
+
+```json
+{
+  "fileId": "file-001",
+  "uri": "file:///queries/example.pb",
+  "mimeType": "application/x-payloadbuilder",
+  "engineBinding": {
+    "engineId": "payloadbuilder",
+    "connectionId": "conn-001"
+  },
+  "initialText": "select 1"
+}
+```
+
+Success result:
+
+```json
+{
+  "fileId": "file-001",
+  "backendVersion": 0
+}
+```
+
+Rules:
+
+- `engineBinding` is optional. Desktop SHOULD only send `file.open` once an engine binding exists (lazy session rule).
+- `initialText` is optional; if absent, backend MUST NOT attempt to parse until a subsequent `file.change` arrives.
+
+## 5.6b `file.close`
+
+Purpose: release backend state for a file (parse tree, engine context, etc.).
+
+Request params:
+
+```json
+{ "fileId": "file-001" }
+```
+
+Success result:
+
+```json
+{ "fileId": "file-001", "accepted": true }
+```
+
+## 5.6c `file.bind`
+
+Purpose: attach or rebind a file to an engine/connection after initial open.
+
+Request params:
+
+```json
+{
+  "fileId": "file-001",
+  "engineId": "payloadbuilder",
+  "connectionId": "conn-001"
+}
+```
+
+Success result:
+
+```json
+{
+  "fileId": "file-001",
+  "engineId": "payloadbuilder",
+  "backendVersion": 1
+}
+```
+
+Rules:
+
+- If the file was previously unbound, backend creates the engine session on bind.
+- If the file was already bound, backend rebinds (may invalidate caches).
+
+## 5.6d `query.execute` fileId extension
+
+`query.execute` params accept an optional `fileId`. When present and the backend has a matching open file session, the backend SHOULD reuse the cached parse tree rather than re-parsing `text`. `text` remains accepted for stateless callers.
+
 ## 5.6 `credential.store`
 
 Purpose: store/rotate secrets for a connection (to be encrypted at rest in backend).
@@ -370,6 +452,23 @@ Rules:
   }
 }
 ```
+
+## 6.4a `file.change`
+
+Renderer → backend notification. Carries the latest buffer text so the backend can refresh its parse tree.
+
+```json
+{
+  "fileId": "file-001",
+  "version": 3,
+  "text": "select id, name from foo"
+}
+```
+
+Rules:
+
+- Debouncing lives on the renderer (mediator); backend MUST tolerate out-of-order or rapid bursts.
+- `version` MUST be monotonically increasing per `fileId`; backend MAY drop notifications with a stale `version`.
 
 ## 6.4 `query.failed`
 
@@ -463,10 +562,12 @@ Current Java stdio scaffold implementation status:
 
 - `backend.handshake` implemented
 - `health.ping` implemented
-- `query.execute` implemented (mocked progressive notifications)
+- `query.execute` implemented (mocked progressive notifications); `fileId` field accepted but not yet consumed
 - `query.cancel` implemented (mocked cancellation notification)
 - `backend.runtimeStatus` implemented
 - `connection.upsert` / `credential.store` request handling scaffolded
+- `file.open` / `file.close` / `file.bind` request handlers implemented against `DefaultFileRegistry`; no engine-specific `FileSessionHandler` yet
+- `file.change` notification handler implemented
 
 Current integration notes:
 

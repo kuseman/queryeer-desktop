@@ -12,6 +12,8 @@ public interface BackendPluginContext
 
     MetadataRegistry metadata();
 
+    FileSessionHandlerRegistry fileSessions();
+
     EventBus events();
 
     SchedulerService scheduler();

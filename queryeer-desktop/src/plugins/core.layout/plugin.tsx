@@ -9,19 +9,119 @@ export const coreLayoutPlugin: Plugin = {
     description: "Registers baseline panel layout capabilities"
   },
   activate: (context) => {
-    context.panels.registerPanel({
+    context.commands.registerCommand({
+      id: "core.layout.openEditor",
+      title: "Open Editor",
+      handler: async () => {
+        console.log("Editor open command executed");
+      }
+    });
+
+    context.commands.registerCommand({
+      id: "core.layout.closeEditor",
+      title: "Close Editor",
+      handler: async () => {
+        console.log("Editor close command executed");
+      }
+    });
+
+    context.layout.setShellDefaults({
+      visibleZones: [
+        "menuBar",
+        "toolBar",
+        "statusBar",
+        "primarySidebar",
+        "mainArea"
+      ],
+      sidebarWidths: {
+        primary: 280,
+        secondary: 320
+      },
+      statusBarHeight: 24
+    });
+
+    context.layout.registerMenuItem({
+      id: "core.layout.menu.file",
+      label: "File",
+      order: 10,
+      group: "file"
+    });
+
+    context.layout.registerMenuItem({
+      id: "core.layout.menu.edit",
+      label: "Edit",
+      order: 20,
+      group: "edit"
+    });
+
+    context.layout.registerMenuItem({
+      id: "core.layout.menu.view",
+      label: "View",
+      order: 30,
+      group: "view"
+    });
+
+    context.layout.registerToolbarAction({
+      id: "core.layout.toolbar.togglePrimarySidebar",
+      title: "",
+      order: 10,
+      commandId: "core.layout.togglePrimarySidebar",
+      icon: "sidebar-primary"
+    });
+
+    context.layout.registerToolbarAction({
+      id: "core.layout.toolbar.toggleSecondarySidebar",
+      title: "",
+      order: 20,
+      commandId: "core.layout.toggleSecondarySidebar",
+      icon: "sidebar-secondary"
+    });
+
+    context.layout.registerStatusItem({
+      id: "core.layout.status.runtime",
+      alignment: "left",
+      order: 10,
+      render: () => <span>Layout: ready</span>
+    });
+
+    context.layout.registerView({
+      id: "core.layout.view.primary",
+      title: "Primary",
+      defaultZone: "primarySidebar",
+      order: 10,
+      canMoveZones: true,
+      render: () => (
+        <div>
+          <p>Primary sidebar slot for dockable plugin views.</p>
+        </div>
+      )
+    });
+
+    context.layout.registerView({
+      id: "core.layout.view.secondary",
+      title: "Secondary",
+      defaultZone: "secondarySidebar",
+      order: 10,
+      canMoveZones: true,
+      render: () => (
+        <div>
+          <p>Secondary sidebar slot for context tools and inspectors.</p>
+        </div>
+      )
+    });
+
+    context.layout.registerWelcome({
       id: "core.layout.welcome",
-      title: "Welcome",
-      placement: "center",
+      order: 10,
       render: () => (
         <div className="panel-card">
-          <h3>Plugin host online</h3>
+          <h3>Workspace ready</h3>
           <p>
-            Layout capability is active. Future modules will register tabs and panels
-            through this extension point.
+            Shell zones are active: menu, toolbar, status bar, sidebars, and main area.
           </p>
         </div>
       )
     });
+
   }
 };

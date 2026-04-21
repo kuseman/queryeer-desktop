@@ -25,6 +25,9 @@
 - Desktop renderer external module loading now supports dev-server-safe `/@fs` resolution + Vite fs allow-list for repo-level `plugins` directory.
 - `dev.query-probe` capability dependency is no longer hard-required at startup (prevents capability validation boot failure in current plugin graph).
 - GitHub CI workflow now uses two broad validation jobs: full desktop validation and full backend reactor `clean verify`.
+- `core.layout` now has a fixed-zone layout contribution contract draft and registry wiring (`menuBar`, `toolBar`, `statusBar`, `primarySidebar`, `secondarySidebar`, `mainArea`).
+- Renderer shell now maps layout contribution snapshots into fixed UI zones (menu/toolbar/status/sidebars/main) with legacy panel compatibility mapping.
+- Editor group infrastructure implemented: tab bar rendering, active editor state management, CSS styling for tabs/content.
 
 ## What changed in this session
 
@@ -71,6 +74,34 @@
 - Updated `.github/workflows/queryeer-desktop-ci.yml` job structure:
   - desktop job remains full desktop checks (`test`, protocol fixtures, `typecheck`, `lint`, `build`)
   - backend job now runs full backend reactor verification (`./mvnw -f queryeer-backend/pom.xml clean verify`)
+- Added first fixed-zone layout contract and runtime wiring:
+  - new layout extension contract types + registry API in desktop runtime
+  - `PluginContext` now exposes `layout` registry alongside commands/panels/filesystems
+  - `core.layout` now contributes shell defaults, menu items, status item, and welcome contribution through layout registry
+  - legacy panel registration remains temporarily for compatibility during migration
+  - draft architecture note added: `queryeer-desktop/documentation/LAYOUT_EXTENSION_MODEL.md`
+- Implemented first fixed-zone renderer mapping in `ShellApp`:
+  - menu bar + toolbar now render from `extensions.layout` contributions
+  - primary/secondary sidebars render `layout.views` contributions
+  - main area renders welcome contributions and existing diagnostics/runtime cards
+  - status bar renders contributed status items and backend state indicator
+  - legacy `panels` contributions are still rendered by placement (`left/right/center/bottom`) for migration compatibility
+- Migrated built-in layout contribution off legacy panel API:
+  - `core.layout` no longer registers legacy `panels` welcome contribution
+  - `core.layout` now contributes fixed sidebar views via `layout.registerView` for primary/secondary slots
+- Deprecated legacy panel extension point in code:
+  - removed `PanelExtension` contract and `PanelRegistry` from `PluginContext`
+  - removed panel registry/snapshot support from runtime `ExtensionRegistry`
+  - `ShellApp` no longer renders legacy placement-based panel mappings
+  - plugin UI contributions are now layout-only (`registerView` / `registerEditor` / `registerWelcome`)
+- Implemented editor group infrastructure in main area:
+  - Added `order` field to `LayoutEditorContribution` contract
+  - ShellApp now maintains `openEditorIds` and `activeEditorId` state
+  - Tab bar renders when editors are open with close buttons per tab
+  - Active editor content renders in main area, fallback to welcome/blank state
+  - Added CSS styling for editor tabs and content pane
+  - Added `core.layout.openEditor` and `core.layout.closeEditor` command stubs in core.layout plugin
+  - First contributed editor auto-opens when shell loads
 
 - Renamed desktop project folder from `electron-shell` to `queryeer-desktop` and updated naming references.
 - Added Java backend standalone Maven reactor scaffold under `queryeer-backend`:
@@ -256,9 +287,9 @@
 
 ## Next 3 tasks
 
-1. Extend Java transport correlation coverage from runner logs to request-level transport lifecycle logs (dispatcher/server paths).
-2. Add runtime guardrails/tests to detect manifest/runtime metadata drift (manifest vs descriptor overlap) while consolidation is ongoing.
-3. Document external plugin package layout rules (manifest location, frontend entryModule path conventions, duplicate-id precedence).
+1. Add command palette actions for layout zones/views (toggle sidebar, focus/move view, reset layout defaults).
+2. Wire editor open command to actual editor state changes (command palette integration).
+3. Extend Java transport correlation coverage from runner logs to request-level transport lifecycle logs (dispatcher/server paths).
 
 ## Known gaps / temporary scaffolds
 

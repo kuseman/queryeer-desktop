@@ -1,0 +1,16 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "request",
+  "id": "req-fixture-file-open-1",
+  "method": "file.open",
+  "params": {
+    "fileId": "file-fixture-1",
+    "uri": "file:///queries/example.pb",
+    "mimeType": "application/x-payloadbuilder",
+    "engineBinding": {
+      "engineId": "payloadbuilder",
+      "connectionId": "connection-1"
+    },
+    "initialText": "select 1"
+  }
+}

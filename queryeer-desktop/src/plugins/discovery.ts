@@ -8,6 +8,7 @@ type PluginLoader = () => Promise<{ pluginModule: PluginModule }>;
 const moduleLoaders: Partial<Record<string, PluginLoader>> = {
   "./core.layout/module": async () => import("./core.layout/module"),
   "./core.filesystem/module": async () => import("./core.filesystem/module"),
+  "./core.files/module": async () => import("./core.files/module"),
   "./core.commands/module": async () => import("./core.commands/module")
 };
 

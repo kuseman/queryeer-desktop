@@ -5,10 +5,14 @@ export type BackendRequestMethod =
   | "query.execute"
   | "query.cancel"
   | "connection.upsert"
-  | "credential.store";
+  | "credential.store"
+  | "file.open"
+  | "file.close"
+  | "file.bind";
 
 export type BackendNotificationMethod =
   | "query.progress"
   | "query.resultChunk"
   | "query.completed"
-  | "query.failed";
+  | "query.failed"
+  | "file.change";

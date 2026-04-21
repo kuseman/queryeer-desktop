@@ -66,11 +66,19 @@ export const pluginModule = {
       requiredCapabilities: []
     },
     activate: (context) => {
-      context.panels.registerPanel({
-        id: "dev.query-probe.panel",
+      context.layout.registerEditor({
+        id: "dev.query-probe.editor",
         title: "Query Probe",
-        placement: "right",
+        order: 10,
+        supportedMimeTypes: ["application/x-payloadbuilder"],
         render: () => React.createElement(QueryProbePanel)
+      });
+
+      context.files.registerMimeResolver((_uri, hint) => {
+        if (hint?.extension === "pb" || hint?.extension === "pbq") {
+          return "application/x-payloadbuilder";
+        }
+        return undefined;
       });
     }
   }

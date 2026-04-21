@@ -3,6 +3,7 @@
 This migration is intentionally incremental. The target architecture is plugin-first and backend-agnostic, with a Java backend behind explicit contracts.
 
 Core ownership and plugin boundaries are defined in `queryeer-desktop/documentation/CORE_BOUNDARY.md`.
+Fixed-zone layout contribution model draft is defined in `queryeer-desktop/documentation/LAYOUT_EXTENSION_MODEL.md`.
 
 ## Current status snapshot
 
@@ -56,6 +57,17 @@ Core ownership and plugin boundaries are defined in `queryeer-desktop/documentat
 - Real query engine adapters wired end-to-end to persisted backend state
 - Output plugins and result routing
 - Credential encryption/persistence and full connection lifecycle
+- Engine-specific `FileSessionHandler` implementations (payloadbuilder first) — increment 5 of the file entity model
+
+### File entity model progress
+
+- Increment 1 — core FE registry + ShellApp migration: done
+- Increment 2 — resolvers + mime classification: done
+- Increment 3 — FileMediator: done
+- Increment 4 — protocol + Java `DefaultFileRegistry` + `FileSessionHandler` SPI: done
+- Increment 5 — engine binding + execute reuse of parse trees: not started
+
+Design reference: `queryeer-desktop/documentation/FILE_ENTITY_MODEL.md`.
 
 ## Current focus (next 2 sprints)
 

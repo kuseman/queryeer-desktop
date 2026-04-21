@@ -1,0 +1,10 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "notification",
+  "method": "file.change",
+  "params": {
+    "fileId": "file-fixture-1",
+    "version": 3,
+    "text": "select id, name from foo"
+  }
+}

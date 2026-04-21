@@ -1,0 +1,9 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "request",
+  "id": "req-fixture-file-close-1",
+  "method": "file.close",
+  "params": {
+    "fileId": "file-fixture-1"
+  }
+}

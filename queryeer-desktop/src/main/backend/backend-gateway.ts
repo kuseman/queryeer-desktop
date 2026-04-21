@@ -7,6 +7,13 @@ import {
   type BackendNotificationEnvelope,
   type BackendRequestEnvelope,
   type BackendResponseEnvelope,
+  type FileBindParams,
+  type FileBindResult,
+  type FileChangeNotification,
+  type FileCloseParams,
+  type FileCloseResult,
+  type FileOpenParams,
+  type FileOpenResult,
   type HandshakeParams,
   type HandshakeResult,
   type PingParams,
@@ -95,6 +102,18 @@ export class BackendGateway {
     ipcMain.handle("backend:cancel-query", async (_event, params: QueryCancelParams) => {
       return this.cancelQuery(params);
     });
+    ipcMain.handle("backend:file-open", async (_event, params: FileOpenParams) => {
+      return this.openFile(params);
+    });
+    ipcMain.handle("backend:file-close", async (_event, params: FileCloseParams) => {
+      return this.closeFile(params);
+    });
+    ipcMain.handle("backend:file-bind", async (_event, params: FileBindParams) => {
+      return this.bindFile(params);
+    });
+    ipcMain.handle("backend:file-change", async (_event, params: FileChangeNotification) => {
+      return this.notifyFileChange(params);
+    });
   }
 
   public async start(): Promise<void> {
@@ -142,6 +161,52 @@ export class BackendGateway {
       throw new Error("query.cancel failed: missing result");
     }
     return response.result as QueryCancelResult;
+  }
+
+  public async openFile(params: FileOpenParams): Promise<FileOpenResult> {
+    const envelope = this.createRequest("file.open", params);
+    this.appendLog("debug", "gateway", `Sending request ${envelope.id} file.open`);
+    const response = await this.sendRequest(envelope);
+    if (!response.result) {
+      throw new Error("file.open failed: missing result");
+    }
+    return response.result as FileOpenResult;
+  }
+
+  public async closeFile(params: FileCloseParams): Promise<FileCloseResult> {
+    const envelope = this.createRequest("file.close", params);
+    this.appendLog("debug", "gateway", `Sending request ${envelope.id} file.close`);
+    const response = await this.sendRequest(envelope);
+    if (!response.result) {
+      throw new Error("file.close failed: missing result");
+    }
+    return response.result as FileCloseResult;
+  }
+
+  public async bindFile(params: FileBindParams): Promise<FileBindResult> {
+    const envelope = this.createRequest("file.bind", params);
+    this.appendLog("debug", "gateway", `Sending request ${envelope.id} file.bind`);
+    const response = await this.sendRequest(envelope);
+    if (!response.result) {
+      throw new Error("file.bind failed: missing result");
+    }
+    return response.result as FileBindResult;
+  }
+
+  public notifyFileChange(params: FileChangeNotification): void {
+    const envelope: BackendNotificationEnvelope<"file.change", FileChangeNotification> = {
+      protocolVersion: BACKEND_PROTOCOL_VERSION,
+      type: "notification",
+      method: "file.change",
+      params
+    };
+    this.appendLog("debug", "gateway", `Sending notification file.change (${params.fileId}@${params.version})`);
+    try {
+      this.transport.sendEnvelope(envelope);
+    } catch (error) {
+      const message = redactErrorMessage(error);
+      this.appendLog("error", "gateway", `Send file.change failed: ${message}`);
+    }
   }
 
   private startPingLoop(): void {
@@ -282,7 +347,10 @@ export class BackendGateway {
       | "backend.runtimeStatus"
       | "health.ping"
       | "query.execute"
-      | "query.cancel",
+      | "query.cancel"
+      | "file.open"
+      | "file.close"
+      | "file.bind",
     TParams
   >(
     method: TMethod,
