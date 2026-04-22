@@ -278,6 +278,12 @@ export class RendererWorkspaceService {
     if (!file || !file.dirtyVsDisk) {
       return;
     }
+    if (!hasMeaningfulContent(state.latestText)) {
+      return;
+    }
+    if (!this.filesRegistry.capabilities.hasCapability(file.mimeType, "backupable")) {
+      return;
+    }
     const backupFileId = this.getOrAssignBackupFileId(fileId);
     try {
       const { backupUri } = await this.bridge.saveBackup(
@@ -437,4 +443,8 @@ export class RendererWorkspaceService {
 
 function isPersistableEntity(file: FileEntity): boolean {
   return !file.uri.startsWith("untitled:");
+}
+
+function hasMeaningfulContent(text: string | null): boolean {
+  return text != null && text.trim().length > 0;
 }

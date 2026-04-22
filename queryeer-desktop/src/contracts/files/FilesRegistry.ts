@@ -3,7 +3,19 @@ import type { EditorResolver, MimeHint, MimeResolver } from "./Resolvers";
 
 export type FilesSubscriber = (files: FileEntity[]) => void;
 
+export type MimeCapability = "backupable" | "executable" | "viewable" | "editable";
+
+export type ContentCategory = "text" | "image" | "binary";
+
+export type MimeCapabilityRegistry = {
+  registerCapabilities: (mimeType: string, capabilities: MimeCapability[]) => void;
+  hasCapability: (mimeType: string, capability: MimeCapability) => boolean;
+  registerContentCategory: (mimeType: string, category: ContentCategory) => void;
+  getContentCategory: (mimeType: string) => ContentCategory | undefined;
+};
+
 export type FilesRegistry = {
+  capabilities: MimeCapabilityRegistry;
   openFile: (input: FileOpenInput) => FileEntity;
   closeFile: (fileId: string) => void;
   getFile: (fileId: string) => FileEntity | undefined;

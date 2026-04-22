@@ -1,4 +1,5 @@
 import type { Plugin } from "../../contracts/plugin/Plugin";
+import type { MimeCapability } from "../../contracts/files/FilesRegistry";
 
 const EXTENSION_MIME_MAP: Record<string, string> = {
   txt: "text/plain",
@@ -11,6 +12,12 @@ const EXTENSION_MIME_MAP: Record<string, string> = {
   log: "text/plain",
   sql: "application/sql"
 };
+
+const DEFAULT_CAPABILITIES: MimeCapability[] = [
+  "backupable",
+  "editable",
+  "viewable"
+];
 
 export const coreFilesPlugin: Plugin = {
   manifest: {
@@ -28,5 +35,10 @@ export const coreFilesPlugin: Plugin = {
       }
       return EXTENSION_MIME_MAP[extension];
     });
+
+    for (const [mimeType] of Object.entries(EXTENSION_MIME_MAP)) {
+      context.files.capabilities.registerCapabilities(mimeType, DEFAULT_CAPABILITIES);
+      context.files.capabilities.registerContentCategory(mimeType, "text");
+    }
   }
 };

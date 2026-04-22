@@ -59,6 +59,7 @@ Cross-cutting boundary doc added: `documentation/PROCESS_BOUNDARIES.md`.
 - Plugin packaging/discovery hardening (folder+zip, duplicate-id handling, diagnostics surfacing)
 - Backend observability hardening (status/logging/correlation workstream)
 - Core-boundary enforcement (query probe behavior moved out of shell core into fully external dual-target plugin package)
+- Mime capability registry for backupable/executable/viewable/editable gating (core.files + core.observability implemented; available for future editor resolver, command palette, etc.)
 
 ### Not started yet
 
@@ -97,6 +98,7 @@ Design reference: `documentation/CORE_FILE_WATCHER_MODEL.md`.
 - Increment 3 — fileWatcher integration (per-file subs, four-branch flag matrix, auto-reload-on-activate): done
 - Increment 4 — autosave + backup (3s debounce + 30s max-interval, separate backups folder, retention=5, dirty/close cleanup): done
 - Increment 5 — crash recovery (persist backupFileId, detect surviving backups on hydrate, expose `listPendingRestores`/`readBackup`/`discardBackup` for future modal UX): done
+- Increment 6 — backup gating (mime capability registry with `backupable`/`executable`/`viewable`/`editable` capabilities; content validation; `core.files` registers default capabilities; `core.observability` registers `viewable` only): done
 
 Design reference: `documentation/CORE_WORKSPACE_MODEL.md`.
 
