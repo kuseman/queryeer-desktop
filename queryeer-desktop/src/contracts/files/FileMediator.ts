@@ -1,10 +1,12 @@
 import type { EngineBinding, FileEntity } from "./FileEntity";
 import type { MimeHint } from "./Resolvers";
+import type { FileOpenIntent } from "./FilesRegistry";
 
 export type FileOpenHint = {
   mimeType?: string;
   editorId?: string;
   engineBinding?: EngineBinding;
+  openIntent?: FileOpenIntent;
 } & Pick<MimeHint, "extension">;
 
 export type FileCloseOptions = {

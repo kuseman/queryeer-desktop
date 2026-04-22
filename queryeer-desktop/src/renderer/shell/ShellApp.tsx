@@ -44,6 +44,24 @@ appShell: {
       readLatestWorkspaceBackup: (params: {
         fileId: string;
       }) => Promise<{ text: string; savedAt: string; backupUri: string } | null>;
+      showDialogMessage: (options: {
+        title: string;
+        message: string;
+        severity?: "info" | "warning" | "error";
+        detail?: string;
+        options?: { label: string; value: string }[];
+      }) => Promise<{ action: string }>;
+      showDialogOpen: (options: {
+        title?: string;
+        defaultPath?: string;
+        filters?: { name: string; extensions: string[] }[];
+        multiSelections?: boolean;
+      }) => Promise<{ canceled: boolean; filePaths: string[] }>;
+      showDialogSave: (options: {
+        title?: string;
+        defaultPath?: string;
+        filters?: { name: string; extensions: string[] }[];
+      }) => Promise<{ canceled: boolean; filePath?: string }>;
       openBackendFile: (params: {
         fileId: string;
         uri: string;
@@ -288,6 +306,7 @@ export function ShellApp({
 
   useEffect(() => {
     return filesRegistry.subscribe((next) => {
+      let addedFileIds: string[] = [];
       setFiles(next);
       setOpenFileIds((prev) => {
         const nextIds = new Set(next.map((file) => file.fileId));
@@ -295,9 +314,13 @@ export function ShellApp({
         const added = next
           .filter((file) => !prev.includes(file.fileId))
           .map((file) => file.fileId);
+        addedFileIds = added;
         return [...retained, ...added];
       });
       setActiveFileId((prev) => {
+        if (addedFileIds.length > 0) {
+          return addedFileIds[addedFileIds.length - 1] ?? null;
+        }
         if (prev && next.some((file) => file.fileId === prev)) {
           return prev;
         }
@@ -448,7 +471,7 @@ export function ShellApp({
 
             <div className="shell-editor-content">
               {activeEditor ? (
-                <div className="shell-editor-pane">{activeEditor.render()}</div>
+                <div className="shell-editor-pane">{activeEditor.render({ activeFile: activeFile ?? undefined })}</div>
               ) : welcomes.length > 0 ? (
                 welcomes.map((welcome) => (
                   <article

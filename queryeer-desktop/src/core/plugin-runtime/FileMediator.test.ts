@@ -9,9 +9,12 @@ import {
 
 function makeEditor(
   id: string,
-  supportedMimeTypes?: string[]
+  supportedMimeTypes?: string[],
+  overrides?: Partial<
+    Pick<LayoutEditorContribution, "openIntents" | "priority" | "order" | "supportedContentCategories">
+  >
 ): LayoutEditorContribution {
-  return { id, title: id, supportedMimeTypes, render: () => null };
+  return { id, title: id, supportedMimeTypes, ...overrides, render: () => null };
 }
 
 type Harness = {
@@ -89,6 +92,26 @@ describe("FileMediator.openFile", () => {
     });
 
     expect(second.fileId).toBe(first.fileId);
+  });
+
+  it("passes openIntent into editor resolution", async () => {
+    const editors = [
+      makeEditor("editor.viewer", ["text/plain"], { openIntents: ["view"] }),
+      makeEditor("editor.editor", ["text/plain"], { openIntents: ["edit"] })
+    ];
+    const { mediator } = setupHarness({ editors });
+
+    const viewFile = await mediator.openFile("file:///intent-view.txt", {
+      mimeType: "text/plain",
+      openIntent: "view"
+    });
+    const editFile = await mediator.openFile("file:///intent-edit.txt", {
+      mimeType: "text/plain",
+      openIntent: "edit"
+    });
+
+    expect(viewFile.editorId).toBe("editor.viewer");
+    expect(editFile.editorId).toBe("editor.editor");
   });
 
   it("does not call backend openFile when no engine binding (lazy)", async () => {

@@ -95,7 +95,11 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
           version: 0,
           openedAt: ""
         };
-        editorId = filesRegistry.resolveEditor(probe);
+        editorId = filesRegistry.resolveEditor(probe, {
+          uri,
+          mimeType,
+          openIntent: hint?.openIntent
+        });
       }
 
       const file = filesRegistry.openFile({
