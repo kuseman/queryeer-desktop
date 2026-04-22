@@ -20,6 +20,27 @@ import type {
 import type { ExternalFrontendPluginManifest } from "../contracts/plugin/ExternalFrontendPluginManifest";
 import type { WorkspaceSnapshot } from "../contracts/workspace/WorkspaceSnapshot";
 
+type DialogShowMessageOptions = {
+  title: string;
+  message: string;
+  severity?: "info" | "warning" | "error";
+  detail?: string;
+  options?: { label: string; value: string }[];
+};
+
+type DialogShowOpenOptions = {
+  title?: string;
+  defaultPath?: string;
+  filters?: { name: string; extensions: string[] }[];
+  multiSelections?: boolean;
+};
+
+type DialogShowSaveOptions = {
+  title?: string;
+  defaultPath?: string;
+  filters?: { name: string; extensions: string[] }[];
+};
+
 type AppShellApi = {
   platform: NodeJS.Platform;
   version: string;
@@ -53,6 +74,9 @@ type AppShellApi = {
   onFileWatcherEvent: (
     listener: (params: { subscriptionId: string; event: FileWatcherEvent }) => void
   ) => () => void;
+  showDialogMessage: (options: DialogShowMessageOptions) => Promise<{ action: string }>;
+  showDialogOpen: (options: DialogShowOpenOptions) => Promise<{ canceled: boolean; filePaths: string[] }>;
+  showDialogSave: (options: DialogShowSaveOptions) => Promise<{ canceled: boolean; filePath?: string }>;
 };
 
 const appShellApi: AppShellApi = {
@@ -121,6 +145,15 @@ const appShellApi: AppShellApi = {
     return () => {
       ipcRenderer.off(channel, wrapped);
     };
+  },
+  showDialogMessage: async (options) => {
+    return ipcRenderer.invoke("dialog:show-message", options);
+  },
+  showDialogOpen: async (options) => {
+    return ipcRenderer.invoke("dialog:show-open", options);
+  },
+  showDialogSave: async (options) => {
+    return ipcRenderer.invoke("dialog:show-save", options);
   }
 };
 

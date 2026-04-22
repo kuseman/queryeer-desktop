@@ -90,7 +90,8 @@ export class PluginHost {
       files: this.extensionRegistry.createFilesRegistry(),
       fileMediator: this.fileMediator,
       fileWatcher: this.fileWatcher,
-      layout: this.extensionRegistry.createLayoutRegistry()
+      layout: this.extensionRegistry.createLayoutRegistry(),
+      dialog: this.extensionRegistry.createDialogRegistry()
     };
 
     for (const plugin of orderedPlugins) {

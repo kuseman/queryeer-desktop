@@ -4,6 +4,7 @@ import { ipcMain } from "electron";
 import { BackendGateway } from "./backend/backend-gateway";
 import { chokidarWatcherFactory } from "./file-watcher/chokidar-watcher-factory";
 import { FileWatcherMainService } from "./file-watcher/file-watcher-service";
+import { DialogMainService } from "./dialog/dialog-service";
 import { discoverExternalFrontendPlugins } from "./plugins/frontend-plugin-discovery";
 import { BackupStore, defaultBackupsDir } from "./workspace/backup-store";
 import {
@@ -13,6 +14,7 @@ import {
 
 const isDev = !app.isPackaged;
 const backendGateway = new BackendGateway();
+const dialogService = new DialogMainService();
 const fileWatcherService = new FileWatcherMainService({
   watcherFactory: chokidarWatcherFactory,
   webContentsLookup: (id) => {
@@ -54,6 +56,7 @@ function createMainWindow(): void {
 
 app.whenReady().then(() => {
   backendGateway.wireIpc();
+  dialogService.wireIpc();
   fileWatcherService.wireIpc();
   workspaceStore = new WorkspaceStore({
     workspaceFilePath: defaultWorkspaceFilePath(app.getPath("userData"))

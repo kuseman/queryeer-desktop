@@ -2,6 +2,7 @@ import type { FileMediator } from "../files/FileMediator";
 import type { FilesRegistry } from "../files/FilesRegistry";
 import type { FileWatcherService } from "../files/FileWatcher";
 import type { LayoutRegistry } from "../extensions/LayoutExtension";
+import type { DialogExtension } from "../extensions/DialogExtension";
 import type { PluginManifest } from "./PluginManifest";
 
 export type Plugin = {
@@ -10,6 +11,8 @@ export type Plugin = {
   deactivate?: () => void | Promise<void>;
 };
 
+export type DialogRegistry = DialogExtension;
+
 export type PluginContext = {
   commands: CommandRegistry;
   filesystems: FileSystemRegistry;
@@ -17,6 +20,7 @@ export type PluginContext = {
   fileMediator: FileMediator;
   fileWatcher: FileWatcherService;
   layout: LayoutRegistry;
+  dialog: DialogRegistry;
 };
 
 export type CommandExecutionResult = {
