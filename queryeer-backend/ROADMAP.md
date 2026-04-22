@@ -110,6 +110,15 @@
 
 ## Desktop-side companion track (file entity / workspace / file watcher)
 
+Additional desktop shell work completed in parallel (outside Java modules):
+
+- [x] Custom frameless shell titlebar with draggable regions and renderer-managed window controls (`minimize`, `maximize/restore`, `close`)
+- [x] VS Code-like baseline menubar structure in `core.menu` with grouped roots (`File/Edit/Selection/View/Go/Run/Terminal/Help`) and accelerator propagation to native menu
+- [x] Move menu rendering out of `ShellApp` into dedicated `core.menu` UI module and add recursive multi-level submenu rendering
+- [x] Add baseline keyboard traversal (`Alt`, arrows, `Enter`/`Space`, `Escape`) for menu interaction
+- [x] Move shell logo to shared SVG resource and generate platform icon outputs (`.ico`, `.icns`, `.png`) for desktop packaging
+- [ ] Keyboard parity polish for mnemonics/letter shortcuts and menu item metadata expansion (separator/disabled)
+
 The Java backend's `file.*` protocol surface and `FileRegistry`/`FileSessionHandler` SPI exist to be consumed by the renderer. The companion desktop work landed in parallel:
 
 - `core.files` plugin owns the renderer `FileRegistry` + `FileMediator`.

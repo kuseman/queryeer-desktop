@@ -2,11 +2,17 @@
   color-scheme: dark;
   --bg-0: #0f1724;
   --bg-1: #13243a;
+  --bg-2: #1a2434;
   --text-0: #eff3f8;
   --text-1: #adc2db;
+  --text-2: rgba(239, 243, 248, 0.72);
   --accent: #31c48d;
   --accent-muted: rgba(49, 196, 141, 0.2);
   --border: rgba(173, 194, 219, 0.18);
+  --titlebar-hover: rgba(173, 194, 219, 0.14);
+  --titlebar-active: rgba(173, 194, 219, 0.2);
+  --titlebar-danger: #d43c3c;
+  --titlebar-dropdown-bg: #1a2c43;
   --ui-font-size-xs: 11px;
   --ui-font-size-sm: 12px;
   --ui-font-size-md: 13px;
@@ -642,4 +648,178 @@ body.is-resizing-layout {
 .shell-editor-tab.is-active .shell-editor-tab-close { 
   border-top: 1px solid var(--accent);
   margin-top: 0px;
+}
+
+/* Titlebar (frameless window) */
+.shell-titlebar {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  padding: 0 0 0 8px;
+  user-select: none;
+  gap: 2px;
+}
+
+.shell-titlebar-drag {
+  flex: 1;
+  height: 100%;
+  -webkit-app-region: drag;
+  min-width: 40px;
+}
+
+.shell-titlebar-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 34px;
+  padding: 0 4px 0 2px;
+  -webkit-app-region: drag;
+}
+
+.shell-titlebar-logo {
+  width: 18px;
+  height: 18px;
+  display: block;
+  filter: drop-shadow(0 0 1px rgba(121, 199, 255, 0.35));
+}
+
+.shell-titlebar-name {
+  font-size: var(--ui-font-size-sm);
+  font-weight: 600;
+  color: var(--text-0);
+}
+
+.shell-titlebar-menu {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  -webkit-app-region: no-drag;
+}
+
+.shell-titlebar-menu-root {
+  position: relative;
+}
+
+.shell-titlebar-menu-item {
+  background: transparent;
+  border: none;
+  color: var(--text-0);
+  padding: 0 9px;
+  height: calc(100% - 2px);
+  cursor: pointer;
+  font-size: var(--ui-font-size-xs);
+  position: relative;
+  border-radius: 4px;
+}
+
+.shell-titlebar-menu-item:hover,
+.shell-titlebar-menu-item:focus,
+.shell-titlebar-menu-item:focus-visible {
+  background: var(--titlebar-hover);
+  outline: none;
+}
+
+.shell-titlebar-menu-item.is-focused,
+.shell-titlebar-menu-item.is-open {
+  background: var(--titlebar-hover);
+}
+
+.shell-titlebar-controls {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  margin-left: auto;
+  -webkit-app-region: no-drag;
+}
+
+.shell-titlebar-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text-0);
+  cursor: pointer;
+}
+
+.shell-titlebar-control:hover {
+  background: var(--titlebar-hover);
+}
+
+.shell-titlebar-control:active {
+  background: var(--titlebar-active);
+}
+
+.shell-titlebar-control-close:hover {
+  background: var(--titlebar-danger);
+  color: white;
+}
+
+.shell-titlebar-dropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 240px;
+  background: var(--titlebar-dropdown-bg);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  border-radius: 5px;
+  padding: 4px;
+}
+
+.shell-titlebar-dropdown.is-nested {
+  top: -4px;
+  left: calc(100% - 2px);
+}
+
+.shell-titlebar-dropdown-entry {
+  position: relative;
+}
+
+.shell-titlebar-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-0);
+  text-align: left;
+  cursor: pointer;
+  font-size: var(--ui-font-size-xs);
+  border-radius: 4px;
+}
+
+.shell-titlebar-dropdown-item:hover,
+.shell-titlebar-dropdown-item.is-focused {
+  background: var(--titlebar-hover);
+}
+
+.shell-titlebar-dropdown-label {
+  min-width: 0;
+}
+
+.shell-titlebar-dropdown-tail {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.shell-titlebar-dropdown-accelerator {
+  color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+
+.shell-titlebar-dropdown-chevron {
+  color: var(--text-2);
+  width: 8px;
+  text-align: right;
 }

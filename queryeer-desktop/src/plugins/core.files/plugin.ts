@@ -28,6 +28,74 @@ export const coreFilesPlugin: Plugin = {
     description: "Owns the frontend file registry and file entity lifecycle"
   },
   activate: (context) => {
+    context.commands.registerCommand({
+      id: "core.files.new",
+      title: "New File",
+      accelerator: "CmdOrCtrl+N",
+      handler: async () => {
+        console.log("New file command executed");
+      }
+    });
+
+    context.commands.registerCommand({
+      id: "core.files.open",
+      title: "Open File",
+      accelerator: "CmdOrCtrl+O",
+      handler: async () => {
+        console.log("Open file command executed");
+      }
+    });
+
+    context.commands.registerCommand({
+      id: "core.files.save",
+      title: "Save File",
+      accelerator: "CmdOrCtrl+S",
+      handler: async () => {
+        console.log("Save file command executed");
+      }
+    });
+
+    context.commands.registerCommand({
+      id: "core.files.saveAs",
+      title: "Save As",
+      accelerator: "CmdOrCtrl+Shift+S",
+      handler: async () => {
+        console.log("Save as command executed");
+      }
+    });
+
+    context.menu.registerMenuItem({
+      id: "core.files.menu.new",
+      label: "New",
+      order: 11,
+      parentId: "core.menu.file",
+      commandId: "core.files.new"
+    });
+
+    context.menu.registerMenuItem({
+      id: "core.files.menu.open",
+      label: "Open",
+      order: 12,
+      parentId: "core.menu.file",
+      commandId: "core.files.open"
+    });
+
+    context.menu.registerMenuItem({
+      id: "core.files.menu.save",
+      label: "Save",
+      order: 13,
+      parentId: "core.menu.file",
+      commandId: "core.files.save"
+    });
+
+    context.menu.registerMenuItem({
+      id: "core.files.menu.saveAs",
+      label: "Save As",
+      order: 14,
+      parentId: "core.menu.file",
+      commandId: "core.files.saveAs"
+    });
+
     context.files.registerMimeResolver((_uri, hint) => {
       const extension = hint?.extension;
       if (!extension) {

@@ -60,11 +60,15 @@ Cross-cutting boundary doc added: `documentation/PROCESS_BOUNDARIES.md`.
 - Backend observability hardening (status/logging/correlation workstream)
 - Core-boundary enforcement (query probe behavior moved out of shell core into fully external dual-target plugin package)
 - Mime capability registry for backupable/executable/viewable/editable gating (core.files + core.observability implemented; available for future editor resolver, command palette, etc.)
+- Window chrome parity track: custom frameless titlebar, VS Code-like renderer menu strip, and renderer-driven native window controls/state sync
+- Menu architecture hardening: title/menu rendering extracted from `ShellApp` into `core.menu` UI module with recursive submenu support and keyboard navigation (Alt + arrows + Escape)
+- Branding/assets hardening: logo moved to shared SVG resource and deterministic icon generation added for Windows/macOS/Linux installer/taskbar assets
 
 ### Not started yet
 
 - Monaco editor plugin (or any text-editor plugin) — first real consumer of FileEntity + viewState
 - Modal/notification UI plugin — surfaces external-change prompt + crash-recovery prompt; consumes `WorkspaceService.listPendingRestores`/`readBackup`/`discardBackup`
+- Keyboard/interaction parity polish for menu UX (mnemonics/letter shortcuts, separators/disabled states, richer accessibility semantics)
 - Real query engine adapters wired end-to-end to persisted backend state
 - Output plugins and result routing
 - Credential encryption/persistence and full connection lifecycle

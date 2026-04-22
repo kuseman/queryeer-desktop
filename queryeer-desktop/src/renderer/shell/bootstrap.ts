@@ -92,6 +92,30 @@ export async function bootstrapShell() {
 
   const commandExecution = await host.executeCommand("core.commands.about");
 
+  window.appShell.onMenuExecuteCommand((commandId: string) => {
+    void host.executeCommand(commandId);
+  });
+
+  const extensions = host.getExtensions();
+  const menuItems = extensions.menu.items.map((item) => ({
+    id: item.id,
+    label: item.label,
+    order: item.order,
+    commandId: item.commandId,
+    parentId: item.parentId,
+    icon: item.icon
+  }));
+  const commands = extensions.commands.map((cmd) => ({
+    id: cmd.id,
+    accelerator: cmd.accelerator
+  }));
+
+  try {
+    await window.appShell.buildMenu(menuItems, commands);
+  } catch (err) {
+    console.error("Failed to build menu:", err);
+  }
+
   setRuntimeData({
     hostState: host.getState(),
     diagnostics: host.getDiagnostics(),

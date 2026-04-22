@@ -74,9 +74,16 @@ type AppShellApi = {
   onFileWatcherEvent: (
     listener: (params: { subscriptionId: string; event: FileWatcherEvent }) => void
   ) => () => void;
+  onMenuExecuteCommand: (listener: (commandId: string) => void) => () => void;
   showDialogMessage: (options: DialogShowMessageOptions) => Promise<{ action: string }>;
   showDialogOpen: (options: DialogShowOpenOptions) => Promise<{ canceled: boolean; filePaths: string[] }>;
   showDialogSave: (options: DialogShowSaveOptions) => Promise<{ canceled: boolean; filePath?: string }>;
+  buildMenu: (menuItems: unknown[], commands: unknown[]) => Promise<{ success: boolean }>;
+  windowMinimize: () => void;
+  windowMaximize: () => void;
+  windowClose: () => void;
+  isWindowMaximized: () => Promise<boolean>;
+  onWindowStateChanged: (listener: (state: { maximized: boolean }) => void) => () => void;
 };
 
 const appShellApi: AppShellApi = {
@@ -146,6 +153,16 @@ const appShellApi: AppShellApi = {
       ipcRenderer.off(channel, wrapped);
     };
   },
+  onMenuExecuteCommand: (listener: (commandId: string) => void) => {
+    const channel = "menu:execute-command";
+    const wrapped = (_event: Electron.IpcRendererEvent, commandId: string): void => {
+      listener(commandId);
+    };
+    ipcRenderer.on(channel, wrapped);
+    return () => {
+      ipcRenderer.off(channel, wrapped);
+    };
+  },
   showDialogMessage: async (options) => {
     return ipcRenderer.invoke("dialog:show-message", options);
   },
@@ -154,6 +171,25 @@ const appShellApi: AppShellApi = {
   },
   showDialogSave: async (options) => {
     return ipcRenderer.invoke("dialog:show-save", options);
+  },
+  buildMenu: async (menuItems: unknown[], commands: unknown[]) => {
+    return ipcRenderer.invoke("menu:build", menuItems, commands);
+  },
+  windowMinimize: () => ipcRenderer.send("window:minimize"),
+  windowMaximize: () => ipcRenderer.send("window:maximize"),
+  windowClose: () => ipcRenderer.send("window:close"),
+  isWindowMaximized: async () => {
+    return ipcRenderer.invoke("window:is-maximized");
+  },
+  onWindowStateChanged: (listener) => {
+    const channel = "window:state-changed";
+    const wrapped = (_event: Electron.IpcRendererEvent, payload: { maximized: boolean }): void => {
+      listener(payload);
+    };
+    ipcRenderer.on(channel, wrapped);
+    return () => {
+      ipcRenderer.off(channel, wrapped);
+    };
   }
 };
 

@@ -59,7 +59,14 @@ describe("bootstrapShell diagnostics wiring", () => {
       watchFile: async () => ({ subscriptionId: "fw-test-1" }),
       unwatchFile: async () => ({ removed: true }),
       muteFileWatcherPath: async () => ({ muted: true }),
-      onFileWatcherEvent: () => () => {}
+      onFileWatcherEvent: () => () => {},
+      onMenuExecuteCommand: () => () => {},
+      buildMenu: async () => ({ success: true }),
+      windowMinimize: () => {},
+      windowMaximize: () => {},
+      windowClose: () => {},
+      isWindowMaximized: async () => false,
+      onWindowStateChanged: () => () => {}
     };
 
     (discoverPluginModules as MockedDiscovery).mockResolvedValue({

@@ -91,6 +91,7 @@ export class PluginHost {
       fileMediator: this.fileMediator,
       fileWatcher: this.fileWatcher,
       layout: this.extensionRegistry.createLayoutRegistry(),
+      menu: this.extensionRegistry.createMenuRegistry(),
       dialog: this.extensionRegistry.createDialogRegistry()
     };
 
