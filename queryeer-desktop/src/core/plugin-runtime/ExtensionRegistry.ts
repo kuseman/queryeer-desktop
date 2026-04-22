@@ -8,6 +8,7 @@ import type {
   LayoutViewContribution,
   LayoutWelcomeContribution
 } from "../../contracts/extensions/LayoutExtension";
+import type { MenuItemContribution, MenuRegistry } from "../../contracts/extensions/MenuExtension";
 import type { CommandExtension } from "../../contracts/extensions/CommandExtension";
 import type { FileSystemExtension } from "../../contracts/extensions/FileSystemExtension";
 import type { FileEntity } from "../../contracts/files/FileEntity";
@@ -24,6 +25,9 @@ export type ExtensionSnapshot = {
   commands: CommandExtension[];
   filesystems: FileSystemExtension[];
   files: FileEntity[];
+  menu: {
+    items: MenuItemContribution[];
+  };
   layout: {
     menuItems: LayoutMenuItemContribution[];
     toolbarActions: LayoutToolbarActionContribution[];
@@ -54,6 +58,7 @@ export class ExtensionRegistry {
   private readonly commandBus = new CommandBus();
   private readonly commands = new Map<string, CommandExtension>();
   private readonly filesystems = new Map<string, FileSystemExtension>();
+  private readonly menuItems = new Map<string, MenuItemContribution>();
   private readonly layoutMenuItems = new Map<string, LayoutMenuItemContribution>();
   private readonly layoutToolbarActions = new Map<string, LayoutToolbarActionContribution>();
   private readonly layoutStatusItems = new Map<string, LayoutStatusItemContribution>();
@@ -87,6 +92,14 @@ export class ExtensionRegistry {
 
   public createFilesRegistry(): FilesRegistry {
     return this.fileRegistry.createFilesRegistry();
+  }
+
+  public createMenuRegistry(): MenuRegistry {
+    return {
+      registerMenuItem: (contribution) => {
+        this.menuItems.set(contribution.id, contribution);
+      }
+    };
   }
 
   public subscribeToFiles(subscriber: (files: FileEntity[]) => void): () => void {
@@ -145,6 +158,9 @@ export class ExtensionRegistry {
       commands: [...this.commands.values()],
       filesystems: [...this.filesystems.values()],
       files: this.fileRegistry.snapshot(),
+      menu: {
+        items: [...this.menuItems.values()]
+      },
       layout: {
         menuItems: [...this.layoutMenuItems.values()],
         toolbarActions: [...this.layoutToolbarActions.values()],

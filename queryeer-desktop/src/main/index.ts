@@ -5,6 +5,7 @@ import { BackendGateway } from "./backend/backend-gateway";
 import { chokidarWatcherFactory } from "./file-watcher/chokidar-watcher-factory";
 import { FileWatcherMainService } from "./file-watcher/file-watcher-service";
 import { DialogMainService } from "./dialog/dialog-service";
+import { MenuService } from "./menu/menu-service";
 import { discoverExternalFrontendPlugins } from "./plugins/frontend-plugin-discovery";
 import { BackupStore, defaultBackupsDir } from "./workspace/backup-store";
 import {
@@ -15,6 +16,7 @@ import {
 const isDev = !app.isPackaged;
 const backendGateway = new BackendGateway();
 const dialogService = new DialogMainService();
+const menuService = new MenuService();
 const fileWatcherService = new FileWatcherMainService({
   watcherFactory: chokidarWatcherFactory,
   webContentsLookup: (id) => {
@@ -24,6 +26,7 @@ const fileWatcherService = new FileWatcherMainService({
 });
 let workspaceStore: WorkspaceStore | null = null;
 let backupStore: BackupStore | null = null;
+let mainWindow: BrowserWindow | null = null;
 
 function createMainWindow(): void {
   const window = new BrowserWindow({
@@ -32,7 +35,7 @@ function createMainWindow(): void {
     minWidth: 1024,
     minHeight: 640,
     show: false,
-    autoHideMenuBar: true,
+    frame: false,
     webPreferences: {
       preload: join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
@@ -40,6 +43,8 @@ function createMainWindow(): void {
       sandbox: true
     }
   });
+
+  mainWindow = window;
 
   window.once("ready-to-show", () => {
     window.show();
@@ -54,10 +59,45 @@ function createMainWindow(): void {
   window.loadFile(join(__dirname, "../renderer/index.html"));
 }
 
+app.disableHardwareAcceleration();
+
 app.whenReady().then(() => {
   backendGateway.wireIpc();
   dialogService.wireIpc();
+  menuService.wireIpc();
+  menuService.setExecuteCommand(async (commandId: string) => {
+    if (mainWindow) {
+      mainWindow.webContents.send("menu:execute-command", commandId);
+    }
+  });
   fileWatcherService.wireIpc();
+  ipcMain.on("window:minimize", () => mainWindow?.minimize());
+  ipcMain.on("window:maximize", () => {
+    if (mainWindow?.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow?.maximize();
+    }
+  });
+  ipcMain.on("window:close", () => mainWindow?.close());
+  ipcMain.handle("window:is-maximized", () => mainWindow?.isMaximized() ?? false);
+
+  const sendWindowState = () => {
+    if (!mainWindow) {
+      return;
+    }
+    mainWindow.webContents.send("window:state-changed", {
+      maximized: mainWindow.isMaximized()
+    });
+  };
+
+  app.on("browser-window-created", (_event, window) => {
+    if (window !== mainWindow) {
+      return;
+    }
+    window.on("maximize", sendWindowState);
+    window.on("unmaximize", sendWindowState);
+  });
   workspaceStore = new WorkspaceStore({
     workspaceFilePath: defaultWorkspaceFilePath(app.getPath("userData"))
   });
@@ -70,6 +110,7 @@ app.whenReady().then(() => {
   void backendGateway.start();
 
   createMainWindow();
+  sendWindowState();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

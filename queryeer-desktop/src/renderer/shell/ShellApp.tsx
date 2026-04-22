@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExtensionSnapshot } from "../../core/plugin-runtime/ExtensionRegistry";
 import type { BackendGatewayStatus } from "../../contracts/backend";
-import type {
-  LayoutZone,
-  LayoutStatusItemContribution
-} from "../../contracts/extensions/LayoutExtension";
+import type { LayoutZone, LayoutStatusItemContribution } from "../../contracts/extensions/LayoutExtension";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { FileMediator } from "../../contracts/files/FileMediator";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import type { WorkspaceSnapshot } from "../../contracts/workspace/WorkspaceSnapshot";
 import type { ExternalFrontendPluginManifest } from "../../contracts/plugin/ExternalFrontendPluginManifest";
 import type { CommandExecutionResult } from "../../contracts/plugin/Plugin";
+import { CoreMenuBar } from "../../plugins/core.menu/MenuBar";
 import type { RendererWorkspaceService } from "../workspace/workspace-service";
 import { GenericActionIcon, layoutToolbarIconMap } from "../icons/LayoutIcons";
 
@@ -82,6 +80,13 @@ appShell: {
           };
         }) => void
       ) => () => void;
+buildMenu: (menuItems: unknown[], commands: unknown[]) => Promise<{ success: boolean }>;
+      windowMinimize: () => void;
+      windowMaximize: () => void;
+      windowClose: () => void;
+      isWindowMaximized: () => Promise<boolean>;
+      onWindowStateChanged: (listener: (state: { maximized: boolean }) => void) => () => void;
+      onMenuExecuteCommand: (listener: (commandId: string) => void) => () => void;
     };
   }
 }
@@ -176,11 +181,6 @@ export function ShellApp({
     const IconComponent = layoutToolbarIconMap[icon] ?? GenericActionIcon;
     return <IconComponent className="shell-toolbar-icon" />;
   };
-
-  const menuItems = useMemo(
-    () => [...extensions.layout.menuItems].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
-    [extensions.layout.menuItems]
-  );
 
   const toolbarActions = useMemo(
     () => [...extensions.layout.toolbarActions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
@@ -333,22 +333,11 @@ export function ShellApp({
 
   return (
     <div className="shell-page">
-      {visibleZones.has("menuBar") && (
-        <header className="shell-topbar shell-menu-bar">
-          <div className="shell-menu-brand">
-            <span className="shell-brand">Queryeer</span>
-            <span className="shell-chip">Desktop Shell</span>
-          </div>
-          <nav className="shell-menu-items" aria-label="Menu bar">
-            {menuItems.map((item) => (
-              <button key={item.id} type="button" className="shell-menu-item">
-                {item.label}
-              </button>
-            ))}
-          </nav>
-        </header>
-      )}
-
+      <CoreMenuBar
+        menuItems={extensions.menu.items}
+        commands={extensions.commands}
+        executeCommand={executeCommand}
+      />
       {visibleZones.has("toolBar") && (
         <section className="shell-toolbar" aria-label="Tool bar">
           {toolbarActions.length === 0 ? (

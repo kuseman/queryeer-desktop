@@ -37,8 +37,43 @@
 - `core.workspace` plugin persists session to `<userData>/workspace.json` atomically (files + activeFileUri + layout + backupFileId). Subscribes to fileWatcher per open disk file. Autosave with 3s debounce + 30s max-interval to `<userData>/backups/`. Crash recovery detects surviving backups and exposes `listPendingRestores` / `readBackup` / `discardBackup` API for a future modal UX. Backups now gated by mime capability registry (`backupable` capability) and content validation (non-empty).
 - Layout state (visibleZones + sidebar widths) is folded into workspace persistence; `zoneOverrides` delta-state in `ShellApp` was replaced with a direct `Set<LayoutZone>` seeded from restored layout.
 - `PROCESS_BOUNDARIES.md` documents the horizontal "Electron main owns disk; Java owns engines; renderer owns UI + in-memory file state" boundary, plus secrets and state-authority tables.
+- Shell window chrome is now custom-framed (frameless BrowserWindow) with a VS Code-like top menu strip, draggable titlebar regions, and renderer-driven window controls (minimize / maximize-restore / close).
+- Core menu rendering has now been extracted out of `ShellApp` into `core.menu/MenuBar.tsx`, including recursive multi-level submenu rendering and keyboard-driven menu navigation behavior.
+- The menu logo is now sourced from a standalone SVG resource (`src/assets/icons/queryeer-logo.svg`) and an icon generation pipeline now emits app/distribution icon assets (`.png`, `.ico`, `.icns`) under `resources/`.
 
 ## What changed in this session
+
+### VS Code-like menubar + custom titlebar window controls
+
+- Enabled frameless desktop window chrome (`frame: false`) and completed renderer/main/preload wiring for:
+  - `window:minimize`, `window:maximize` (toggle maximize/restore), `window:close`
+  - `window:is-maximized` request and `window:state-changed` event for correct maximize/restore icon state
+- Reworked `ShellApp` titlebar to mimic VS Code behavior more closely:
+  - top-level menu strip with hover/click dropdown behavior
+  - right-aligned window controls
+  - dedicated drag/no-drag regions to preserve button/menu interactivity and draggable window movement
+  - dropdown accelerator rendering beside menu item labels
+- Moved menu/titlebar rendering logic from `ShellApp` into `core.menu` module component (`src/plugins/core.menu/MenuBar.tsx`) to keep shell composition lean.
+- Added recursive submenu rendering (supports more than one level of nested menu items).
+- Added keyboard menu UX:
+  - `Alt` toggles menu focus/activation
+  - arrow navigation across root menu and nested submenu levels
+  - `Enter`/`Space` activate focused menu item
+  - `Escape` closes open menus
+- Expanded `core.menu` from scaffold to a fuller baseline menu model (`File`, `Edit`, `Selection`, `View`, `Go`, `Run`, `Terminal`, `Help`) with command stubs and representative VS Code-style shortcuts.
+- Added nested `View -> Appearance -> Zoom -> (Zoom In/Out/Reset)` subtree to validate deep submenu support.
+- Replaced inline TSX logo drawing with an external SVG resource and switched titlebar logo rendering to `<img src>` from that asset.
+- Added icon generation script `scripts/generate-icons.mjs` and npm command `npm run assets:icons`:
+  - input: `src/assets/icons/queryeer-logo.svg`
+  - outputs: `resources/icon.png`, `resources/icon.ico`, `resources/icon.icns`
+  - variant set: `resources/icons/icon-{16,24,32,48,64,128,256,512,1024}.png` + copied `.ico`/`.icns`
+- Updated electron-builder platform icon paths in `package.json` (`win.icon`, `mac.icon`, `linux.icon`) to use generated resources.
+- Added optional `accelerator` metadata on command contracts/registrations and forwarded accelerators to native menu build payload.
+- Aligned existing plugin menu contributions to the shared root menus:
+  - `core.files` now contributes under `core.menu.file`
+  - `core.layout` DevTools command now contributes under `core.menu.view`
+- Updated titlebar/menu CSS tokens and component styles for VS Code-like spacing, hover states, dropdown sizing, and control button behavior.
+- Updated renderer bootstrap test app-shell mock with new window state APIs.
 
 ### Mime capability registry for backupable/file behavior (CORE_WORKSPACE backup fix)
 
@@ -368,9 +403,9 @@
 
 ## Next 3 tasks
 
-1. Monaco editor plugin (or a simple text-editor plugin) — first real consumer of FileEntity + viewState, enables actual `reloadFile` disk-read wiring + real notifyChanged text flow.
-2. Modal/notification UI plugin — drives the active+dirty external-change prompt (Reload/Keep/Diff) and the crash-recovery prompt (Restore/Discard). WorkspaceService already exposes the data via `listPendingRestores` / `readBackup`.
-3. Engine-specific `FileSessionHandler` implementations (payloadbuilder first) — increment 5 of the file entity model, unlocks parse-tree reuse via `query.execute.fileId`. Deferred until editor + output wiring land.
+1. Add mnemonic-letter navigation parity (eg Alt+F/Alt+E) plus typed first-character matching inside open menus.
+2. Monaco editor plugin (or a simple text-editor plugin) — first real consumer of FileEntity + viewState, enables actual `reloadFile` disk-read wiring + real notifyChanged text flow.
+3. Modal/notification UI plugin — drives the active+dirty external-change prompt (Reload/Keep/Diff) and the crash-recovery prompt (Restore/Discard). WorkspaceService already exposes the data via `listPendingRestores` / `readBackup`.
 
 ## Known gaps / temporary scaffolds
 
@@ -384,6 +419,8 @@
 - `hasRecoveredBackup` stays true until explicit `discardBackup` or a future `applyBackup`; the "auto-purge on clean" branch skips recovered entities to avoid silently revoking the user's choice.
 
 ### Older gaps (still relevant)
+- Current `core.menu` command handlers are mostly placeholder stubs for parity scaffolding; real command routing (command palette, quick open, run/terminal actions, zoom behavior) is pending downstream feature plugins.
+- Icon generation currently relies on dev dependencies (`sharp`, `to-ico`, `png2icons`); if CI/release should regenerate icons, `npm run assets:icons` must be added to the release workflow.
 - Desktop defaults to mock transport unless `QUERYEER_BACKEND_STDIO=1` is set.
 - Java stdio transport protocol handling is real, but execution internals and credential persistence remain mocked/stubbed.
 - `FileSessionHandler` SPI exists in `backend-api`, but no engine plugin implements it yet — parse-tree reuse via `query.execute.fileId` is not live.

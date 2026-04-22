@@ -25,6 +25,22 @@ export const coreLayoutPlugin: Plugin = {
       }
     });
 
+    context.commands.registerCommand({
+      id: "core.layout.toggleDevTools",
+      title: "Toggle Developer Tools",
+      handler: async () => {
+        console.log("Toggle DevTools command executed");
+      }
+    });
+
+    context.menu.registerMenuItem({
+      id: "core.layout.menu.view.toggleDevTools",
+      label: "Toggle Developer Tools",
+      order: 40,
+      parentId: "core.menu.view",
+      commandId: "core.layout.toggleDevTools"
+    });
+
     context.layout.setShellDefaults({
       visibleZones: [
         "menuBar",
