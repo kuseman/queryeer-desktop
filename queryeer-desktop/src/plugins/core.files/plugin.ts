@@ -31,7 +31,6 @@ export const coreFilesPlugin: Plugin = {
     context.commands.registerCommand({
       id: "core.files.new",
       title: "New File",
-      accelerator: "CmdOrCtrl+N",
       handler: async () => {
         console.log("New file command executed");
       }
@@ -40,7 +39,6 @@ export const coreFilesPlugin: Plugin = {
     context.commands.registerCommand({
       id: "core.files.open",
       title: "Open File",
-      accelerator: "CmdOrCtrl+O",
       handler: async () => {
         console.log("Open file command executed");
       }
@@ -49,7 +47,6 @@ export const coreFilesPlugin: Plugin = {
     context.commands.registerCommand({
       id: "core.files.save",
       title: "Save File",
-      accelerator: "CmdOrCtrl+S",
       handler: async () => {
         console.log("Save file command executed");
       }
@@ -58,10 +55,42 @@ export const coreFilesPlugin: Plugin = {
     context.commands.registerCommand({
       id: "core.files.saveAs",
       title: "Save As",
-      accelerator: "CmdOrCtrl+Shift+S",
       handler: async () => {
         console.log("Save as command executed");
       }
+    });
+
+    context.keybindings.registerKeybinding({
+      id: "core.files.keybinding.new",
+      commandId: "core.files.new",
+      key: "CmdOrCtrl+N",
+      when: "global",
+      scope: "global",
+      order: 110
+    });
+    context.keybindings.registerKeybinding({
+      id: "core.files.keybinding.open",
+      commandId: "core.files.open",
+      key: "CmdOrCtrl+O",
+      when: "global",
+      scope: "global",
+      order: 120
+    });
+    context.keybindings.registerKeybinding({
+      id: "core.files.keybinding.save",
+      commandId: "core.files.save",
+      key: "CmdOrCtrl+S",
+      when: "editorFocus",
+      scope: "editor",
+      order: 130
+    });
+    context.keybindings.registerKeybinding({
+      id: "core.files.keybinding.saveAs",
+      commandId: "core.files.saveAs",
+      key: "CmdOrCtrl+Shift+S",
+      when: "editorFocus",
+      scope: "editor",
+      order: 140
     });
 
     context.menu.registerMenuItem({

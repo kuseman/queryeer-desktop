@@ -9,14 +9,24 @@ export const coreMenuPlugin: Plugin = {
     description: "Handles native menu bar and menu item registration"
   },
   activate: (context) => {
-    const registerStub = (id: string, title: string, accelerator?: string) => {
+    const registerStub = (id: string, title: string) => {
       context.commands.registerCommand({
         id,
         title,
-        accelerator,
         handler: async () => {
           console.log(`${title} command executed`);
         }
+      });
+    };
+
+    const registerShortcut = (id: string, commandId: string, key: string, order: number) => {
+      context.keybindings.registerKeybinding({
+        id,
+        commandId,
+        key,
+        when: "global",
+        scope: "global",
+        order
       });
     };
 
@@ -29,12 +39,18 @@ export const coreMenuPlugin: Plugin = {
     context.menu.registerMenuItem({ id: "core.menu.terminal", label: "Terminal", order: 70 });
     context.menu.registerMenuItem({ id: "core.menu.help", label: "Help", order: 80 });
 
-    registerStub("core.menu.edit.undo", "Undo", "CmdOrCtrl+Z");
-    registerStub("core.menu.edit.redo", "Redo", "CmdOrCtrl+Y");
-    registerStub("core.menu.edit.cut", "Cut", "CmdOrCtrl+X");
-    registerStub("core.menu.edit.copy", "Copy", "CmdOrCtrl+C");
-    registerStub("core.menu.edit.paste", "Paste", "CmdOrCtrl+V");
-    registerStub("core.menu.edit.find", "Find", "CmdOrCtrl+F");
+    registerStub("core.menu.edit.undo", "Undo");
+    registerShortcut("core.menu.edit.undo.shortcut", "core.menu.edit.undo", "CmdOrCtrl+Z", 210);
+    registerStub("core.menu.edit.redo", "Redo");
+    registerShortcut("core.menu.edit.redo.shortcut", "core.menu.edit.redo", "CmdOrCtrl+Y", 220);
+    registerStub("core.menu.edit.cut", "Cut");
+    registerShortcut("core.menu.edit.cut.shortcut", "core.menu.edit.cut", "CmdOrCtrl+X", 230);
+    registerStub("core.menu.edit.copy", "Copy");
+    registerShortcut("core.menu.edit.copy.shortcut", "core.menu.edit.copy", "CmdOrCtrl+C", 240);
+    registerStub("core.menu.edit.paste", "Paste");
+    registerShortcut("core.menu.edit.paste.shortcut", "core.menu.edit.paste", "CmdOrCtrl+V", 250);
+    registerStub("core.menu.edit.find", "Find");
+    registerShortcut("core.menu.edit.find.shortcut", "core.menu.edit.find", "CmdOrCtrl+F", 260);
 
     context.menu.registerMenuItem({
       id: "core.menu.edit.undo.item",
@@ -79,7 +95,13 @@ export const coreMenuPlugin: Plugin = {
       commandId: "core.menu.edit.find"
     });
 
-    registerStub("core.menu.selection.selectAll", "Select All", "CmdOrCtrl+A");
+    registerStub("core.menu.selection.selectAll", "Select All");
+    registerShortcut(
+      "core.menu.selection.selectAll.shortcut",
+      "core.menu.selection.selectAll",
+      "CmdOrCtrl+A",
+      310
+    );
     context.menu.registerMenuItem({
       id: "core.menu.selection.selectAll.item",
       label: "Select All",
@@ -88,10 +110,19 @@ export const coreMenuPlugin: Plugin = {
       commandId: "core.menu.selection.selectAll"
     });
 
-    registerStub("core.menu.view.commandPalette", "Command Palette", "Ctrl+Shift+P");
-    registerStub("core.menu.view.zoomIn", "Zoom In", "CmdOrCtrl+Plus");
-    registerStub("core.menu.view.zoomOut", "Zoom Out", "CmdOrCtrl+-");
-    registerStub("core.menu.view.zoomReset", "Reset Zoom", "CmdOrCtrl+0");
+    registerStub("core.menu.view.commandPalette", "Command Palette");
+    registerShortcut(
+      "core.menu.view.commandPalette.shortcut",
+      "core.menu.view.commandPalette",
+      "CmdOrCtrl+Shift+P",
+      410
+    );
+    registerStub("core.menu.view.zoomIn", "Zoom In");
+    registerShortcut("core.menu.view.zoomIn.shortcut", "core.menu.view.zoomIn", "CmdOrCtrl+Plus", 420);
+    registerStub("core.menu.view.zoomOut", "Zoom Out");
+    registerShortcut("core.menu.view.zoomOut.shortcut", "core.menu.view.zoomOut", "CmdOrCtrl+-", 430);
+    registerStub("core.menu.view.zoomReset", "Reset Zoom");
+    registerShortcut("core.menu.view.zoomReset.shortcut", "core.menu.view.zoomReset", "CmdOrCtrl+0", 440);
 
     context.menu.registerMenuItem({
       id: "core.menu.view.commandPalette.item",
@@ -134,7 +165,8 @@ export const coreMenuPlugin: Plugin = {
       commandId: "core.menu.view.zoomReset"
     });
 
-    registerStub("core.menu.go.quickOpen", "Go to File", "CmdOrCtrl+P");
+    registerStub("core.menu.go.quickOpen", "Go to File");
+    registerShortcut("core.menu.go.quickOpen.shortcut", "core.menu.go.quickOpen", "CmdOrCtrl+P", 510);
     context.menu.registerMenuItem({
       id: "core.menu.go.quickOpen.item",
       label: "Go to File...",
@@ -143,7 +175,8 @@ export const coreMenuPlugin: Plugin = {
       commandId: "core.menu.go.quickOpen"
     });
 
-    registerStub("core.menu.run.start", "Start Debugging", "F5");
+    registerStub("core.menu.run.start", "Start Debugging");
+    registerShortcut("core.menu.run.start.shortcut", "core.menu.run.start", "F5", 610);
     context.menu.registerMenuItem({
       id: "core.menu.run.start.item",
       label: "Start Debugging",
@@ -152,7 +185,13 @@ export const coreMenuPlugin: Plugin = {
       commandId: "core.menu.run.start"
     });
 
-    registerStub("core.menu.terminal.new", "New Terminal", "Ctrl+Shift+`");
+    registerStub("core.menu.terminal.new", "New Terminal");
+    registerShortcut(
+      "core.menu.terminal.new.shortcut",
+      "core.menu.terminal.new",
+      "CmdOrCtrl+Shift+`",
+      710
+    );
     context.menu.registerMenuItem({
       id: "core.menu.terminal.new.item",
       label: "New Terminal",

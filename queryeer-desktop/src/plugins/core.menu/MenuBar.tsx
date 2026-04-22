@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import type { CommandExtension } from "../../contracts/extensions/CommandExtension";
+import type { KeybindingContribution } from "../../contracts/extensions/KeybindingExtension";
 import type { MenuItemContribution } from "../../contracts/extensions/MenuExtension";
 import queryeerLogoUrl from "../../assets/icons/queryeer-logo.svg";
 
 type CoreMenuBarProps = {
   menuItems: MenuItemContribution[];
-  commands: CommandExtension[];
+  keybindings: KeybindingContribution[];
   executeCommand: (commandId: string) => Promise<unknown>;
 };
 
@@ -28,7 +28,7 @@ function isTextInputTarget(target: EventTarget | null): boolean {
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 }
 
-export function CoreMenuBar({ menuItems, commands, executeCommand }: CoreMenuBarProps): JSX.Element {
+export function CoreMenuBar({ menuItems, keybindings, executeCommand }: CoreMenuBarProps): JSX.Element {
   const [openPath, setOpenPath] = useState<string[]>([]);
   const [focusPath, setFocusPath] = useState<string[]>([]);
   const [menuBarFocused, setMenuBarFocused] = useState(false);
@@ -67,13 +67,18 @@ export function CoreMenuBar({ menuItems, commands, executeCommand }: CoreMenuBar
 
   const acceleratorByCommand = useMemo(() => {
     const map = new Map<string, string>();
-    for (const command of commands) {
-      if (command.accelerator) {
-        map.set(command.id, normalizeAccelerator(command.accelerator));
+    for (const binding of [...keybindings].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
+      const isGlobal = (binding.scope ?? "global") === "global";
+      const isMenuSafeWhen = binding.when === undefined || binding.when === "global";
+      if (!isGlobal || !isMenuSafeWhen) {
+        continue;
+      }
+      if (!map.has(binding.commandId)) {
+        map.set(binding.commandId, normalizeAccelerator(binding.key));
       }
     }
     return map;
-  }, [commands]);
+  }, [keybindings]);
 
   const getChildren = (id: string): MenuItemContribution[] => {
     return childrenByParent.get(id) ?? [];

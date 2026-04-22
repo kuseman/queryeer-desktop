@@ -1,6 +1,5 @@
 import type {
   LayoutEditorContribution,
-  LayoutMenuItemContribution,
   LayoutRegistry,
   LayoutShellDefaults,
   LayoutStatusItemContribution,
@@ -10,6 +9,10 @@ import type {
 } from "../../contracts/extensions/LayoutExtension";
 import type { MenuItemContribution, MenuRegistry } from "../../contracts/extensions/MenuExtension";
 import type { CommandExtension } from "../../contracts/extensions/CommandExtension";
+import type {
+  KeybindingContribution,
+  KeybindingRegistry
+} from "../../contracts/extensions/KeybindingExtension";
 import type { FileSystemExtension } from "../../contracts/extensions/FileSystemExtension";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
@@ -28,8 +31,8 @@ export type ExtensionSnapshot = {
   menu: {
     items: MenuItemContribution[];
   };
+  keybindings: KeybindingContribution[];
   layout: {
-    menuItems: LayoutMenuItemContribution[];
     toolbarActions: LayoutToolbarActionContribution[];
     statusItems: LayoutStatusItemContribution[];
     views: LayoutViewContribution[];
@@ -59,7 +62,7 @@ export class ExtensionRegistry {
   private readonly commands = new Map<string, CommandExtension>();
   private readonly filesystems = new Map<string, FileSystemExtension>();
   private readonly menuItems = new Map<string, MenuItemContribution>();
-  private readonly layoutMenuItems = new Map<string, LayoutMenuItemContribution>();
+  private readonly keybindings = new Map<string, KeybindingContribution>();
   private readonly layoutToolbarActions = new Map<string, LayoutToolbarActionContribution>();
   private readonly layoutStatusItems = new Map<string, LayoutStatusItemContribution>();
   private readonly layoutViews = new Map<string, LayoutViewContribution>();
@@ -102,15 +105,20 @@ export class ExtensionRegistry {
     };
   }
 
+  public createKeybindingRegistry(): KeybindingRegistry {
+    return {
+      registerKeybinding: (contribution) => {
+        this.keybindings.set(contribution.id, contribution);
+      }
+    };
+  }
+
   public subscribeToFiles(subscriber: (files: FileEntity[]) => void): () => void {
     return this.fileRegistry.createFilesRegistry().subscribe(subscriber);
   }
 
   public createLayoutRegistry(): LayoutRegistry {
     return {
-      registerMenuItem: (contribution) => {
-        this.layoutMenuItems.set(contribution.id, contribution);
-      },
       registerToolbarAction: (contribution) => {
         this.layoutToolbarActions.set(contribution.id, contribution);
       },
@@ -161,8 +169,8 @@ export class ExtensionRegistry {
       menu: {
         items: [...this.menuItems.values()]
       },
+      keybindings: [...this.keybindings.values()],
       layout: {
-        menuItems: [...this.layoutMenuItems.values()],
         toolbarActions: [...this.layoutToolbarActions.values()],
         statusItems: [...this.layoutStatusItems.values()],
         views: [...this.layoutViews.values()],

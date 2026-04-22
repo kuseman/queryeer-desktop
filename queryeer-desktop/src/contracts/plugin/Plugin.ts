@@ -3,6 +3,7 @@ import type { FilesRegistry } from "../files/FilesRegistry";
 import type { FileWatcherService } from "../files/FileWatcher";
 import type { LayoutRegistry } from "../extensions/LayoutExtension";
 import type { MenuRegistry } from "../extensions/MenuExtension";
+import type { KeybindingRegistry } from "../extensions/KeybindingExtension";
 import type { DialogExtension } from "../extensions/DialogExtension";
 import type { PluginManifest } from "./PluginManifest";
 
@@ -22,6 +23,7 @@ export type PluginContext = {
   fileWatcher: FileWatcherService;
   layout: LayoutRegistry;
   menu: MenuRegistry;
+  keybindings: KeybindingRegistry;
   dialog: DialogRegistry;
 };
 
@@ -35,7 +37,8 @@ export type CommandRegistry = {
   registerCommand: (command: {
     id: string;
     title: string;
-    accelerator?: string;
+    category?: string;
+    enablement?: string;
     handler: () => void | Promise<void>;
   }) => void;
   executeCommand: (commandId: string) => Promise<CommandExecutionResult>;

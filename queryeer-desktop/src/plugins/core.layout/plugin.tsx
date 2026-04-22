@@ -56,27 +56,6 @@ export const coreLayoutPlugin: Plugin = {
       statusBarHeight: 24
     });
 
-    context.layout.registerMenuItem({
-      id: "core.layout.menu.file",
-      label: "File",
-      order: 10,
-      group: "file"
-    });
-
-    context.layout.registerMenuItem({
-      id: "core.layout.menu.edit",
-      label: "Edit",
-      order: 20,
-      group: "edit"
-    });
-
-    context.layout.registerMenuItem({
-      id: "core.layout.menu.view",
-      label: "View",
-      order: 30,
-      group: "view"
-    });
-
     context.layout.registerToolbarAction({
       id: "core.layout.toolbar.togglePrimarySidebar",
       title: "",

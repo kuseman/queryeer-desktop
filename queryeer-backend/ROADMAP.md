@@ -118,6 +118,9 @@ Additional desktop shell work completed in parallel (outside Java modules):
 - [x] Add baseline keyboard traversal (`Alt`, arrows, `Enter`/`Space`, `Escape`) for menu interaction
 - [x] Move shell logo to shared SVG resource and generate platform icon outputs (`.ico`, `.icns`, `.png`) for desktop packaging
 - [ ] Keyboard parity polish for mnemonics/letter shortcuts and menu item metadata expansion (separator/disabled)
+- [~] Commands/keybindings migration started (desktop): contribution contract + registry + user override persistence + resolver/diagnostics + baseline context-aware `when` evaluation complete; richer editor-driven context keys still pending
+- [x] Desktop cleanup: removed dead `layout.menuItems` contribution path to avoid split menu ownership (`core.menu` is sole menu surface)
+- [x] Desktop cleanup: removed legacy command-level accelerator compatibility; shortcut ownership is now centralized in keybinding contributions
 
 The Java backend's `file.*` protocol surface and `FileRegistry`/`FileSessionHandler` SPI exist to be consumed by the renderer. The companion desktop work landed in parallel:
 

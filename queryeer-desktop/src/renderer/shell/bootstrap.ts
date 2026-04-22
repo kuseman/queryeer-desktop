@@ -6,6 +6,10 @@ import { RendererFileWatcherService } from "../file-watcher/file-watcher-service
 import { RendererWorkspaceService } from "../workspace/workspace-service";
 import { discoverPluginModules } from "../../plugins/discovery";
 import { setRuntimeData } from "../../plugins/core.observability/runtime-data";
+import { createKeybindingService } from "../../plugins/core.commands/keybinding-service";
+import {
+  resolveKeybindingState
+} from "../../plugins/core.commands/keybinding-resolver";
 
 export async function bootstrapShell() {
   const backendSync: FileBackendSync = {
@@ -73,6 +77,12 @@ export async function bootstrapShell() {
   await host.start(discovery.manifests);
   host.setExternalLoadErrors(discovery.loadErrors);
 
+  const keybindingService = createKeybindingService({
+    executeCommand: (commandId) => host.executeCommand(commandId),
+    getUserKeybindings: () => window.appShell.getUserKeybindings()
+  });
+  await keybindingService.initialize(host.getExtensions());
+
   workspaceService = new RendererWorkspaceService({
     bridge: {
       getWorkspace: () => window.appShell.getWorkspace(),
@@ -105,9 +115,26 @@ export async function bootstrapShell() {
     parentId: item.parentId,
     icon: item.icon
   }));
+
+  const fallbackMenuAccelerators = new Map<string, string>();
+  const keybindingState = resolveKeybindingState(
+    extensions,
+    await window.appShell.getUserKeybindings()
+  );
+  for (const contribution of [...keybindingState.resolved].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
+    const isGlobalScope = (contribution.scope ?? "global") === "global";
+    const isGlobalWhen = contribution.when === undefined || contribution.when === "global";
+    if (!isGlobalScope || !isGlobalWhen) {
+      continue;
+    }
+    if (!fallbackMenuAccelerators.has(contribution.commandId)) {
+      fallbackMenuAccelerators.set(contribution.commandId, contribution.key);
+    }
+  }
+
   const commands = extensions.commands.map((cmd) => ({
     id: cmd.id,
-    accelerator: cmd.accelerator
+    accelerator: fallbackMenuAccelerators.get(cmd.id)
   }));
 
   try {
@@ -120,6 +147,7 @@ export async function bootstrapShell() {
     hostState: host.getState(),
     diagnostics: host.getDiagnostics(),
     extensions: host.getExtensions(),
+    keybindingDiagnostics: keybindingService.diagnostics(),
     commandExecution
   });
 

@@ -12,14 +12,6 @@ export type SidebarZone = "primarySidebar" | "secondarySidebar";
 
 export type DockPlacement = "start" | "end" | "before" | "after";
 
-export type LayoutMenuItemContribution = {
-  id: string;
-  label: string;
-  order?: number;
-  commandId?: string;
-  group?: "file" | "edit" | "view" | "run" | "tools" | "help";
-};
-
 export type LayoutToolbarActionContribution = {
   id: string;
   title: string;
@@ -71,7 +63,6 @@ export type LayoutShellDefaults = {
 };
 
 export type LayoutRegistry = {
-  registerMenuItem: (contribution: LayoutMenuItemContribution) => void;
   registerToolbarAction: (contribution: LayoutToolbarActionContribution) => void;
   registerStatusItem: (contribution: LayoutStatusItemContribution) => void;
   registerView: (contribution: LayoutViewContribution) => void;
