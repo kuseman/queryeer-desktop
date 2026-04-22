@@ -14,6 +14,7 @@ import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import type {
   CommandRegistry,
+  DialogRegistry,
   FileSystemRegistry
 } from "../../contracts/plugin/Plugin";
 import { CommandBus } from "./CommandBus";
@@ -121,6 +122,20 @@ export class ExtensionRegistry {
             ...defaults.sidebarWidths
           }
         };
+      }
+    };
+  }
+
+  public createDialogRegistry(): DialogRegistry {
+    return {
+      showMessage: async () => {
+        return { action: "" };
+      },
+      showOpenDialog: async () => {
+        return { canceled: true, filePaths: [] };
+      },
+      showSaveDialog: async () => {
+        return { canceled: true, filePath: undefined };
       }
     };
   }
