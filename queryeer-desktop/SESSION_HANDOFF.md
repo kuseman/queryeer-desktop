@@ -34,11 +34,29 @@
   - FileEntity carries dirty flags, engine binding, external-modification flags, viewState bag
   - `file.open`, `file.close`, `file.bind`, `file.change` protocol methods + Java `FileRegistry` / `FileSessionHandler` SPI + `DefaultFileRegistry`
 - `core.fileWatcher` plugin runs chokidar in Electron main, dedup+refcounts watchers by (uri, recursive), fans out events, per-URI mute API with active timers.
-- `core.workspace` plugin persists session to `<userData>/workspace.json` atomically (files + activeFileUri + layout + backupFileId). Subscribes to fileWatcher per open disk file. Autosave with 3s debounce + 30s max-interval to `<userData>/backups/`. Crash recovery detects surviving backups and exposes `listPendingRestores` / `readBackup` / `discardBackup` API for a future modal UX.
+- `core.workspace` plugin persists session to `<userData>/workspace.json` atomically (files + activeFileUri + layout + backupFileId). Subscribes to fileWatcher per open disk file. Autosave with 3s debounce + 30s max-interval to `<userData>/backups/`. Crash recovery detects surviving backups and exposes `listPendingRestores` / `readBackup` / `discardBackup` API for a future modal UX. Backups now gated by mime capability registry (`backupable` capability) and content validation (non-empty).
 - Layout state (visibleZones + sidebar widths) is folded into workspace persistence; `zoneOverrides` delta-state in `ShellApp` was replaced with a direct `Set<LayoutZone>` seeded from restored layout.
 - `PROCESS_BOUNDARIES.md` documents the horizontal "Electron main owns disk; Java owns engines; renderer owns UI + in-memory file state" boundary, plus secrets and state-authority tables.
 
 ## What changed in this session
+
+### Mime capability registry for backupable/file behavior (CORE_WORKSPACE backup fix)
+
+- Added `MimeCapability` type (`backupable`, `executable`, `viewable`, `editable`) to `contracts/files/FilesRegistry.ts`
+- Added `ContentCategory` type (`text`, `image`, `binary`) to FilesRegistry contract
+- Added `MimeCapabilityRegistry` with:
+  - `registerCapabilities` / `hasCapability` for capabilities
+  - `registerContentCategory` / `getContentCategory` for content categorization
+- Updated `FileRegistry` implementation to support both
+- `core.files` plugin now uses `mime-types` library for extension→mime lookup and `isText` for classification:
+  - Default capabilities (`backupable`, `editable`, `viewable`) derived from text classification
+  - No hardcoded extension map - library handles it
+- `core.observability` registers only `viewable` + `binary` category
+- `workspace-service.ts` gates backup via capability check
+- Future query module can register `executable` for sql mime types
+- Editors can now resolve by category: `filesRegistry.capabilities.getContentCategory(mimeType)`
+
+### Previous session
 
 ### File entity + mediator model (FILE_ENTITY_MODEL.md)
 

@@ -2,7 +2,13 @@
 
 This document defines the `core.workspace` plugin — responsible for session state, persistence, external-change handling, and autosave/backup.
 
-Status: implemented (5/5 increments). The user-facing modal UX for external-change and crash-recovery prompts is intentionally deferred to a future plugin; the WorkspaceService API exposes the data that modal would consume (`listPendingRestores`, `readBackup`, `discardBackup`, `reloadFile` / `acceptExternalChange` / `discardExternalChange` on the mediator).
+Status: implemented (6/6 increments). The user-facing modal UX for external-change and crash-recovery prompts is intentionally deferred to a future plugin; the WorkspaceService API exposes the data that modal would consume (`listPendingRestores`, `readBackup`, `discardBackup`, `reloadFile` / `acceptExternalChange` / `discardExternalChange` on the mediator).
+
+**Increment 6 added**: Backup gating via mime capability registry. Backups now require:
+1. File mime type has `backupable` capability registered (via `FilesRegistry.capabilities.registerCapabilities`)
+2. Content passes `hasMeaningfulContent` check (non-empty, non-whitespace-only text)
+
+This prevents empty/no-data files (e.g., `application/x-observability`) from generating meaningless backups. The capability registry is also available for future use in editor resolver, command palette filtering, etc.
 
 ## 1. Goals
 

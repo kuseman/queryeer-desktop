@@ -41,6 +41,9 @@ export const coreObservabilityPlugin: Plugin = {
         });
       }
     });
+
+    context.files.capabilities.registerCapabilities(OBSERVABILITY_MIME_TYPE, ["viewable"]);
+    context.files.capabilities.registerContentCategory(OBSERVABILITY_MIME_TYPE, "binary");
   }
 };
 

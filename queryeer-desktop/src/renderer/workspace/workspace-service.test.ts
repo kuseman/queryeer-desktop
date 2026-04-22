@@ -70,6 +70,10 @@ function makeHarness(
 ) {
   const fileRegistryImpl = new FileRegistry();
   const filesRegistry = fileRegistryImpl.createFilesRegistry();
+
+  filesRegistry.capabilities.registerContentCategory("text/plain", "text");
+  filesRegistry.capabilities.registerCapabilities("text/plain", ["backupable", "editable", "viewable"]);
+
   const backupMock = vi.fn<WorkspaceBridge["saveBackup"]>(async () => ({
     backupUri: "file:///backup.bak"
   }));

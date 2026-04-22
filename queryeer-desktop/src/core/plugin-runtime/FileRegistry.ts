@@ -4,8 +4,11 @@ import type {
   FileOpenInput
 } from "../../contracts/files/FileEntity";
 import type {
+  ContentCategory,
   FilesRegistry,
-  FilesSubscriber
+  FilesSubscriber,
+  MimeCapability,
+  MimeCapabilityRegistry
 } from "../../contracts/files/FilesRegistry";
 import {
   DEFAULT_MIME_TYPE,
@@ -31,6 +34,8 @@ export class FileRegistry {
   private readonly subscribers = new Set<FilesSubscriber>();
   private readonly mimeResolvers: MimeResolver[] = [];
   private readonly editorResolvers: EditorResolver[] = [];
+  private readonly mimeCapabilities = new Map<string, Set<MimeCapability>>();
+  private readonly mimeContentCategories = new Map<string, ContentCategory>();
   private readonly getEditors: () => LayoutEditorContribution[];
 
   constructor(options: FileRegistryOptions = {}) {
@@ -39,6 +44,7 @@ export class FileRegistry {
 
   public createFilesRegistry(): FilesRegistry {
     return {
+      capabilities: this.createMimeCapabilityRegistry(),
       openFile: (input) => this.openFile(input),
       closeFile: (fileId) => this.closeFile(fileId),
       getFile: (fileId) => this.files.get(fileId),
@@ -54,6 +60,31 @@ export class FileRegistry {
       },
       classifyUri: (uri, hint) => this.classifyUri(uri, hint),
       resolveEditor: (file) => this.resolveEditor(file)
+    };
+  }
+
+  private createMimeCapabilityRegistry(): MimeCapabilityRegistry {
+    return {
+      registerCapabilities: (mimeType, capabilities) => {
+        let set = this.mimeCapabilities.get(mimeType);
+        if (!set) {
+          set = new Set();
+          this.mimeCapabilities.set(mimeType, set);
+        }
+        for (const cap of capabilities) {
+          set.add(cap);
+        }
+      },
+      hasCapability: (mimeType, capability) => {
+        const set = this.mimeCapabilities.get(mimeType);
+        return set?.has(capability) ?? false;
+      },
+      registerContentCategory: (mimeType, category) => {
+        this.mimeContentCategories.set(mimeType, category);
+      },
+      getContentCategory: (mimeType) => {
+        return this.mimeContentCategories.get(mimeType);
+      }
     };
   }
 
