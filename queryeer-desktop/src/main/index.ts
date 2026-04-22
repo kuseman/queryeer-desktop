@@ -7,6 +7,10 @@ import { FileWatcherMainService } from "./file-watcher/file-watcher-service";
 import { DialogMainService } from "./dialog/dialog-service";
 import { MenuService } from "./menu/menu-service";
 import { discoverExternalFrontendPlugins } from "./plugins/frontend-plugin-discovery";
+import {
+  defaultKeybindingsFilePath,
+  KeybindingsStore
+} from "./commands/keybindings-store";
 import { BackupStore, defaultBackupsDir } from "./workspace/backup-store";
 import {
   defaultWorkspaceFilePath,
@@ -25,6 +29,7 @@ const fileWatcherService = new FileWatcherMainService({
   }
 });
 let workspaceStore: WorkspaceStore | null = null;
+let keybindingsStore: KeybindingsStore | null = null;
 let backupStore: BackupStore | null = null;
 let mainWindow: BrowserWindow | null = null;
 
@@ -102,6 +107,10 @@ app.whenReady().then(() => {
     workspaceFilePath: defaultWorkspaceFilePath(app.getPath("userData"))
   });
   workspaceStore.wireIpc();
+  keybindingsStore = new KeybindingsStore({
+    keybindingsFilePath: defaultKeybindingsFilePath(app.getPath("userData"))
+  });
+  keybindingsStore.wireIpc();
   backupStore = new BackupStore({
     backupsDir: defaultBackupsDir(app.getPath("userData"))
   });

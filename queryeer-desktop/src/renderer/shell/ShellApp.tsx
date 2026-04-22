@@ -8,6 +8,7 @@ import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import type { WorkspaceSnapshot } from "../../contracts/workspace/WorkspaceSnapshot";
 import type { ExternalFrontendPluginManifest } from "../../contracts/plugin/ExternalFrontendPluginManifest";
 import type { CommandExecutionResult } from "../../contracts/plugin/Plugin";
+import type { UserKeybindingsDocument } from "../../contracts/commands/Keybindings";
 import { CoreMenuBar } from "../../plugins/core.menu/MenuBar";
 import type { RendererWorkspaceService } from "../workspace/workspace-service";
 import { GenericActionIcon, layoutToolbarIconMap } from "../icons/LayoutIcons";
@@ -30,6 +31,8 @@ appShell: {
       }) => Promise<{ accepted: boolean; queryExecutionId: string }>;
       getWorkspace: () => Promise<WorkspaceSnapshot>;
       saveWorkspace: (snapshot: WorkspaceSnapshot) => Promise<{ accepted: boolean }>;
+      getUserKeybindings: () => Promise<UserKeybindingsDocument>;
+      saveUserKeybindings: (document: UserKeybindingsDocument) => Promise<{ accepted: boolean }>;
       saveWorkspaceBackup: (params: {
         fileId: string;
         text: string;
@@ -335,7 +338,7 @@ export function ShellApp({
     <div className="shell-page">
       <CoreMenuBar
         menuItems={extensions.menu.items}
-        commands={extensions.commands}
+        keybindings={extensions.keybindings}
         executeCommand={executeCommand}
       />
       {visibleZones.has("toolBar") && (

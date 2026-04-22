@@ -19,6 +19,7 @@ import type {
 } from "../contracts/files/FileWatcher";
 import type { ExternalFrontendPluginManifest } from "../contracts/plugin/ExternalFrontendPluginManifest";
 import type { WorkspaceSnapshot } from "../contracts/workspace/WorkspaceSnapshot";
+import type { UserKeybindingsDocument } from "../contracts/commands/Keybindings";
 
 type DialogShowMessageOptions = {
   title: string;
@@ -54,6 +55,8 @@ type AppShellApi = {
   notifyBackendFileChange: (params: FileChangeNotification) => Promise<void>;
   getWorkspace: () => Promise<WorkspaceSnapshot>;
   saveWorkspace: (snapshot: WorkspaceSnapshot) => Promise<{ accepted: boolean }>;
+  getUserKeybindings: () => Promise<UserKeybindingsDocument>;
+  saveUserKeybindings: (document: UserKeybindingsDocument) => Promise<{ accepted: boolean }>;
   saveWorkspaceBackup: (params: {
     fileId: string;
     text: string;
@@ -118,6 +121,12 @@ const appShellApi: AppShellApi = {
   },
   saveWorkspace: async (snapshot) => {
     return ipcRenderer.invoke("workspace:save", snapshot);
+  },
+  getUserKeybindings: async () => {
+    return ipcRenderer.invoke("keybindings:get");
+  },
+  saveUserKeybindings: async (document) => {
+    return ipcRenderer.invoke("keybindings:save", document);
   },
   saveWorkspaceBackup: async (params) => {
     return ipcRenderer.invoke("workspace:save-backup", params);

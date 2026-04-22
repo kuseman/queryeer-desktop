@@ -92,6 +92,7 @@ export class PluginHost {
       fileWatcher: this.fileWatcher,
       layout: this.extensionRegistry.createLayoutRegistry(),
       menu: this.extensionRegistry.createMenuRegistry(),
+      keybindings: this.extensionRegistry.createKeybindingRegistry(),
       dialog: this.extensionRegistry.createDialogRegistry()
     };
 

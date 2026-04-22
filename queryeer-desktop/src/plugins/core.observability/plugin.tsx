@@ -97,7 +97,7 @@ function ObservabilityEditor() {
     return <div>Runtime data not available yet.</div>;
   }
 
-  const { hostState, diagnostics, extensions } = runtime;
+  const { hostState, diagnostics, extensions, keybindingDiagnostics } = runtime;
   const platformLabel =
     typeof window !== "undefined" ? window.appShell?.platform ?? "unknown" : "unknown";
 
@@ -142,6 +142,15 @@ function ObservabilityEditor() {
             {extensions.commands.map((command) => (
               <li key={command.id}>{command.id}</li>
             ))}
+          </ul>
+        </article>
+
+        <article className="panel-card">
+          <h2>Keybindings</h2>
+          <ul>
+            <li>Registered: {extensions.keybindings.length}</li>
+            <li>Invalid user bindings: {keybindingDiagnostics.invalidUserBindings.length}</li>
+            <li>Duplicates resolved: {keybindingDiagnostics.duplicateBindings.length}</li>
           </ul>
         </article>
 

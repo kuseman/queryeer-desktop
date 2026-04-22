@@ -63,12 +63,20 @@ Cross-cutting boundary doc added: `documentation/PROCESS_BOUNDARIES.md`.
 - Window chrome parity track: custom frameless titlebar, VS Code-like renderer menu strip, and renderer-driven native window controls/state sync
 - Menu architecture hardening: title/menu rendering extracted from `ShellApp` into `core.menu` UI module with recursive submenu support and keyboard navigation (Alt + arrows + Escape)
 - Branding/assets hardening: logo moved to shared SVG resource and deterministic icon generation added for Windows/macOS/Linux installer/taskbar assets
+- Commands/keybindings foundation: introduced keybinding extension contract + runtime registry and started migration path from menu-accelerator-first to keybindings-first
+- Keybindings persistence/resolution baseline: appDir `keybindings.json` store + preload IPC + default/user merge + startup diagnostics and global keydown dispatch
+- Context-aware keybinding baseline: dedicated keybinding service + context key tracking + `when` expression evaluator integrated into dispatch
+- Legacy layout-menu contribution branch removed; menu ownership is now singular through `core.menu` extension contributions
+- Legacy command-level accelerator path removed; keybindings are now the single keyboard shortcut authority
 
 ### Not started yet
 
 - Monaco editor plugin (or any text-editor plugin) — first real consumer of FileEntity + viewState
 - Modal/notification UI plugin — surfaces external-change prompt + crash-recovery prompt; consumes `WorkspaceService.listPendingRestores`/`readBackup`/`discardBackup`
 - Keyboard/interaction parity polish for menu UX (mnemonics/letter shortcuts, separators/disabled states, richer accessibility semantics)
+- Keybindings resolver + user overrides (`appDir/keybindings.json`) + validation diagnostics in `core.commands`
+- Context expression engine (`when`) + context-key service for editor/terminal/explorer-aware keybinding dispatch
+- Plugin/editor-driven context key publishing API (beyond current DOM-heuristic focus detection)
 - Real query engine adapters wired end-to-end to persisted backend state
 - Output plugins and result routing
 - Credential encryption/persistence and full connection lifecycle

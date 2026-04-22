@@ -12,9 +12,19 @@ export const coreCommandsPlugin: Plugin = {
     context.commands.registerCommand({
       id: "core.commands.about",
       title: "Show About",
+      category: "Help",
       handler: () => {
         console.info("Queryeer Electron shell v0.1.0");
       }
+    });
+
+    context.keybindings.registerKeybinding({
+      id: "core.commands.keybinding.about",
+      commandId: "core.commands.about",
+      key: "F1",
+      when: "global",
+      scope: "global",
+      order: 10
     });
   }
 };

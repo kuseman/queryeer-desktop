@@ -48,6 +48,8 @@ describe("bootstrapShell diagnostics wiring", () => {
         files: []
       }),
       saveWorkspace: async () => ({ accepted: true }),
+      getUserKeybindings: async () => ({ version: 1 as const, bindings: [], unbound: [] }),
+      saveUserKeybindings: async () => ({ accepted: true }),
       saveWorkspaceBackup: async () => ({ backupUri: "file:///backup" }),
       purgeWorkspaceBackups: async () => ({ purged: 0 }),
       listWorkspaceBackups: async () => ({ backupPaths: [] }),

@@ -40,6 +40,11 @@
 - Shell window chrome is now custom-framed (frameless BrowserWindow) with a VS Code-like top menu strip, draggable titlebar regions, and renderer-driven window controls (minimize / maximize-restore / close).
 - Core menu rendering has now been extracted out of `ShellApp` into `core.menu/MenuBar.tsx`, including recursive multi-level submenu rendering and keyboard-driven menu navigation behavior.
 - The menu logo is now sourced from a standalone SVG resource (`src/assets/icons/queryeer-logo.svg`) and an icon generation pipeline now emits app/distribution icon assets (`.png`, `.ico`, `.icns`) under `resources/`.
+- Keybinding architecture phase 1+2 has started: new keybinding extension contract and registry wiring are now in place, with compatibility fallback to existing menu accelerators.
+- Keybindings phase 3 is now in place: appDir persistence (`keybindings.json`), user/default merge + baseline validation diagnostics, and renderer keydown dispatch for global bindings.
+- Keybindings phase 4 baseline is now in place: context key service and `when` expression evaluation (`&&`, `||`, `!`, `==`, `!=`, parens, booleans/strings/numbers) wired into keybinding dispatch.
+- Removed dead layout menu contribution path: `LayoutMenuItemContribution`, `layout.registerMenuItem`, runtime storage/snapshot field (`layout.menuItems`), and stale `core.layout` menu contribution calls.
+- Removed legacy command-level `accelerator` compatibility from command contracts and runtime fallback; keybindings are now the single source for shortcut metadata and menu accelerator derivation.
 
 ## What changed in this session
 
@@ -68,6 +73,27 @@
   - outputs: `resources/icon.png`, `resources/icon.ico`, `resources/icon.icns`
   - variant set: `resources/icons/icon-{16,24,32,48,64,128,256,512,1024}.png` + copied `.ico`/`.icns`
 - Updated electron-builder platform icon paths in `package.json` (`win.icon`, `mac.icon`, `linux.icon`) to use generated resources.
+- Added `KeybindingExtension` contract (`id`, `commandId`, `key`, optional `when/scope/order`) and exposed `context.keybindings.registerKeybinding(...)` on `PluginContext`.
+- Runtime snapshot now includes `extensions.keybindings` in `ExtensionRegistry`.
+- `core.commands` now registers a first keybinding contribution (`F1` -> `core.commands.about`) as baseline wiring proof.
+- Bootstrap now derives menu accelerator fallbacks from keybinding contributions for global bindings when command-level `accelerator` is not set, preserving current native menu behavior while moving toward keybindings-first ownership.
+- Added keybindings contract document + empty factory in `src/contracts/commands/Keybindings.ts` (`version`, `bindings`, `unbound`).
+- Added main-process keybindings store + IPC in `src/main/commands/keybindings-store.ts` (`keybindings:get` / `keybindings:save`) with atomic writes and tests.
+- Preload bridge now exposes `getUserKeybindings()` / `saveUserKeybindings()`.
+- Added resolver utility in `src/plugins/core.commands/keybinding-resolver.ts`:
+  - merges defaults + legacy accelerator fallback + user document
+  - validates unknown command ids and simple key syntax
+  - resolves duplicates deterministically by order (last-wins) with diagnostics
+  - normalizes keyboard events for runtime matching
+- Renderer bootstrap now wires global keydown dispatch to resolved keybindings and exposes keybinding diagnostics into observability runtime data.
+- Added `when` evaluator (`src/plugins/core.commands/when-evaluator.ts`) and context key service (`src/plugins/core.commands/context-key-service.ts`).
+- Added dedicated keybinding runtime service (`src/plugins/core.commands/keybinding-service.ts`) and moved keydown dispatch out of ad-hoc bootstrap logic into this service.
+- Current default context keys: `global`, `editorFocus`, `terminalFocus`, `explorerFocus`, `inputFocus`.
+- Keydown matching now evaluates `when` expressions against current context snapshot instead of global-only filtering.
+- Layout contract is now cleaner: menu structure is exclusively owned by `core.menu` via `context.menu.registerMenuItem`.
+- `core.menu` and `core.files` now register shortcuts exclusively via `context.keybindings.registerKeybinding(...)` (no command-level accelerator metadata).
+- Menu accelerator labels/rendering now derive from keybinding contributions (global bindings only) instead of command metadata.
+- Observability editor now shows keybinding summary diagnostics (registered / invalid user / duplicates resolved).
 - Added optional `accelerator` metadata on command contracts/registrations and forwarded accelerators to native menu build payload.
 - Aligned existing plugin menu contributions to the shared root menus:
   - `core.files` now contributes under `core.menu.file`
@@ -403,7 +429,7 @@
 
 ## Next 3 tasks
 
-1. Add mnemonic-letter navigation parity (eg Alt+F/Alt+E) plus typed first-character matching inside open menus.
+1. Expand context key coverage and precise focus semantics (active editor id/language/readOnly/resource state), and allow plugins/editors to publish dynamic context keys.
 2. Monaco editor plugin (or a simple text-editor plugin) — first real consumer of FileEntity + viewState, enables actual `reloadFile` disk-read wiring + real notifyChanged text flow.
 3. Modal/notification UI plugin — drives the active+dirty external-change prompt (Reload/Keep/Diff) and the crash-recovery prompt (Restore/Discard). WorkspaceService already exposes the data via `listPendingRestores` / `readBackup`.
 
@@ -421,6 +447,9 @@
 ### Older gaps (still relevant)
 - Current `core.menu` command handlers are mostly placeholder stubs for parity scaffolding; real command routing (command palette, quick open, run/terminal actions, zoom behavior) is pending downstream feature plugins.
 - Icon generation currently relies on dev dependencies (`sharp`, `to-ico`, `png2icons`); if CI/release should regenerate icons, `npm run assets:icons` must be added to the release workflow.
+- `when` evaluator is now live, but current context keys are heuristic (DOM-class based) and should be tightened once Monaco/editor-specific focus markers are in place.
+- Any plugin still expecting `extensions.layout.menuItems` will now fail to compile; none exist in-repo after this cleanup.
+- Any plugin still setting `registerCommand({ accelerator: ... })` will now fail to compile; migrate to keybinding contributions.
 - Desktop defaults to mock transport unless `QUERYEER_BACKEND_STDIO=1` is set.
 - Java stdio transport protocol handling is real, but execution internals and credential persistence remain mocked/stubbed.
 - `FileSessionHandler` SPI exists in `backend-api`, but no engine plugin implements it yet — parse-tree reuse via `query.execute.fileId` is not live.
