@@ -119,6 +119,7 @@ Additional desktop shell work completed in parallel (outside Java modules):
 - [x] Move shell logo to shared SVG resource and generate platform icon outputs (`.ico`, `.icns`, `.png`) for desktop packaging
 - [ ] Keyboard parity polish for mnemonics/letter shortcuts and menu item metadata expansion (separator/disabled)
 - [~] Commands/keybindings migration started (desktop): contribution contract + registry + user override persistence + resolver/diagnostics + baseline context-aware `when` evaluation complete; richer editor-driven context keys still pending
+- [~] File/editor resolver hardening (desktop): intent/category/capability-aware resolver scoring + wildcard mime support + unsupported fallback editor contribution complete; reopen-with UX and first real editor plugin pending
 - [x] Desktop cleanup: removed dead `layout.menuItems` contribution path to avoid split menu ownership (`core.menu` is sole menu surface)
 - [x] Desktop cleanup: removed legacy command-level accelerator compatibility; shortcut ownership is now centralized in keybinding contributions
 

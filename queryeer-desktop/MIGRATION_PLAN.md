@@ -60,6 +60,7 @@ Cross-cutting boundary doc added: `documentation/PROCESS_BOUNDARIES.md`.
 - Backend observability hardening (status/logging/correlation workstream)
 - Core-boundary enforcement (query probe behavior moved out of shell core into fully external dual-target plugin package)
 - Mime capability registry for backupable/executable/viewable/editable gating (core.files + core.observability implemented; available for future editor resolver, command palette, etc.)
+- Editor-resolution hardening for tab routing: wildcard mime matching, open-intent-aware matching (`edit`/`view`), category/capability-aware selection, and fallback unsupported editor contribution
 - Window chrome parity track: custom frameless titlebar, VS Code-like renderer menu strip, and renderer-driven native window controls/state sync
 - Menu architecture hardening: title/menu rendering extracted from `ShellApp` into `core.menu` UI module with recursive submenu support and keyboard navigation (Alt + arrows + Escape)
 - Branding/assets hardening: logo moved to shared SVG resource and deterministic icon generation added for Windows/macOS/Linux installer/taskbar assets
@@ -71,7 +72,7 @@ Cross-cutting boundary doc added: `documentation/PROCESS_BOUNDARIES.md`.
 
 ### Not started yet
 
-- Monaco editor plugin (or any text-editor plugin) — first real consumer of FileEntity + viewState
+- Monaco editor plugin (or any text-editor plugin) — first real consumer of FileEntity + viewState, now enabled by intent/category/capability-aware editor resolver baseline
 - Modal/notification UI plugin — surfaces external-change prompt + crash-recovery prompt; consumes `WorkspaceService.listPendingRestores`/`readBackup`/`discardBackup`
 - Keyboard/interaction parity polish for menu UX (mnemonics/letter shortcuts, separators/disabled states, richer accessibility semantics)
 - Keybindings resolver + user overrides (`appDir/keybindings.json`) + validation diagnostics in `core.commands`
@@ -88,6 +89,7 @@ Cross-cutting boundary doc added: `documentation/PROCESS_BOUNDARIES.md`.
 - Increment 2 — resolvers + mime classification: done
 - Increment 3 — FileMediator: done
 - Increment 4 — protocol + Java `DefaultFileRegistry` + `FileSessionHandler` SPI: done
+- Increment 4.5 — editor resolver hardening (openIntent + wildcard mime + category/capability scoring + unsupported fallback editor): done
 - Increment 5 — engine binding + execute reuse of parse trees: deferred (premature without editor/output wiring)
 
 Design reference: `documentation/FILE_ENTITY_MODEL.md`.

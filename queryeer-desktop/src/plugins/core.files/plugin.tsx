@@ -1,5 +1,6 @@
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { MimeCapability } from "../../contracts/files/FilesRegistry";
+import type { FileEntity } from "../../contracts/files/FileEntity";
 
 const EXTENSION_MIME_MAP: Record<string, string> = {
   txt: "text/plain",
@@ -10,7 +11,8 @@ const EXTENSION_MIME_MAP: Record<string, string> = {
   xml: "application/xml",
   csv: "text/csv",
   log: "text/plain",
-  sql: "application/sql"
+  sql: "application/sql",
+  plbsql: "application/sql"
 };
 
 const DEFAULT_CAPABILITIES: MimeCapability[] = [
@@ -18,6 +20,74 @@ const DEFAULT_CAPABILITIES: MimeCapability[] = [
   "editable",
   "viewable"
 ];
+
+const ALL_MIME_CAPABILITIES: MimeCapability[] = [
+  "backupable",
+  "editable",
+  "viewable",
+  "executable"
+];
+
+function toFileUri(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, "/");
+  if (/^[A-Za-z]:\//.test(normalized)) {
+    return `file:///${encodeURI(normalized)}`;
+  }
+  if (normalized.startsWith("//")) {
+    return `file:${encodeURI(normalized)}`;
+  }
+  if (normalized.startsWith("/")) {
+    return `file://${encodeURI(normalized)}`;
+  }
+  return `file:///${encodeURI(normalized)}`;
+}
+
+function renderUnsupportedEditorView(
+  file: FileEntity,
+  category: string,
+  capabilities: MimeCapability[]
+): JSX.Element {
+  const capabilitySummary = capabilities.join(" ") || "none";
+  return (
+    <section className="unsupported-editor">
+      <header className="unsupported-editor-header">
+        <h2>Unsupported File Type</h2>
+        <p>
+          No editor contribution currently handles this resource. The file is open in a tab so
+          you can inspect metadata while we wire dedicated editors.
+        </p>
+      </header>
+
+      <dl className="unsupported-editor-grid">
+        <div>
+          <dt>URI</dt>
+          <dd title={file.uri}>{file.uri}</dd>
+        </div>
+        <div>
+          <dt>MIME</dt>
+          <dd>{file.mimeType}</dd>
+        </div>
+        <div>
+          <dt>Category</dt>
+          <dd>
+            <span className="unsupported-editor-chip">{category}</span>
+          </dd>
+        </div>
+        <div>
+          <dt>Capabilities</dt>
+          <dd>
+            <span className="unsupported-editor-chip">{capabilitySummary}</span>
+          </dd>
+        </div>
+      </dl>
+
+      <p className="unsupported-editor-help">
+        Next step: register an editor contribution with matching `supportedMimeTypes`,
+        `supportedContentCategories`, or `requiredCapabilities`.
+      </p>
+    </section>
+  );
+}
 
 export const coreFilesPlugin: Plugin = {
   manifest: {
@@ -28,6 +98,33 @@ export const coreFilesPlugin: Plugin = {
     description: "Owns the frontend file registry and file entity lifecycle"
   },
   activate: (context) => {
+    context.layout.registerEditor({
+      id: "core.files.unsupported",
+      title: "Unsupported File",
+      order: 9_999,
+      supportedMimeTypes: ["*/*"],
+      openIntents: ["view", "edit"],
+      priority: -1_000,
+      render: ({ activeFile } = {}) => {
+        if (!activeFile) {
+          return (
+            <section className="unsupported-editor">
+              <header className="unsupported-editor-header">
+                <h2>Unsupported File Type</h2>
+                <p>No active file selected.</p>
+              </header>
+            </section>
+          );
+        }
+        const capabilities = ALL_MIME_CAPABILITIES.filter((capability) =>
+          context.files.capabilities.hasCapability(activeFile.mimeType, capability)
+        );
+        const category =
+          context.files.capabilities.getContentCategory(activeFile.mimeType) ?? "unknown";
+        return renderUnsupportedEditorView(activeFile, category, capabilities);
+      }
+    });
+
     context.commands.registerCommand({
       id: "core.files.new",
       title: "New File",
@@ -40,7 +137,16 @@ export const coreFilesPlugin: Plugin = {
       id: "core.files.open",
       title: "Open File",
       handler: async () => {
-        console.log("Open file command executed");
+        const result = await context.dialog.showOpenDialog({
+          title: "Open File",
+          multiSelections: true
+        });
+        if (result.canceled || result.filePaths.length === 0) {
+          return;
+        }
+        for (const filePath of result.filePaths) {
+          await context.fileMediator.openFile(toFileUri(filePath));
+        }
       }
     });
 
@@ -133,7 +239,7 @@ export const coreFilesPlugin: Plugin = {
       return EXTENSION_MIME_MAP[extension];
     });
 
-    for (const [mimeType] of Object.entries(EXTENSION_MIME_MAP)) {
+    for (const mimeType of new Set(Object.values(EXTENSION_MIME_MAP))) {
       context.files.capabilities.registerCapabilities(mimeType, DEFAULT_CAPABILITIES);
       context.files.capabilities.registerContentCategory(mimeType, "text");
     }

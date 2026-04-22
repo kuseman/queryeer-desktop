@@ -4,7 +4,9 @@ import type {
   FileOpenInput
 } from "../../contracts/files/FileEntity";
 import type {
+  EditorResolutionContext,
   ContentCategory,
+  FileOpenIntent,
   FilesRegistry,
   FilesSubscriber,
   MimeCapability,
@@ -59,7 +61,7 @@ export class FileRegistry {
         this.editorResolvers.push(resolver);
       },
       classifyUri: (uri, hint) => this.classifyUri(uri, hint),
-      resolveEditor: (file) => this.resolveEditor(file)
+      resolveEditor: (file, context) => this.resolveEditor(file, context)
     };
   }
 
@@ -113,23 +115,144 @@ export class FileRegistry {
     return DEFAULT_MIME_TYPE;
   }
 
-  public resolveEditor(file: FileEntity): string | undefined {
+  public resolveEditor(
+    file: FileEntity,
+    context?: Partial<EditorResolutionContext>
+  ): string | undefined {
+    const effectiveContext = this.buildEditorResolutionContext(file, context);
     for (const resolver of this.editorResolvers) {
       const editorId = resolver(file);
       if (editorId) {
         return editorId;
       }
     }
-    return this.matchEditorByMimeType(file.mimeType);
+    return this.matchEditor(effectiveContext);
   }
 
-  private matchEditorByMimeType(mimeType: string): string | undefined {
-    for (const editor of this.getEditors()) {
-      if (editor.supportedMimeTypes?.includes(mimeType)) {
-        return editor.id;
+  private buildEditorResolutionContext(
+    file: FileEntity,
+    context?: Partial<EditorResolutionContext>
+  ): EditorResolutionContext {
+    const mimeType = context?.mimeType ?? file.mimeType;
+    return {
+      uri: context?.uri ?? file.uri,
+      mimeType,
+      openIntent: context?.openIntent ?? this.defaultOpenIntent(mimeType),
+      contentCategory: context?.contentCategory ?? this.mimeContentCategories.get(mimeType)
+    };
+  }
+
+  private defaultOpenIntent(mimeType: string): FileOpenIntent {
+    if (this.mimeCapabilities.get(mimeType)?.has("editable")) {
+      return "edit";
+    }
+    return "view";
+  }
+
+  private matchEditor(context: EditorResolutionContext): string | undefined {
+    const scored = this.getEditors()
+      .map((editor) => {
+        return {
+          editor,
+          score: this.scoreEditor(editor, context)
+        };
+      })
+      .filter((candidate) => candidate.score !== undefined)
+      .sort((a, b) => {
+        const scoreDiff = (b.score ?? Number.NEGATIVE_INFINITY) - (a.score ?? Number.NEGATIVE_INFINITY);
+        if (scoreDiff !== 0) {
+          return scoreDiff;
+        }
+        const priorityDiff = (b.editor.priority ?? 0) - (a.editor.priority ?? 0);
+        if (priorityDiff !== 0) {
+          return priorityDiff;
+        }
+        const orderDiff = (a.editor.order ?? 0) - (b.editor.order ?? 0);
+        if (orderDiff !== 0) {
+          return orderDiff;
+        }
+        return a.editor.id.localeCompare(b.editor.id);
+      });
+
+    if (scored.length > 0) {
+      return scored[0]?.editor.id;
+    }
+
+    const fallback = this.getEditors().find((editor) => editor.id === "core.files.unsupported");
+    return fallback?.id;
+  }
+
+  private scoreEditor(
+    editor: LayoutEditorContribution,
+    context: EditorResolutionContext
+  ): number | undefined {
+    const uriScheme = extractScheme(context.uri);
+    if (editor.resourceScheme && editor.resourceScheme !== uriScheme) {
+      return undefined;
+    }
+
+    let score = editor.priority ?? 0;
+    let hasMatchSignal = false;
+
+    const mimeScore = this.scoreMimeMatch(editor.supportedMimeTypes, context.mimeType);
+    if (mimeScore !== undefined) {
+      score += mimeScore;
+      hasMatchSignal = true;
+    }
+
+    if (
+      context.contentCategory &&
+      editor.supportedContentCategories?.includes(context.contentCategory)
+    ) {
+      score += 220;
+      hasMatchSignal = true;
+    }
+
+    if (editor.openIntents?.includes(context.openIntent)) {
+      score += 100;
+      hasMatchSignal = true;
+    }
+
+    const mimeCapabilities = this.mimeCapabilities.get(context.mimeType);
+    const missingRequiredCapability = editor.requiredCapabilities?.some(
+      (capability) => !mimeCapabilities?.has(capability)
+    );
+    if (missingRequiredCapability) {
+      return undefined;
+    }
+
+    if (!hasMatchSignal) {
+      return undefined;
+    }
+
+    return score;
+  }
+
+  private scoreMimeMatch(
+    supportedMimeTypes: string[] | undefined,
+    mimeType: string
+  ): number | undefined {
+    if (!supportedMimeTypes || supportedMimeTypes.length === 0) {
+      return undefined;
+    }
+    let bestScore: number | undefined;
+    for (const supportedMimeType of supportedMimeTypes) {
+      if (supportedMimeType === mimeType) {
+        bestScore = Math.max(bestScore ?? Number.NEGATIVE_INFINITY, 400);
+        continue;
+      }
+      if (supportedMimeType === "*/*") {
+        bestScore = Math.max(bestScore ?? Number.NEGATIVE_INFINITY, 100);
+        continue;
+      }
+      if (supportedMimeType.endsWith("/*")) {
+        const prefix = supportedMimeType.slice(0, -1);
+        if (mimeType.startsWith(prefix)) {
+          bestScore = Math.max(bestScore ?? Number.NEGATIVE_INFINITY, 300);
+        }
       }
     }
-    return undefined;
+    return bestScore;
   }
 
   private openFile(input: FileOpenInput): FileEntity {
@@ -228,4 +351,12 @@ function extractExtension(uri: string): string | undefined {
     return undefined;
   }
   return tail.slice(dot + 1).toLowerCase();
+}
+
+function extractScheme(uri: string): string | undefined {
+  const colon = uri.indexOf(":");
+  if (colon <= 0) {
+    return undefined;
+  }
+  return uri.slice(0, colon);
 }

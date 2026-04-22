@@ -31,6 +31,9 @@
 - File entity / mediator infrastructure is live:
   - `core.files` plugin owns the renderer `FileRegistry` + `FileMediator`
   - mime/editor resolver chains; editor contributions declare `supportedMimeTypes`
+  - editor resolution now supports wildcard mime matching (`type/*`, `*/*`), open-intent-aware scoring (`edit`/`view`), content-category matching, required capability gating, and deterministic tie-breaks
+  - fallback editor route added (`core.files.unsupported`) so unresolved files still open in tabs
+  - `core.files.open` is now wired through `core.dialog.showOpenDialog` and opens selected files through `FileMediator`
   - FileEntity carries dirty flags, engine binding, external-modification flags, viewState bag
   - `file.open`, `file.close`, `file.bind`, `file.change` protocol methods + Java `FileRegistry` / `FileSessionHandler` SPI + `DefaultFileRegistry`
 - `core.fileWatcher` plugin runs chokidar in Electron main, dedup+refcounts watchers by (uri, recursive), fans out events, per-URI mute API with active timers.
@@ -47,6 +50,51 @@
 - Removed legacy command-level `accelerator` compatibility from command contracts and runtime fallback; keybindings are now the single source for shortcut metadata and menu accelerator derivation.
 
 ## What changed in this session
+
+### File/editor resolver hardening before editor plugin rollout
+
+- Added `FileOpenIntent` (`edit`/`view`) and threaded `openIntent` through `FileMediator.openFile(...)` into `FilesRegistry.resolveEditor(...)` context.
+- Extended `LayoutEditorContribution` with resolver metadata used for matching/scoring:
+  - `supportedContentCategories`
+  - `requiredCapabilities`
+  - `openIntents`
+  - `priority`
+- Reworked `FileRegistry.resolveEditor(...)` matching strategy:
+  - keeps explicit resolver-chain precedence
+  - adds scored editor matching (exact mime, wildcard mime, category, intent, capability gating)
+  - deterministic tie-breaks (`priority`, `order`, `id`)
+  - fallback to `core.files.unsupported` editor id when present
+- Added wildcard mime support in matching (`text/*`, `*/*`).
+- Fixed `core.files` mime-capability registration bug (was registering extension keys instead of mime values).
+- Added a minimal fallback editor contribution in `core.files` (`core.files.unsupported`) to avoid blank main-area states for unresolved file types.
+- Upgraded fallback editor rendering to include active-file diagnostics (uri, mime, category, capabilities) by passing `activeFile` into `LayoutEditorContribution.render(...)`.
+- Expanded tests:
+  - `src/core/plugin-runtime/FileRegistry.test.ts` (wildcards, category/intent matching, required capabilities, fallback)
+  - `src/core/plugin-runtime/FileMediator.test.ts` (openIntent propagation)
+
+### core.dialog activation/discovery fix + file-open wiring
+
+- Root cause for "Open File" no-op was confirmed: `core.dialog` manifest/module existed but was not included in internal plugin manifest loading (`manifest-loader`) or static module loader map (`discovery`), so dialog APIs stayed on `ExtensionRegistry` no-op defaults.
+- Added `core.dialog` to `loadPluginManifests()` and to the static internal module loader map.
+- `core.files.open` now calls `context.dialog.showOpenDialog(...)` and opens returned paths via `context.fileMediator.openFile(...)`.
+- Verified `core.dialog` message/open/save methods share the same activation path; once plugin loads, all three are wired.
+- Updated renderer `window.appShell` typing in `ShellApp` for dialog APIs so bootstrap/tests remain type-safe.
+
+### Validation
+
+- `npm run typecheck` passed.
+- `npm run lint` passed.
+- Focused tests passed:
+  - `src/renderer/shell/bootstrap.test.ts`
+  - `src/renderer/plugins/external-plugin-diagnostics.test.ts`
+  - `src/core/plugin-runtime/FileRegistry.test.ts`
+  - `src/core/plugin-runtime/FileMediator.test.ts`
+
+### Validation
+
+- `npm run typecheck` passed.
+- `npm run lint` passed.
+- `npm run test` passed.
 
 ### VS Code-like menubar + custom titlebar window controls
 
@@ -429,9 +477,9 @@
 
 ## Next 3 tasks
 
-1. Expand context key coverage and precise focus semantics (active editor id/language/readOnly/resource state), and allow plugins/editors to publish dynamic context keys.
-2. Monaco editor plugin (or a simple text-editor plugin) — first real consumer of FileEntity + viewState, enables actual `reloadFile` disk-read wiring + real notifyChanged text flow.
-3. Modal/notification UI plugin — drives the active+dirty external-change prompt (Reload/Keep/Diff) and the crash-recovery prompt (Restore/Discard). WorkspaceService already exposes the data via `listPendingRestores` / `readBackup`.
+1. Add integration coverage for `core.dialog` activation and command wiring (`core.files.open` path + dialog bridge APIs) so missing-manifest regressions fail tests early.
+2. Implement first real text editor plugin (Monaco or lightweight baseline) using new resolver metadata (`supportedMimeTypes`, wildcard support, `openIntents`) and persist editor-specific `viewState`.
+3. Add "Reopen With" command/menu flow to let users override auto-resolved editor per file and persist that override in workspace/session state.
 
 ## Known gaps / temporary scaffolds
 
@@ -439,6 +487,8 @@
 - `FileMediator.reloadFile` currently just resets flags — real disk re-read waits for a `readFile` IPC + an editor that can apply content to its buffer.
 - `FileMediator.saveFile` currently just stamps `diskVersion = version` and clears `dirtyVsDisk` — no disk write yet. Save flow ties into `PROCESS_BOUNDARIES.md` disk-ownership rule; implementation follows when an editor produces text to write.
 - `notifyChanged(fileId, text)` is called by editors passing text explicitly. No editor model exists yet; the shape is ready.
+- `core.files.unsupported` fallback editor is currently a static placeholder string; proper unsupported-file UX (metadata/actions/reopen-with) still needs a dedicated view component.
+- `core.dialog` had no direct startup/assertion test before this fix; internal-plugin manifest/loader drift can silently fall back to no-op dialog implementations unless covered by integration tests.
 - No UI surfaces the external-change prompt (active+dirty) or crash-recovery prompt. Workspace service exposes the data via `listPendingRestores` / `readBackup` / `discardBackup` — a future modal plugin consumes them.
 - `core.fileWatcher` increment 5 (atomic-save delete+add event normalization + inotify-limit warning) is deferred. Noted in `CORE_FILE_WATCHER_MODEL.md`.
 - Backups from previous sessions can orphan if the user doesn't discard — `BackupStore` retention caps within-session but doesn't purge stale per-fileId across sessions. Acceptable until modal UX lands.

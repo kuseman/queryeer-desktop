@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import type { ContentCategory, FileOpenIntent, MimeCapability } from "../files/FilesRegistry";
+import type { FileEntity } from "../files/FileEntity";
 
 export type LayoutZone =
   | "menuBar"
@@ -43,8 +45,12 @@ export type LayoutEditorContribution = {
   order?: number;
   resourceScheme?: string;
   supportedMimeTypes?: string[];
+  supportedContentCategories?: ContentCategory[];
+  requiredCapabilities?: MimeCapability[];
+  openIntents?: FileOpenIntent[];
+  priority?: number;
   canSplit?: boolean;
-  render: () => ReactNode;
+  render: (context?: { activeFile?: FileEntity }) => ReactNode;
 };
 
 export type LayoutWelcomeContribution = {

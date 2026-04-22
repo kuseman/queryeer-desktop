@@ -251,6 +251,7 @@ body.is-resizing-layout {
   display: flex;
   align-items: stretch;
   border-right: 1px solid var(--border);
+  position: relative;
 }
 
 .shell-editor-tab-button {
@@ -275,8 +276,17 @@ body.is-resizing-layout {
 
 .shell-editor-tab.is-active .shell-editor-tab-button {
   background: rgba(7, 15, 25, 0.55);
-  border-top-color: var(--accent);
   color: var(--text-0);
+}
+
+.shell-editor-tab.is-active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--accent);
 }
 
 .shell-editor-tab-title {
@@ -646,8 +656,71 @@ body.is-resizing-layout {
   }
 }
 .shell-editor-tab.is-active .shell-editor-tab-close { 
-  border-top: 1px solid var(--accent);
   margin-top: 0px;
+}
+
+.unsupported-editor {
+  margin: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(49, 196, 141, 0.08), rgba(7, 15, 25, 0.55));
+  padding: 18px;
+  max-width: 960px;
+}
+
+.unsupported-editor-header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.unsupported-editor-header p {
+  margin: 8px 0 0;
+  color: var(--text-1);
+  max-width: 70ch;
+}
+
+.unsupported-editor-grid {
+  margin: 14px 0 0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.unsupported-editor-grid div {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(7, 15, 25, 0.45);
+}
+
+.unsupported-editor-grid dt {
+  margin: 0;
+  font-size: var(--ui-font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-1);
+}
+
+.unsupported-editor-grid dd {
+  margin: 6px 0 0;
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  font-size: var(--ui-font-size-sm);
+  color: var(--text-0);
+  overflow-wrap: anywhere;
+}
+
+.unsupported-editor-chip {
+  display: inline-block;
+  border: 1px solid var(--accent-muted);
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: #c7ffee;
+  background: rgba(49, 196, 141, 0.18);
+}
+
+.unsupported-editor-help {
+  margin: 14px 0 0;
+  color: var(--text-2);
 }
 
 /* Titlebar (frameless window) */
