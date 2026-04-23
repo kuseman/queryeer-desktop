@@ -19,7 +19,8 @@ export type FileEntity = {
   reloadPending?: boolean;
   backupUri?: string;
   hasRecoveredBackup?: boolean;
-  viewState?: ViewStateBag;
+  runtimeViewState?: unknown;
+  persistentViewState?: ViewStateBag;
   version: number;
   backendVersion?: number;
   diskVersion?: number;
@@ -33,12 +34,13 @@ export type FileOpenInput = {
   editorId?: string;
   engineBinding?: EngineBinding;
   diskVersion?: number;
-  viewState?: ViewStateBag;
+  persistentViewState?: ViewStateBag;
 };
 
 export type FileEntityUpdate = Partial<
   Pick<
     FileEntity,
+    | "uri"
     | "mimeType"
     | "editorId"
     | "engineBinding"
@@ -50,7 +52,8 @@ export type FileEntityUpdate = Partial<
     | "reloadPending"
     | "backupUri"
     | "hasRecoveredBackup"
-    | "viewState"
+    | "runtimeViewState"
+    | "persistentViewState"
     | "metadata"
   >
 >;

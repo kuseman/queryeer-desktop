@@ -22,9 +22,10 @@ export function TabTooltip({ sections }: TabTooltipProps) {
 }
 
 export function buildTabTooltip(
-  file: FileEntity,
+  file: FileEntity | undefined,
   contributions: TooltipSectionContribution[]
 ): TabTooltipProps {
+  if (!file) return { sections: [] };
   const sections = contributions
     .filter((c) => c.order >= 0)
     .sort((a, b) => a.order - b.order)

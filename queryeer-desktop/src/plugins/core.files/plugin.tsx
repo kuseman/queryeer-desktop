@@ -2,6 +2,7 @@ import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { MimeCapability } from "../../contracts/files/FilesRegistry";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import { fileUriToPath } from "../../contracts/files/Resolvers";
+import { getTextEditorRegistry } from "../core.editor/TextEditor/TextEditorRegistry";
 
 const EXTENSION_MIME_MAP: Record<string, string> = {
   txt: "text/plain",
@@ -13,7 +14,7 @@ const EXTENSION_MIME_MAP: Record<string, string> = {
   csv: "text/csv",
   log: "text/plain",
   sql: "application/sql",
-  plbsql: "application/sql"
+  plbsql: "application/plbsql"
 };
 
 const DEFAULT_CAPABILITIES: MimeCapability[] = [
@@ -155,7 +156,16 @@ export const coreFilesPlugin: Plugin = {
       id: "core.files.save",
       title: "Save File",
       handler: async () => {
-        console.log("Save file command executed");
+        const activeFileId = context.fileMediator.getActiveFileId();
+        if (activeFileId) {
+          await context.fileMediator.saveFile(activeFileId);
+          return;
+        }
+
+        const activeFromEditor = getTextEditorRegistry().getActiveFile();
+        if (activeFromEditor) {
+          await context.fileMediator.saveFile(activeFromEditor.fileId);
+        }
       }
     });
 

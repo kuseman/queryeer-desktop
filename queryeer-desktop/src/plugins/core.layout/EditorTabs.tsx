@@ -35,14 +35,18 @@ export function EditorTabs({
   }
 
   const tabTitle = (file: FileEntity, editor: LayoutEditorContribution | undefined) => {
-    return file.uri.startsWith("file://")
-      ? file.uri.split("/").pop()
-      : editor?.title ?? file.uri;
+    if (file.uri.startsWith("file://")) {
+      return file.uri.split("/").pop() ?? file.uri;
+    }
+    if (file.uri.startsWith("untitled:")) {
+      return file.uri.slice(8);
+    }
+    return editor?.title ?? file.uri;
   };
 
   const tooltipProps = hoveredTab
     ? buildTabTooltip(
-        openFiles.find((f) => f.fileId === hoveredTab.fileId)!,
+        openFiles.find((f) => f.fileId === hoveredTab.fileId),
         tooltipContributions
       )
     : { sections: [] };

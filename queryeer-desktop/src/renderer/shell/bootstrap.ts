@@ -10,6 +10,7 @@ import { createKeybindingService } from "../../plugins/core.commands/keybinding-
 import {
   resolveKeybindingState
 } from "../../plugins/core.commands/keybinding-resolver";
+import { getTextEditorRegistry } from "../../plugins/core.editor/TextEditor/TextEditorRegistry";
 
 export async function bootstrapShell() {
   const backendSync: FileBackendSync = {
@@ -47,6 +48,13 @@ export async function bootstrapShell() {
     }
   };
 
+  const resolveFileContent = (fileId: string, uri: string): string | undefined => {
+    const textEditorRegistry = getTextEditorRegistry();
+    const model = textEditorRegistry.getModelForFile(fileId)
+      ?? textEditorRegistry.getModelForUri(uri);
+    return model?.getContent();
+  };
+
   const fileWatcher = new RendererFileWatcherService({
     watchFile: (params) => window.appShell.watchFile(params),
     unwatchFile: (params) => window.appShell.unwatchFile(params),
@@ -63,7 +71,10 @@ export async function bootstrapShell() {
     executeBackendQuery: (params) => window.appShell.executeBackendQuery(params),
     fileWatcher,
     backendSync,
-    onFileChanged
+    onFileChanged,
+    writeFile: (uri, text) => window.appShell.writeFile(uri, text),
+    resolveFileContent,
+    showSaveDialog: (options) => window.appShell.showDialogSave(options)
   });
 
   const externalFrontendPlugins = await window.appShell.getExternalFrontendPlugins();

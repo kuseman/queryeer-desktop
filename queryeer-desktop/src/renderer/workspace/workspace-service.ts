@@ -11,6 +11,7 @@ import {
   type PersistedLayoutSnapshot,
   type WorkspaceSnapshot
 } from "../../contracts/workspace/WorkspaceSnapshot";
+import { getTextEditorRegistry } from "../../plugins/core.editor/TextEditor/TextEditorRegistry";
 
 export type WorkspaceBridge = {
   getWorkspace: () => Promise<WorkspaceSnapshot>;
@@ -51,6 +52,15 @@ const DEFAULT_DEBOUNCE_MS = 250;
 const DEFAULT_BACKUP_DEBOUNCE_MS = 3_000;
 const DEFAULT_BACKUP_MAX_INTERVAL_MS = 30_000;
 
+function stableBackupIdForUri(uri: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < uri.length; i += 1) {
+    hash ^= uri.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `bkp-${(hash >>> 0).toString(16)}`;
+}
+
 export class RendererWorkspaceService {
   private readonly bridge: WorkspaceBridge;
   private readonly filesRegistry: FilesRegistry;
@@ -84,21 +94,30 @@ export class RendererWorkspaceService {
 
   public async hydrate(): Promise<void> {
     const snapshot = await this.bridge.getWorkspace();
-    for (const entry of snapshot.files) {
-      const entity = await this.fileMediator.openFile(entry.uri, {
-        mimeType: entry.mimeType,
-        editorId: entry.editorId,
-        engineBinding: entry.engineBinding
-      });
-      if (entry.backupFileId) {
-        this.backupFileIdByFileId.set(entity.fileId, entry.backupFileId);
-        await this.detectRecoveredBackup(entity.fileId, entry.backupFileId);
-      }
-    }
+
+    const fileEntities = await Promise.all(
+      snapshot.files.map((entry) =>
+        this.fileMediator.openFile(entry.uri, {
+          mimeType: entry.mimeType,
+          editorId: entry.editorId,
+          engineBinding: entry.engineBinding,
+          persistentViewState: entry.persistentViewState
+        })
+      )
+    );
+
+    await Promise.all(
+      snapshot.files.map((entry, i) => {
+        if (!entry.backupFileId) {
+          return Promise.resolve();
+        }
+        this.backupFileIdByFileId.set(fileEntities[i].fileId, entry.backupFileId);
+        return this.restoreFileContentFromBackup(fileEntities[i].fileId, entry.backupFileId);
+      })
+    );
+
     if (snapshot.activeFileUri) {
-      const entity = this.filesRegistry
-        .listFiles()
-        .find((f) => f.uri === snapshot.activeFileUri);
+      const entity = fileEntities.find((f) => f.uri === snapshot.activeFileUri);
       if (entity) {
         this.activeFileId = entity.fileId;
       }
@@ -112,9 +131,11 @@ export class RendererWorkspaceService {
       this.syncWatchers(files);
       this.syncBackups(files);
     });
+    this.syncWatchers(this.filesRegistry.listFiles());
+    this.syncBackups(this.filesRegistry.listFiles());
   }
 
-  private async detectRecoveredBackup(
+  private async restoreFileContentFromBackup(
     fileId: string,
     backupFileId: string
   ): Promise<void> {
@@ -124,11 +145,14 @@ export class RendererWorkspaceService {
         return;
       }
       this.filesRegistry.updateFile(fileId, {
-        hasRecoveredBackup: true,
-        backupUri: latest.backupUri
+        dirtyVsDisk: true,
+        backupUri: latest.backupUri,
+        hasRecoveredBackup: false
       });
+      const registry = getTextEditorRegistry();
+      registry.applyRecoveredContent(fileId, latest.text);
     } catch {
-      // best-effort; missing dir or read failure means no recovery offered
+      // best-effort; if backup can't be read we continue with disk content
     }
   }
 
@@ -275,13 +299,18 @@ export class RendererWorkspaceService {
       state.maxIntervalTimer = null;
     }
     const file = this.filesRegistry.getFile(fileId);
-    if (!file || !file.dirtyVsDisk) {
+    if (!file) {
+      return;
+    }
+    const isUntitled = file.uri.startsWith("untitled:");
+    const isDirty = isUntitled || file.dirtyVsDisk;
+    if (!isDirty) {
       return;
     }
     if (!hasMeaningfulContent(state.latestText)) {
       return;
     }
-    if (!this.filesRegistry.capabilities.hasCapability(file.mimeType, "backupable")) {
+    if (!isUntitled && !this.filesRegistry.capabilities.hasCapability(file.mimeType, "backupable")) {
       return;
     }
     const backupFileId = this.getOrAssignBackupFileId(fileId);
@@ -300,6 +329,12 @@ export class RendererWorkspaceService {
     const existing = this.backupFileIdByFileId.get(fileId);
     if (existing) {
       return existing;
+    }
+    const file = this.filesRegistry.getFile(fileId);
+    if (file) {
+      const stableId = stableBackupIdForUri(file.uri);
+      this.backupFileIdByFileId.set(fileId, stableId);
+      return stableId;
     }
     this.backupFileIdByFileId.set(fileId, fileId);
     return fileId;
@@ -416,13 +451,13 @@ export class RendererWorkspaceService {
   private async pushSnapshot(): Promise<void> {
     const files: PersistedFileEntry[] = this.filesRegistry
       .listFiles()
-      .filter(isPersistableEntity)
       .map((file) => ({
         uri: file.uri,
         mimeType: file.mimeType,
         editorId: file.editorId,
         engineBinding: file.engineBinding,
-        backupFileId: this.backupFileIdByFileId.get(file.fileId)
+        backupFileId: this.backupFileIdByFileId.get(file.fileId),
+        persistentViewState: file.persistentViewState
       }));
 
     let activeFileUri: string | undefined;
@@ -439,10 +474,6 @@ export class RendererWorkspaceService {
     };
     await this.bridge.saveWorkspace(snapshot);
   }
-}
-
-function isPersistableEntity(file: FileEntity): boolean {
-  return !file.uri.startsWith("untitled:");
 }
 
 function hasMeaningfulContent(text: string | null): boolean {

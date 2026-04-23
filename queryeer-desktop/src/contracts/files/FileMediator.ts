@@ -1,4 +1,4 @@
-import type { EngineBinding, FileEntity } from "./FileEntity";
+import type { EngineBinding, FileEntity, ViewStateBag } from "./FileEntity";
 import type { MimeHint } from "./Resolvers";
 import type { FileOpenIntent } from "./FilesRegistry";
 
@@ -7,6 +7,7 @@ export type FileOpenHint = {
   editorId?: string;
   engineBinding?: EngineBinding;
   openIntent?: FileOpenIntent;
+  persistentViewState?: ViewStateBag;
 } & Pick<MimeHint, "extension">;
 
 export type FileCloseOptions = {
@@ -22,6 +23,8 @@ export type FileMediator = {
   openFile: (uri: string, hint?: FileOpenHint) => Promise<FileEntity>;
   closeFile: (fileId: string, opts?: FileCloseOptions) => Promise<void>;
   saveFile: (fileId: string) => Promise<void>;
+  setActiveFileId: (fileId: string | null) => void;
+  getActiveFileId: () => string | null;
   notifyChanged: (fileId: string, text: string) => void;
   bindEngine: (
     fileId: string,

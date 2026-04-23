@@ -23,6 +23,8 @@ describe("bootstrapShell diagnostics wiring", () => {
     window.appShell = {
       platform: "win32",
       version: "0.1.0",
+      readFile: async () => ({ success: true, content: "" }),
+      writeFile: async () => ({ success: true }),
       getBackendStatus: async () => ({
         mode: "mock-stdio",
         state: "healthy",
@@ -43,7 +45,7 @@ describe("bootstrapShell diagnostics wiring", () => {
       executeBackendQuery: async () => ({ accepted: true, queryExecutionId: "q-1" }),
       cancelBackendQuery: async () => ({ accepted: true, queryExecutionId: "q-1" }),
       getWorkspace: async () => ({
-        schemaVersion: 1 as const,
+        schemaVersion: 2 as const,
         savedAt: "1970-01-01T00:00:00.000Z",
         files: []
       }),

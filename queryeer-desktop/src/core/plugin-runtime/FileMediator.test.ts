@@ -21,6 +21,9 @@ type Harness = {
   registry: FileRegistry;
   execute: ReturnType<typeof vi.fn>;
   sync: Required<FileBackendSync>;
+  writeFile: ReturnType<typeof vi.fn>;
+  resolveFileContent: ReturnType<typeof vi.fn>;
+  showSaveDialog: ReturnType<typeof vi.fn>;
   mediator: ReturnType<typeof createFileMediator>;
 };
 
@@ -44,14 +47,20 @@ function setupHarness(options?: {
     changeFile: vi.fn(async () => {}),
     bindFile: vi.fn(async () => {})
   };
+  const writeFile = vi.fn(async () => ({ success: true }));
+  const resolveFileContent = vi.fn(() => "resolved-content");
+  const showSaveDialog = vi.fn();
   const mediator = createFileMediator({
     filesRegistry,
     executeBackendQuery: execute,
     backendSync: sync,
+    writeFile,
+    resolveFileContent,
     changeDebounceMs: options?.changeDebounceMs ?? 50,
-    generateQueryExecutionId: () => "qx-test"
+    generateQueryExecutionId: () => "qx-test",
+    showSaveDialog
   });
-  return { registry, execute, sync, mediator };
+  return { registry, execute, sync, writeFile, resolveFileContent, showSaveDialog, mediator };
 }
 
 describe("FileMediator.openFile", () => {
@@ -190,6 +199,144 @@ describe("FileMediator.notifyChanged", () => {
     vi.advanceTimersByTime(100);
 
     expect(sync.changeFile).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("FileMediator active file", () => {
+  it("tracks active file when set and clear", async () => {
+    const { mediator } = setupHarness();
+    const file = await mediator.openFile("file:///active.sql", {
+      mimeType: "application/sql"
+    });
+
+    expect(mediator.getActiveFileId()).toBe(file.fileId);
+
+    mediator.setActiveFileId("manual-id");
+    expect(mediator.getActiveFileId()).toBe("manual-id");
+
+    mediator.setActiveFileId(null);
+    expect(mediator.getActiveFileId()).toBeNull();
+  });
+});
+
+describe("FileMediator.saveFile", () => {
+  it("writes latest text and clears dirtyVsDisk for file:// uris", async () => {
+    const { mediator, registry, writeFile } = setupHarness();
+    const file = await mediator.openFile("file:///x.sql", {
+      mimeType: "application/sql"
+    });
+
+    mediator.notifyChanged(file.fileId, "select 42");
+    await mediator.saveFile(file.fileId);
+
+    expect(writeFile).toHaveBeenCalledWith("file:///x.sql", "select 42");
+    const updated = registry.createFilesRegistry().getFile(file.fileId);
+    expect(updated?.dirtyVsDisk).toBe(false);
+  });
+
+  it("uses resolveFileContent when there is no pending text", async () => {
+    const { mediator, resolveFileContent, writeFile } = setupHarness();
+    const file = await mediator.openFile("file:///y.sql", {
+      mimeType: "application/sql"
+    });
+
+    await mediator.saveFile(file.fileId);
+
+    expect(resolveFileContent).toHaveBeenCalledWith(file.fileId, "file:///y.sql");
+    expect(writeFile).toHaveBeenCalledWith("file:///y.sql", "resolved-content");
+  });
+
+  it("shows save dialog for untitled files and converts uri on save", async () => {
+    const { mediator, registry, writeFile, showSaveDialog } = setupHarness();
+    const file = await mediator.openFile("untitled:Query1.sql", {
+      mimeType: "application/sql"
+    });
+    mediator.notifyChanged(file.fileId, "select * from users");
+
+    showSaveDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePath: "C:\\Users\\test\\Query1.sql"
+    });
+
+    await mediator.saveFile(file.fileId);
+
+    expect(showSaveDialog).toHaveBeenCalledWith({
+      title: "Save Query",
+      defaultPath: "Query1.sql",
+      filters: [{ name: "SQL Files", extensions: ["sql"] }]
+    });
+    expect(writeFile).toHaveBeenCalledWith(
+      "file:///C:/Users/test/Query1.sql",
+      "select * from users"
+    );
+    const updated = registry.createFilesRegistry().getFile(file.fileId);
+    expect(updated?.uri).toBe("file:///C:/Users/test/Query1.sql");
+    expect(updated?.dirtyVsDisk).toBe(false);
+  });
+
+  it("handles unix paths in save dialog", async () => {
+    const { mediator, registry, writeFile, showSaveDialog } = setupHarness();
+    const file = await mediator.openFile("untitled:Query.sql", {
+      mimeType: "application/sql"
+    });
+    mediator.notifyChanged(file.fileId, "select 1");
+
+    showSaveDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePath: "/home/user/Query.sql"
+    });
+
+    await mediator.saveFile(file.fileId);
+
+    expect(writeFile).toHaveBeenCalledWith(
+      "file:///home/user/Query.sql",
+      "select 1"
+    );
+    const updated = registry.createFilesRegistry().getFile(file.fileId);
+    expect(updated?.uri).toBe("file:///home/user/Query.sql");
+  });
+
+  it("cancels save-as when dialog is canceled", async () => {
+    const { mediator, writeFile, showSaveDialog } = setupHarness();
+    const file = await mediator.openFile("untitled:MyQuery.sql", {
+      mimeType: "application/sql"
+    });
+    mediator.notifyChanged(file.fileId, "select 1");
+
+    showSaveDialog.mockResolvedValueOnce({ canceled: true });
+
+    await mediator.saveFile(file.fileId);
+
+    expect(writeFile).not.toHaveBeenCalled();
+  });
+
+  it("does nothing for untitled when showSaveDialog not provided", async () => {
+    const registry = new FileRegistry({ getEditors: () => [] });
+    const filesRegistry = registry.createFilesRegistry();
+    const writeFile = vi.fn(async () => ({ success: true }));
+    const mediator = createFileMediator({
+      filesRegistry,
+      executeBackendQuery: vi.fn(),
+      writeFile
+    });
+    const file = await mediator.openFile("untitled:orphan", {
+      mimeType: "application/sql"
+    });
+
+    await mediator.saveFile(file.fileId);
+
+    expect(writeFile).not.toHaveBeenCalled();
+  });
+
+  it("does nothing for unknown URI schemes", async () => {
+    const { mediator, writeFile } = setupHarness();
+    const file = await mediator.openFile("app-data://config", {
+      mimeType: "application/json"
+    });
+
+    await mediator.saveFile(file.fileId);
+
+    expect(writeFile).not.toHaveBeenCalled();
   });
 });
 

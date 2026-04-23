@@ -1,7 +1,8 @@
 import type {
   FileEntity,
   FileEntityUpdate,
-  FileOpenInput
+  FileOpenInput,
+  ViewStateBag
 } from "../../contracts/files/FileEntity";
 import type {
   EditorResolutionContext,
@@ -42,6 +43,34 @@ export class FileRegistry {
 
   constructor(options: FileRegistryOptions = {}) {
     this.getEditors = options.getEditors ?? (() => []);
+    this.registerDefaultCapabilities();
+  }
+
+  private registerDefaultCapabilities(): void {
+    const commonTextTypes = [
+      "text/plain",
+      "text/markdown",
+      "application/json",
+      "application/xml",
+      "application/sql",
+      "application/plbsql",
+      "application/yaml",
+      "text/html",
+      "text/css",
+      "text/javascript",
+      "text/typescript"
+    ];
+    for (const mimeType of commonTextTypes) {
+      let set = this.mimeCapabilities.get(mimeType);
+      if (!set) {
+        set = new Set();
+        this.mimeCapabilities.set(mimeType, set);
+      }
+      set.add("viewable");
+      set.add("editable");
+      set.add("backupable");
+      set.add("executable");
+    }
   }
 
   public createFilesRegistry(): FilesRegistry {
@@ -61,7 +90,10 @@ export class FileRegistry {
         this.editorResolvers.push(resolver);
       },
       classifyUri: (uri, hint) => this.classifyUri(uri, hint),
-      resolveEditor: (file, context) => this.resolveEditor(file, context)
+      resolveEditor: (file, context) => this.resolveEditor(file, context),
+      getEditorState: (fileId, editorKey) => this.getEditorState(fileId, editorKey),
+      setEditorState: (fileId, editorKey, state) => this.setEditorState(fileId, editorKey, state),
+      markDirty: (fileId) => this.markDirty(fileId)
     };
   }
 
@@ -271,7 +303,7 @@ export class FileRegistry {
       dirtyVsDisk: false,
       version: 0,
       diskVersion: input.diskVersion,
-      viewState: input.viewState,
+      persistentViewState: input.persistentViewState,
       openedAt: new Date().toISOString()
     };
 
@@ -340,6 +372,25 @@ export class FileRegistry {
     for (const subscriber of this.subscribers) {
       subscriber(snapshot);
     }
+  }
+
+  public getEditorState(fileId: string, editorKey: string): unknown {
+    const file = this.files.get(fileId);
+    if (!file?.persistentViewState) return null;
+    const editorState = (file.persistentViewState as Record<string, unknown>)[editorKey];
+    return editorState ?? null;
+  }
+
+  public setEditorState(fileId: string, editorKey: string, state: unknown): void {
+    const file = this.files.get(fileId);
+    if (!file) return;
+    const bag = file.persistentViewState ?? {};
+    const updatedBag = { ...bag, [editorKey]: state };
+    this.updateFile(fileId, { persistentViewState: updatedBag as ViewStateBag });
+  }
+
+  public markDirty(fileId: string): void {
+    this.updateFile(fileId, { dirtyVsDisk: true });
   }
 }
 

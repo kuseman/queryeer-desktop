@@ -1,6 +1,8 @@
 import { app, BrowserWindow, webContents, nativeImage } from "electron";
 import { join } from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
 import { ipcMain } from "electron";
+import { fileUriToPath } from "../contracts/files/Resolvers";
 import { BackendGateway } from "./backend/backend-gateway";
 import { chokidarWatcherFactory } from "./file-watcher/chokidar-watcher-factory";
 import { FileWatcherMainService } from "./file-watcher/file-watcher-service";
@@ -51,7 +53,7 @@ function createMainWindow(): void {
       preload: join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: false
     }
   });
 
@@ -126,6 +128,24 @@ app.whenReady().then(() => {
   });
   backupStore.wireIpc();
   ipcMain.handle("plugins:get-frontend-targets", async () => discoverExternalFrontendPlugins());
+  ipcMain.handle("file:read", async (_event, { uri }: { uri: string }) => {
+    try {
+      const filePath = fileUriToPath(uri);
+      const content = await readFile(filePath, "utf8");
+      return { success: true, content };
+    } catch {
+      return { success: false, content: "" };
+    }
+  });
+  ipcMain.handle("file:write", async (_event, { uri, content }: { uri: string; content: string }) => {
+    try {
+      const filePath = fileUriToPath(uri);
+      await writeFile(filePath, content, "utf8");
+      return { success: true };
+    } catch {
+      return { success: false };
+    }
+  });
   void backendGateway.start();
 
   if (process.platform === "darwin" && app.dock && !dockIcon.isEmpty()) {

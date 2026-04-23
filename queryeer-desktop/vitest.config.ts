@@ -35,6 +35,13 @@ export default defineConfig({
           },
           isolate: false
         }
+      },
+      {
+        test: {
+          name: "plugins",
+          include: ["src/plugins/**/*.test.ts", "src/plugins/**/*.test.tsx"],
+          environment: "jsdom"
+        }
       }
     ],
     coverage: {

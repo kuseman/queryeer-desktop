@@ -45,7 +45,8 @@ type FileEntity = {
   externallyModified?: boolean;
   reloadPending?: boolean;
   backupUri?: string;
-  viewState?: Record<string, unknown>;  // editor-namespaced bag; see below
+  runtimeViewState?: unknown;  // non-serializable; not persisted (e.g. Monaco view state)
+  persistentViewState?: Record<string, unknown>; // serializable; persisted
   version: number;            // bumped on every local change
   backendVersion?: number;    // last version acknowledged by backend
   diskVersion?: number;       // last version persisted to disk
@@ -53,7 +54,11 @@ type FileEntity = {
 };
 ```
 
-**`viewState`** is an editor-namespaced bag. Each editor contribution owns a key and the value shape inside it — e.g. `viewState["editor.monaco"] = { cursor, scroll }`, `viewState["image.viewer"] = { zoom, pan }`, `viewState["result.grid"] = { scrolledRow, selectedCell }`. Core never interprets the contents. Workspace persistence round-trips the bag verbatim.
+**`runtimeViewState`** holds non-serializable editor state that exists only during the editor session (e.g. Monaco's scroll position, cursor state). It is NOT persisted and is released when the editor is disposed.
+
+**`persistentViewState`** holds a namespaced bag of editor states (`{ "monaco.editor": {...}, "visual.editor": {...} }`) that survive across sessions. The workspace persists this bag verbatim. Each editor contribution is keyed by its plugin id or a stable string.
+
+**`runtimeViewState`** and **`persistentViewState`** are separate to allow fine-grained control over what gets persisted. Each editor contribution owns the shape of its `persistentViewState` — core never interprets the contents. Workspace persistence round-trips the bag verbatim.
 
 ### 3.2 Responsibilities
 
@@ -66,6 +71,28 @@ type FileEntity = {
 
 - Does NOT hold content buffers. The editor view owns the text model. The registry only tracks flags and version numbers.
 - Does NOT call the backend directly. All backend sync goes through the mediator.
+
+## 3.4 Editor View State
+
+Each editor is responsible for storing and restoring its own view state. The `FileEntity` tracks two view state fields:
+
+- **`runtimeViewState`**: Non-serializable Monaco view state (scroll position, selection, etc.). Not persisted.
+- **`persistentViewState`**: Serializable editor state bag, keyed by editor contribution. Persisted to disk/workspace.
+
+Editors retrieve and store view state via `FilesRegistry`:
+
+```ts
+// Get persisted state when opening a file
+const state = filesRegistry.getEditorState(fileId, "monaco.editor");
+
+// Apply state to editor
+editor.setViewState(state);
+
+// Save state when switching files or closing
+filesRegistry.setEditorState(fileId, "monaco.editor", editor.getViewState());
+```
+
+Each editor contribution owns the shape of its state within `persistentViewState`. Core never interprets the contents. The registry stores state in a namespaced bag (`persistentViewState["monaco.editor"] = {...}`) to allow multiple editors per file.
 
 ## 4. Backend file-registry (`backend-api` + `backend-core`)
 
@@ -208,14 +235,18 @@ type LayoutEditorContribution = {
 };
 ```
 
-### 7.3 New registry entries in `PluginContext`
+### 7.3 FilesRegistry API
 
 ```ts
 type FilesRegistry = {
   registerMimeResolver: (fn: (uri: string, hint?: MimeHint) => string | undefined) => void;
   registerEngineResolver: (fn: (file: FileEntity) => EngineBinding | undefined) => void;
+  getEditorState: (fileId: string, editorKey: string) => unknown;
+  setEditorState: (fileId: string, editorKey: string, state: unknown) => void;
 };
 ```
+
+Each editor plugin uses its own `editorKey` (e.g., `"monaco.editor"`) to namespace its state within `persistentViewState`.
 
 Engine plugins (`query.payloadbuilder`, `query.jdbc`) register both a mime resolver and an engine resolver. Core remains engine-agnostic.
 
