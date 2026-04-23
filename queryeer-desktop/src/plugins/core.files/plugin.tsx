@@ -1,6 +1,7 @@
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { MimeCapability } from "../../contracts/files/FilesRegistry";
 import type { FileEntity } from "../../contracts/files/FileEntity";
+import { fileUriToPath } from "../../contracts/files/Resolvers";
 
 const EXTENSION_MIME_MAP: Record<string, string> = {
   txt: "text/plain",
@@ -243,5 +244,14 @@ export const coreFilesPlugin: Plugin = {
       context.files.capabilities.registerCapabilities(mimeType, DEFAULT_CAPABILITIES);
       context.files.capabilities.registerContentCategory(mimeType, "text");
     }
+
+    context.tooltip.registerTooltipSection({
+      id: "core.files.tooltip.path",
+      order: 10,
+      render: ({ file }) => ({
+        label: "Path",
+        value: fileUriToPath(file.uri)
+      })
+    });
   }
 };

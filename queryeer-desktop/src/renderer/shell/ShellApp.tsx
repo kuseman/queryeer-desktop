@@ -263,6 +263,11 @@ export function ShellApp({
     return editorsById.get(activeFile.editorId) ?? null;
   }, [activeFile, editorsById]);
 
+  const tooltipContributions = useMemo(
+    () => [...extensions.tooltip.sections].sort((a, b) => a.order - b.order),
+    [extensions.tooltip.sections]
+  );
+
   const closeFile = (fileId: string) => {
     setOpenFileIds((prev) => {
       const next = prev.filter((id) => id !== fileId);
@@ -390,6 +395,7 @@ export function ShellApp({
               tabsRef={tabsRef}
               onSelectFile={setActiveFileId}
               onCloseFile={closeFile}
+              tooltipContributions={tooltipContributions}
             />
 
             <EditorPane

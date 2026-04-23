@@ -5,6 +5,8 @@ export type EngineBinding = {
 
 export type ViewStateBag = Record<string, unknown>;
 
+export type FileEntityMetadata = Record<string, unknown>;
+
 export type FileEntity = {
   fileId: string;
   uri: string;
@@ -22,6 +24,7 @@ export type FileEntity = {
   backendVersion?: number;
   diskVersion?: number;
   openedAt: string;
+  metadata?: FileEntityMetadata;
 };
 
 export type FileOpenInput = {
@@ -48,5 +51,6 @@ export type FileEntityUpdate = Partial<
     | "backupUri"
     | "hasRecoveredBackup"
     | "viewState"
+    | "metadata"
   >
 >;

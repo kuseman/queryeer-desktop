@@ -117,6 +117,5 @@ export const coreLayoutPlugin: Plugin = {
         </div>
       )
     });
-
   }
 };

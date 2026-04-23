@@ -33,7 +33,8 @@ function makeExtensions(): ExtensionSnapshot {
         sidebarWidths: { primary: 280, secondary: 320 },
         statusBarHeight: 24
       }
-    }
+    },
+    tooltip: { sections: [] }
   };
 }
 

@@ -14,6 +14,7 @@ import type {
   KeybindingRegistry
 } from "../../contracts/extensions/KeybindingExtension";
 import type { FileSystemExtension } from "../../contracts/extensions/FileSystemExtension";
+import type { TooltipSectionContribution } from "../../contracts/extensions/TooltipExtension";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import type {
@@ -39,6 +40,9 @@ export type ExtensionSnapshot = {
     editors: LayoutEditorContribution[];
     welcomes: LayoutWelcomeContribution[];
     shellDefaults: LayoutShellDefaults;
+  };
+  tooltip: {
+    sections: TooltipSectionContribution[];
   };
 };
 
@@ -68,6 +72,7 @@ export class ExtensionRegistry {
   private readonly layoutViews = new Map<string, LayoutViewContribution>();
   private readonly layoutEditors = new Map<string, LayoutEditorContribution>();
   private readonly layoutWelcomes = new Map<string, LayoutWelcomeContribution>();
+  private readonly tooltipSections = new Map<string, TooltipSectionContribution>();
   private shellDefaults: LayoutShellDefaults = DEFAULT_SHELL_DEFAULTS;
   private readonly fileRegistry = new FileRegistry({
     getEditors: () => [...this.layoutEditors.values()]
@@ -161,6 +166,14 @@ export class ExtensionRegistry {
     };
   }
 
+  public createTooltipRegistry() {
+    return {
+      registerTooltipSection: (contribution: TooltipSectionContribution) => {
+        this.tooltipSections.set(contribution.id, contribution);
+      }
+    };
+  }
+
   public snapshot(): ExtensionSnapshot {
     return {
       commands: [...this.commands.values()],
@@ -177,6 +190,9 @@ export class ExtensionRegistry {
         editors: [...this.layoutEditors.values()],
         welcomes: [...this.layoutWelcomes.values()],
         shellDefaults: this.shellDefaults
+      },
+      tooltip: {
+        sections: [...this.tooltipSections.values()]
       }
     };
   }
