@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExtensionSnapshot } from "../../core/plugin-runtime/ExtensionRegistry";
 import type { BackendGatewayStatus } from "../../contracts/backend";
-import type { LayoutZone, LayoutStatusItemContribution, LayoutEditorContribution } from "../../contracts/extensions/LayoutExtension";
+import type { LayoutZone, LayoutEditorContribution } from "../../contracts/extensions/LayoutExtension";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { FileMediator } from "../../contracts/files/FileMediator";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
@@ -11,7 +11,7 @@ import type { CommandExecutionResult } from "../../contracts/plugin/Plugin";
 import type { UserKeybindingsDocument } from "../../contracts/commands/Keybindings";
 import { CoreMenuBar } from "../../plugins/core.menu/MenuBar";
 import type { RendererWorkspaceService } from "../workspace/workspace-service";
-import { GenericActionIcon, layoutToolbarIconMap } from "../icons/LayoutIcons";
+import { Toolbar, StatusBar, Sidebar, SidebarDivider, EditorTabs, EditorPane } from "../../plugins/core.layout";
 
 declare global {
   interface Window {
@@ -187,23 +187,6 @@ export function ShellApp({
     });
   };
 
-  const zoneToggleByCommand: Record<string, "primarySidebar" | "secondarySidebar" | undefined> = {
-    "core.layout.togglePrimarySidebar": "primarySidebar",
-    "core.layout.toggleSecondarySidebar": "secondarySidebar"
-  };
-
-  const isZoneVisible = (zone: LayoutZone) => {
-    return visibleZones.has(zone);
-  };
-
-  const renderToolbarIcon = (icon: string | undefined) => {
-    if (!icon) {
-      return <GenericActionIcon className="shell-toolbar-icon" />;
-    }
-    const IconComponent = layoutToolbarIconMap[icon] ?? GenericActionIcon;
-    return <IconComponent className="shell-toolbar-icon" />;
-  };
-
   const toolbarActions = useMemo(
     () => [...extensions.layout.toolbarActions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
     [extensions.layout.toolbarActions]
@@ -252,7 +235,7 @@ export function ShellApp({
   );
 
   const editorsById = useMemo(() => {
-    const map = new Map<string, (typeof editors)[number]>();
+    const map = new Map<string, LayoutEditorContribution>();
     for (const editor of editors) {
       map.set(editor.id, editor);
     }
@@ -366,13 +349,6 @@ export function ShellApp({
     document.addEventListener("mouseup", onMouseUp);
   };
 
-  const tabTitle = (file: FileEntity, editor: LayoutEditorContribution | undefined) => {
-    // Show file name for file:// uri else the editor's name
-    return file.uri.startsWith("file://")
-      ? file.uri.split("/").pop()
-      : editor?.title ?? file.uri;
-  };
-
   return (
     <div className="shell-page">
       <CoreMenuBar
@@ -381,201 +357,73 @@ export function ShellApp({
         executeCommand={executeCommand}
       />
       {visibleZones.has("toolBar") && (
-        <section className="shell-toolbar" aria-label="Tool bar">
-          {toolbarActions.length === 0 ? (
-            <span className="shell-toolbar-empty">No toolbar actions contributed yet.</span>
-          ) : (
-            toolbarActions.map((action) => (
-              <button
-                key={action.id}
-                type="button"
-                className={`shell-toolbar-action ${
-                  zoneToggleByCommand[action.commandId] &&
-                  isZoneVisible(zoneToggleByCommand[action.commandId] as "primarySidebar" | "secondarySidebar")
-                    ? "is-active"
-                    : ""
-                }`}
-                title={action.title}
-                aria-pressed={
-                  zoneToggleByCommand[action.commandId]
-                    ? isZoneVisible(zoneToggleByCommand[action.commandId] as "primarySidebar" | "secondarySidebar")
-                    : undefined
-                }
-                onClick={() => {
-                  if (action.commandId === "core.layout.togglePrimarySidebar") {
-                    toggleZone("primarySidebar");
-                    return;
-                  }
-                  if (action.commandId === "core.layout.toggleSecondarySidebar") {
-                    toggleZone("secondarySidebar");
-                    return;
-                  }
-                }}
-              >
-                {renderToolbarIcon(action.icon)}
-                <span>{action.title}</span>
-              </button>
-            ))
-          )}
-        </section>
+        <Toolbar
+          toolbarActions={toolbarActions}
+          visibleZones={visibleZones}
+          onToggleZone={toggleZone}
+        />
       )}
 
       <main className="shell-layout" ref={layoutRef}>
         {visibleZones.has("primarySidebar") && (
-          <aside
-            className="shell-sidebar shell-sidebar-primary"
-            aria-label="Primary sidebar"
-            style={{ width: `${primarySidebarWidth}px` }}
-          >
-            {primaryViews.map((view) => (
-              <section key={view.id} className="panel-card">
-                <h3>{view.title}</h3>
-                {view.render()}
-              </section>
-            ))}
-          </aside>
+          <Sidebar
+            views={primaryViews}
+            zone="primarySidebar"
+            width={primarySidebarWidth}
+          />
         )}
 
         {visibleZones.has("primarySidebar") && (
-          <div
-            className="shell-divider"
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize primary sidebar"
-            onMouseDown={() => beginResize("primary")}
+          <SidebarDivider
+            target="primary"
+            onResize={beginResize}
+            label="Resize primary sidebar"
           />
         )}
 
         <section className="shell-main-area" aria-label="Main area">
           <div className="shell-main">
-            {openFiles.length > 0 ? (
-              <div ref={tabsRef} className="shell-editor-tabs">
-                {openFiles.map((file) => {
-                  const editor = file.editorId ? editorsById.get(file.editorId) : undefined;
-                  const title = tabTitle(file, editor);
-                  const dirtyMark = file.dirtyVsDisk || file.dirtyVsBackend ? " •" : "";
-                  return (
-                    <div
-                      key={file.fileId}
-                      data-file-id={file.fileId}
-                      className={`shell-editor-tab ${
-                        activeFileId === file.fileId ? "is-active" : ""
-                      }`}
-                    >
-                      <div
-                        role="button"
-                        className="shell-editor-tab-button"
-                        onClick={() => setActiveFileId(file.fileId)}
-                      >
-                        <span className="shell-editor-tab-title">{`${title}${dirtyMark}`}</span>
-                      </div>
-                      <span
-                        role="button"
-                        className="shell-editor-tab-close"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          closeFile(file.fileId);
-                        }}
-                        aria-label={`Close ${title}`}
-                      >
-                        ×
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
+            <EditorTabs
+              openFiles={openFiles}
+              activeFileId={activeFileId}
+              editorsById={editorsById}
+              tabsRef={tabsRef}
+              onSelectFile={setActiveFileId}
+              onCloseFile={closeFile}
+            />
 
-            <div className="shell-editor-content">
-              {activeEditor ? (
-                <div className="shell-editor-pane">{activeEditor.render({ activeFile: activeFile ?? undefined })}</div>
-              ) : welcomes.length > 0 ? (
-                welcomes.map((welcome) => (
-                  <article
-                    key={welcome.id}
-                    className="panel-card panel-card-wide"
-                  >
-                    {welcome.render()}
-                  </article>
-                ))
-              ) : null}
-            </div>
+            <EditorPane
+              activeFile={activeFile}
+              activeEditor={activeEditor}
+              welcomes={welcomes}
+            />
           </div>
         </section>
 
         {visibleZones.has("secondarySidebar") && (
-          <div
-            className="shell-divider"
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize secondary sidebar"
-            onMouseDown={() => beginResize("secondary")}
+          <SidebarDivider
+            target="secondary"
+            onResize={beginResize}
+            label="Resize secondary sidebar"
           />
         )}
 
         {visibleZones.has("secondarySidebar") && (
-          <aside
-            className="shell-sidebar shell-sidebar-secondary"
-            aria-label="Secondary sidebar"
-            style={{ width: `${secondarySidebarWidth}px` }}
-          >
-            {secondaryViews.map((view) => (
-              <section key={view.id} className="panel-card">
-                <h3>{view.title}</h3>
-                {view.render()}
-              </section>
-            ))}
-          </aside>
+          <Sidebar
+            views={secondaryViews}
+            zone="secondarySidebar"
+            width={secondarySidebarWidth}
+          />
         )}
       </main>
 
       {visibleZones.has("statusBar") && (
-        <footer className="shell-status-bar" aria-label="Status bar">
-          <div className="shell-status-bar-left">
-            {statusItemsLeft.map((item) => (
-              <div key={item.id} className="shell-status-item">
-                <StatusItemContent item={item} executeCommand={executeCommand} />
-              </div>
-            ))}
-          </div>
-          <div className="shell-status-bar-right">
-            {statusItemsRight.map((item) => (
-              <div key={item.id} className="shell-status-item">
-                <StatusItemContent item={item} executeCommand={executeCommand} />
-              </div>
-            ))}
-          </div>
-        </footer>
+        <StatusBar
+          statusItemsLeft={statusItemsLeft}
+          statusItemsRight={statusItemsRight}
+          executeCommand={executeCommand}
+        />
       )}
     </div>
-  );
-}
-
-function StatusItemContent({
-  item,
-  executeCommand
-}: {
-  item: LayoutStatusItemContribution;
-  executeCommand: (commandId: string) => Promise<CommandExecutionResult>;
-}) {
-  if (!item.commandId) {
-    return <>{item.render()}</>;
-  }
-  return (
-    <span
-      role="button"
-      className="shell-status-item-interactive"
-      tabIndex={0}
-      onClick={() => {
-        void executeCommand(item.commandId!);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          void executeCommand(item.commandId!);
-        }
-      }}
-    >
-      {item.render()}
-    </span>
   );
 }
