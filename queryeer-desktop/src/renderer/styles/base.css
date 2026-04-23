@@ -343,6 +343,50 @@ body.is-resizing-layout {
   color: var(--text-0);
 }
 
+.shell-tab-tooltip {
+  position: fixed;
+  z-index: 1000;
+  background: var(--bg-2);
+  border: 1px solid rgba(173, 194, 219, 0.35);
+  border-radius: 6px;
+  padding: 8px 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  min-width: 240px;
+}
+
+.tab-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tab-tooltip-section {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--ui-font-size-xs);
+}
+
+.tab-tooltip-label {
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+
+.tab-tooltip-value {
+  color: var(--text-0);
+  text-align: right;
+  word-break: break-all;
+}
+
+.tab-tooltip-section.severity-warning .tab-tooltip-value {
+  color: #f59e0b;
+}
+
+.tab-tooltip-section.severity-error .tab-tooltip-value {
+  color: #ef4444;
+}
+
 .shell-editor-content {
   flex: 1;
   min-height: 0;

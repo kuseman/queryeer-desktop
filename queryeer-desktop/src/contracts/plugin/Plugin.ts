@@ -5,6 +5,7 @@ import type { LayoutRegistry } from "../extensions/LayoutExtension";
 import type { MenuRegistry } from "../extensions/MenuExtension";
 import type { KeybindingRegistry } from "../extensions/KeybindingExtension";
 import type { DialogExtension } from "../extensions/DialogExtension";
+import type { TooltipRegistry } from "../extensions/TooltipExtension";
 import type { PluginManifest } from "./PluginManifest";
 
 export type Plugin = {
@@ -25,6 +26,7 @@ export type PluginContext = {
   menu: MenuRegistry;
   keybindings: KeybindingRegistry;
   dialog: DialogRegistry;
+  tooltip: TooltipRegistry;
 };
 
 export type CommandExecutionResult = {

@@ -93,7 +93,8 @@ export class PluginHost {
       layout: this.extensionRegistry.createLayoutRegistry(),
       menu: this.extensionRegistry.createMenuRegistry(),
       keybindings: this.extensionRegistry.createKeybindingRegistry(),
-      dialog: this.extensionRegistry.createDialogRegistry()
+      dialog: this.extensionRegistry.createDialogRegistry(),
+      tooltip: this.extensionRegistry.createTooltipRegistry()
     };
 
     for (const plugin of orderedPlugins) {

@@ -40,7 +40,18 @@ export function normalizeKeybindingKey(value: string): string {
     .split("+")
     .map((part) => part.trim())
     .filter((part) => part.length > 0)
-    .map((part) => part.toLowerCase())
+    .map((part) => {
+      const lower = part.toLowerCase();
+      if (lower === "cmdorctrl") {
+        const isMac = typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform ?? "");
+        return isMac ? "meta" : "ctrl";
+      }
+      if (lower === "cmd") return "meta";
+      if (lower === "ctrl") return "ctrl";
+      if (lower === "alt") return "alt";
+      if (lower === "shift") return "shift";
+      return lower;
+    })
     .join("+");
 }
 
