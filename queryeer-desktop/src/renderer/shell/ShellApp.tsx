@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExtensionSnapshot } from "../../core/plugin-runtime/ExtensionRegistry";
 import type { BackendGatewayStatus } from "../../contracts/backend";
-import type { LayoutZone, LayoutStatusItemContribution } from "../../contracts/extensions/LayoutExtension";
+import type { LayoutZone, LayoutStatusItemContribution, LayoutEditorContribution } from "../../contracts/extensions/LayoutExtension";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { FileMediator } from "../../contracts/files/FileMediator";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
@@ -15,7 +15,7 @@ import { GenericActionIcon, layoutToolbarIconMap } from "../icons/LayoutIcons";
 
 declare global {
   interface Window {
-appShell: {
+    appShell: {
       platform: string;
       version: string;
       getBackendStatus: () => Promise<BackendGatewayStatus>;
@@ -101,7 +101,7 @@ appShell: {
           };
         }) => void
       ) => () => void;
-buildMenu: (menuItems: unknown[], commands: unknown[]) => Promise<{ success: boolean }>;
+      buildMenu: (menuItems: unknown[], commands: unknown[]) => Promise<{ success: boolean }>;
       windowMinimize: () => void;
       windowMaximize: () => void;
       windowClose: () => void;
@@ -171,6 +171,7 @@ export function ShellApp({
     () => workspaceService.restoredActiveFileId() ?? filesRegistry.listFiles()[0]?.fileId ?? null
   );
   const layoutRef = useRef<HTMLElement | null>(null);
+  const tabsRef = useRef<HTMLDivElement | null>(null);
 
   const toggleZone = (zone: LayoutZone) => {
     setVisibleZones((previous) => {
@@ -295,6 +296,14 @@ export function ShellApp({
   }, [activeFileId, workspaceService]);
 
   useEffect(() => {
+    if (!activeFileId || !tabsRef.current) return;
+    const tab = tabsRef.current.querySelector(`[data-file-id="${CSS.escape(activeFileId)}"]`);
+    if (tab) {
+      tab.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    }
+  }, [activeFileId]);
+
+  useEffect(() => {
     workspaceService.setLayout({
       visibleZones: [...visibleZones],
       sidebarWidths: {
@@ -327,7 +336,7 @@ export function ShellApp({
         return next.length > 0 ? next[next.length - 1]!.fileId : null;
       });
     });
-  }, [filesRegistry]);
+  }, [filesRegistry, setActiveFileId]);
 
   const beginResize = (target: "primary" | "secondary") => {
     const onMouseMove = (event: MouseEvent) => {
@@ -355,6 +364,13 @@ export function ShellApp({
     document.body.classList.add("is-resizing-layout");
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseup", onMouseUp);
+  };
+
+  const tabTitle = (file: FileEntity, editor: LayoutEditorContribution | undefined) => {
+    // Show file name for file:// uri else the editor's name
+    return file.uri.startsWith("file://")
+      ? file.uri.split("/").pop()
+      : editor?.title ?? file.uri;
   };
 
   return (
@@ -433,14 +449,15 @@ export function ShellApp({
         <section className="shell-main-area" aria-label="Main area">
           <div className="shell-main">
             {openFiles.length > 0 ? (
-              <div className="shell-editor-tabs">
+              <div ref={tabsRef} className="shell-editor-tabs">
                 {openFiles.map((file) => {
                   const editor = file.editorId ? editorsById.get(file.editorId) : undefined;
-                  const title = editor?.title ?? file.uri;
+                  const title = tabTitle(file, editor);
                   const dirtyMark = file.dirtyVsDisk || file.dirtyVsBackend ? " •" : "";
                   return (
                     <div
                       key={file.fileId}
+                      data-file-id={file.fileId}
                       className={`shell-editor-tab ${
                         activeFileId === file.fileId ? "is-active" : ""
                       }`}

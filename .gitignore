@@ -50,6 +50,9 @@ plugins/dev-query-probe/lib/
 
 .DS_Store
 
+### VS Code ###
+.vscode
+
 ### Legacy
 queryeer-api/
 queryeer-catalog/
