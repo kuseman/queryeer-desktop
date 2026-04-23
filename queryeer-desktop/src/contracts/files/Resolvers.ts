@@ -16,11 +16,12 @@ export function fileUriToPath(uri: string): string {
   if (!decoded.startsWith("file://")) {
     return decoded;
   }
-
-  const pathPart = decoded.slice("file://".length);
-  const isWindows = typeof navigator !== "undefined" && /Win/.test(navigator.platform ?? "");
+  const withoutScheme = decoded.startsWith("file:///")
+    ? decoded.slice(8)
+    : decoded.slice("file://".length);
+  const isWindows = /^[A-Za-z]:/.test(withoutScheme);
   if (isWindows) {
-    return pathPart.replace(/\//g, "\\").replace(/^\\/, "");
+    return withoutScheme.replace(/\//g, "\\");
   }
-  return "/" + pathPart;
+  return withoutScheme;
 }

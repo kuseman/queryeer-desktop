@@ -120,6 +120,9 @@ Additional desktop shell work completed in parallel (outside Java modules):
 - [ ] Keyboard parity polish for mnemonics/letter shortcuts and menu item metadata expansion (separator/disabled)
 - [~] Commands/keybindings migration started (desktop): contribution contract + registry + user override persistence + resolver/diagnostics + baseline context-aware `when` evaluation complete; richer editor-driven context keys still pending
 - [~] File/editor resolver hardening (desktop): intent/category/capability-aware resolver scoring + wildcard mime support + unsupported fallback editor contribution complete; reopen-with UX and first real editor plugin pending
+- [~] Monaco editor migration (desktop): core editor plugin + Monaco text editor baseline landed; persisted view-state restore on fresh restart fixed by using keyed bag state (`persistentViewState["monaco.editor"]`); end-to-end save/notify wiring still pending
+- [~] Monaco editor migration (desktop): core editor plugin + Monaco text editor baseline landed; persisted view-state restore on fresh restart fixed by using keyed bag state (`persistentViewState["monaco.editor"]`); notifyChanged + save-file wiring now landed for `file:` URIs, with save-as/untitled flow still pending
+- [~] Monaco editor migration (desktop): core editor plugin + Monaco text editor baseline landed; persisted view-state restore on fresh restart fixed by using keyed bag state (`persistentViewState["monaco.editor"]`); notifyChanged + save-file wiring now landed for `file:` URIs, and workspace backup restore now rehydrates dirty buffers for non-untitled files; single-file backup overwrite policy still pending decision
 - [x] Desktop cleanup: removed dead `layout.menuItems` contribution path to avoid split menu ownership (`core.menu` is sole menu surface)
 - [x] Desktop cleanup: removed legacy command-level accelerator compatibility; shortcut ownership is now centralized in keybinding contributions
 

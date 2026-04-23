@@ -18,6 +18,8 @@ declare global {
     appShell: {
       platform: string;
       version: string;
+      readFile: (uri: string) => Promise<{ success: boolean; content: string }>;
+      writeFile: (uri: string, content: string) => Promise<{ success: boolean }>;
       getBackendStatus: () => Promise<BackendGatewayStatus>;
       getExternalFrontendPlugins: () => Promise<ExternalFrontendPluginManifest[]>;
       executeBackendQuery: (params: {
@@ -281,7 +283,8 @@ export function ShellApp({
 
   useEffect(() => {
     workspaceService.setActiveFileId(activeFileId);
-  }, [activeFileId, workspaceService]);
+    fileMediator.setActiveFileId(activeFileId);
+  }, [activeFileId, fileMediator, workspaceService]);
 
   useEffect(() => {
     if (!activeFileId || !tabsRef.current) return;

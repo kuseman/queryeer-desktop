@@ -1,7 +1,7 @@
 import type { LayoutZone } from "../extensions/LayoutExtension";
-import type { EngineBinding } from "../files/FileEntity";
+import type { EngineBinding, ViewStateBag } from "../files/FileEntity";
 
-export const WORKSPACE_SCHEMA_VERSION = 1;
+export const WORKSPACE_SCHEMA_VERSION = 2;
 
 export type PersistedFileEntry = {
   uri: string;
@@ -9,6 +9,7 @@ export type PersistedFileEntry = {
   editorId?: string;
   engineBinding?: EngineBinding;
   backupFileId?: string;
+  persistentViewState?: ViewStateBag;
 };
 
 export type PersistedLayoutSnapshot = {

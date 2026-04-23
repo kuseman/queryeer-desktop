@@ -36,4 +36,7 @@ export type FilesRegistry = {
   registerEditorResolver: (resolver: EditorResolver) => void;
   classifyUri: (uri: string, hint?: MimeHint) => string;
   resolveEditor: (file: FileEntity, context?: Partial<EditorResolutionContext>) => string | undefined;
+  getEditorState: (fileId: string, editorKey: string) => unknown;
+  setEditorState: (fileId: string, editorKey: string, state: unknown) => void;
+  markDirty: (fileId: string) => void;
 };

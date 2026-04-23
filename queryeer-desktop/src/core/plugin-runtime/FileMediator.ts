@@ -22,10 +22,17 @@ export type FileMediatorOptions = {
   filesRegistry: FilesRegistry;
   executeBackendQuery: BackendQueryExecutor;
   backendSync?: FileBackendSync;
+  writeFile?: (uri: string, text: string) => Promise<{ success: boolean }>;
+  resolveFileContent?: (fileId: string, uri: string) => string | undefined;
   onFileChanged?: (file: FileEntity, text: string) => void;
   changeDebounceMs?: number;
   generateQueryExecutionId?: () => string;
   now?: () => number;
+  showSaveDialog?: (options: {
+    title?: string;
+    defaultPath?: string;
+    filters?: { name: string; extensions: string[] }[];
+  }) => Promise<{ canceled: boolean; filePath?: string }>;
 };
 
 const DEFAULT_DEBOUNCE_MS = 150;
@@ -42,13 +49,17 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
     filesRegistry,
     executeBackendQuery,
     backendSync,
+    writeFile,
+    resolveFileContent,
     onFileChanged,
     changeDebounceMs = DEFAULT_DEBOUNCE_MS,
-    generateQueryExecutionId = defaultExecutionId
+    generateQueryExecutionId = defaultExecutionId,
+    showSaveDialog
   } = options;
 
   const pendingChanges = new Map<string, ReturnType<typeof setTimeout>>();
   const pendingTexts = new Map<string, string>();
+  let activeFileId: string | null = null;
 
   function flushChange(fileId: string): void {
     const timer = pendingChanges.get(fileId);
@@ -106,12 +117,15 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
         uri,
         mimeType,
         editorId,
-        engineBinding: hint?.engineBinding
+        engineBinding: hint?.engineBinding,
+        persistentViewState: hint?.persistentViewState
       });
 
       if (file.engineBinding) {
         await backendSync?.openFile?.(file);
       }
+
+      activeFileId = file.fileId;
 
       return file;
     },
@@ -129,6 +143,9 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
       flushChange(fileId);
       await backendSync?.closeFile?.(file);
       filesRegistry.closeFile(fileId);
+      if (activeFileId === fileId) {
+        activeFileId = null;
+      }
     },
 
     async saveFile(fileId) {
@@ -136,7 +153,50 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
       if (!file) {
         return;
       }
+
+      const isFileUri = file.uri.startsWith("file:");
+      const isUntitled = file.uri.startsWith("untitled:");
+
+      if (!isFileUri && !isUntitled) {
+        return;
+      }
+
+      let targetUri = file.uri;
+
+      if (isUntitled) {
+        if (!showSaveDialog) {
+          return;
+        }
+        const dialogResult = await showSaveDialog({
+          title: "Save Query",
+          defaultPath: file.uri.replace(/^untitled:/, "") || undefined,
+          filters: [{ name: "SQL Files", extensions: ["sql"] }]
+        });
+        if (dialogResult.canceled || !dialogResult.filePath) {
+          return;
+        }
+        let normalizedPath = dialogResult.filePath.replace(/\\/g, "/");
+        if (/^[a-zA-Z]:/.test(normalizedPath)) {
+          normalizedPath = `/${normalizedPath}`;
+        }
+        targetUri = `file://${normalizedPath}`;
+      }
+
+      const latestText =
+        pendingTexts.get(fileId) ?? resolveFileContent?.(fileId, file.uri);
+      if (latestText === undefined) {
+        return;
+      }
+
+      if (writeFile) {
+        const result = await writeFile(targetUri, latestText);
+        if (!result.success) {
+          throw new Error(`Failed to save file '${targetUri}'`);
+        }
+      }
+
       filesRegistry.updateFile(fileId, {
+        uri: targetUri,
         diskVersion: file.version,
         dirtyVsDisk: false
       });
@@ -165,6 +225,14 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
         void backendSync?.changeFile?.(latest, pendingText);
       }, changeDebounceMs);
       pendingChanges.set(fileId, timer);
+    },
+
+    setActiveFileId(fileId) {
+      activeFileId = fileId;
+    },
+
+    getActiveFileId() {
+      return activeFileId;
     },
 
     async bindEngine(fileId, engineId, connectionId) {

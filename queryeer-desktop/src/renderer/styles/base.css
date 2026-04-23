@@ -1,26 +1,27 @@
 :root {
   color-scheme: dark;
-  --bg-0: #0f1724;
-  --bg-1: #13243a;
-  --bg-2: #1a2434;
-  --text-0: #eff3f8;
-  --text-1: #adc2db;
-  --text-2: rgba(239, 243, 248, 0.72);
-  --accent: #31c48d;
-  --accent-muted: rgba(49, 196, 141, 0.2);
-  --border: rgba(173, 194, 219, 0.18);
-  --titlebar-hover: rgba(173, 194, 219, 0.14);
-  --titlebar-active: rgba(173, 194, 219, 0.2);
-  --titlebar-danger: #d43c3c;
-  --titlebar-dropdown-bg: #1a2c43;
+  --bg-0: #1e1e1e;
+  --bg-1: #252526;
+  --bg-2: #2d2d2d;
+  --bg-3: #333333;
+  --text-0: #cccccc;
+  --text-1: #858585;
+  --text-2: #6b6b6b;
+  --accent: #0e639c;
+  --accent-muted: #1177bb;
+  --border: #454545;
+  --titlebar-hover: rgba(255, 255, 255, 0.08);
+  --titlebar-active: rgba(255, 255, 255, 0.16);
+  --titlebar-danger: #f14c4c;
+  --titlebar-dropdown-bg: #2d2d30;
   --ui-font-size-xs: 11px;
   --ui-font-size-sm: 12px;
   --ui-font-size-md: 13px;
   --ui-font-size-title: 14px;
-  --ui-scrollbar-size: 8px;
-  --ui-scrollbar-thumb: rgba(173, 194, 219, 0.35);
-  --ui-scrollbar-thumb-hover: rgba(173, 194, 219, 0.55);
-  --ui-scrollbar-track: rgba(7, 15, 25, 0.22);
+  --ui-scrollbar-size: 10px;
+  --ui-scrollbar-thumb: rgba(255, 255, 255, 0.2);
+  --ui-scrollbar-thumb-hover: rgba(255, 255, 255, 0.4);
+  --ui-scrollbar-track: rgba(0, 0, 0, 0.2);
 }
 
 * {
@@ -111,7 +112,7 @@ body {
 
 .shell-menu-item:hover {
   border-color: var(--border);
-  background: rgba(7, 15, 25, 0.45);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .shell-toolbar {
@@ -120,13 +121,13 @@ body {
   gap: 4px;
   padding: 4px 8px;
   border-bottom: 1px solid var(--border);
-  background: rgba(9, 18, 31, 0.5);
+  background: #2d2d2d;
 }
 
 .shell-toolbar-action {
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: rgba(7, 15, 25, 0.45);
+  background: rgba(255, 255, 255, 0.08);
   color: var(--text-0);
   padding: 5px 9px;
   cursor: pointer;
@@ -138,8 +139,8 @@ body {
 
 .shell-toolbar-action.is-active {
   border-color: var(--accent);
-  background: rgba(49, 196, 141, 0.2);
-  color: #e9fff6;
+  background: rgba(14, 99, 156, 0.5);
+  color: var(--text-0);
 }
 
 .shell-toolbar-icon {
@@ -184,7 +185,7 @@ body {
   gap: 0;
   padding: 0;
   border-bottom: 1px solid var(--border);
-  background: rgba(6, 12, 22, 0.6);
+  background: #252526;
   min-height: 28px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -198,14 +199,67 @@ body {
   gap: 0;
   padding: 0;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
 }
 
 .shell-main-area {
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
+  background: #1e1e1e;
+  display: flex;
+  flex-direction: column;
+}
+
+.shell-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+.shell-editor-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.shell-editor-pane {
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.text-editor-component {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.text-editor-container {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.observability-editor {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
-  background: rgba(7, 15, 25, 0.25);
+  padding: 16px;
 }
 
 .shell-sidebar {
@@ -214,7 +268,7 @@ body {
   gap: 0;
   min-height: 0;
   overflow: auto;
-  background: rgba(7, 15, 25, 0.35);
+  background: #252526;
 }
 
 .shell-divider {
@@ -236,7 +290,7 @@ body {
 }
 
 .shell-divider:hover {
-  background: var(--accent);
+  background: var(--accent-muted);
 }
 
 body.is-resizing-layout {
@@ -390,13 +444,30 @@ body.is-resizing-layout {
 .shell-editor-content {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  padding: 8px 12px;
+  overflow: hidden;
+  padding: 0;
 }
 
 .shell-editor-pane {
-  margin: -8px -12px;
+  margin: 0;
   padding: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.text-editor-component {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.text-editor-container {
+  flex: 1;
+  width: 100%;
+  height: 100%;
 }
 
 .shell-editor-pane .panel-card {
@@ -438,7 +509,7 @@ body.is-resizing-layout {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px;
-  background: rgba(7, 15, 25, 0.35);
+  background: #2d2d2d;
 }
 
 .shell-status .label {
@@ -464,7 +535,7 @@ body.is-resizing-layout {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px;
-  background: rgba(7, 15, 25, 0.35);
+  background: #2d2d2d;
 }
 
 .shell-sidebar .panel-card {
@@ -564,7 +635,7 @@ body.is-resizing-layout {
 .backend-log-panel {
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: rgba(7, 15, 25, 0.45);
+  background: #2d2d2d;
   max-height: 280px;
   overflow: auto;
 }
@@ -625,7 +696,7 @@ body.is-resizing-layout {
   min-height: 24px;
   padding: 6px 12px;
   border-top: 1px solid var(--border);
-  background: rgba(6, 12, 22, 0.75);
+  background: #007acc;
   position: sticky;
   bottom: 0;
   z-index: 5;
@@ -640,7 +711,7 @@ body.is-resizing-layout {
 
 .shell-status-item {
   font-size: var(--ui-font-size-xs);
-  color: var(--text-1);
+  color: #ffffff;
 }
 
 .shell-status-item-interactive {
@@ -651,7 +722,7 @@ body.is-resizing-layout {
 }
 
 .shell-status-item-interactive:hover {
-  background: rgba(173, 194, 219, 0.12);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .shell-status-item-interactive:focus-visible {

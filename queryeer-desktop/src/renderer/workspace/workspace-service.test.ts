@@ -17,6 +17,19 @@ import {
   type WorkspaceBridge
 } from "./workspace-service";
 
+const applyRecoveredContentMock = vi.fn();
+
+vi.mock("../../plugins/core.editor/TextEditor/TextEditorRegistry", () => ({
+  getTextEditorRegistry: () => ({
+    getModelForFile: () => null,
+    applyRecoveredContent: applyRecoveredContentMock
+  })
+}));
+
+beforeEach(() => {
+  applyRecoveredContentMock.mockReset();
+});
+
 type WatcherHarness = {
   service: FileWatcherService;
   fire: (uri: string, event: FileWatcherEvent) => void;
@@ -199,7 +212,7 @@ describe("RendererWorkspaceService snapshot push", () => {
     expect(saveMock).toHaveBeenCalledTimes(1);
   });
 
-  it("excludes untitled files from the persisted snapshot", async () => {
+it("persists untitled files in the snapshot", async () => {
     const { service, mediator, saveMock } = makeHarness();
     await service.hydrate();
 
@@ -207,21 +220,62 @@ describe("RendererWorkspaceService snapshot push", () => {
     await service.flush();
 
     const persisted = saveMock.mock.calls[0]?.[0];
-    expect(persisted?.files ?? []).toEqual([]);
+    expect(persisted?.files).toHaveLength(1);
+    expect(persisted?.files[0]?.uri).toBe("untitled:scratch");
   });
 
-  it("setActiveFileId triggers a debounced save", async () => {
-    const { service, mediator, saveMock } = makeHarness();
+  it("round-trips Monaco persistent view state across simulated restart", async () => {
+    const monacoState = {
+      cursorState: [{ inSelectionMode: false, position: { lineNumber: 12, column: 7 } }],
+      viewState: { scrollTop: 240, scrollLeft: 16 }
+    };
+
+    const { service, mediator, filesRegistry, saveMock } = makeHarness();
     await service.hydrate();
-    const file = await mediator.openFile("file:///x.txt", { mimeType: "text/plain" });
-    saveMock.mockClear();
 
-    service.setActiveFileId(file.fileId);
-    await vi.advanceTimersByTimeAsync(50);
+    const file = await mediator.openFile("file:///persisted.sql", { mimeType: "application/sql" });
+    filesRegistry.updateFile(file.fileId, {
+      persistentViewState: { "monaco.editor": monacoState }
+    });
+    await service.flush();
 
-    expect(saveMock).toHaveBeenCalledTimes(1);
-    const persisted = saveMock.mock.calls[0]![0];
-    expect(persisted.activeFileUri).toBe("file:///x.txt");
+    const firstPersisted = saveMock.mock.calls[0]?.[0];
+    expect(firstPersisted?.files[0]?.persistentViewState?.["monaco.editor"]).toEqual(monacoState);
+
+    const simulatedWorkspaceJson = JSON.parse(JSON.stringify(firstPersisted)) as WorkspaceSnapshot;
+    const restart = makeHarness(simulatedWorkspaceJson);
+    await restart.service.hydrate();
+
+    const reopened = restart.filesRegistry.listFiles().find((f) => f.uri === "file:///persisted.sql");
+    expect(reopened?.persistentViewState?.["monaco.editor"]).toEqual(monacoState);
+
+    await restart.service.flush();
+    const secondPersisted = restart.saveMock.mock.calls[0]?.[0];
+    expect(secondPersisted?.files[0]?.persistentViewState?.["monaco.editor"]).toEqual(monacoState);
+  });
+});
+
+describe("RendererWorkspaceService untitled file persistence", () => {
+  it("restores untitled file content from backup on hydrate", async () => {
+    const snapshot: WorkspaceSnapshot = {
+      schemaVersion: WORKSPACE_SCHEMA_VERSION,
+      savedAt: "t",
+      files: [
+        { uri: "untitled:scratch", mimeType: "text/plain", backupFileId: "untitled-fid" }
+      ]
+    };
+    const { service, filesRegistry, readLatestBackupMock } = makeHarness(snapshot);
+    readLatestBackupMock.mockResolvedValueOnce({
+      text: "untitled content here",
+      savedAt: "t2",
+      backupUri: "file:///backup/untitled.bak"
+    });
+
+    await service.hydrate();
+
+    const entity = filesRegistry.listFiles()[0]!;
+    expect(entity.uri).toBe("untitled:scratch");
+    expect(entity.dirtyVsDisk).toBe(true);
   });
 });
 
@@ -433,7 +487,8 @@ describe("RendererWorkspaceService autosave", () => {
     await vi.advanceTimersByTimeAsync(150);
 
     expect(backupMock).toHaveBeenCalledTimes(1);
-    expect(backupMock).toHaveBeenCalledWith(file.fileId, "edited");
+    expect(backupMock.mock.calls[0]?.[0]).toMatch(/^bkp-/);
+    expect(backupMock.mock.calls[0]?.[1]).toBe("edited");
   });
 
   it("coalesces rapid edits inside the debounce window into one backup", async () => {
@@ -453,7 +508,8 @@ describe("RendererWorkspaceService autosave", () => {
     await vi.advanceTimersByTimeAsync(150);
 
     expect(backupMock).toHaveBeenCalledTimes(1);
-    expect(backupMock).toHaveBeenCalledWith(file.fileId, "v3");
+    expect(backupMock.mock.calls[0]?.[0]).toMatch(/^bkp-/);
+    expect(backupMock.mock.calls[0]?.[1]).toBe("v3");
   });
 
   it("fires a backup on the max-interval even when edits keep resetting the debounce", async () => {
@@ -546,13 +602,13 @@ describe("RendererWorkspaceService crash recovery", () => {
       await service.flush();
 
       const persisted = saveMock.mock.calls[0]![0];
-      expect(persisted.files[0]!.backupFileId).toBe(file.fileId);
+      expect(persisted.files[0]!.backupFileId).toMatch(/^bkp-/);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("detects a surviving backup on hydrate and marks the entity", async () => {
+  it("restores surviving backup content on hydrate and marks file dirty", async () => {
     const snapshot: WorkspaceSnapshot = {
       schemaVersion: WORKSPACE_SCHEMA_VERSION,
       savedAt: "t",
@@ -576,11 +632,13 @@ describe("RendererWorkspaceService crash recovery", () => {
     const entities = filesRegistry.listFiles();
     expect(entities).toHaveLength(1);
     const entity = entities[0]!;
-    expect(entity.hasRecoveredBackup).toBe(true);
+    expect(entity.dirtyVsDisk).toBe(true);
+    expect(entity.hasRecoveredBackup).toBe(false);
     expect(entity.backupUri).toBe("file:///backup/previous.bak");
+    expect(applyRecoveredContentMock).toHaveBeenCalledWith(entity.fileId, "recovered content");
   });
 
-  it("does not mark hasRecoveredBackup when no surviving backup exists", async () => {
+  it("does not mark dirty when no surviving backup exists", async () => {
     const snapshot: WorkspaceSnapshot = {
       schemaVersion: WORKSPACE_SCHEMA_VERSION,
       savedAt: "t",
@@ -599,10 +657,12 @@ describe("RendererWorkspaceService crash recovery", () => {
 
     const entity = filesRegistry.listFiles()[0]!;
     expect(entity.hasRecoveredBackup).toBeFalsy();
+    expect(entity.dirtyVsDisk).toBe(false);
     expect(entity.backupUri).toBeUndefined();
+    expect(applyRecoveredContentMock).not.toHaveBeenCalled();
   });
 
-  it("listPendingRestores returns recovered entries", async () => {
+  it("listPendingRestores is empty when backups are auto-restored", async () => {
     const snapshot: WorkspaceSnapshot = {
       schemaVersion: WORKSPACE_SCHEMA_VERSION,
       savedAt: "t",
@@ -621,9 +681,7 @@ describe("RendererWorkspaceService crash recovery", () => {
     await service.hydrate();
     const pending = service.listPendingRestores();
 
-    expect(pending).toHaveLength(1);
-    expect(pending[0]!.uri).toBe("file:///r.txt");
-    expect(pending[0]!.backupFileId).toBe("prev-1");
+    expect(pending).toHaveLength(0);
   });
 
   it("discardBackup purges and clears the flag", async () => {
@@ -679,5 +737,70 @@ describe("RendererWorkspaceService crash recovery", () => {
 
     expect(result?.text).toBe("restored-text");
     expect(readLatestBackupMock).toHaveBeenLastCalledWith("prev-1");
+  });
+
+  it("restores untitled file content from backup on hydrate", async () => {
+    const snapshot: WorkspaceSnapshot = {
+      schemaVersion: WORKSPACE_SCHEMA_VERSION,
+      savedAt: "t",
+      files: [
+        { uri: "untitled:scratch", mimeType: "text/plain", backupFileId: "untitled-fid" }
+      ]
+    };
+    const { service, filesRegistry, readLatestBackupMock } = makeHarness(snapshot);
+    readLatestBackupMock.mockResolvedValueOnce({
+      text: "untitled content here",
+      savedAt: "t2",
+      backupUri: "file:///backup/untitled.bak"
+    });
+
+    await service.hydrate();
+
+    const entity = filesRegistry.listFiles()[0]!;
+    expect(entity.uri).toBe("untitled:scratch");
+    expect(entity.dirtyVsDisk).toBe(true);
+    expect(applyRecoveredContentMock).toHaveBeenCalledWith(entity.fileId, "untitled content here");
+  });
+
+  it("uses a stable backup id for file-backed editors across restart", async () => {
+    vi.useFakeTimers();
+    try {
+      const initialSnapshot: WorkspaceSnapshot = {
+        schemaVersion: WORKSPACE_SCHEMA_VERSION,
+        savedAt: "t",
+        files: [{ uri: "file:///persisted.sql", mimeType: "application/sql" }]
+      };
+      const first = makeHarness(initialSnapshot, {
+        backupDebounceMs: 50,
+        backupMaxIntervalMs: 5_000
+      });
+      await first.service.hydrate();
+
+      const opened = first.filesRegistry.listFiles()[0]!;
+      first.mediator.notifyChanged(opened.fileId, "v1");
+      await vi.advanceTimersByTimeAsync(100);
+      await Promise.resolve();
+      await Promise.resolve();
+      await first.service.flush();
+      const persisted = first.saveMock.mock.calls.at(-1)?.[0] as WorkspaceSnapshot;
+      const persistedBackupId = persisted.files[0]!.backupFileId;
+      expect(persistedBackupId).toMatch(/^bkp-/);
+
+      const second = makeHarness(persisted, {
+        backupDebounceMs: 50,
+        backupMaxIntervalMs: 5_000
+      });
+      await second.service.hydrate();
+      const reopened = second.filesRegistry.listFiles()[0]!;
+      second.mediator.notifyChanged(reopened.fileId, "v2");
+      await vi.advanceTimersByTimeAsync(100);
+      await Promise.resolve();
+
+      expect(second.backupMock).toHaveBeenCalled();
+      const calledBackupId = second.backupMock.mock.calls.at(-1)?.[0];
+      expect(calledBackupId).toBe(persistedBackupId);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

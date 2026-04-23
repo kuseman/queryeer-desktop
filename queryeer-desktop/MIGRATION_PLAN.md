@@ -69,10 +69,14 @@ Cross-cutting boundary doc added: `documentation/PROCESS_BOUNDARIES.md`.
 - Context-aware keybinding baseline: dedicated keybinding service + context key tracking + `when` expression evaluator integrated into dispatch
 - Legacy layout-menu contribution branch removed; menu ownership is now singular through `core.menu` extension contributions
 - Legacy command-level accelerator path removed; keybindings are now the single keyboard shortcut authority
+- **core.editor plugin architecture**: `core.editor` parent plugin + `core.editor.text` (Monaco) + `core.editor.image` scaffolded. Stable `TextEditorApi` abstraction wraps Monaco. `TextEditorRegistry` singleton manages model lifetime per file. `FileEntity.viewState` split into `runtimeViewState` + `persistentViewState`. Editor commands + keybindings registered.
+- **Monaco fresh-restart view-state restore fixed**: runtime now restores Monaco from keyed bag entry `persistentViewState["monaco.editor"]` (rather than treating the whole bag as Monaco state), aligning persistence (`setEditorState`) with restore semantics.
+- **Editor notify/save bridge progress**: Monaco text edits now call `FileMediator.notifyChanged` through `TextEditorRegistry`, and `FileMediator.saveFile` now performs actual disk writes for `file:` URIs via main/preload `file:write` bridge; `core.files.save` now triggers mediator save.
+- **Workspace backup restore behavior updated**: persisted backups now auto-restore into hydrated session state for file-backed editors as dirty buffers (not only untitled), with deferred apply support when editor model initializes later.
+- **Backup identity stabilization**: autosave backup ids are now URI-stable (`bkp-<hash(uri)>`) to avoid duplicate backup streams when runtime file ids change across restarts.
 
 ### Not started yet
 
-- Monaco editor plugin (or any text-editor plugin) — first real consumer of FileEntity + viewState, now enabled by intent/category/capability-aware editor resolver baseline
 - Modal/notification UI plugin — surfaces external-change prompt + crash-recovery prompt; consumes `WorkspaceService.listPendingRestores`/`readBackup`/`discardBackup`
 - Keyboard/interaction parity polish for menu UX (mnemonics/letter shortcuts, separators/disabled states, richer accessibility semantics)
 - Keybindings resolver + user overrides (`appDir/keybindings.json`) + validation diagnostics in `core.commands`
@@ -82,6 +86,18 @@ Cross-cutting boundary doc added: `documentation/PROCESS_BOUNDARIES.md`.
 - Output plugins and result routing
 - Credential encryption/persistence and full connection lifecycle
 - Engine-specific `FileSessionHandler` implementations (payloadbuilder first) — increment 5 of the file entity model; deferred until editor + output wiring land
+
+### Editor model progress
+
+- Increment 1 — plugin scaffold (`core.editor`, `core.editor.text`, `core.editor.image`): done
+- Increment 2 — stable `TextEditorApi` abstraction + Monaco `MonacoTextEditorApi` implementation: done
+- Increment 3 — `TextEditorRegistry` singleton + model lifetime management per file: done
+- Increment 4 — Monaco `TextEditorComponent` React lifecycle (create/dispose/switch model): done
+- Increment 5 — editor commands + keybindings wired to Monaco: done
+- Increment 6 — wire FileMediator content loading into `TextEditorModel`: pending
+- Increment 7 — wire content changes back to `FileMediator.notifyChanged`: done
+- Increment 8 — implement `core.files.save` via `FileMediator.saveFile`: done (for `file:` uris; save-as/untitled still pending)
+- Increment 9 — code completion provider wiring via `CompletionProvider` contract: pending
 
 ### File entity model progress
 
@@ -164,7 +180,9 @@ Design reference: `documentation/CORE_WORKSPACE_MODEL.md`.
 
 ### Feature plugins
 
-- `editor.monaco`: Monaco host, language registration, completion API, diagnostics API
+- `core.editor`: pluggable editor system — owns editor registry, delegates to `core.editor.text` / `core.editor.image` / future editors
+- `core.editor.text`: Monaco-based text editor with stable `TextEditorApi` abstraction, model-per-file registry, command/keybinding wiring
+- `core.editor.image`: image viewer for common image mime types
 - `query.payloadbuilder`: query execution adapter over backend contract
 - `query.jdbc`: jdbc query adapter over backend contract
 - `output.table`: virtualized tabular output renderer

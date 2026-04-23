@@ -7,20 +7,6 @@ This repository contains two active migration workstreams:
 
 ## Mandatory update rule for every AI session
 
-Before ending a session that changes architecture, contracts, runtime behavior, or project structure, the agent MUST update the following files:
-
-1. `queryeer-desktop/SESSION_HANDOFF.md`
-   - update "Current snapshot"
-   - update "What changed in this session"
-   - update "Next 3 tasks"
-   - update "Known gaps / temporary scaffolds"
-2. `queryeer-desktop/MIGRATION_PLAN.md`
-   - reflect completed or newly started increments
-   - keep backend planning artifacts current
-3. `queryeer-backend/ROADMAP.md`
-   - check/uncheck progress items per module
-   - record newly introduced blockers or decisions
-
 If contract shapes are changed, the agent MUST update both sides in the same session:
 
 - TypeScript contracts: `queryeer-desktop/src/contracts/backend/*`
@@ -36,6 +22,13 @@ When applicable, run and report:
 
 - Desktop: `npm run typecheck && npm run lint && npm run build && npm run test:integration` (from `queryeer-desktop`)
 - Backend: `./mvnw -f queryeer-backend/pom.xml -DskipTests=true clean verify`
+
+## Test-first expectation
+
+- Prefer adding or extending tests for every non-trivial code change.
+- Minimum bar for behavior changes: add/adjust focused unit tests in the same session.
+- If a change crosses module/runtime boundaries (contracts, persistence, IPC, editor/workspace flow), add at least one higher-level integration-style test when feasible.
+- If a test is intentionally deferred, document the gap and rationale in `SESSION_HANDOFF.md` under "Known gaps / temporary scaffolds".
 
 ## Handoff quality bar
 

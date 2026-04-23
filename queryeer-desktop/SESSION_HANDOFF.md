@@ -48,6 +48,43 @@
 - Keybindings phase 4 baseline is now in place: context key service and `when` expression evaluation (`&&`, `||`, `!`, `==`, `!=`, parens, booleans/strings/numbers) wired into keybinding dispatch.
 - Removed dead layout menu contribution path: `LayoutMenuItemContribution`, `layout.registerMenuItem`, runtime storage/snapshot field (`layout.menuItems`), and stale `core.layout` menu contribution calls.
 - Removed legacy command-level `accelerator` compatibility from command contracts and runtime fallback; keybindings are now the single source for shortcut metadata and menu accelerator derivation.
+- **core.editor plugin scaffold created**: `core.editor` owns the editor registry and delegates to editor-type plugins. `core.editor.text` implements Monaco-based text editor with stable `TextEditorApi` abstraction. `core.editor.image` provides image editor placeholder. `monaco-editor` package added.
+- **FileEntity viewState split**: `viewState` replaced with `runtimeViewState` (non-serializable, Monaco model/state) and `persistentViewState` (serializable cursor/scroll state). `FileOpenInput` and `FileEntityUpdate` updated.
+- **TextEditor architecture**: `TextEditorRegistry` singleton manages Monaco models per file (uri-based deduplication). `TextEditorModel` wraps content + line cache per file. `TextEditorApi` abstract class defines stable editor contract. `MonacoTextEditorApi` concrete implementation wraps Monaco editor instances. `TextEditorComponent` React component manages Monaco lifecycle.
+- **Editor commands registered**: undo, redo, format, formatSelection, find/findNext/findPrevious, closeFindWidget, goToDefinition, peekDefinition, goToTypeDefinition, goToImplementation, peekImplementation, findReferences, toggle/add/removeCommentLine, insertSnippet, selectAll, copyLineUp/Down, moveLineUp/Down, deleteLine, joinLines, sortLinesAscending/Descending, trimTrailingWhitespace, indent/outdent.
+- **View state management refactored**: Three-layer architecture — `runtimeViewState` Map for in-session tab switching (never persisted), `openFileAsync` restores from `runtimeViewState` on tab switch, `persistentViewState` only restored on workspace reload if file is not dirty. `onEditorReady` now also falls back to `persistentViewState` when no runtime state exists (cold reload fix). Added `pendingFileForEditor` queue — `openFileAsync` stores pending file when editor not yet ready; `onEditorReady` restores it with correct view state priority (runtime > persistent). `TextEditorComponent` uses single-effect approach with `initStartedRef` guard to prevent editor re-creation on render; second effect handles tab switches with race-condition guard. `applyViewStateToEditor` helper deduplicates state restoration logic. `setActiveFileId` now restores state from `runtimeViewState` first, falls back to `persistentViewState` if not dirty. `openFileAsync` always applies view state (not gated by isSwitch). `TextEditorRegistry.test.ts` has 18 unit tests covering all state scenarios.
+- **Monaco persisted view-state restore fix**: `persistentViewState` is a keyed bag and Monaco state is now restored from `persistentViewState["monaco.editor"]` (instead of passing the whole bag to `editor.restoreViewState`). This fixes cursor/scroll restore on fresh restart.
+- **Editor change + save wiring landed**: Monaco content changes now flow through `TextEditorRegistry.notifyChanged(...)` into `FileMediator.notifyChanged(...)` (backend + workspace autosave path), and `core.files.save` now calls `FileMediator.saveFile(...)`. Main/preload bridge gained `file:write`/`writeFile` for real disk writes of `file:` URIs.
+- **Backup recovery semantics updated**: on hydrate, persisted backups are now auto-restored into the working session for both file-backed and untitled editors (not just flagged as recoverable). Restored files are marked `dirtyVsDisk: true` and recovered text is applied through `TextEditorRegistry.applyRecoveredContent(...)` with queued delivery when Monaco model is not yet created.
+- **Backup artifact policy updated**: autosave now writes to one stable backup id per URI (`bkp-<hash(uri)>`) instead of rolling timestamped ids per runtime file id, preventing duplicate backup lineages across restarts.
+
+## What changed in this session
+
+### core.editor plugin scaffold + core.editor.text implementation
+
+- Created `src/contracts/editor/EditorApi.ts` — stable cross-editor contract (`ICodeEditor`, `TextDocument`, `Position`, `Selection`, `TextRange`, `TextEditorEditOperation`, `Disposable`, cursor/selection/layout/mouse event types, `EditorOptions`).
+- Created `src/plugins/core.editor/plugin.tsx` + `module.ts` — parent plugin that activates both `core.editor.text` and `core.editor.image`.
+- Created `src/plugins/core.editor/TextEditor/` module with:
+  - `TextEditorRegistry.ts` — singleton managing Monaco model lifetime per file (uri-based deduplication, fileId→model map, active model switching)
+  - `TextEditorModel.ts` — per-file model wrapping content + line cache
+  - `TextEditorApi.ts` — abstract base class defining stable editor API
+  - `MonacoTextEditorApi.ts` — concrete Monaco implementation of `TextEditorApi`
+  - `TextEditorComponent.tsx` — React component managing Monaco editor lifecycle (create/dispose, model switching, event cleanup)
+  - `commands/index.ts` — all editor commands registered against `context.commands`
+  - `keybindings.ts` — all Monaco shortcuts registered as keybinding contributions
+  - `types.ts` — internal types matching Monaco event shapes
+- Created `src/plugins/core.editor/ImageEditor/plugin.tsx` — placeholder image editor contribution for common image mime types.
+- Split `FileEntity.viewState` into `runtimeViewState` + `persistentViewState` in `FileEntity.ts`, `FileOpenInput`, and `FileEntityUpdate`.
+- Updated `FileRegistry.ts` to use `persistentViewState` instead of `viewState`.
+- Added `monaco-editor` to `package.json` dependencies.
+- Updated `electron.vite.config.ts` with manual chunk for Monaco.
+- Fixed ESLint config to allow `_` prefix for intentionally unused parameters.
+- `npm run typecheck` + `npm run lint` pass.
+
+### Validation
+
+- `npm run typecheck` passed.
+- `npm run lint` passed.
 
 ## What changed in this session
 
@@ -84,6 +121,20 @@
 
 - `npm run typecheck` passed.
 - `npm run lint` passed.
+- `npm run test -- src/plugins/core.editor/TextEditor/TextEditorRegistry.test.ts` passed.
+- `npm run test -- src/renderer/workspace/workspace-service.test.ts` passed.
+- `npm run test -- src/renderer/workspace/workspace-service.test.ts` passed (includes restart round-trip assertion for Monaco `persistentViewState["monaco.editor"]`).
+- `npm run test -- src/core/plugin-runtime/FileMediator.test.ts` passed (includes save flow assertions).
+- `npm run test -- src/plugins/core.editor/TextEditor/TextEditorRegistry.test.ts` passed.
+- `npm run test -- src/renderer/shell/bootstrap.test.ts` passed.
+- `npm run test -- src/renderer/workspace/workspace-service.test.ts` passed after backup auto-restore + stable backup id updates.
+- `npm run test -- src/plugins/core.editor/TextEditor/TextEditorRegistry.test.ts` passed after recovered-content queue updates.
+- `npm run typecheck` passed.
+- `npm run lint` passed.
+- `npm run build` passed.
+- `npm run test -- src/core/plugin-runtime/FileRegistry.test.ts` passed.
+- `npm run test -- src/renderer/shell/bootstrap.test.ts` passed.
+- `npm run build` passed.
 - Focused tests passed:
   - `src/renderer/shell/bootstrap.test.ts`
   - `src/renderer/plugins/external-plugin-diagnostics.test.ts`
@@ -477,22 +528,22 @@
 
 ## Next 3 tasks
 
-1. Add integration coverage for `core.dialog` activation and command wiring (`core.files.open` path + dialog bridge APIs) so missing-manifest regressions fail tests early.
-2. Implement first real text editor plugin (Monaco or lightweight baseline) using new resolver metadata (`supportedMimeTypes`, wildcard support, `openIntents`) and persist editor-specific `viewState`.
-3. Add "Reopen With" command/menu flow to let users override auto-resolved editor per file and persist that override in workspace/session state.
+1. Implement explicit active-editor/file selection API for save commands (replace current "active text editor else last file" fallback).
+2. Implement `core.files.saveAs` (path picker + uri remap + persisted state update).
+3. Add integration-style test covering dirty non-untitled file restart: backup restores into editor model as dirty and can be saved/discarded deterministically.
 
 ## Known gaps / temporary scaffolds
 
 ### File entity / workspace / file watcher
-- `FileMediator.reloadFile` currently just resets flags — real disk re-read waits for a `readFile` IPC + an editor that can apply content to its buffer.
-- `FileMediator.saveFile` currently just stamps `diskVersion = version` and clears `dirtyVsDisk` — no disk write yet. Save flow ties into `PROCESS_BOUNDARIES.md` disk-ownership rule; implementation follows when an editor produces text to write.
-- `notifyChanged(fileId, text)` is called by editors passing text explicitly. No editor model exists yet; the shape is ready.
-- `core.files.unsupported` fallback editor is currently a static placeholder string; proper unsupported-file UX (metadata/actions/reopen-with) still needs a dedicated view component.
-- `core.dialog` had no direct startup/assertion test before this fix; internal-plugin manifest/loader drift can silently fall back to no-op dialog implementations unless covered by integration tests.
-- No UI surfaces the external-change prompt (active+dirty) or crash-recovery prompt. Workspace service exposes the data via `listPendingRestores` / `readBackup` / `discardBackup` — a future modal plugin consumes them.
-- `core.fileWatcher` increment 5 (atomic-save delete+add event normalization + inotify-limit warning) is deferred. Noted in `CORE_FILE_WATCHER_MODEL.md`.
-- Backups from previous sessions can orphan if the user doesn't discard — `BackupStore` retention caps within-session but doesn't purge stale per-fileId across sessions. Acceptable until modal UX lands.
-- `hasRecoveredBackup` stays true until explicit `discardBackup` or a future `applyBackup`; the "auto-purge on clean" branch skips recovered entities to avoid silently revoking the user's choice.
+- `TextEditorComponent` marks dirty on content change via `onDidChangeModelContent` → `registry.markDirty(file.fileId)`. FileEntity version increments trigger dirty state.
+- Monaco is lazy-loaded (dynamic `import("monaco-editor")`) — startup no longer blocked by Monaco module evaluation.
+- View state is decoupled from dirty state — tab switching uses in-memory `runtimeViewState`, workspace reload uses `persistentViewState`.
+- `openFileAsync` fires on `file?.fileId` change only — not on `file` reference changes from dirty updates.
+- Backupable capability is now registered by default in `FileRegistry` constructor for common text types.
+- `FileMediator.saveFile` currently writes only `file:` URIs; untitled/save-as flow is still pending.
+- Backup store currently still writes timestamped `.bak` file names under a stable per-URI id prefix (`bkp-...`), so multiple versions per file are retained by policy; if product direction is single rolling file per backup id, `BackupStore.saveBackup` should switch to in-place overwrite semantics.
+- Code completion contract exists (`CompletionProvider`, `CompletionItem`, etc.) but no real provider is wired.
+- `core.editor.image` is a placeholder — needs actual image rendering (e.g., `<img>` tag or canvas).
 
 ### Older gaps (still relevant)
 - Current `core.menu` command handlers are mostly placeholder stubs for parity scaffolding; real command routing (command palette, quick open, run/terminal actions, zoom behavior) is pending downstream feature plugins.

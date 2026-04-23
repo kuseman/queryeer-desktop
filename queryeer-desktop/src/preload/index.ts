@@ -45,6 +45,8 @@ type DialogShowSaveOptions = {
 type AppShellApi = {
   platform: NodeJS.Platform;
   version: string;
+  readFile: (uri: string) => Promise<{ success: boolean; content: string }>;
+  writeFile: (uri: string, content: string) => Promise<{ success: boolean }>;
   getBackendStatus: () => Promise<BackendGatewayStatus>;
   getExternalFrontendPlugins: () => Promise<ExternalFrontendPluginManifest[]>;
   executeBackendQuery: (params: QueryExecuteParams) => Promise<QueryExecuteResult>;
@@ -92,6 +94,12 @@ type AppShellApi = {
 const appShellApi: AppShellApi = {
   platform: process.platform,
   version: "0.1.0",
+  readFile: async (uri: string) => {
+    return ipcRenderer.invoke("file:read", { uri });
+  },
+  writeFile: async (uri: string, content: string) => {
+    return ipcRenderer.invoke("file:write", { uri, content });
+  },
   getBackendStatus: async () => {
     return ipcRenderer.invoke("backend:get-status");
   },

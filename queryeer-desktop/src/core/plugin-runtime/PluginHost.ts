@@ -28,6 +28,13 @@ export type PluginHostOptions = {
   fileWatcher: FileWatcherService;
   backendSync?: FileBackendSync;
   onFileChanged?: (file: FileEntity, text: string) => void;
+  writeFile?: (uri: string, text: string) => Promise<{ success: boolean }>;
+  resolveFileContent?: (fileId: string, uri: string) => string | undefined;
+  showSaveDialog?: (options: {
+    title?: string;
+    defaultPath?: string;
+    filters?: { name: string; extensions: string[] }[];
+  }) => Promise<{ canceled: boolean; filePath?: string }>;
 };
 
 export class PluginHost {
@@ -50,7 +57,10 @@ export class PluginHost {
       filesRegistry: this.extensionRegistry.createFilesRegistry(),
       executeBackendQuery: options.executeBackendQuery,
       backendSync: options.backendSync,
-      onFileChanged: options.onFileChanged
+      onFileChanged: options.onFileChanged,
+      writeFile: options.writeFile,
+      resolveFileContent: options.resolveFileContent,
+      showSaveDialog: options.showSaveDialog
     });
   }
 

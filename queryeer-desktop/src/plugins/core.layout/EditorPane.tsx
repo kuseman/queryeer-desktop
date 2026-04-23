@@ -11,7 +11,7 @@ export function EditorPane({ activeFile, activeEditor, welcomes }: EditorPanePro
   return (
     <div className="shell-editor-content">
       {activeEditor ? (
-        <div className="shell-editor-pane">{activeEditor.render({ activeFile: activeFile ?? undefined })}</div>
+        <div key={activeEditor.id} className="shell-editor-pane">{activeEditor.render({ activeFile: activeFile ?? undefined })}</div>
       ) : welcomes.length > 0 ? (
         welcomes.map((welcome) => (
           <article key={welcome.id} className="panel-card panel-card-wide">

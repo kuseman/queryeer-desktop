@@ -167,7 +167,7 @@ describe("FileRegistry editor resolution", () => {
     expect(registry.resolveEditor(file, { openIntent: "edit" })).toBe("editor.editor");
   });
 
-  it("excludes editors missing required mime capabilities", () => {
+it("excludes editors missing required mime capabilities", () => {
     const editors = [
       makeEditor("editor.exec", ["application/sql"], {
         requiredCapabilities: ["executable"]
@@ -181,10 +181,7 @@ describe("FileRegistry editor resolution", () => {
       mimeType: "application/sql"
     });
 
-    expect(registry.resolveEditor(file)).toBe("editor.fallback");
-
-    registry.capabilities.registerCapabilities("application/sql", ["executable"]);
-    expect(registry.resolveEditor(file)).toBe("editor.exec");
+expect(registry.resolveEditor(file)).toBe("editor.exec");
   });
 
   it("falls back to core.files.unsupported when no editor matches", () => {

@@ -27,6 +27,9 @@ export default defineConfig({
         ]
       }
     },
+    optimizeDeps: {
+      exclude: ["monaco-editor"]
+    },
     build: {
       outDir: "out/renderer"
     },
