@@ -1,4 +1,4 @@
-import { app, BrowserWindow, webContents } from "electron";
+import { app, BrowserWindow, webContents, nativeImage } from "electron";
 import { join } from "node:path";
 import { ipcMain } from "electron";
 import { BackendGateway } from "./backend/backend-gateway";
@@ -33,6 +33,11 @@ let keybindingsStore: KeybindingsStore | null = null;
 let backupStore: BackupStore | null = null;
 let mainWindow: BrowserWindow | null = null;
 
+const dockIconPath = join(__dirname, "../../resources/icons/icon-128.png");
+const windowIconPath = join(__dirname, "../../resources/icons/icon-256.png");
+const dockIcon = nativeImage.createFromPath(dockIconPath);
+const windowIcon = nativeImage.createFromPath(windowIconPath);
+
 function createMainWindow(): void {
   const window = new BrowserWindow({
     width: 1280,
@@ -41,6 +46,7 @@ function createMainWindow(): void {
     minHeight: 640,
     show: false,
     frame: false,
+    icon: windowIcon.isEmpty() ? undefined : windowIcon,
     webPreferences: {
       preload: join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
@@ -50,6 +56,10 @@ function createMainWindow(): void {
   });
 
   mainWindow = window;
+
+  if (!windowIcon.isEmpty()) {
+    window.setIcon(windowIcon);
+  }
 
   window.once("ready-to-show", () => {
     window.show();
@@ -117,6 +127,12 @@ app.whenReady().then(() => {
   backupStore.wireIpc();
   ipcMain.handle("plugins:get-frontend-targets", async () => discoverExternalFrontendPlugins());
   void backendGateway.start();
+
+  if (process.platform === "darwin" && app.dock && !dockIcon.isEmpty()) {
+    app.dock.setIcon(dockIcon);
+  } else if (process.platform === "win32") {
+    app.setAppUserModelId("com.queryeer.electron");
+  }
 
   createMainWindow();
   sendWindowState();
