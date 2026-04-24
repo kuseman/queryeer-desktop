@@ -552,7 +552,7 @@ body.is-resizing-layout {
   border-radius: 0;
   border-bottom: 1px solid var(--border);
   background: transparent;
-  padding: 8px 12px;
+  padding: 0;
 }
 
 .shell-sidebar .panel-card h3 {
@@ -562,6 +562,50 @@ body.is-resizing-layout {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-1);
+}
+
+/* Collapsible panel header */
+.panel-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 6px;
+  border: none;
+  background: transparent;
+  cursor: default;
+}
+
+.panel-header-interactive {
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.panel-header-interactive:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  font-size: var(--ui-font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-1);
+}
+
+.panel-chevron {
+  font-size: 10px;
+  color: var(--text-2);
+  transition: transform 0.15s ease;
+  margin-right: 4px;
+}
+
+.panel-chevron-open {
+  transform: rotate(90deg);
+}
+
+.panel-content {
+  padding: 4px 6px 6px;
 }
 
 .panel-card-wide {

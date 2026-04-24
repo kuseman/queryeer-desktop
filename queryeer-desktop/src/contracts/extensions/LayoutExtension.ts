@@ -36,6 +36,8 @@ export type LayoutViewContribution = {
   defaultZone: SidebarZone;
   order?: number;
   canMoveZones?: boolean;
+  canCollapse?: boolean;
+  isOpen?: boolean;
   render: () => ReactNode;
 };
 
