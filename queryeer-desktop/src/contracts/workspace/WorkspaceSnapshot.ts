@@ -18,6 +18,7 @@ export type PersistedLayoutSnapshot = {
     primary?: number;
     secondary?: number;
   };
+  sidebarPanelStates?: Record<string, boolean>;
 };
 
 export type WorkspaceSnapshot = {

@@ -166,6 +166,11 @@ export function ShellApp({
       extensions.layout.shellDefaults.sidebarWidths?.secondary ??
       320
   );
+  const [panelStates, setPanelStates] = useState<Record<string, boolean>>(
+    () =>
+      workspaceService.restoredLayout()?.sidebarPanelStates ??
+      {}
+  );
   const [files, setFiles] = useState<FileEntity[]>(() => filesRegistry.listFiles());
   const [openFileIds, setOpenFileIds] = useState<string[]>(() =>
     filesRegistry.listFiles().map((file) => file.fileId)
@@ -332,9 +337,10 @@ export function ShellApp({
       sidebarWidths: {
         primary: primarySidebarWidth,
         secondary: secondarySidebarWidth
-      }
+      },
+      sidebarPanelStates: panelStates
     });
-  }, [visibleZones, primarySidebarWidth, secondarySidebarWidth, workspaceService]);
+  }, [visibleZones, primarySidebarWidth, secondarySidebarWidth, panelStates, workspaceService]);
 
   useEffect(() => {
     return filesRegistry.subscribe((next) => {
@@ -410,6 +416,10 @@ export function ShellApp({
             views={primaryViews}
             zone="primarySidebar"
             width={primarySidebarWidth}
+            panelStates={panelStates}
+            onPanelStateChange={(viewId, isOpen) =>
+              setPanelStates((prev) => ({ ...prev, [viewId]: isOpen }))
+            }
           />
         )}
 
@@ -454,6 +464,10 @@ export function ShellApp({
             views={secondaryViews}
             zone="secondarySidebar"
             width={secondarySidebarWidth}
+            panelStates={panelStates}
+            onPanelStateChange={(viewId, isOpen) =>
+              setPanelStates((prev) => ({ ...prev, [viewId]: isOpen }))
+            }
           />
         )}
       </main>
