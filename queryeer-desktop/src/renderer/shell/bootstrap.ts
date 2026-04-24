@@ -63,7 +63,11 @@ export async function bootstrapShell() {
   });
 
   let workspaceService: RendererWorkspaceService | null = null;
+  let filesRegistry: ReturnType<typeof host.getFilesRegistry> | null = null;
+  let fileMediator: ReturnType<typeof host.getFileMediator> | null = null;
+
   const onFileChanged = (file: FileEntity, text: string): void => {
+    getTextEditorRegistry().updateModelContent(file.uri, text);
     workspaceService?.handleFileChanged(file, text);
   };
 
@@ -73,9 +77,14 @@ export async function bootstrapShell() {
     backendSync,
     onFileChanged,
     writeFile: (uri, text) => window.appShell.writeFile(uri, text),
+    readFile: (uri) => window.appShell.readFile(uri),
+    muteFileWatcherPath: (uri, durationMs) => fileWatcher.mutePath(uri, durationMs),
     resolveFileContent,
     showSaveDialog: (options) => window.appShell.showDialogSave(options)
   });
+
+  filesRegistry = host.getFilesRegistry();
+  fileMediator = host.getFileMediator();
 
   const externalFrontendPlugins = await window.appShell.getExternalFrontendPlugins();
   const externalManifests = externalFrontendPlugins.map(toPluginManifestFile);
@@ -105,9 +114,10 @@ export async function bootstrapShell() {
       readLatestBackup: (fileId) =>
         window.appShell.readLatestWorkspaceBackup({ fileId })
     },
-    filesRegistry: host.getFilesRegistry(),
-    fileMediator: host.getFileMediator(),
-    fileWatcher
+    filesRegistry: filesRegistry!,
+    fileMediator: fileMediator!,
+    fileWatcher,
+    showDialog: (options) => window.appShell.showDialogMessage(options)
   });
   await workspaceService.hydrate();
 
@@ -165,8 +175,8 @@ export async function bootstrapShell() {
   return {
     hostState: host.getState(),
     extensions: host.getExtensions(),
-    filesRegistry: host.getFilesRegistry(),
-    fileMediator: host.getFileMediator(),
+    filesRegistry,
+    fileMediator,
     workspaceService,
     commandExecution,
     executeCommand: (commandId: string) => host.executeCommand(commandId),

@@ -112,7 +112,6 @@ export function TextEditorComponent({ file, registry }: TextEditorComponentProps
       const currentFile = registry.getActiveFile();
       if (currentFile?.fileId) {
         registry.markDirty(currentFile.fileId);
-        registry.notifyChanged(currentFile.fileId, api.getContent());
       }
     });
 
@@ -136,7 +135,7 @@ export function TextEditorComponent({ file, registry }: TextEditorComponentProps
     }
     pendingFileRef.current = file;
     void initEditorOnce(file);
-  }, [file?.fileId, file?.version, registry, initEditorOnce]);
+  }, [file?.fileId, registry, initEditorOnce]);
 
   useEffect(() => {
     mountedRef.current = true;

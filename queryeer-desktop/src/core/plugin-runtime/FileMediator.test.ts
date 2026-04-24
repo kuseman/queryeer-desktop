@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { LayoutEditorContribution } from "../../contracts/extensions/LayoutExtension";
 import { FileRegistry } from "./FileRegistry";
 import {
@@ -22,6 +22,7 @@ type Harness = {
   execute: ReturnType<typeof vi.fn>;
   sync: Required<FileBackendSync>;
   writeFile: ReturnType<typeof vi.fn>;
+  readFile: ReturnType<typeof vi.fn>;
   resolveFileContent: ReturnType<typeof vi.fn>;
   showSaveDialog: ReturnType<typeof vi.fn>;
   mediator: ReturnType<typeof createFileMediator>;
@@ -48,6 +49,7 @@ function setupHarness(options?: {
     bindFile: vi.fn(async () => {})
   };
   const writeFile = vi.fn(async () => ({ success: true }));
+  const readFile = vi.fn(async () => ({ success: true, content: "" }));
   const resolveFileContent = vi.fn(() => "resolved-content");
   const showSaveDialog = vi.fn();
   const mediator = createFileMediator({
@@ -55,12 +57,13 @@ function setupHarness(options?: {
     executeBackendQuery: execute,
     backendSync: sync,
     writeFile,
+    readFile,
     resolveFileContent,
     changeDebounceMs: options?.changeDebounceMs ?? 50,
     generateQueryExecutionId: () => "qx-test",
     showSaveDialog
   });
-  return { registry, execute, sync, writeFile, resolveFileContent, showSaveDialog, mediator };
+  return { registry, execute, sync, writeFile, readFile, resolveFileContent, showSaveDialog, mediator };
 }
 
 describe("FileMediator.openFile", () => {
@@ -176,32 +179,6 @@ describe("FileMediator.closeFile", () => {
   });
 });
 
-describe("FileMediator.notifyChanged", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("debounces backend change calls", async () => {
-    const { mediator, sync } = setupHarness({ changeDebounceMs: 100 });
-    const file = await mediator.openFile("untitled:c", {
-      mimeType: "text/plain"
-    });
-
-    mediator.notifyChanged(file.fileId, "select 1");
-    vi.advanceTimersByTime(50);
-    mediator.notifyChanged(file.fileId, "select 1");
-    vi.advanceTimersByTime(50);
-    mediator.notifyChanged(file.fileId, "select 1");
-    vi.advanceTimersByTime(100);
-
-    expect(sync.changeFile).toHaveBeenCalledTimes(1);
-  });
-});
-
 describe("FileMediator active file", () => {
   it("tracks active file when set and clear", async () => {
     const { mediator } = setupHarness();
@@ -220,16 +197,16 @@ describe("FileMediator active file", () => {
 });
 
 describe("FileMediator.saveFile", () => {
-  it("writes latest text and clears dirtyVsDisk for file:// uris", async () => {
-    const { mediator, registry, writeFile } = setupHarness();
+  it("writes content via resolveFileContent for file:// uris", async () => {
+    const { mediator, registry, resolveFileContent, writeFile } = setupHarness();
     const file = await mediator.openFile("file:///x.sql", {
       mimeType: "application/sql"
     });
 
-    mediator.notifyChanged(file.fileId, "select 42");
     await mediator.saveFile(file.fileId);
 
-    expect(writeFile).toHaveBeenCalledWith("file:///x.sql", "select 42");
+    expect(resolveFileContent).toHaveBeenCalledWith(file.fileId, "file:///x.sql");
+    expect(writeFile).toHaveBeenCalledWith("file:///x.sql", "resolved-content");
     const updated = registry.createFilesRegistry().getFile(file.fileId);
     expect(updated?.dirtyVsDisk).toBe(false);
   });
@@ -251,7 +228,6 @@ describe("FileMediator.saveFile", () => {
     const file = await mediator.openFile("untitled:Query1.sql", {
       mimeType: "application/sql"
     });
-    mediator.notifyChanged(file.fileId, "select * from users");
 
     showSaveDialog.mockResolvedValueOnce({
       canceled: false,
@@ -267,7 +243,7 @@ describe("FileMediator.saveFile", () => {
     });
     expect(writeFile).toHaveBeenCalledWith(
       "file:///C:/Users/test/Query1.sql",
-      "select * from users"
+      "resolved-content"
     );
     const updated = registry.createFilesRegistry().getFile(file.fileId);
     expect(updated?.uri).toBe("file:///C:/Users/test/Query1.sql");
@@ -279,7 +255,6 @@ describe("FileMediator.saveFile", () => {
     const file = await mediator.openFile("untitled:Query.sql", {
       mimeType: "application/sql"
     });
-    mediator.notifyChanged(file.fileId, "select 1");
 
     showSaveDialog.mockResolvedValueOnce({
       canceled: false,
@@ -290,7 +265,7 @@ describe("FileMediator.saveFile", () => {
 
     expect(writeFile).toHaveBeenCalledWith(
       "file:///home/user/Query.sql",
-      "select 1"
+      "resolved-content"
     );
     const updated = registry.createFilesRegistry().getFile(file.fileId);
     expect(updated?.uri).toBe("file:///home/user/Query.sql");
@@ -301,7 +276,6 @@ describe("FileMediator.saveFile", () => {
     const file = await mediator.openFile("untitled:MyQuery.sql", {
       mimeType: "application/sql"
     });
-    mediator.notifyChanged(file.fileId, "select 1");
 
     showSaveDialog.mockResolvedValueOnce({ canceled: true });
 
@@ -402,50 +376,97 @@ describe("FileMediator.executeFile", () => {
 });
 
 describe("FileMediator.reloadFile / acceptExternalChange / discardExternalChange", () => {
-  it("reloadFile clears externallyModified, reloadPending, and dirtyVsDisk", async () => {
+it("reloadFile resets diskState and dirtyVsDisk", async () => {
     const { mediator, registry } = setupHarness();
-    const file = await mediator.openFile("file:///r.txt", { mimeType: "text/plain" });
+    const file = await mediator.openFile("file:///rc.txt", { mimeType: "text/plain" });
     registry.createFilesRegistry().updateFile(file.fileId, {
-      externallyModified: true,
-      reloadPending: true,
+      diskState: "modifiedOnDisk",
       dirtyVsDisk: true
     });
 
     const result = await mediator.reloadFile(file.fileId);
 
-    expect(result?.externallyModified).toBe(false);
-    expect(result?.reloadPending).toBe(false);
+    expect(result?.diskState).toBe("inSync");
     expect(result?.dirtyVsDisk).toBe(false);
   });
 
-  it("acceptExternalChange behaves like reloadFile", async () => {
+  it("reloadFile resets deletedOnDisk to inSync", async () => {
+    const { mediator, registry } = setupHarness();
+    const file = await mediator.openFile("file:///del.txt", { mimeType: "text/plain" });
+    registry.createFilesRegistry().updateFile(file.fileId, {
+      diskState: "deletedOnDisk",
+      dirtyVsDisk: true
+    });
+
+    const result = await mediator.reloadFile(file.fileId);
+
+    expect(result?.diskState).toBe("inSync");
+    expect(result?.dirtyVsDisk).toBe(false);
+  });
+
+  it("reloadFile calls readFile when provided", async () => {
+    const { mediator, readFile, registry } = setupHarness();
+    const file = await mediator.openFile("file:///rc2.txt", { mimeType: "text/plain" });
+    registry.createFilesRegistry().updateFile(file.fileId, {
+      diskState: "modifiedOnDisk"
+    });
+
+    await mediator.reloadFile(file.fileId);
+
+    expect(readFile).toHaveBeenCalledWith(file.uri);
+  });
+
+  it("acceptExternalChange clears diskState and dirtyVsDisk", async () => {
     const { mediator, registry } = setupHarness();
     const file = await mediator.openFile("file:///a.txt", { mimeType: "text/plain" });
     registry.createFilesRegistry().updateFile(file.fileId, {
-      externallyModified: true,
-      reloadPending: true,
+      diskState: "modifiedOnDisk",
       dirtyVsDisk: true
     });
 
     const result = await mediator.acceptExternalChange(file.fileId);
 
-    expect(result?.externallyModified).toBe(false);
-    expect(result?.reloadPending).toBe(false);
+    expect(result?.diskState).toBe("inSync");
     expect(result?.dirtyVsDisk).toBe(false);
   });
 
-  it("discardExternalChange clears the external flags but marks dirtyVsDisk", async () => {
+  it("discardExternalChange clears diskState and keeps local dirty", async () => {
     const { mediator, registry } = setupHarness();
     const file = await mediator.openFile("file:///d.txt", { mimeType: "text/plain" });
     registry.createFilesRegistry().updateFile(file.fileId, {
-      externallyModified: true,
-      reloadPending: false
+      diskState: "modifiedOnDisk"
     });
 
     const result = await mediator.discardExternalChange(file.fileId);
 
-    expect(result?.externallyModified).toBe(false);
-    expect(result?.reloadPending).toBe(false);
+    expect(result?.diskState).toBe("inSync");
+    expect(result?.dirtyVsDisk).toBe(true);
+  });
+
+  it("acceptExternalChange clears deletedOnDisk", async () => {
+    const { mediator, registry } = setupHarness();
+    const file = await mediator.openFile("file:///del2.txt", { mimeType: "text/plain" });
+    registry.createFilesRegistry().updateFile(file.fileId, {
+      diskState: "deletedOnDisk",
+      dirtyVsDisk: true
+    });
+
+    const result = await mediator.acceptExternalChange(file.fileId);
+
+    expect(result?.diskState).toBe("inSync");
+    expect(result?.dirtyVsDisk).toBe(false);
+  });
+
+  it("discardExternalChange clears deletedOnDisk and marks local dirty", async () => {
+    const { mediator, registry } = setupHarness();
+    const file = await mediator.openFile("file:///del3.txt", { mimeType: "text/plain" });
+    registry.createFilesRegistry().updateFile(file.fileId, {
+      diskState: "deletedOnDisk"
+    });
+
+    const result = await mediator.discardExternalChange(file.fileId);
+
+    expect(result?.diskState).toBe("inSync");
     expect(result?.dirtyVsDisk).toBe(true);
   });
 

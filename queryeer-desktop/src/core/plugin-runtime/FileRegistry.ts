@@ -81,7 +81,6 @@ export class FileRegistry {
       getFile: (fileId) => this.files.get(fileId),
       listFiles: () => this.list(),
       updateFile: (fileId, update) => this.updateFile(fileId, update),
-      notifyChanged: (fileId) => this.notifyChanged(fileId),
       subscribe: (subscriber) => this.subscribe(subscriber),
       registerMimeResolver: (resolver) => {
         this.mimeResolvers.push(resolver);
@@ -295,14 +294,14 @@ export class FileRegistry {
 
     const entity: FileEntity = {
       fileId: generateFileId(),
+      version: 0,
       uri: input.uri,
       mimeType: input.mimeType,
       editorId: input.editorId,
       engineBinding: input.engineBinding,
       dirtyVsBackend: false,
       dirtyVsDisk: false,
-      version: 0,
-      diskVersion: input.diskVersion,
+      diskState: "inSync",
       persistentViewState: input.persistentViewState,
       openedAt: new Date().toISOString()
     };
@@ -328,23 +327,6 @@ export class FileRegistry {
     }
 
     const next: FileEntity = { ...existing, ...update };
-    this.files.set(fileId, next);
-    this.emit();
-    return next;
-  }
-
-  private notifyChanged(fileId: string): FileEntity | undefined {
-    const existing = this.files.get(fileId);
-    if (!existing) {
-      return undefined;
-    }
-
-    const next: FileEntity = {
-      ...existing,
-      version: existing.version + 1,
-      dirtyVsBackend: existing.backendVersion !== existing.version + 1,
-      dirtyVsDisk: existing.diskVersion !== existing.version + 1
-    };
     this.files.set(fileId, next);
     this.emit();
     return next;
@@ -390,7 +372,11 @@ export class FileRegistry {
   }
 
   public markDirty(fileId: string): void {
-    this.updateFile(fileId, { dirtyVsDisk: true });
+    const file = this.files.get(fileId);
+    if (!file) {
+      return;
+    }
+    this.updateFile(fileId, { dirtyVsDisk: true, version: file.version + 1 });
   }
 }
 

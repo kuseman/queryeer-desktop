@@ -1,7 +1,9 @@
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { FileMediator } from "../../contracts/files/FileMediator";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
+import type { DialogSeverity, DialogOption } from "../../contracts/extensions/DialogExtension";
 import type {
+  FileWatcherEvent,
   FileWatcherService,
   FileWatcherSubscription
 } from "../../contracts/files/FileWatcher";
@@ -36,6 +38,13 @@ export type RendererWorkspaceServiceOptions = {
   filesRegistry: FilesRegistry;
   fileMediator: FileMediator;
   fileWatcher: FileWatcherService;
+  showDialog: (options: {
+    title: string;
+    message: string;
+    severity?: DialogSeverity;
+    detail?: string;
+    options?: DialogOption[];
+  }) => Promise<{ action: string }>;
   debounceMs?: number;
   backupDebounceMs?: number;
   backupMaxIntervalMs?: number;
@@ -66,6 +75,7 @@ export class RendererWorkspaceService {
   private readonly filesRegistry: FilesRegistry;
   private readonly fileMediator: FileMediator;
   private readonly fileWatcher: FileWatcherService;
+  private readonly showDialog: RendererWorkspaceServiceOptions["showDialog"];
   private readonly debounceMs: number;
   private readonly backupDebounceMs: number;
   private readonly backupMaxIntervalMs: number;
@@ -80,12 +90,17 @@ export class RendererWorkspaceService {
   private readonly watcherSubsPending = new Map<string, Promise<void>>();
   private readonly autosaveStates = new Map<string, AutosaveState>();
   private readonly backupFileIdByFileId = new Map<string, string>();
+  private readonly externalPromptInFlight = new Set<string>();
+  private readonly lastDirtyAtByFileId = new Map<string, number>();
+  private readonly externalPromptRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private activeFileSnapshotProvider: (() => string | null) | null = null;
 
   public constructor(options: RendererWorkspaceServiceOptions) {
     this.bridge = options.bridge;
     this.filesRegistry = options.filesRegistry;
     this.fileMediator = options.fileMediator;
     this.fileWatcher = options.fileWatcher;
+    this.showDialog = options.showDialog;
     this.debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
     this.backupDebounceMs = options.backupDebounceMs ?? DEFAULT_BACKUP_DEBOUNCE_MS;
     this.backupMaxIntervalMs = options.backupMaxIntervalMs ?? DEFAULT_BACKUP_MAX_INTERVAL_MS;
@@ -127,6 +142,7 @@ export class RendererWorkspaceService {
 
     this.hydrated = true;
     this.unsubscribeFromFiles = this.filesRegistry.subscribe((files) => {
+      this.recordDirtyTransitions(files);
       this.scheduleSave();
       this.syncWatchers(files);
       this.syncBackups(files);
@@ -190,20 +206,94 @@ export class RendererWorkspaceService {
     return this.activeFileId;
   }
 
-  public setActiveFileId(fileId: string | null): void {
-    if (this.activeFileId === fileId) {
-      return;
+  public setActiveFileSnapshotProvider(provider: () => string | null): void {
+    this.activeFileSnapshotProvider = provider;
+  }
+
+  private getFileName(file: FileEntity): string {
+    if (file.uri.startsWith("file://")) {
+      return file.uri.split("/").pop() ?? file.uri;
     }
+    if (file.uri.startsWith("untitled:")) {
+      return file.uri.slice(8);
+    }
+    return file.uri;
+  }
+
+  public setActiveFileId(fileId: string | null): void {
+    const wasSameFile = this.activeFileId === fileId;
     this.activeFileId = fileId;
+    this.fileMediator.setActiveFileId(fileId);
     if (!this.hydrated) {
       return;
     }
-    this.scheduleSave();
+    if (!wasSameFile) {
+      this.scheduleSave();
+    }
     if (fileId) {
       const file = this.filesRegistry.getFile(fileId);
-      if (file?.reloadPending && !file.dirtyVsDisk) {
+      if (!file) {
+        return;
+      }
+
+      if (file.diskState === "deletedOnDisk") {
+        void this.handleDeletedFile(file);
+        return;
+      }
+
+      if (file.diskState === "modifiedOnDisk") {
+        if (file.dirtyVsDisk) {
+          if (!this.externalPromptInFlight.has(file.fileId)) {
+            this.externalPromptInFlight.add(file.fileId);
+            void this.handleExternallyModifiedDirtyFile(file).finally(() => {
+              this.externalPromptInFlight.delete(file.fileId);
+            });
+          }
+          return;
+        }
         void this.fileMediator.reloadFile(fileId);
       }
+    }
+  }
+
+  private async handleDeletedFile(file: FileEntity): Promise<void> {
+    const fileName = this.getFileName(file);
+    const result = await this.showDialog({
+      title: "File Deleted",
+      message: `The file "${fileName}" has been deleted on disk.`,
+      severity: "warning",
+      detail: "Do you want to keep the file in the editor or close it?",
+      options: [
+        { label: "Keep File", value: "keep" },
+        { label: "Close File", value: "close" }
+      ]
+    });
+
+    if (result.action === "keep") {
+      await this.fileMediator.discardExternalChange(file.fileId);
+    } else if (result.action === "close") {
+      await this.fileMediator.closeFile(file.fileId, { discardDirty: true });
+    }
+  }
+
+  private async handleExternallyModifiedDirtyFile(file: FileEntity): Promise<void> {
+    const fileName = this.getFileName(file);
+    const result = await this.showDialog({
+      title: "File Changed",
+      message: `The file "${fileName}" has been modified on disk.`,
+      severity: "warning",
+      detail:
+        "You have unsaved changes. Do you want to keep your changes or reload from disk?",
+      options: [
+        { label: "Keep My Changes", value: "keep" },
+        { label: "Reload from Disk", value: "reload" }
+      ]
+    });
+
+    if (result.action === "keep") {
+      await this.fileMediator.discardExternalChange(file.fileId);
+    } else if (result.action === "reload") {
+      await this.fileMediator.reloadFile(file.fileId);
     }
   }
 
@@ -280,6 +370,10 @@ export class RendererWorkspaceService {
     }
     this.watcherSubs.clear();
     this.watcherSubsPending.clear();
+    for (const timer of this.externalPromptRetryTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.externalPromptRetryTimers.clear();
     for (const fileId of [...this.autosaveStates.keys()]) {
       this.clearAutosave(fileId);
     }
@@ -396,7 +490,7 @@ export class RendererWorkspaceService {
 
   private subscribeWatcher(fileId: string, uri: string): void {
     const pending = this.fileWatcher
-      .watch(uri, {}, () => this.onWatcherEvent(fileId))
+      .watch(uri, {}, (event) => this.onWatcherEvent(fileId, event))
       .then((sub) => {
         this.watcherSubsPending.delete(fileId);
         if (!this.filesRegistry.getFile(fileId)) {
@@ -419,20 +513,118 @@ export class RendererWorkspaceService {
     }
   }
 
-  private onWatcherEvent(fileId: string): void {
+  private onWatcherEvent(fileId: string, event: FileWatcherEvent): void {
     const file = this.filesRegistry.getFile(fileId);
     if (!file) {
       return;
     }
-    const isActive = this.activeFileId === fileId;
-    if (isActive && !file.dirtyVsDisk) {
+
+    const isActive = this.isActiveFile(fileId);
+
+    if (event.type === "delete") {
+      const next = this.filesRegistry.updateFile(fileId, {
+        diskState: "deletedOnDisk"
+      });
+      if (isActive && next && !this.externalPromptInFlight.has(fileId)) {
+        this.externalPromptInFlight.add(fileId);
+        void this.handleDeletedFile(next).finally(() => {
+          this.externalPromptInFlight.delete(fileId);
+        });
+      }
+      return;
+    }
+
+    const isDirty = this.isLocallyDirty(file);
+    if (isActive && !isDirty) {
       void this.fileMediator.reloadFile(fileId);
       return;
     }
-    this.filesRegistry.updateFile(fileId, {
-      externallyModified: true,
-      reloadPending: !isActive && !file.dirtyVsDisk
+    const next = this.filesRegistry.updateFile(fileId, {
+      diskState: "modifiedOnDisk"
     });
+    if (!next) {
+      return;
+    }
+    if (isActive && isDirty && !this.externalPromptInFlight.has(fileId)) {
+      this.externalPromptInFlight.add(fileId);
+      void this.handleExternallyModifiedDirtyFile(next).finally(() => {
+        this.externalPromptInFlight.delete(fileId);
+      });
+      return;
+    }
+    if (!isActive && isDirty) {
+      this.scheduleExternalDirtyPromptRetry(fileId);
+    }
+  }
+
+  private scheduleExternalDirtyPromptRetry(fileId: string): void {
+    const existing = this.externalPromptRetryTimers.get(fileId);
+    if (existing) {
+      clearTimeout(existing);
+    }
+    const timer = setTimeout(() => {
+      this.externalPromptRetryTimers.delete(fileId);
+      const file = this.filesRegistry.getFile(fileId);
+      if (!file) {
+        return;
+      }
+      if (file.diskState !== "modifiedOnDisk") {
+        return;
+      }
+      if (!this.isLocallyDirty(file)) {
+        return;
+      }
+      if (!this.isActiveFile(fileId)) {
+        return;
+      }
+      if (this.externalPromptInFlight.has(fileId)) {
+        return;
+      }
+      this.externalPromptInFlight.add(fileId);
+      void this.handleExternallyModifiedDirtyFile(file).finally(() => {
+        this.externalPromptInFlight.delete(fileId);
+      });
+    }, 75);
+    this.externalPromptRetryTimers.set(fileId, timer);
+  }
+
+  private recordDirtyTransitions(files: FileEntity[]): void {
+    const now = Date.now();
+    for (const file of files) {
+      if (file.dirtyVsDisk) {
+        if (!this.lastDirtyAtByFileId.has(file.fileId)) {
+          this.lastDirtyAtByFileId.set(file.fileId, now);
+        }
+      } else {
+        this.lastDirtyAtByFileId.delete(file.fileId);
+      }
+    }
+  }
+
+  private isLocallyDirty(file: FileEntity): boolean {
+    if (file.dirtyVsDisk) {
+      return true;
+    }
+    const lastDirtyAt = this.lastDirtyAtByFileId.get(file.fileId);
+    if (lastDirtyAt === undefined) {
+      return false;
+    }
+    return Date.now() - lastDirtyAt < 1_500;
+  }
+
+  private isActiveFile(fileId: string): boolean {
+    const snapshotActiveFileId = this.activeFileSnapshotProvider?.() ?? null;
+    const mediatorActiveFileId = this.fileMediator.getActiveFileId();
+    const textRegistry = getTextEditorRegistry() as unknown as {
+      getActiveFile?: () => { fileId?: string } | null;
+    };
+    const textEditorActiveFileId = textRegistry.getActiveFile?.()?.fileId ?? null;
+    return (
+      snapshotActiveFileId === fileId ||
+      mediatorActiveFileId === fileId ||
+      this.activeFileId === fileId ||
+      textEditorActiveFileId === fileId
+    );
   }
 
   private scheduleSave(): void {

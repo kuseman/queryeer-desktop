@@ -1,7 +1,6 @@
 import type { FileEntity } from "../../../contracts/files/FileEntity";
 import type { Disposable } from "./types";
 import type { FilesRegistry } from "../../../contracts/files/FilesRegistry";
-import type { FileMediator } from "../../../contracts/files/FileMediator";
 import { TextEditorModel } from "./TextEditorModel";
 import { TextEditorApi } from "./TextEditorApi";
 import { ViewStateStore } from "./ViewStateStore";
@@ -25,16 +24,11 @@ export class TextEditorRegistry {
   private editorApi: TextEditorApi | null = null;
   private listeners: Array<() => void> = [];
   private filesRegistry: FilesRegistry | null = null;
-  private fileMediator: FileMediator | null = null;
   private pendingFileForEditor: FileEntity | null = null;
 
   setFilesRegistry(registry: FilesRegistry): void {
     this.filesRegistry = registry;
     this.viewStateStore.setFilesRegistry(registry);
-  }
-
-  setFileMediator(mediator: FileMediator): void {
-    this.fileMediator = mediator;
   }
 
   onEditorReady(api: TextEditorApi): void {
@@ -82,10 +76,6 @@ export class TextEditorRegistry {
 
   markDirty(fileId: string): void {
     this.filesRegistry?.markDirty(fileId);
-  }
-
-  notifyChanged(fileId: string, text: string): void {
-    this.fileMediator?.notifyChanged(fileId, text);
   }
 
   applyRecoveredContent(fileId: string, text: string): void {
@@ -226,7 +216,16 @@ export class TextEditorRegistry {
   updateModelContent(uri: string, content: string): void {
     const model = this.modelsByUri.get(uri);
     if (model) {
+      const activeFile = this.getActiveFile();
+      const shouldCapture = Boolean(activeFile?.uri === uri && this.editorApi);
+      if (shouldCapture) {
+        this.captureActiveViewState();
+      }
       model.setContent(content);
+      if (activeFile?.uri === uri && this.editorApi) {
+        this.editorApi.setModel(model.getDocument());
+        this.applyEditorStateForActiveFile(activeFile.fileId);
+      }
     }
   }
 

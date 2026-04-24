@@ -58,6 +58,13 @@ export function EditorTabs({
         const title = tabTitle(file, editor);
         const dirtyMark = file.dirtyVsDisk || file.dirtyVsBackend ? " •" : "";
 
+        let titleClassName = "shell-editor-tab-title";
+        if (file.diskState === "deletedOnDisk") {
+          titleClassName += " is-deleted";
+        } else if (file.diskState === "modifiedOnDisk" && file.dirtyVsDisk) {
+          titleClassName += " is-modified";
+        }
+
         return (
           <div
             key={file.fileId}
@@ -74,7 +81,7 @@ export function EditorTabs({
               className="shell-editor-tab-button"
               onClick={() => onSelectFile(file.fileId)}
             >
-              <span className="shell-editor-tab-title">{`${title}${dirtyMark}`}</span>
+              <span className={titleClassName}>{`${title}${dirtyMark}`}</span>
             </div>
             <span
               role="button"

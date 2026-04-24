@@ -19,7 +19,6 @@ export const coreEditorTextPlugin: Plugin = {
   activate: (context) => {
     const textRegistry = getTextEditorRegistry();
     textRegistry.setFilesRegistry(context.files);
-    textRegistry.setFileMediator(context.fileMediator);
 
     registerTextEditorCommands(context, textRegistry);
     registerTextEditorKeybindings(context);
