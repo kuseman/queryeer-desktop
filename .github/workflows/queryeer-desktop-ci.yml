@@ -1,13 +1,12 @@
 name: Queryeer Desktop CI
 
 on:
-  pull_request:
   push:
     branches:
       - "**"
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   desktop-validation:
