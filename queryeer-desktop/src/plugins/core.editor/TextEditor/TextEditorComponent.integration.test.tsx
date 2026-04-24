@@ -103,6 +103,7 @@ function makeFile(overrides: Partial<FileEntity>): FileEntity {
     mimeType: "application/sql",
     dirtyVsBackend: false,
     dirtyVsDisk: false,
+    diskState: "inSync",
     version: 1,
     openedAt: new Date().toISOString(),
     ...overrides
@@ -151,7 +152,6 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
       getFile: (fileId: string) => filesById.get(fileId) ?? undefined,
       listFiles: vi.fn(() => []),
       updateFile: vi.fn(),
-      notifyChanged: vi.fn(),
       subscribe: vi.fn(),
       registerMimeResolver: vi.fn(),
       registerEditorResolver: vi.fn(),

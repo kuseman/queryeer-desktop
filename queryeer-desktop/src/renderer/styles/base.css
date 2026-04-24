@@ -368,6 +368,15 @@ body.is-resizing-layout {
   white-space: nowrap;
 }
 
+.shell-editor-tab-title.is-modified {
+  color: #e6c200;
+}
+
+.shell-editor-tab-title.is-deleted {
+  color: #ff4d4d;
+  text-decoration: line-through;
+}
+
 .shell-editor-tab-close {
   display: flex;
   align-items: center;

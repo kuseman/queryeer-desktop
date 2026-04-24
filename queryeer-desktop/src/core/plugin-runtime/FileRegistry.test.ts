@@ -213,3 +213,15 @@ expect(registry.resolveEditor(file)).toBe("editor.exec");
     expect(registry.resolveEditor(file)).toBe("editor.fallback");
   });
 });
+
+describe("FileRegistry dirtyVsDisk initialization", () => {
+  it("starts with dirtyVsDisk false when opening a file", () => {
+    const registry = new FileRegistry().createFilesRegistry();
+    const file = registry.openFile({
+      uri: "file:///test.sql",
+      mimeType: "application/sql"
+    });
+
+    expect(file.dirtyVsDisk).toBe(false);
+  });
+});

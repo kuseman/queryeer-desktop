@@ -23,6 +23,7 @@ export type FileMediatorOptions = {
   executeBackendQuery: BackendQueryExecutor;
   backendSync?: FileBackendSync;
   writeFile?: (uri: string, text: string) => Promise<{ success: boolean }>;
+  readFile?: (uri: string) => Promise<{ success: boolean; content: string }>;
   resolveFileContent?: (fileId: string, uri: string) => string | undefined;
   onFileChanged?: (file: FileEntity, text: string) => void;
   changeDebounceMs?: number;
@@ -33,9 +34,8 @@ export type FileMediatorOptions = {
     defaultPath?: string;
     filters?: { name: string; extensions: string[] }[];
   }) => Promise<{ canceled: boolean; filePath?: string }>;
+  muteFileWatcherPath?: (uri: string, durationMs: number) => Promise<void>;
 };
-
-const DEFAULT_DEBOUNCE_MS = 150;
 
 let executionCounter = 0;
 
@@ -50,34 +50,15 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
     executeBackendQuery,
     backendSync,
     writeFile,
+    readFile,
     resolveFileContent,
     onFileChanged,
-    changeDebounceMs = DEFAULT_DEBOUNCE_MS,
     generateQueryExecutionId = defaultExecutionId,
-    showSaveDialog
+    showSaveDialog,
+    muteFileWatcherPath
   } = options;
 
-  const pendingChanges = new Map<string, ReturnType<typeof setTimeout>>();
-  const pendingTexts = new Map<string, string>();
   let activeFileId: string | null = null;
-
-  function flushChange(fileId: string): void {
-    const timer = pendingChanges.get(fileId);
-    if (timer !== undefined) {
-      clearTimeout(timer);
-      pendingChanges.delete(fileId);
-    }
-    const text = pendingTexts.get(fileId);
-    pendingTexts.delete(fileId);
-    if (text === undefined) {
-      return;
-    }
-    const file = filesRegistry.getFile(fileId);
-    if (!file) {
-      return;
-    }
-    void backendSync?.changeFile?.(file, text);
-  }
 
   return {
     async openFile(uri, hint) {
@@ -99,11 +80,12 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
       if (!editorId) {
         const probe: FileEntity = {
           fileId: "probe",
+          version: 0,
           uri,
           mimeType,
           dirtyVsBackend: false,
           dirtyVsDisk: false,
-          version: 0,
+          diskState: "inSync",
           openedAt: ""
         };
         editorId = filesRegistry.resolveEditor(probe, {
@@ -140,7 +122,6 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
           `Cannot close file '${fileId}' with unsaved changes; pass discardDirty to override.`
         );
       }
-      flushChange(fileId);
       await backendSync?.closeFile?.(file);
       filesRegistry.closeFile(fileId);
       if (activeFileId === fileId) {
@@ -182,13 +163,15 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
         targetUri = `file://${normalizedPath}`;
       }
 
-      const latestText =
-        pendingTexts.get(fileId) ?? resolveFileContent?.(fileId, file.uri);
+      const latestText = resolveFileContent?.(fileId, file.uri);
       if (latestText === undefined) {
         return;
       }
 
       if (writeFile) {
+        if (targetUri.startsWith("file:")) {
+          await muteFileWatcherPath?.(targetUri, 750);
+        }
         const result = await writeFile(targetUri, latestText);
         if (!result.success) {
           throw new Error(`Failed to save file '${targetUri}'`);
@@ -197,34 +180,9 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
 
       filesRegistry.updateFile(fileId, {
         uri: targetUri,
-        diskVersion: file.version,
-        dirtyVsDisk: false
+        dirtyVsDisk: false,
+        diskState: "inSync"
       });
-    },
-
-    notifyChanged(fileId, text) {
-      const file = filesRegistry.notifyChanged(fileId);
-      if (!file) {
-        return;
-      }
-
-      onFileChanged?.(file, text);
-      pendingTexts.set(fileId, text);
-      const existing = pendingChanges.get(fileId);
-      if (existing !== undefined) {
-        clearTimeout(existing);
-      }
-      const timer = setTimeout(() => {
-        pendingChanges.delete(fileId);
-        const latest = filesRegistry.getFile(fileId);
-        const pendingText = pendingTexts.get(fileId);
-        pendingTexts.delete(fileId);
-        if (!latest || pendingText === undefined) {
-          return;
-        }
-        void backendSync?.changeFile?.(latest, pendingText);
-      }, changeDebounceMs);
-      pendingChanges.set(fileId, timer);
     },
 
     setActiveFileId(fileId) {
@@ -265,7 +223,6 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
           `Cannot execute file '${fileId}' without an engine binding`
         );
       }
-      flushChange(fileId);
       const queryExecutionId = generateQueryExecutionId();
       const result = await executeBackendQuery({
         queryExecutionId,
@@ -278,15 +235,25 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
       };
     },
 
-    async reloadFile(fileId) {
+async reloadFile(fileId) {
       const file = filesRegistry.getFile(fileId);
       if (!file) {
         return undefined;
       }
-      // TODO(workspace #4+): re-read disk content here and replace the buffer.
+
+      if (readFile) {
+        try {
+          const result = await readFile(file.uri);
+          if (result.success && onFileChanged) {
+            onFileChanged(file, result.content);
+          }
+        } catch {
+          // Failed to read file, continue with reset
+        }
+      }
+
       return filesRegistry.updateFile(fileId, {
-        externallyModified: false,
-        reloadPending: false,
+        diskState: "inSync",
         dirtyVsDisk: false
       });
     },
@@ -297,8 +264,7 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
         return undefined;
       }
       return filesRegistry.updateFile(fileId, {
-        externallyModified: false,
-        reloadPending: false,
+        diskState: "inSync",
         dirtyVsDisk: false
       });
     },
@@ -309,8 +275,7 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
         return undefined;
       }
       return filesRegistry.updateFile(fileId, {
-        externallyModified: false,
-        reloadPending: false,
+        diskState: "inSync",
         dirtyVsDisk: true
       });
     }

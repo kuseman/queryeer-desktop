@@ -25,8 +25,8 @@ type DialogSaveOptions = {
 
 export class DialogMainService {
   public wireIpc(): void {
-    ipcMain.handle("dialog:show-message", async (_event, options: DialogMessageOptions) => {
-      const window = BrowserWindow.getFocusedWindow();
+    ipcMain.handle("dialog:show-message", async (event, options: DialogMessageOptions) => {
+      const window = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow();
       if (!window) {
         return { action: "" };
       }
@@ -44,8 +44,8 @@ export class DialogMainService {
       return { action: selectedOption?.value ?? "" };
     });
 
-    ipcMain.handle("dialog:show-open", async (_event, options: DialogOpenOptions) => {
-      const window = BrowserWindow.getFocusedWindow();
+    ipcMain.handle("dialog:show-open", async (event, options: DialogOpenOptions) => {
+      const window = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow();
       if (!window) {
         return { canceled: true, filePaths: [] };
       }
@@ -63,8 +63,8 @@ export class DialogMainService {
       };
     });
 
-    ipcMain.handle("dialog:show-save", async (_event, options: DialogSaveOptions) => {
-      const window = BrowserWindow.getFocusedWindow();
+    ipcMain.handle("dialog:show-save", async (event, options: DialogSaveOptions) => {
+      const window = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow();
       if (!window) {
         return { canceled: true, filePath: undefined };
       }

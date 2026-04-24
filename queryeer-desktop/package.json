@@ -2,7 +2,8 @@
   "name": "queryeer-desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Incremental Electron shell for Queryeer migration",
+  "license": "MIT",
+  "description": "Queryeer Desktop",
   "main": "out/main/index.js",
   "type": "module",
   "scripts": {

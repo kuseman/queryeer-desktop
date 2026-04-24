@@ -29,6 +29,8 @@ export type PluginHostOptions = {
   backendSync?: FileBackendSync;
   onFileChanged?: (file: FileEntity, text: string) => void;
   writeFile?: (uri: string, text: string) => Promise<{ success: boolean }>;
+  readFile?: (uri: string) => Promise<{ success: boolean; content: string }>;
+  muteFileWatcherPath?: (uri: string, durationMs: number) => Promise<void>;
   resolveFileContent?: (fileId: string, uri: string) => string | undefined;
   showSaveDialog?: (options: {
     title?: string;
@@ -59,6 +61,8 @@ export class PluginHost {
       backendSync: options.backendSync,
       onFileChanged: options.onFileChanged,
       writeFile: options.writeFile,
+      readFile: options.readFile,
+      muteFileWatcherPath: options.muteFileWatcherPath,
       resolveFileContent: options.resolveFileContent,
       showSaveDialog: options.showSaveDialog
     });

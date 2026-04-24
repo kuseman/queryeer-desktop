@@ -14,6 +14,7 @@ function makeFile(overrides: Partial<FileEntity> = {}): FileEntity {
     mimeType: "application/sql",
     dirtyVsBackend: false,
     dirtyVsDisk: false,
+    diskState: "inSync",
     version: 1,
     openedAt: new Date().toISOString(),
     ...overrides
@@ -484,17 +485,6 @@ describe("TextEditorRegistry view state", () => {
       registry.setActiveFileId(file.fileId);
 
       expect(api.setViewState).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("notifyChanged", () => {
-    it("forwards content updates to FileMediator.notifyChanged", () => {
-      const notifyChanged = vi.fn();
-      registry.setFileMediator({ notifyChanged } as any);
-
-      registry.notifyChanged("file-1", "select 1");
-
-      expect(notifyChanged).toHaveBeenCalledWith("file-1", "select 1");
     });
   });
 

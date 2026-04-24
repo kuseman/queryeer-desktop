@@ -256,6 +256,28 @@ export const coreFilesPlugin: Plugin = {
     }
 
     context.tooltip.registerTooltipSection({
+      id: "core.files.tooltip.fileStatus",
+      order: 5,
+      render: ({ file }) => {
+        if (file.diskState === "deletedOnDisk") {
+          return {
+            label: "Status",
+            value: "Deleted on disk",
+            severity: "error"
+          };
+        }
+        if (file.diskState === "modifiedOnDisk") {
+          return {
+            label: "Status",
+            value: file.dirtyVsDisk ? "Modified on disk (unsaved changes)" : "Modified on disk",
+            severity: "warning"
+          };
+        }
+        return null;
+      }
+    });
+
+    context.tooltip.registerTooltipSection({
       id: "core.files.tooltip.path",
       order: 10,
       render: ({ file }) => ({

@@ -111,11 +111,47 @@ export class MonacoTextEditorApi extends TextEditorApi {
       return;
     }
     const monaco = this.monaco();
+    const currentModel = this.editor.getModel();
+    let viewStateToRestore: unknown | null = null;
+    let fallbackSelection: monacoType.Selection | null = null;
+    let fallbackPosition: monacoType.Position | null = null;
+    let fallbackScrollTop: number | null = null;
+    let fallbackScrollLeft: number | null = null;
     let monacoModel = monaco.editor.getModel(monaco.Uri.parse(model.uri));
     if (!monacoModel) {
       monacoModel = monaco.editor.createModel(model.getText(), model.languageId, monaco.Uri.parse(model.uri));
+    } else {
+      const nextValue = model.getText();
+      if (monacoModel.getValue() !== nextValue) {
+        if (currentModel === monacoModel) {
+          viewStateToRestore = this.editor.saveViewState();
+          fallbackSelection = this.editor.getSelection();
+          fallbackPosition = this.editor.getPosition();
+          fallbackScrollTop = this.editor.getScrollTop();
+          fallbackScrollLeft = this.editor.getScrollLeft();
+        }
+        monacoModel.setValue(nextValue);
+      }
     }
-    this.editor.setModel(monacoModel);
+    if (currentModel !== monacoModel) {
+      this.editor.setModel(monacoModel);
+    }
+    if (viewStateToRestore) {
+      this.editor.restoreViewState(viewStateToRestore as monacoType.editor.ICodeEditorViewState);
+    }
+    if (fallbackSelection || fallbackPosition || fallbackScrollTop !== null || fallbackScrollLeft !== null) {
+      if (fallbackSelection) {
+        this.editor.setSelection(fallbackSelection);
+      } else if (fallbackPosition) {
+        this.editor.setPosition(fallbackPosition);
+      }
+      if (fallbackScrollTop !== null) {
+        this.editor.setScrollTop(fallbackScrollTop);
+      }
+      if (fallbackScrollLeft !== null) {
+        this.editor.setScrollLeft(fallbackScrollLeft);
+      }
+    }
   }
 
   getPosition(): Position | null {

@@ -30,7 +30,6 @@ export type FilesRegistry = {
   getFile: (fileId: string) => FileEntity | undefined;
   listFiles: () => FileEntity[];
   updateFile: (fileId: string, update: FileEntityUpdate) => FileEntity | undefined;
-  notifyChanged: (fileId: string) => FileEntity | undefined;
   subscribe: (subscriber: FilesSubscriber) => () => void;
   registerMimeResolver: (resolver: MimeResolver) => void;
   registerEditorResolver: (resolver: EditorResolver) => void;

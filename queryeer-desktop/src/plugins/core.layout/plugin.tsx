@@ -1,4 +1,5 @@
 import type { Plugin } from "../../contracts/plugin/Plugin";
+import { confirmCloseDirtyFile } from "../../renderer/shell/close-file-guard";
 
 export const coreLayoutPlugin: Plugin = {
   manifest: {
@@ -21,8 +22,36 @@ export const coreLayoutPlugin: Plugin = {
       id: "core.layout.closeEditor",
       title: "Close Editor",
       handler: async () => {
-        console.log("Editor close command executed");
+        const activeFileId = context.fileMediator.getActiveFileId();
+        if (!activeFileId) {
+          return;
+        }
+        const file = context.files.getFile(activeFileId);
+        if (!file) {
+          return;
+        }
+
+        const isDirty = file.dirtyVsDisk || file.dirtyVsBackend;
+        if (isDirty) {
+          const shouldClose = await confirmCloseDirtyFile(file, (options) =>
+            context.dialog.showMessage(options)
+          );
+          if (!shouldClose) {
+            return;
+          }
+        }
+
+        await context.fileMediator.closeFile(activeFileId, { discardDirty: true });
       }
+    });
+
+    context.keybindings.registerKeybinding({
+      id: "core.layout.keybinding.closeEditor",
+      commandId: "core.layout.closeEditor",
+      key: "CmdOrCtrl+W",
+      when: "editorFocus",
+      scope: "editor",
+      order: 150
     });
 
     context.commands.registerCommand({

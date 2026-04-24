@@ -12,6 +12,7 @@ import type { UserKeybindingsDocument } from "../../contracts/commands/Keybindin
 import { CoreMenuBar } from "../../plugins/core.menu/MenuBar";
 import type { RendererWorkspaceService } from "../workspace/workspace-service";
 import { Toolbar, StatusBar, Sidebar, SidebarDivider, EditorTabs, EditorPane } from "../../plugins/core.layout";
+import { confirmCloseDirtyFile } from "./close-file-guard";
 
 declare global {
   interface Window {
@@ -172,8 +173,17 @@ export function ShellApp({
   const [activeFileId, setActiveFileId] = useState<string | null>(
     () => workspaceService.restoredActiveFileId() ?? filesRegistry.listFiles()[0]?.fileId ?? null
   );
+  const activeFileIdRef = useRef<string | null>(activeFileId);
   const layoutRef = useRef<HTMLElement | null>(null);
   const tabsRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    activeFileIdRef.current = activeFileId;
+  }, [activeFileId]);
+
+  useEffect(() => {
+    workspaceService.setActiveFileSnapshotProvider(() => activeFileIdRef.current);
+  }, [workspaceService]);
 
   const toggleZone = (zone: LayoutZone) => {
     setVisibleZones((previous) => {
@@ -271,14 +281,36 @@ export function ShellApp({
   );
 
   const closeFile = (fileId: string) => {
-    setOpenFileIds((prev) => {
-      const next = prev.filter((id) => id !== fileId);
-      if (activeFileId === fileId) {
-        setActiveFileId(next.length > 0 ? next[next.length - 1]! : null);
+    const performClose = () => {
+      setOpenFileIds((prev) => {
+        const next = prev.filter((id) => id !== fileId);
+        if (activeFileId === fileId) {
+          setActiveFileId(next.length > 0 ? next[next.length - 1]! : null);
+        }
+        return next;
+      });
+      void fileMediator.closeFile(fileId, { discardDirty: true });
+    };
+
+    const file = filesRegistry.getFile(fileId);
+    if (!file) {
+      return;
+    }
+    void (async () => {
+      const shouldClose = await confirmCloseDirtyFile(file, (options) =>
+        window.appShell.showDialogMessage(options)
+      );
+      if (!shouldClose) {
+        return;
       }
-      return next;
-    });
-    void fileMediator.closeFile(fileId, { discardDirty: true });
+      performClose();
+    })();
+  };
+
+  const selectFile = (fileId: string) => {
+    setActiveFileId(fileId);
+    workspaceService.setActiveFileId(fileId);
+    fileMediator.setActiveFileId(fileId);
   };
 
   useEffect(() => {
@@ -396,7 +428,7 @@ export function ShellApp({
               activeFileId={activeFileId}
               editorsById={editorsById}
               tabsRef={tabsRef}
-              onSelectFile={setActiveFileId}
+              onSelectFile={selectFile}
               onCloseFile={closeFile}
               tooltipContributions={tooltipContributions}
             />
