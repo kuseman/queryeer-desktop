@@ -9,6 +9,8 @@ export type FileEntityMetadata = Record<string, unknown>;
 
 export type FileDiskState = "inSync" | "modifiedOnDisk" | "deletedOnDisk";
 
+import "../shell/Api";
+
 export type FileEntity = {
   fileId: string;
   version: number;

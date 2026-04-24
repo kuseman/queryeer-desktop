@@ -19,6 +19,7 @@ export type PersistedLayoutSnapshot = {
     secondary?: number;
   };
   sidebarPanelStates?: Record<string, boolean>;
+  sidebarPanelHeights?: Record<string, number>;
 };
 
 export type WorkspaceSnapshot = {

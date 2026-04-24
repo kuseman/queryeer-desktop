@@ -1,6 +1,6 @@
 import { app, BrowserWindow, webContents, nativeImage } from "electron";
 import { join } from "node:path";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, readdir, stat } from "node:fs/promises";
 import { ipcMain } from "electron";
 import { fileUriToPath } from "../contracts/files/Resolvers";
 import { BackendGateway } from "./backend/backend-gateway";
@@ -144,6 +144,49 @@ app.whenReady().then(() => {
       return { success: true };
     } catch {
       return { success: false };
+    }
+  });
+  ipcMain.handle("fs:read-dir", async (_event, { uri }: { uri: string }) => {
+    try {
+      const dirPath = fileUriToPath(uri);
+      const entries = await readdir(dirPath, { withFileTypes: true });
+      const items = await Promise.all(
+        entries.map(async (entry) => {
+          const fullPath = join(dirPath, entry.name);
+          try {
+            const stats = await stat(fullPath);
+            return {
+              name: entry.name,
+              isDirectory: entry.isDirectory(),
+              isFile: entry.isFile(),
+              size: stats.size,
+              modified: stats.mtime.toISOString()
+            };
+          } catch {
+            return null;
+          }
+        })
+      );
+      return { success: true, items: items.filter(Boolean) };
+    } catch {
+      return { success: false, items: [] };
+    }
+  });
+  ipcMain.handle("fs:get-stat", async (_event, { uri }: { uri: string }) => {
+    try {
+      const filePath = fileUriToPath(uri);
+      const stats = await stat(filePath);
+      return {
+        success: true,
+        stat: {
+          isDirectory: stats.isDirectory(),
+          isFile: stats.isFile(),
+          size: stats.size,
+          modified: stats.mtime.toISOString()
+        }
+      };
+    } catch {
+      return { success: false, stat: null };
     }
   });
   void backendGateway.start();

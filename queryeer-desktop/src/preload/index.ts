@@ -36,6 +36,11 @@ type DialogShowOpenOptions = {
   multiSelections?: boolean;
 };
 
+type DialogShowFolderOptions = {
+  title?: string;
+  defaultPath?: string;
+};
+
 type DialogShowSaveOptions = {
   title?: string;
   defaultPath?: string;
@@ -70,6 +75,18 @@ type AppShellApi = {
   readLatestWorkspaceBackup: (params: {
     fileId: string;
   }) => Promise<{ text: string; savedAt: string; backupUri: string } | null>;
+  readDir: (params: {
+    uri: string;
+  }) => Promise<{
+    success: boolean;
+    items: { name: string; isDirectory: boolean; isFile: boolean; size: number; modified: string }[];
+  }>;
+  getStat: (params: {
+    uri: string;
+  }) => Promise<{
+    success: boolean;
+    stat: { isDirectory: boolean; isFile: boolean; size: number; modified: string } | null;
+  }>;
   watchFile: (params: {
     uri: string;
     options: FileWatcherWatchOptions;
@@ -82,6 +99,7 @@ type AppShellApi = {
   onMenuExecuteCommand: (listener: (commandId: string) => void) => () => void;
   showDialogMessage: (options: DialogShowMessageOptions) => Promise<{ action: string }>;
   showDialogOpen: (options: DialogShowOpenOptions) => Promise<{ canceled: boolean; filePaths: string[] }>;
+  showOpenFolder: (options?: DialogShowFolderOptions) => Promise<{ canceled: boolean; folderPath?: string }>;
   showDialogSave: (options: DialogShowSaveOptions) => Promise<{ canceled: boolean; filePath?: string }>;
   buildMenu: (menuItems: unknown[], commands: unknown[]) => Promise<{ success: boolean }>;
   windowMinimize: () => void;
@@ -148,6 +166,12 @@ const appShellApi: AppShellApi = {
   readLatestWorkspaceBackup: async (params) => {
     return ipcRenderer.invoke("workspace:read-backup", params);
   },
+  readDir: async (params) => {
+    return ipcRenderer.invoke("fs:read-dir", params);
+  },
+  getStat: async (params) => {
+    return ipcRenderer.invoke("fs:get-stat", params);
+  },
   watchFile: async (params) => {
     return ipcRenderer.invoke("file-watcher:watch", params);
   },
@@ -185,6 +209,9 @@ const appShellApi: AppShellApi = {
   },
   showDialogOpen: async (options) => {
     return ipcRenderer.invoke("dialog:show-open", options);
+  },
+  showOpenFolder: async (options) => {
+    return ipcRenderer.invoke("dialog:show-open-folder", options);
   },
   showDialogSave: async (options) => {
     return ipcRenderer.invoke("dialog:show-save", options);
