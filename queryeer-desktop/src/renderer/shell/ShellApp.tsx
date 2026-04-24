@@ -1,119 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExtensionSnapshot } from "../../core/plugin-runtime/ExtensionRegistry";
-import type { BackendGatewayStatus } from "../../contracts/backend";
 import type { LayoutZone, LayoutEditorContribution } from "../../contracts/extensions/LayoutExtension";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { FileMediator } from "../../contracts/files/FileMediator";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
-import type { WorkspaceSnapshot } from "../../contracts/workspace/WorkspaceSnapshot";
-import type { ExternalFrontendPluginManifest } from "../../contracts/plugin/ExternalFrontendPluginManifest";
 import type { CommandExecutionResult } from "../../contracts/plugin/Plugin";
-import type { UserKeybindingsDocument } from "../../contracts/commands/Keybindings";
+import "../../contracts/shell/Api";
 import { CoreMenuBar } from "../../plugins/core.menu/MenuBar";
 import type { RendererWorkspaceService } from "../workspace/workspace-service";
 import { Toolbar, StatusBar, Sidebar, SidebarDivider, EditorTabs, EditorPane } from "../../plugins/core.layout";
 import { confirmCloseDirtyFile } from "./close-file-guard";
-
-declare global {
-  interface Window {
-    appShell: {
-      platform: string;
-      version: string;
-      readFile: (uri: string) => Promise<{ success: boolean; content: string }>;
-      writeFile: (uri: string, content: string) => Promise<{ success: boolean }>;
-      getBackendStatus: () => Promise<BackendGatewayStatus>;
-      getExternalFrontendPlugins: () => Promise<ExternalFrontendPluginManifest[]>;
-      executeBackendQuery: (params: {
-        queryExecutionId: string;
-        engineId: string;
-        text: string;
-      }) => Promise<{ accepted: boolean; queryExecutionId: string }>;
-      cancelBackendQuery: (params: {
-        queryExecutionId: string;
-        reason?: string;
-      }) => Promise<{ accepted: boolean; queryExecutionId: string }>;
-      getWorkspace: () => Promise<WorkspaceSnapshot>;
-      saveWorkspace: (snapshot: WorkspaceSnapshot) => Promise<{ accepted: boolean }>;
-      getUserKeybindings: () => Promise<UserKeybindingsDocument>;
-      saveUserKeybindings: (document: UserKeybindingsDocument) => Promise<{ accepted: boolean }>;
-      saveWorkspaceBackup: (params: {
-        fileId: string;
-        text: string;
-      }) => Promise<{ backupUri: string }>;
-      purgeWorkspaceBackups: (params: { fileId: string }) => Promise<{ purged: number }>;
-      listWorkspaceBackups: (params: {
-        fileId: string;
-      }) => Promise<{ backupPaths: string[] }>;
-      readLatestWorkspaceBackup: (params: {
-        fileId: string;
-      }) => Promise<{ text: string; savedAt: string; backupUri: string } | null>;
-      showDialogMessage: (options: {
-        title: string;
-        message: string;
-        severity?: "info" | "warning" | "error";
-        detail?: string;
-        options?: { label: string; value: string }[];
-      }) => Promise<{ action: string }>;
-      showDialogOpen: (options: {
-        title?: string;
-        defaultPath?: string;
-        filters?: { name: string; extensions: string[] }[];
-        multiSelections?: boolean;
-      }) => Promise<{ canceled: boolean; filePaths: string[] }>;
-      showDialogSave: (options: {
-        title?: string;
-        defaultPath?: string;
-        filters?: { name: string; extensions: string[] }[];
-      }) => Promise<{ canceled: boolean; filePath?: string }>;
-      openBackendFile: (params: {
-        fileId: string;
-        uri: string;
-        mimeType: string;
-        engineBinding?: { engineId: string; connectionId?: string };
-        initialText?: string;
-      }) => Promise<{ fileId: string; backendVersion: number }>;
-      closeBackendFile: (params: {
-        fileId: string;
-      }) => Promise<{ fileId: string; accepted: boolean }>;
-      bindBackendFile: (params: {
-        fileId: string;
-        engineId: string;
-        connectionId?: string;
-      }) => Promise<{ fileId: string; engineId: string; backendVersion: number }>;
-      notifyBackendFileChange: (params: {
-        fileId: string;
-        version: number;
-        text: string;
-      }) => Promise<void>;
-      watchFile: (params: {
-        uri: string;
-        options: { recursive?: boolean };
-      }) => Promise<{ subscriptionId: string }>;
-      unwatchFile: (params: { subscriptionId: string }) => Promise<{ removed: boolean }>;
-      muteFileWatcherPath: (params: {
-        uri: string;
-        durationMs: number;
-      }) => Promise<{ muted: boolean }>;
-      onFileWatcherEvent: (
-        listener: (params: {
-          subscriptionId: string;
-          event: {
-            type: "add" | "modify" | "delete" | "rename";
-            uri: string;
-            timestamp: string;
-          };
-        }) => void
-      ) => () => void;
-      buildMenu: (menuItems: unknown[], commands: unknown[]) => Promise<{ success: boolean }>;
-      windowMinimize: () => void;
-      windowMaximize: () => void;
-      windowClose: () => void;
-      isWindowMaximized: () => Promise<boolean>;
-      onWindowStateChanged: (listener: (state: { maximized: boolean }) => void) => () => void;
-      onMenuExecuteCommand: (listener: (commandId: string) => void) => () => void;
-    };
-  }
-}
 
 type ShellAppProps = {
   extensions: ExtensionSnapshot;
@@ -169,6 +65,11 @@ export function ShellApp({
   const [panelStates, setPanelStates] = useState<Record<string, boolean>>(
     () =>
       workspaceService.restoredLayout()?.sidebarPanelStates ??
+      {}
+  );
+  const [panelHeights, setPanelHeights] = useState<Record<string, number>>(
+    () =>
+      workspaceService.restoredLayout()?.sidebarPanelHeights ??
       {}
   );
   const [files, setFiles] = useState<FileEntity[]>(() => filesRegistry.listFiles());
@@ -338,9 +239,10 @@ export function ShellApp({
         primary: primarySidebarWidth,
         secondary: secondarySidebarWidth
       },
-      sidebarPanelStates: panelStates
+      sidebarPanelStates: panelStates,
+      sidebarPanelHeights: panelHeights
     });
-  }, [visibleZones, primarySidebarWidth, secondarySidebarWidth, panelStates, workspaceService]);
+  }, [visibleZones, primarySidebarWidth, secondarySidebarWidth, panelStates, panelHeights, workspaceService]);
 
   useEffect(() => {
     return filesRegistry.subscribe((next) => {
@@ -417,9 +319,14 @@ export function ShellApp({
             zone="primarySidebar"
             width={primarySidebarWidth}
             panelStates={panelStates}
+            panelHeights={panelHeights}
             onPanelStateChange={(viewId, isOpen) =>
               setPanelStates((prev) => ({ ...prev, [viewId]: isOpen }))
             }
+            onPanelResize={(viewId, height) =>
+              setPanelHeights((prev) => ({ ...prev, [viewId]: height }))
+            }
+            onExecuteCommand={executeCommand}
           />
         )}
 
@@ -465,9 +372,14 @@ export function ShellApp({
             zone="secondarySidebar"
             width={secondarySidebarWidth}
             panelStates={panelStates}
+            panelHeights={panelHeights}
             onPanelStateChange={(viewId, isOpen) =>
               setPanelStates((prev) => ({ ...prev, [viewId]: isOpen }))
             }
+            onPanelResize={(viewId, height) =>
+              setPanelHeights((prev) => ({ ...prev, [viewId]: height }))
+            }
+            onExecuteCommand={executeCommand}
           />
         )}
       </main>

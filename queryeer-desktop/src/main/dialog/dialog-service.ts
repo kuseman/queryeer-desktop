@@ -23,6 +23,11 @@ type DialogSaveOptions = {
   filters?: { name: string; extensions: string[] }[];
 };
 
+type DialogOpenFolderOptions = {
+  title?: string;
+  defaultPath?: string;
+};
+
 export class DialogMainService {
   public wireIpc(): void {
     ipcMain.handle("dialog:show-message", async (event, options: DialogMessageOptions) => {
@@ -44,7 +49,7 @@ export class DialogMainService {
       return { action: selectedOption?.value ?? "" };
     });
 
-    ipcMain.handle("dialog:show-open", async (event, options: DialogOpenOptions) => {
+ipcMain.handle("dialog:show-open", async (event, options: DialogOpenOptions) => {
       const window = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow();
       if (!window) {
         return { canceled: true, filePaths: [] };
@@ -60,6 +65,24 @@ export class DialogMainService {
       return {
         canceled: result.canceled,
         filePaths: result.filePaths
+      };
+    });
+
+    ipcMain.handle("dialog:show-open-folder", async (event, options: DialogOpenFolderOptions) => {
+      const window = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow();
+      if (!window) {
+        return { canceled: true, folderPath: undefined };
+      }
+
+      const result = await dialog.showOpenDialog(window, {
+        title: options.title ?? "Select Folder",
+        defaultPath: options.defaultPath,
+        properties: ["openDirectory"]
+      });
+
+      return {
+        canceled: result.canceled,
+        folderPath: result.filePaths[0]
       };
     });
 

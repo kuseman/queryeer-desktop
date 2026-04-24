@@ -23,6 +23,10 @@ export type DialogExtension = {
     filters?: { name: string; extensions: string[] }[];
     multiSelections?: boolean;
   }) => Promise<{ canceled: boolean; filePaths: string[] }>;
+  showOpenFolder: (options?: {
+    title?: string;
+    defaultPath?: string;
+  }) => Promise<{ canceled: boolean; folderPath?: string }>;
   showSaveDialog: (options: {
     title?: string;
     defaultPath?: string;

@@ -85,6 +85,7 @@ function createContext(file?: FileEntity) {
     dialog: {
       showMessage,
       showOpenDialog: vi.fn(),
+      showOpenFolder: vi.fn(),
       showSaveDialog: vi.fn()
     },
     tooltip: { registerTooltipSection: vi.fn() }

@@ -17,6 +17,10 @@ const getAppShell = () => {
         filters?: { name: string; extensions: string[] }[];
         multiSelections?: boolean;
       }) => Promise<{ canceled: boolean; filePaths: string[] }>;
+      showOpenFolder: (options?: {
+        title?: string;
+        defaultPath?: string;
+      }) => Promise<{ canceled: boolean; folderPath?: string }>;
       showDialogSave: (options: {
         title?: string;
         defaultPath?: string;
@@ -59,6 +63,16 @@ export const coreDialogPlugin: Plugin = {
         defaultPath: options.defaultPath,
         filters: options.filters,
         multiSelections: options.multiSelections
+      });
+    };
+
+    context.dialog.showOpenFolder = async (options) => {
+      if (!appShell) {
+        return { canceled: true, folderPath: undefined };
+      }
+      return appShell.showOpenFolder({
+        title: options?.title,
+        defaultPath: options?.defaultPath
       });
     };
 

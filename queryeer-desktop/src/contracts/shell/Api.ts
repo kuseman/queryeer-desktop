@@ -1,0 +1,58 @@
+import type { BackendGatewayStatus } from "../backend";
+import type { WorkspaceSnapshot } from "../workspace/WorkspaceSnapshot";
+import type { UserKeybindingsDocument } from "../commands/Keybindings";
+import type { ExternalFrontendPluginManifest } from "../plugin/ExternalFrontendPluginManifest";
+import type { FileWatcherEvent } from "../files/FileWatcher";
+
+export interface ShellApi {
+  platform: string;
+  version: string;
+  readFile: (uri: string) => Promise<{ success: boolean; content: string }>;
+  writeFile: (uri: string, content: string) => Promise<{ success: boolean }>;
+  getBackendStatus: () => Promise<BackendGatewayStatus>;
+  getExternalFrontendPlugins: () => Promise<ExternalFrontendPluginManifest[]>;
+  executeBackendQuery: (params: {
+    queryExecutionId: string;
+    engineId: string;
+    text: string;
+  }) => Promise<{ accepted: boolean; queryExecutionId: string }>;
+  cancelBackendQuery: (params: {
+    queryExecutionId: string;
+    reason?: string;
+  }) => Promise<{ accepted: boolean; queryExecutionId: string }>;
+  getWorkspace: () => Promise<WorkspaceSnapshot>;
+  saveWorkspace: (snapshot: WorkspaceSnapshot) => Promise<{ accepted: boolean }>;
+  getUserKeybindings: () => Promise<UserKeybindingsDocument>;
+  saveUserKeybindings: (document: UserKeybindingsDocument) => Promise<{ accepted: boolean }>;
+  saveWorkspaceBackup: (params: { fileId: string; text: string }) => Promise<{ backupUri: string }>;
+  purgeWorkspaceBackups: (params: { fileId: string }) => Promise<{ purged: number }>;
+  listWorkspaceBackups: (params: { fileId: string }) => Promise<{ backupPaths: string[] }>;
+  readLatestWorkspaceBackup: (params: { fileId: string }) => Promise<{ text: string; savedAt: string; backupUri: string } | null>;
+  readDir: (params: { uri: string }) => Promise<{ success: boolean; items: { name: string; isDirectory: boolean; isFile: boolean; size: number; modified: string }[] }>;
+  getStat: (params: { uri: string }) => Promise<{ success: boolean; stat: { isDirectory: boolean; isFile: boolean; size: number; modified: string } | null }>;
+  showDialogMessage: (options: { title: string; message: string; severity?: "info" | "warning" | "error"; detail?: string; options?: { label: string; value: string }[] }) => Promise<{ action: string }>;
+  showDialogOpen: (options?: { title?: string; defaultPath?: string; filters?: { name: string; extensions: string[] }[]; multiSelections?: boolean }) => Promise<{ canceled: boolean; filePaths: string[] }>;
+  showOpenFolder: (options?: { title?: string; defaultPath?: string }) => Promise<{ canceled: boolean; folderPath?: string }>;
+  showDialogSave: (options?: { title?: string; defaultPath?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<{ canceled: boolean; filePath?: string }>;
+  openBackendFile: (params: { fileId: string; uri: string; mimeType: string; engineBinding?: { engineId: string; connectionId?: string }; initialText?: string }) => Promise<{ fileId: string; backendVersion: number }>;
+  closeBackendFile: (params: { fileId: string }) => Promise<{ fileId: string; accepted: boolean }>;
+  bindBackendFile: (params: { fileId: string; engineId: string; connectionId?: string }) => Promise<{ fileId: string; engineId: string; backendVersion: number }>;
+  notifyBackendFileChange: (params: { fileId: string; version: number; text: string }) => Promise<void>;
+  watchFile: (params: { uri: string; options: { recursive?: boolean } }) => Promise<{ subscriptionId: string }>;
+  unwatchFile: (params: { subscriptionId: string }) => Promise<{ removed: boolean }>;
+  muteFileWatcherPath: (params: { uri: string; durationMs: number }) => Promise<{ muted: boolean }>;
+  onFileWatcherEvent: (listener: (params: { subscriptionId: string; event: FileWatcherEvent }) => void) => () => void;
+  onMenuExecuteCommand: (listener: (commandId: string) => void) => () => void;
+  buildMenu: (menuItems: unknown[], commands: unknown[]) => Promise<{ success: boolean }>;
+  windowMinimize: () => void;
+  windowMaximize: () => void;
+  windowClose: () => void;
+  isWindowMaximized: () => Promise<boolean>;
+  onWindowStateChanged: (listener: (state: { maximized: boolean }) => void) => () => void;
+}
+
+declare global {
+  interface Window {
+    appShell: ShellApi;
+  }
+}

@@ -160,6 +160,9 @@ export class ExtensionRegistry {
       showOpenDialog: async () => {
         return { canceled: true, filePaths: [] };
       },
+      showOpenFolder: async () => {
+        return { canceled: true, folderPath: undefined };
+      },
       showSaveDialog: async () => {
         return { canceled: true, filePath: undefined };
       }

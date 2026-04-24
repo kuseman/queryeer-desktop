@@ -22,12 +22,11 @@ export type LayoutToolbarActionContribution = {
   icon?: string;
 };
 
-export type LayoutStatusItemContribution = {
+export type LayoutPanelAction = {
   id: string;
-  alignment?: "left" | "right";
-  order?: number;
-  commandId?: string;
-  render: () => ReactNode;
+  icon: string;
+  title?: string;
+  commandId: string;
 };
 
 export type LayoutViewContribution = {
@@ -38,6 +37,18 @@ export type LayoutViewContribution = {
   canMoveZones?: boolean;
   canCollapse?: boolean;
   isOpen?: boolean;
+  flex?: number;
+  minHeight?: number;
+  maxHeight?: number;
+  panelActions?: LayoutPanelAction[];
+  render: () => ReactNode;
+};
+
+export type LayoutStatusItemContribution = {
+  id: string;
+  alignment?: "left" | "right";
+  order?: number;
+  commandId?: string;
   render: () => ReactNode;
 };
 

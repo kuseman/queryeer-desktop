@@ -1,0 +1,9 @@
+{
+  "id": "core.explorer",
+  "name": "Core Explorer",
+  "version": "0.1.0",
+  "kind": "core",
+  "providesCapabilities": ["explorer.view"],
+  "description": "File explorer sidebar for browsing and opening files from added folders",
+  "modulePath": "./core.explorer/module"
+}

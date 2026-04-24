@@ -222,7 +222,7 @@ export class FileRegistry {
       return undefined;
     }
 
-    let score = editor.priority ?? 0;
+    let score = 0;
     let hasMatchSignal = false;
 
     const mimeScore = this.scoreMimeMatch(editor.supportedMimeTypes, context.mimeType);
