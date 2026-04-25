@@ -99,6 +99,78 @@ app.whenReady().then(() => {
   ipcMain.on("window:close", () => mainWindow?.close());
   ipcMain.handle("window:is-maximized", () => mainWindow?.isMaximized() ?? false);
   ipcMain.handle("app:is-dev", () => isDev);
+  ipcMain.handle("window:zoom-in", () => {
+    const window = BrowserWindow.getFocusedWindow();
+    if (window) {
+      const wc = window.webContents;
+      wc.setZoomLevel(wc.getZoomLevel() + 1);
+    }
+  });
+  ipcMain.handle("window:zoom-out", () => {
+    const window = BrowserWindow.getFocusedWindow();
+    if (window) {
+      const wc = window.webContents;
+      wc.setZoomLevel(wc.getZoomLevel() - 1);
+    }
+  });
+  ipcMain.handle("window:zoom-reset", () => {
+    const window = BrowserWindow.getFocusedWindow();
+    if (window) {
+      window.webContents.setZoomLevel(0);
+    }
+  });
+  ipcMain.handle("window:undo", () => {
+    const window = BrowserWindow.getFocusedWindow();
+    window?.webContents.undo();
+  });
+  ipcMain.handle("window:redo", () => {
+    const window = BrowserWindow.getFocusedWindow();
+    window?.webContents.redo();
+  });
+  ipcMain.handle("window:cut", () => {
+    const window = BrowserWindow.getFocusedWindow();
+    window?.webContents.cut();
+  });
+  ipcMain.handle("window:copy", () => {
+    const window = BrowserWindow.getFocusedWindow();
+    window?.webContents.copy();
+  });
+  ipcMain.handle("window:paste", () => {
+    const window = BrowserWindow.getFocusedWindow();
+    window?.webContents.paste();
+  });
+  ipcMain.handle("window:select-all", () => {
+    const window = BrowserWindow.getFocusedWindow();
+    window?.webContents.selectAll();
+  });
+  ipcMain.handle("window:reload", () => {
+    const window = BrowserWindow.getFocusedWindow();
+    if (window) {
+      window.reload();
+    }
+  });
+  ipcMain.handle("window:force-reload", () => {
+    const window = BrowserWindow.getFocusedWindow();
+    if (window) {
+      window.webContents.reloadIgnoringCache();
+    }
+  });
+  ipcMain.handle("window:toggle-full-screen", () => {
+    const window = BrowserWindow.getFocusedWindow();
+    if (window) {
+      window.setFullScreen(!window.isFullScreen());
+    }
+  });
+  ipcMain.handle("window:toggle-dev-tools", () => {
+    const window = BrowserWindow.getFocusedWindow();
+    if (window) {
+      if (window.webContents.isDevToolsOpened()) {
+        window.webContents.closeDevTools();
+      } else {
+        window.webContents.openDevTools({ mode: "detach" });
+      }
+    }
+  });
 
   const sendWindowState = () => {
     if (!mainWindow) {

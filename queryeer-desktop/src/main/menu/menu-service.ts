@@ -60,6 +60,10 @@ export class MenuService {
   }
 
   private createMenuItem(contribution: MenuItemContribution): MenuItem | null {
+    if (contribution.type === "separator") {
+      return new MenuItem({ type: "separator" });
+    }
+
     const children = this.menuItems
       .filter((item) => item.parentId === contribution.id)
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -91,7 +95,7 @@ export class MenuService {
     if (contribution.role) {
       return new MenuItem({
         label: contribution.label,
-        role: contribution.role,
+        role: contribution.role as Electron.MenuItemConstructorOptions["role"],
         accelerator: contribution.accelerator
       });
     }

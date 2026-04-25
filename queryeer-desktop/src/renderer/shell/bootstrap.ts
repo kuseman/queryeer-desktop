@@ -146,15 +146,35 @@ export async function bootstrapShell() {
     void host.executeCommand(commandId);
   });
 
+  const handleZoomKeyboard = (event: KeyboardEvent) => {
+    const isCtrlOrMeta = event.ctrlKey || event.metaKey;
+    if (!isCtrlOrMeta) {
+      return;
+    }
+    if (event.key === "=" || event.key === "+") {
+      event.preventDefault();
+      void window.appShell.zoomIn();
+    } else if (event.key === "-" || event.key === "_") {
+      event.preventDefault();
+      void window.appShell.zoomOut();
+    } else if (event.key === "0") {
+      event.preventDefault();
+      void window.appShell.zoomReset();
+    }
+  };
+  document.addEventListener("keydown", handleZoomKeyboard);
+
   const extensions = host.getExtensions();
   const menuItems = extensions.menu.items.map((item) => ({
     id: item.id,
     label: item.label,
+    type: item.type,
     order: item.order,
     commandId: item.commandId,
     parentId: item.parentId,
     icon: item.icon,
-    accelerator: item.accelerator
+    accelerator: item.accelerator,
+    role: item.role
   }));
 
   const fallbackMenuAccelerators = new Map<string, string>();

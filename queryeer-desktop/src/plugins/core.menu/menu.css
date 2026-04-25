@@ -161,6 +161,15 @@
   position: relative;
 }
 
+.shell-titlebar-dropdown-entry-separator {
+  padding: 4px 6px;
+}
+
+.shell-titlebar-dropdown-separator {
+  height: 1px;
+  background: var(--border);
+}
+
 .shell-titlebar-dropdown-item {
   display: flex;
   align-items: center;

@@ -381,6 +381,42 @@ export class MonacoTextEditorApi extends TextEditorApi {
     this.editor?.updateOptions(options as monacoType.editor.IStandaloneEditorConstructionOptions);
   }
 
+  undo(): void {
+    if (!this.editor) return;
+    this.editor.focus();
+    this.editor.trigger("command", "undo", null);
+  }
+
+  redo(): void {
+    if (!this.editor) return;
+    this.editor.focus();
+    this.editor.trigger("command", "redo", null);
+  }
+
+  cut(): void {
+    if (!this.editor) return;
+    this.editor.focus();
+    this.editor.trigger("command", "editor.action.clipboardCutAction", null);
+  }
+
+  copy(): void {
+    if (!this.editor) return;
+    this.editor.focus();
+    this.editor.trigger("command", "editor.action.clipboardCopyAction", null);
+  }
+
+  paste(): void {
+    if (!this.editor) return;
+    this.editor.focus();
+    this.editor.trigger("command", "editor.action.clipboardPasteAction", null);
+  }
+
+  selectAll(): void {
+    if (!this.editor) return;
+    this.editor.focus();
+    this.editor.trigger("command", "editor.action.selectAll", null);
+  }
+
   pushUndoStop(): boolean {
     if (!this.editor) return false;
     return this.editor.pushUndoStop();
@@ -467,24 +503,36 @@ export class MonacoTextEditorApi extends TextEditorApi {
 
   onDidFocusEditorText(callback: () => void): Disposable {
     if (!this.editor) return { dispose: () => {} };
+    if (typeof this.editor.onDidFocusEditorText !== "function") {
+      return { dispose: () => {} };
+    }
     const d = this.editor.onDidFocusEditorText(callback);
     return { dispose: () => d.dispose() };
   }
 
   onDidBlurEditorText(callback: () => void): Disposable {
     if (!this.editor) return { dispose: () => {} };
+    if (typeof this.editor.onDidBlurEditorText !== "function") {
+      return { dispose: () => {} };
+    }
     const d = this.editor.onDidBlurEditorText(callback);
     return { dispose: () => d.dispose() };
   }
 
   onDidFocusEditorWidget(callback: () => void): Disposable {
     if (!this.editor) return { dispose: () => {} };
+    if (typeof this.editor.onDidFocusEditorWidget !== "function") {
+      return { dispose: () => {} };
+    }
     const d = this.editor.onDidFocusEditorWidget(callback);
     return { dispose: () => d.dispose() };
   }
 
   onDidBlurEditorWidget(callback: () => void): Disposable {
     if (!this.editor) return { dispose: () => {} };
+    if (typeof this.editor.onDidBlurEditorWidget !== "function") {
+      return { dispose: () => {} };
+    }
     const d = this.editor.onDidBlurEditorWidget(callback);
     return { dispose: () => d.dispose() };
   }

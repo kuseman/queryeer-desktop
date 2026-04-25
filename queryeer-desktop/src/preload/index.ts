@@ -113,6 +113,19 @@ type AppShellApi = {
   isWindowMaximized: () => Promise<boolean>;
   isDev: () => Promise<boolean>;
   onWindowStateChanged: (listener: (state: { maximized: boolean }) => void) => () => void;
+  zoomIn: () => Promise<void>;
+  zoomOut: () => Promise<void>;
+  zoomReset: () => Promise<void>;
+  undo: () => Promise<void>;
+  redo: () => Promise<void>;
+  cut: () => Promise<void>;
+  copy: () => Promise<void>;
+  paste: () => Promise<void>;
+  selectAll: () => Promise<void>;
+  reloadWindow: () => Promise<void>;
+  forceReloadWindow: () => Promise<void>;
+  toggleFullScreen: () => Promise<void>;
+  toggleDevTools: () => Promise<void>;
 };
 
 const appShellApi: AppShellApi = {
@@ -249,6 +262,45 @@ const appShellApi: AppShellApi = {
   },
   isDev: async () => {
     return ipcRenderer.invoke("app:is-dev");
+  },
+  zoomIn: async () => {
+    return ipcRenderer.invoke("window:zoom-in");
+  },
+  zoomOut: async () => {
+    return ipcRenderer.invoke("window:zoom-out");
+  },
+  zoomReset: async () => {
+    return ipcRenderer.invoke("window:zoom-reset");
+  },
+  undo: async () => {
+    return ipcRenderer.invoke("window:undo");
+  },
+  redo: async () => {
+    return ipcRenderer.invoke("window:redo");
+  },
+  cut: async () => {
+    return ipcRenderer.invoke("window:cut");
+  },
+  copy: async () => {
+    return ipcRenderer.invoke("window:copy");
+  },
+  paste: async () => {
+    return ipcRenderer.invoke("window:paste");
+  },
+  selectAll: async () => {
+    return ipcRenderer.invoke("window:select-all");
+  },
+  reloadWindow: async () => {
+    return ipcRenderer.invoke("window:reload");
+  },
+  forceReloadWindow: async () => {
+    return ipcRenderer.invoke("window:force-reload");
+  },
+  toggleFullScreen: async () => {
+    return ipcRenderer.invoke("window:toggle-full-screen");
+  },
+  toggleDevTools: async () => {
+    return ipcRenderer.invoke("window:toggle-dev-tools");
   },
   onWindowStateChanged: (listener) => {
     const channel = "window:state-changed";
