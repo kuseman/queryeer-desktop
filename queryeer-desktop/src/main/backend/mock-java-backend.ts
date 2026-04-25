@@ -12,7 +12,7 @@ import {
   type QueryExecuteResult,
   type PingResult,
   type RuntimeStatusResult
-} from "../../contracts/backend";
+} from "../../contracts/backend/index.js";
 
 type EnvelopeSink = (envelope: BackendEnvelope) => void;
 

@@ -7,7 +7,7 @@ import java.util.Map;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
 
-final class InMemoryQueryEngineRegistry implements QueryEngineRegistry
+public final class InMemoryQueryEngineRegistry implements QueryEngineRegistry
 {
     private final Map<String, QueryEngineProvider> providersById = new LinkedHashMap<>();
 

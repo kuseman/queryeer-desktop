@@ -1,5 +1,5 @@
 import { Menu, MenuItem, app, ipcMain } from "electron";
-import type { MenuItemContribution } from "../../contracts/extensions/MenuExtension";
+import type { MenuItemContribution } from "../../contracts/extensions/MenuExtension.js";
 
 export type CommandInfo = {
   id: string;

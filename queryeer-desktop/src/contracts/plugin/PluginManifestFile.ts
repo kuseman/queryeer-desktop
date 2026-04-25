@@ -1,5 +1,5 @@
-import type { PluginManifest } from "./PluginManifest";
-import type { ExternalFrontendPluginManifest } from "./ExternalFrontendPluginManifest";
+import type { PluginManifest } from "./PluginManifest.js";
+import type { ExternalFrontendPluginManifest } from "./ExternalFrontendPluginManifest.js";
 
 export type PluginManifestFile = PluginManifest & {
   modulePath: string;

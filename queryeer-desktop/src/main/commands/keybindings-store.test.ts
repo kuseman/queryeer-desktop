@@ -5,8 +5,8 @@ import { join } from "node:path";
 import {
   emptyUserKeybindingsDocument,
   KEYBINDINGS_SCHEMA_VERSION
-} from "../../contracts/commands/Keybindings";
-import { KeybindingsStore } from "./keybindings-store";
+} from "../../contracts/commands/Keybindings.js";
+import { KeybindingsStore } from "./keybindings-store.js";
 
 let workDir: string;
 

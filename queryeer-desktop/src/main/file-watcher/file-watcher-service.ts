@@ -4,7 +4,7 @@ import type {
   FileWatcherEvent,
   FileWatcherEventType,
   FileWatcherWatchOptions
-} from "../../contracts/files/FileWatcher";
+} from "../../contracts/files/FileWatcher.js";
 
 export type FileWatcherSubscriptionRecord = {
   subscriptionId: string;

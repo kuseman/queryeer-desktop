@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { redactErrorMessage, redactLogMessage } from "./backend-log-redaction";
+import { redactErrorMessage, redactLogMessage } from "./backend-log-redaction.js";
 
 describe("backend-log-redaction", () => {
   it("redacts sensitive key=value pairs in plain text", () => {

@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WORKSPACE_SCHEMA_VERSION } from "../../contracts/workspace/WorkspaceSnapshot";
-import { WorkspaceStore } from "./workspace-store";
+import { WORKSPACE_SCHEMA_VERSION } from "../../contracts/workspace/WorkspaceSnapshot.js";
+import { WorkspaceStore } from "./workspace-store.js";
 
 let workDir: string;
 

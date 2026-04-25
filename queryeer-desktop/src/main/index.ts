@@ -2,22 +2,22 @@ import { app, BrowserWindow, webContents, nativeImage } from "electron";
 import { join } from "node:path";
 import { readFile, writeFile, readdir, stat } from "node:fs/promises";
 import { ipcMain } from "electron";
-import { fileUriToPath } from "../contracts/files/Resolvers";
-import { BackendGateway } from "./backend/backend-gateway";
-import { chokidarWatcherFactory } from "./file-watcher/chokidar-watcher-factory";
-import { FileWatcherMainService } from "./file-watcher/file-watcher-service";
-import { DialogMainService } from "./dialog/dialog-service";
-import { MenuService } from "./menu/menu-service";
-import { discoverExternalFrontendPlugins } from "./plugins/frontend-plugin-discovery";
+import { fileUriToPath } from "../contracts/files/Resolvers.js";
+import { BackendGateway } from "./backend/backend-gateway.js";
+import { chokidarWatcherFactory } from "./file-watcher/chokidar-watcher-factory.js";
+import { FileWatcherMainService } from "./file-watcher/file-watcher-service.js";
+import { DialogMainService } from "./dialog/dialog-service.js";
+import { MenuService } from "./menu/menu-service.js";
+import { discoverExternalFrontendPlugins } from "./plugins/frontend-plugin-discovery.js";
 import {
   defaultKeybindingsFilePath,
   KeybindingsStore
-} from "./commands/keybindings-store";
-import { BackupStore, defaultBackupsDir } from "./workspace/backup-store";
+} from "./commands/keybindings-store.js";
+import { BackupStore, defaultBackupsDir } from "./workspace/backup-store.js";
 import {
   defaultWorkspaceFilePath,
   WorkspaceStore
-} from "./workspace/workspace-store";
+} from "./workspace/workspace-store.js";
 
 const isDev = !app.isPackaged;
 const backendGateway = new BackendGateway();

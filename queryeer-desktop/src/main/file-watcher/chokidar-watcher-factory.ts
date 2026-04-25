@@ -1,5 +1,5 @@
 import { watch as chokidarWatch } from "chokidar";
-import type { WatcherFactory } from "./file-watcher-service";
+import type { WatcherFactory } from "./file-watcher-service.js";
 
 export const chokidarWatcherFactory: WatcherFactory = ({
   path,

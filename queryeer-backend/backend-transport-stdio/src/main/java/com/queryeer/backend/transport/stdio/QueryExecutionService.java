@@ -41,7 +41,7 @@ public final class QueryExecutionService
         QueryEngineProvider provider = engineRegistry.getProvider(params.engineId());
         if (provider == null)
         {
-            notificationPublisher.publish("query.failed",
+            notificationPublisher.publishForQuery(params.queryExecutionId(), "query.failed",
                     new QueryFailedNotification(params.queryExecutionId(), new BackendError(BackendErrorCode.ENGINE_NOT_FOUND, "No engine registered for id: " + params.engineId(), null)));
             return;
         }
@@ -76,7 +76,8 @@ public final class QueryExecutionService
         }
         else
         {
-            notificationPublisher.publish("query.failed", new QueryFailedNotification(params.queryExecutionId(), new BackendError(BackendErrorCode.CANCELLED, "Execution cancelled by client", null)));
+            notificationPublisher.publishForQuery(params.queryExecutionId(), "query.failed",
+                    new QueryFailedNotification(params.queryExecutionId(), new BackendError(BackendErrorCode.CANCELLED, "Execution cancelled by client", null)));
         }
     }
 
@@ -96,7 +97,7 @@ public final class QueryExecutionService
         @Override
         public void progress(int percent, String message)
         {
-            notificationPublisher.publish("query.progress", new QueryProgressNotification(executionId, percent, message));
+            notificationPublisher.publishForQuery(executionId, "query.progress", new QueryProgressNotification(executionId, percent, message));
         }
 
         @Override
@@ -109,19 +110,19 @@ public final class QueryExecutionService
                 columns.add(new ColumnDefinition(columnNames.get(i), i < columnTypes.size() ? columnTypes.get(i)
                         : "any"));
             }
-            notificationPublisher.publish("query.chunkStart", new QueryChunkStartNotification(executionId, currentResultSetIndex, new ResultSchema(columns)));
+            notificationPublisher.publishForQuery(executionId, "query.chunkStart", new QueryChunkStartNotification(executionId, currentResultSetIndex, new ResultSchema(columns)));
         }
 
         @Override
         public void resultSetRows(List<List<Object>> rows)
         {
-            notificationPublisher.publish("query.chunkRows", new QueryChunkRowsNotification(executionId, currentResultSetIndex, rows));
+            notificationPublisher.publishForQuery(executionId, "query.chunkRows", new QueryChunkRowsNotification(executionId, currentResultSetIndex, rows));
         }
 
         @Override
         public void completed(long durationMs, long rowCount)
         {
-            notificationPublisher.publish("query.completed", new QueryCompletedNotification(executionId, new QueryMetrics((int) durationMs, (int) rowCount)));
+            notificationPublisher.publishForQuery(executionId, "query.completed", new QueryCompletedNotification(executionId, new QueryMetrics((int) durationMs, (int) rowCount)));
         }
 
         @Override
@@ -136,7 +137,7 @@ public final class QueryExecutionService
             {
                 code = BackendErrorCode.INTERNAL;
             }
-            notificationPublisher.publish("query.failed", new QueryFailedNotification(executionId, new BackendError(code, errorMessage, null)));
+            notificationPublisher.publishForQuery(executionId, "query.failed", new QueryFailedNotification(executionId, new BackendError(code, errorMessage, null)));
         }
     }
 }

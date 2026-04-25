@@ -30,6 +30,7 @@ public final class CredentialStoreRequestHandler implements RequestHandler
                 .convertValue(envelope.params(), CredentialStoreParams.class);
 
         String credentialId = "cred-" + envelope.id();
-        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, new CredentialStoreResult(params.connectionId(), credentialId, 1L), null));
+        responseWriter
+                .write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, new CredentialStoreResult(params.connectionId(), credentialId, 1L), null));
     }
 }

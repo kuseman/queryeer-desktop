@@ -1,8 +1,8 @@
-import type { BackendError } from "./ErrorCode";
+import type { BackendError } from "./ErrorCode.js";
 import type {
   BackendNotificationMethod,
   BackendRequestMethod
-} from "./Methods";
+} from "./Methods.js";
 
 export type Capability =
   | "backend.runtimeStatus"

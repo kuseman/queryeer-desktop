@@ -1,4 +1,4 @@
-import type { Capability } from "./Types";
+import type { Capability } from "./Types.js";
 
 export const BACKEND_REQUEST_CAPABILITIES: ReadonlyArray<Capability> = [
   "backend.runtimeStatus",

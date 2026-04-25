@@ -2,9 +2,10 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
-import type { BackendEnvelope } from "../../contracts/backend";
-import { redactErrorMessage, redactLogMessage } from "./backend-log-redaction";
-import { MockJavaBackend } from "./mock-java-backend";
+import type { BackendEnvelope } from "../../contracts/backend/index.js";
+import { redactErrorMessage, redactLogMessage } from "./backend-log-redaction.js";
+import { MockJavaBackend } from "./mock-java-backend.js";
+import { FrameParser } from "./frame-parser.js";
 
 export type BackendTransport = {
   start: () => Promise<void>;
@@ -13,9 +14,9 @@ export type BackendTransport = {
   readonly mode: "mock-stdio" | "stdio-process";
 };
 
-type TransportDiagnostic = {
+export type TransportDiagnostic = {
   level: "debug" | "info" | "warn" | "error";
-  source: "transport" | "backend";
+  source: "transport" | "backend" | "backend-console";
   message: string;
 };
 
@@ -44,7 +45,6 @@ export class StdioProcessBackendTransport implements BackendTransport {
   private lastErrorLine: string | null = null;
   private stdinBroken = false;
   private dependenciesPrepared = false;
-  private stdout: ReturnType<typeof createInterface> | null = null;
   private stderr: ReturnType<typeof createInterface> | null = null;
 
   public constructor(
@@ -127,30 +127,29 @@ export class StdioProcessBackendTransport implements BackendTransport {
       });
     });
 
-    this.stdout = createInterface({ input: this.process.stdout });
-    this.stdout.on("line", (line) => {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith("{")) {
-        if (trimmed) {
-          this.onDiagnostic({
-            level: "info",
-            source: "backend",
-            message: redactLogMessage(trimmed)
-          });
-        }
-        return;
-      }
+    const frameParser = new FrameParser();
+    frameParser.onFrame = (json) => {
       try {
-        const envelope = JSON.parse(trimmed) as BackendEnvelope;
+        const envelope = JSON.parse(json) as BackendEnvelope;
         this.onEnvelope(envelope);
       } catch {
         this.onDiagnostic({
           level: "warn",
           source: "backend",
-          message: redactLogMessage(`Invalid protocol JSON on stdout: ${trimmed}`)
+          message: redactLogMessage(`Invalid protocol JSON on stdout: ${json}`)
         });
       }
-    });
+    };
+    frameParser.onConsole = (line) => {
+      if (line.trim()) {
+        this.onDiagnostic({
+          level: "info",
+          source: "backend-console",
+          message: redactLogMessage(line)
+        });
+      }
+    };
+    this.process.stdout.on("data", (chunk: Buffer) => frameParser.feed(chunk));
 
     this.stderr = createInterface({ input: this.process.stderr });
     this.stderr.on("line", (line) => {
@@ -237,7 +236,6 @@ export class StdioProcessBackendTransport implements BackendTransport {
     args: string[]
   ): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-      const errLines: string[] = [];
       const prep =
         process.platform === "win32"
           ? spawn(
@@ -260,34 +258,36 @@ export class StdioProcessBackendTransport implements BackendTransport {
               windowsHide: true
             });
 
-      const stderr = createInterface({ input: prep.stderr });
-      stderr.on("line", (line) => {
-        if (line.trim()) {
-          this.lastErrorLine = redactLogMessage(line.trim());
-          errLines.push(this.lastErrorLine);
-          this.onDiagnostic({
-            level: this.classifyBackendLineLevel(this.lastErrorLine),
-            source: "backend",
-            message: this.lastErrorLine
-          });
-        }
-      });
+      const outChunks: Buffer[] = [];
+      const errChunks: Buffer[] = [];
+      prep.stdout.on("data", (chunk: Buffer) => outChunks.push(chunk));
+      prep.stderr.on("data", (chunk: Buffer) => errChunks.push(chunk));
 
       prep.on("error", (error) => {
         reject(error);
       });
 
-      prep.on("exit", (code) => {
+      prep.on("close", (code) => {
+        const combined = Buffer.concat([...outChunks, ...errChunks]).toString("utf8");
+        const lines = combined
+          .split("\n")
+          .map((l) => l.replace(/\r$/, "").trim())
+          .filter(Boolean)
+          .map(redactLogMessage);
+
+        for (const line of lines) {
+          this.lastErrorLine = line;
+          this.onDiagnostic({ level: this.classifyBackendLineLevel(line), source: "backend", message: line });
+        }
+
         if (code === 0) {
           resolve();
           return;
         }
         reject(
           new Error(
-            errLines.length > 0
-              ? `Maven preparation failed: ${errLines.slice(-3).join(" | ")}`
-              : this.lastErrorLine
-                ? `Maven preparation failed: ${this.lastErrorLine}`
+            lines.length > 0
+              ? `Maven preparation failed: ${lines.join(" | ")}`
               : `Maven preparation failed with exit code ${code ?? "null"}`
           )
         );
@@ -300,10 +300,6 @@ export class StdioProcessBackendTransport implements BackendTransport {
       return;
     }
 
-    if (this.stdout) {
-      this.stdout.close();
-      this.stdout = null;
-    }
     if (this.stderr) {
       this.stderr.close();
       this.stderr = null;
@@ -359,7 +355,9 @@ export class StdioProcessBackendTransport implements BackendTransport {
     }
 
     try {
-      this.process.stdin.write(`${JSON.stringify(envelope)}\n`);
+      const body = Buffer.from(JSON.stringify(envelope), "utf8");
+      this.process.stdin.write(`Content-Length: ${body.length}\r\n\r\n`);
+      this.process.stdin.write(body);
     } catch (error) {
       this.stdinBroken = true;
       const message = redactErrorMessage(error);

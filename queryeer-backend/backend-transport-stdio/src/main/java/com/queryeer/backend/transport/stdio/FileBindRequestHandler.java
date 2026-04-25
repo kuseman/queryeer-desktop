@@ -40,13 +40,13 @@ public final class FileBindRequestHandler implements RequestHandler
         Optional<FileSession> session = fileRegistry.bind(params.fileId(), params.engineId(), params.connectionId());
         if (session.isEmpty())
         {
-            responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null,
+            responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, null,
                     new BackendError(BackendErrorCode.VALIDATION, "Unknown fileId: " + params.fileId(), null)));
             return;
         }
 
         FileSession bound = session.get();
-        responseWriter.write(
-                new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, new FileBindResult(bound.fileId(), bound.engineId(), bound.backendVersion()), null));
+        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null,
+                new FileBindResult(bound.fileId(), bound.engineId(), bound.backendVersion()), null));
     }
 }

@@ -1,7 +1,7 @@
 package com.queryeer.backend.transport.stdio;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import org.junit.jupiter.api.Assertions;
@@ -25,7 +25,7 @@ class RequestDispatcherTest
         RecordingRequestHandler handler = new RecordingRequestHandler("health.ping");
         RequestDispatcher dispatcher = new RequestDispatcher(responseWriter, List.of(handler));
 
-        BackendEnvelope envelope = new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-1", "health.ping", null, null, null);
+        BackendEnvelope envelope = new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-1", null, "health.ping", null, null, null);
         dispatcher.dispatch(envelope);
 
         Assertions.assertEquals(1, handler.handledCount);
@@ -43,12 +43,13 @@ class RequestDispatcherTest
 
         RequestDispatcher dispatcher = new RequestDispatcher(responseWriter, List.of(new RecordingRequestHandler("health.ping")));
 
-        BackendEnvelope envelope = new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-2", "unknown.method", null, null, null);
+        BackendEnvelope envelope = new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-2", null, "unknown.method", null, null, null);
         dispatcher.dispatch(envelope);
 
-        String line = output.toString(StandardCharsets.UTF_8)
-                .trim();
-        BackendEnvelope response = codec.decode(line);
+        FramedReader reader = new FramedReader(new ByteArrayInputStream(output.toByteArray()), l ->
+        {
+        });
+        BackendEnvelope response = codec.decode(reader.readFrame());
 
         Assertions.assertEquals(EnvelopeType.RESPONSE, response.type());
         Assertions.assertEquals("req-2", response.id());

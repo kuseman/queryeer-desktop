@@ -1,4 +1,4 @@
-import type { Capability, RuntimeStatusResult } from "./Types";
+import type { Capability, RuntimeStatusResult } from "./Types.js";
 
 export type BackendGatewayMode = "mock-stdio" | "stdio-process";
 

@@ -41,6 +41,6 @@ public final class RuntimeStatusRequestHandler implements RequestHandler
             result = new RuntimeStatusResult(snapshot.startedAt(), snapshot.pluginStatuses(), snapshot.activatedPluginIds(), null);
         }
 
-        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, result, null));
+        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, result, null));
     }
 }

@@ -39,7 +39,7 @@ public final class MockQueryExecutionService
             {
                 return;
             }
-            notificationPublisher.publish("query.progress", new QueryProgressNotification(params.queryExecutionId(), 20, "Running " + params.engineId()));
+            notificationPublisher.publishForQuery(params.queryExecutionId(), "query.progress", new QueryProgressNotification(params.queryExecutionId(), 20, "Running " + params.engineId()));
         }, 120, TimeUnit.MILLISECONDS);
 
         scheduler.schedule(() ->
@@ -48,9 +48,10 @@ public final class MockQueryExecutionService
             {
                 return;
             }
-            notificationPublisher.publish("query.chunkStart",
+            notificationPublisher.publishForQuery(params.queryExecutionId(), "query.chunkStart",
                     new QueryChunkStartNotification(params.queryExecutionId(), 0, new ResultSchema(List.of(new ColumnDefinition("id", "integer"), new ColumnDefinition("value", "string")))));
-            notificationPublisher.publish("query.chunkRows", new QueryChunkRowsNotification(params.queryExecutionId(), 0, List.of(List.of(1, "alpha"), List.of(2, "beta"))));
+            notificationPublisher.publishForQuery(params.queryExecutionId(), "query.chunkRows",
+                    new QueryChunkRowsNotification(params.queryExecutionId(), 0, List.of(List.of(1, "alpha"), List.of(2, "beta"))));
         }, 280, TimeUnit.MILLISECONDS);
 
         scheduler.schedule(() ->
@@ -59,13 +60,14 @@ public final class MockQueryExecutionService
             {
                 return;
             }
-            notificationPublisher.publish("query.completed", new QueryCompletedNotification(params.queryExecutionId(), new QueryMetrics(600, 2)));
+            notificationPublisher.publishForQuery(params.queryExecutionId(), "query.completed", new QueryCompletedNotification(params.queryExecutionId(), new QueryMetrics(600, 2)));
         }, 460, TimeUnit.MILLISECONDS);
     }
 
     public void cancel(QueryCancelParams params)
     {
         cancelledExecutionIds.add(params.queryExecutionId());
-        notificationPublisher.publish("query.failed", new QueryFailedNotification(params.queryExecutionId(), new BackendError(BackendErrorCode.CANCELLED, "Execution cancelled by client", null)));
+        notificationPublisher.publishForQuery(params.queryExecutionId(), "query.failed",
+                new QueryFailedNotification(params.queryExecutionId(), new BackendError(BackendErrorCode.CANCELLED, "Execution cancelled by client", null)));
     }
 }

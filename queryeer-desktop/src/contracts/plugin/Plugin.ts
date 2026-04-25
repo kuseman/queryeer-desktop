@@ -1,12 +1,12 @@
-import type { FileMediator } from "../files/FileMediator";
-import type { FilesRegistry } from "../files/FilesRegistry";
-import type { FileWatcherService } from "../files/FileWatcher";
-import type { LayoutRegistry } from "../extensions/LayoutExtension";
-import type { MenuRegistry } from "../extensions/MenuExtension";
-import type { KeybindingRegistry } from "../extensions/KeybindingExtension";
-import type { DialogExtension } from "../extensions/DialogExtension";
-import type { TooltipRegistry } from "../extensions/TooltipExtension";
-import type { PluginManifest } from "./PluginManifest";
+import type { FileMediator } from "../files/FileMediator.js";
+import type { FilesRegistry } from "../files/FilesRegistry.js";
+import type { FileWatcherService } from "../files/FileWatcher.js";
+import type { LayoutRegistry } from "../extensions/LayoutExtension.js";
+import type { MenuRegistry } from "../extensions/MenuExtension.js";
+import type { KeybindingRegistry } from "../extensions/KeybindingExtension.js";
+import type { DialogExtension } from "../extensions/DialogExtension.js";
+import type { TooltipRegistry } from "../extensions/TooltipExtension.js";
+import type { PluginManifest } from "./PluginManifest.js";
 
 export type Plugin = {
   manifest: PluginManifest;

@@ -1,4 +1,4 @@
-import type { BackendLogEntry, BackendLogLevel } from "../../contracts/backend";
+import type { BackendLogEntry, BackendLogLevel } from "../../contracts/backend/index.js";
 
 type BackendLogSource = "gateway" | "transport" | "backend";
 

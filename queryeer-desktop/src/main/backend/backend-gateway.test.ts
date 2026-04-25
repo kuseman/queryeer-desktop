@@ -12,8 +12,8 @@ import {
   type QueryCancelResult,
   type QueryExecuteParams,
   type QueryExecuteResult
-} from "../../contracts/backend";
-import { BackendGateway } from "./backend-gateway";
+} from "../../contracts/backend/index.js";
+import { BackendGateway } from "./backend-gateway.js";
 
 type EnvelopeHandler = (envelope: BackendEnvelope) => void;
 

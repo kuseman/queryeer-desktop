@@ -26,6 +26,6 @@ public final class HandshakeRequestHandler implements RequestHandler
     {
         HandshakeResult result = new HandshakeResult(new ServerIdentity("queryeer-java-backend", "0.1.0"), ProtocolVersion.V1_0_0, BackendCapabilities.HANDSHAKE_SUPPORTED_CAPABILITIES);
 
-        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, result, null));
+        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, result, null));
     }
 }

@@ -3,9 +3,9 @@ import {
   BACKEND_PROTOCOL_VERSION,
   type QueryExecuteParams,
   type QueryCancelParams
-} from "../../contracts/backend";
-import { BackendGateway } from "./backend-gateway";
-import { StdioProcessBackendTransport } from "./backend-transport";
+} from "../../contracts/backend/index.js";
+import { BackendGateway } from "./backend-gateway.js";
+import { StdioProcessBackendTransport, type TransportDiagnostic } from "./backend-transport.js";
 
 const INTEGRATION_STARTUP_TIMEOUT = 120_000;
 
@@ -26,7 +26,7 @@ describe("Backend E2E Integration", () => {
 
   beforeAll(async () => {
     gateway = new BackendGateway(
-      (onEnvelope, onDiagnostic) =>
+      (onEnvelope, onDiagnostic: (event: TransportDiagnostic) => void) =>
         new StdioProcessBackendTransport(onEnvelope, onDiagnostic)
     );
     globalGateway = gateway;

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import type { BackendResponseEnvelope } from "../../contracts/backend";
-import { BACKEND_PROTOCOL_VERSION } from "../../contracts/backend";
-import { BackendPendingRequestMap } from "./backend-request-pending-map";
+import type { BackendResponseEnvelope } from "../../contracts/backend/index.js";
+import { BACKEND_PROTOCOL_VERSION } from "../../contracts/backend/index.js";
+import { BackendPendingRequestMap } from "./backend-request-pending-map.js";
 
 describe("BackendPendingRequestMap", () => {
   it("resolves pending requests and clears timeout", () => {
