@@ -1,0 +1,13 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "notification",
+  "method": "query.chunkRows",
+  "params": {
+    "queryExecutionId": "exec-fixture-1",
+    "resultSetIndex": 0,
+    "rows": [
+      [1],
+      [2]
+    ]
+  }
+}

@@ -95,7 +95,8 @@ export class MockJavaBackend {
         "query.execute",
         "query.cancel",
         "query.progress",
-        "query.resultChunk",
+        "query.chunkStart",
+        "query.chunkRows",
         "query.completed",
         "query.failed",
         "file.open",
@@ -220,21 +221,29 @@ export class MockJavaBackend {
         this.sink({
           protocolVersion: BACKEND_PROTOCOL_VERSION,
           type: "notification",
-          method: "query.resultChunk",
+          method: "query.chunkStart",
           params: {
             queryExecutionId: params.queryExecutionId,
-            chunkIndex: 0,
+            resultSetIndex: 0,
             schema: {
               columns: [
                 { name: "id", type: "integer" },
                 { name: "value", type: "string" }
               ]
-            },
+            }
+          }
+        });
+        this.sink({
+          protocolVersion: BACKEND_PROTOCOL_VERSION,
+          type: "notification",
+          method: "query.chunkRows",
+          params: {
+            queryExecutionId: params.queryExecutionId,
+            resultSetIndex: 0,
             rows: [
               [1, "alpha"],
               [2, "beta"]
-            ],
-            isLastChunk: false
+            ]
           }
         });
       }, 350)
@@ -248,12 +257,11 @@ export class MockJavaBackend {
         this.sink({
           protocolVersion: BACKEND_PROTOCOL_VERSION,
           type: "notification",
-          method: "query.resultChunk",
+          method: "query.chunkRows",
           params: {
             queryExecutionId: params.queryExecutionId,
-            chunkIndex: 1,
-            rows: [[3, "gamma"]],
-            isLastChunk: true
+            resultSetIndex: 0,
+            rows: [[3, "gamma"]]
           }
         });
       }, 550)

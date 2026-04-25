@@ -12,7 +12,8 @@ export type Capability =
   | "connection.upsert"
   | "credential.store"
   | "query.progress"
-  | "query.resultChunk"
+  | "query.chunkStart"
+  | "query.chunkRows"
   | "query.completed"
   | "query.failed"
   | "file.open"
@@ -138,14 +139,18 @@ export type QueryProgressNotification = {
   message?: string;
 };
 
-export type QueryResultChunkNotification = {
+export type QueryChunkStartNotification = {
   queryExecutionId: string;
-  chunkIndex: number;
-  schema?: {
+  resultSetIndex: number;
+  schema: {
     columns: Array<{ name: string; type: string }>;
   };
+};
+
+export type QueryChunkRowsNotification = {
+  queryExecutionId: string;
+  resultSetIndex: number;
   rows: unknown[][];
-  isLastChunk: boolean;
 };
 
 export type QueryCompletedNotification = {
@@ -234,7 +239,8 @@ export type BackendMethodResultMap = {
 
 export type BackendNotificationParamsMap = {
   "query.progress": QueryProgressNotification;
-  "query.resultChunk": QueryResultChunkNotification;
+  "query.chunkStart": QueryChunkStartNotification;
+  "query.chunkRows": QueryChunkRowsNotification;
   "query.completed": QueryCompletedNotification;
   "query.failed": QueryFailedNotification;
   "file.change": FileChangeNotification;

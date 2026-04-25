@@ -45,6 +45,7 @@ export type RendererWorkspaceServiceOptions = {
     detail?: string;
     options?: DialogOption[];
   }) => Promise<{ action: string }>;
+  applyRecoveredContent?: (fileId: string, text: string) => void;
   debounceMs?: number;
   backupDebounceMs?: number;
   backupMaxIntervalMs?: number;
@@ -76,6 +77,7 @@ export class RendererWorkspaceService {
   private readonly fileMediator: FileMediator;
   private readonly fileWatcher: FileWatcherService;
   private readonly showDialog: RendererWorkspaceServiceOptions["showDialog"];
+  private readonly applyRecoveredContent: (fileId: string, text: string) => void;
   private readonly debounceMs: number;
   private readonly backupDebounceMs: number;
   private readonly backupMaxIntervalMs: number;
@@ -101,6 +103,7 @@ export class RendererWorkspaceService {
     this.fileMediator = options.fileMediator;
     this.fileWatcher = options.fileWatcher;
     this.showDialog = options.showDialog;
+    this.applyRecoveredContent = options.applyRecoveredContent ?? ((fileId, text) => getTextEditorRegistry().applyRecoveredContent(fileId, text));
     this.debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
     this.backupDebounceMs = options.backupDebounceMs ?? DEFAULT_BACKUP_DEBOUNCE_MS;
     this.backupMaxIntervalMs = options.backupMaxIntervalMs ?? DEFAULT_BACKUP_MAX_INTERVAL_MS;
@@ -165,8 +168,7 @@ export class RendererWorkspaceService {
         backupUri: latest.backupUri,
         hasRecoveredBackup: false
       });
-      const registry = getTextEditorRegistry();
-      registry.applyRecoveredContent(fileId, latest.text);
+      this.applyRecoveredContent(fileId, latest.text);
     } catch {
       // best-effort; if backup can't be read we continue with disk content
     }

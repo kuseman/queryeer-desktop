@@ -16,7 +16,9 @@ const moduleLoaders: Partial<Record<string, PluginLoader>> = {
   "./core.menu/module": async () => import("./core.menu/module"),
   "./core.observability/module": async () => import("./core.observability/module"),
   "./core.editor/module": async () => import("./core.editor/module"),
-  "./core.explorer/module": async () => import("./core.explorer/module")
+  "./core.explorer/module": async () => import("./core.explorer/module"),
+  "./core.queryengine/module": async () => import("./core.queryengine/module"),
+  "./core.queryengine.output.text/module": async () => import("./core.queryengine.output.text/module")
 };
 
 export type PluginDiscoveryResult = {

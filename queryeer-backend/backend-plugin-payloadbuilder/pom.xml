@@ -19,5 +19,10 @@
             <artifactId>backend-api</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>se.kuseman.payloadbuilder</groupId>
+            <artifactId>payloadbuilder-core</artifactId>
+            <version>1.10.1</version>
+        </dependency>
     </dependencies>
 </project>

@@ -23,6 +23,7 @@ export class TextEditorRegistry {
   private activeFileId: string | null = null;
   private editorApi: TextEditorApi | null = null;
   private listeners: Array<() => void> = [];
+  private contentDirtyListeners: Array<(fileId: string, text: string) => void> = [];
   private filesRegistry: FilesRegistry | null = null;
   private pendingFileForEditor: FileEntity | null = null;
 
@@ -76,6 +77,22 @@ export class TextEditorRegistry {
 
   markDirty(fileId: string): void {
     this.filesRegistry?.markDirty(fileId);
+    if (this.contentDirtyListeners.length > 0) {
+      const text = this.editorApi?.getContent();
+      if (text !== undefined) {
+        for (const listener of this.contentDirtyListeners) {
+          listener(fileId, text);
+        }
+      }
+    }
+  }
+
+  onContentDirty(listener: (fileId: string, text: string) => void): () => void {
+    this.contentDirtyListeners.push(listener);
+    return () => {
+      const idx = this.contentDirtyListeners.indexOf(listener);
+      if (idx !== -1) this.contentDirtyListeners.splice(idx, 1);
+    };
   }
 
   applyRecoveredContent(fileId: string, text: string): void {

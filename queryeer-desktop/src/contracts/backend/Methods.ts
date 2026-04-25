@@ -12,7 +12,8 @@ export type BackendRequestMethod =
 
 export type BackendNotificationMethod =
   | "query.progress"
-  | "query.resultChunk"
+  | "query.chunkStart"
+  | "query.chunkRows"
   | "query.completed"
   | "query.failed"
   | "file.change";

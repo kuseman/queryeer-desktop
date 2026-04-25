@@ -5,7 +5,6 @@ import java.util.List;
 import com.queryeer.backend.api.BackendPlugin;
 import com.queryeer.backend.api.BackendPluginContext;
 import com.queryeer.backend.api.PluginDescriptor;
-import com.queryeer.backend.api.QueryEngineProvider;
 
 public final class PayloadbuilderBackendPlugin implements BackendPlugin
 {
@@ -19,14 +18,7 @@ public final class PayloadbuilderBackendPlugin implements BackendPlugin
     public void activate(BackendPluginContext context)
     {
         context.queryEngines()
-                .register(new QueryEngineProvider()
-                {
-                    @Override
-                    public String engineId()
-                    {
-                        return "payloadbuilder";
-                    }
-                });
+                .register(new PayloadbuilderQueryEngineProvider());
         context.logger()
                 .info("Activated payloadbuilder backend plugin");
     }

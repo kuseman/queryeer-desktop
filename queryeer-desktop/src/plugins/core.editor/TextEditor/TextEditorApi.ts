@@ -79,6 +79,19 @@ export abstract class TextEditorApi {
 
   abstract getCursorState(): { position: Position; selection: Selection } | undefined;
 
+  getSelectedText(): string | null {
+    const sel = this.getSelection();
+    if (!sel) return null;
+    const startLine = Math.min(sel.selectionStartLineNumber, sel.positionLineNumber);
+    const endLine = Math.max(sel.selectionStartLineNumber, sel.positionLineNumber);
+    const startCol =
+      startLine === sel.selectionStartLineNumber ? sel.selectionStartColumn : sel.positionColumn;
+    const endCol =
+      endLine === sel.positionLineNumber ? sel.positionColumn : sel.selectionStartColumn;
+    if (startLine === endLine && startCol === endCol) return null;
+    return this.getModel()?.getText({ startLineNumber: startLine, startColumn: startCol, endLineNumber: endLine, endColumn: endCol }) ?? null;
+  }
+
   abstract onDidChangeModelContent(callback: (event: ModelContentChangedEvent) => void): Disposable;
   abstract onDidChangeCursorPosition(callback: (event: CursorPositionChangedEvent) => void): Disposable;
   abstract onDidChangeCursorSelection(callback: (event: CursorSelectionChangedEvent) => void): Disposable;

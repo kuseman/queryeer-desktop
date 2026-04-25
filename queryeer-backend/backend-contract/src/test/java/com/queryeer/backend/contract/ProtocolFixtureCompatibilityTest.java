@@ -21,11 +21,12 @@ import com.queryeer.backend.contract.file.FileOpenResult;
 import com.queryeer.backend.contract.handshake.HandshakeResult;
 import com.queryeer.backend.contract.health.PingResult;
 import com.queryeer.backend.contract.query.QueryCancelResult;
+import com.queryeer.backend.contract.query.QueryChunkRowsNotification;
+import com.queryeer.backend.contract.query.QueryChunkStartNotification;
 import com.queryeer.backend.contract.query.QueryCompletedNotification;
 import com.queryeer.backend.contract.query.QueryExecuteResult;
 import com.queryeer.backend.contract.query.QueryFailedNotification;
 import com.queryeer.backend.contract.query.QueryProgressNotification;
-import com.queryeer.backend.contract.query.QueryResultChunkNotification;
 import com.queryeer.backend.contract.runtime.RuntimeStatusResult;
 
 class ProtocolFixtureCompatibilityTest
@@ -184,18 +185,36 @@ class ProtocolFixtureCompatibilityTest
     }
 
     @Test
-    void queryResultChunkNotificationFixtureIsCompatible() throws IOException
+    void queryChunkStartNotificationFixtureIsCompatible() throws IOException
     {
-        BackendEnvelope notification = readFixture("notification-query-result-chunk.json");
+        BackendEnvelope notification = readFixture("notification-query-chunk-start.json");
 
         assertEnvelopeBase(notification);
         Assertions.assertEquals(EnvelopeType.NOTIFICATION, notification.type());
-        Assertions.assertEquals("query.resultChunk", notification.method());
+        Assertions.assertEquals("query.chunkStart", notification.method());
         Assertions.assertNotNull(notification.params());
 
-        QueryResultChunkNotification params = objectMapper.convertValue(notification.params(), QueryResultChunkNotification.class);
+        QueryChunkStartNotification params = objectMapper.convertValue(notification.params(), QueryChunkStartNotification.class);
         Assertions.assertEquals("exec-fixture-1", params.queryExecutionId());
-        Assertions.assertEquals(0, params.chunkIndex());
+        Assertions.assertEquals(0, params.resultSetIndex());
+        Assertions.assertEquals(1, params.schema()
+                .columns()
+                .size());
+    }
+
+    @Test
+    void queryChunkRowsNotificationFixtureIsCompatible() throws IOException
+    {
+        BackendEnvelope notification = readFixture("notification-query-chunk-rows.json");
+
+        assertEnvelopeBase(notification);
+        Assertions.assertEquals(EnvelopeType.NOTIFICATION, notification.type());
+        Assertions.assertEquals("query.chunkRows", notification.method());
+        Assertions.assertNotNull(notification.params());
+
+        QueryChunkRowsNotification params = objectMapper.convertValue(notification.params(), QueryChunkRowsNotification.class);
+        Assertions.assertEquals("exec-fixture-1", params.queryExecutionId());
+        Assertions.assertEquals(0, params.resultSetIndex());
         Assertions.assertEquals(2, params.rows()
                 .size());
     }

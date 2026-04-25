@@ -10,9 +10,9 @@ public final class QueryCancelRequestHandler implements RequestHandler
 {
     private final ResponseWriter responseWriter;
     private final EnvelopeCodec codec;
-    private final MockQueryExecutionService queryExecutionService;
+    private final QueryExecutionService queryExecutionService;
 
-    public QueryCancelRequestHandler(ResponseWriter responseWriter, EnvelopeCodec codec, MockQueryExecutionService queryExecutionService)
+    public QueryCancelRequestHandler(ResponseWriter responseWriter, EnvelopeCodec codec, QueryExecutionService queryExecutionService)
     {
         this.responseWriter = responseWriter;
         this.codec = codec;

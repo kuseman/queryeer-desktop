@@ -43,6 +43,7 @@ export interface ShellApi {
   muteFileWatcherPath: (params: { uri: string; durationMs: number }) => Promise<{ muted: boolean }>;
   onFileWatcherEvent: (listener: (params: { subscriptionId: string; event: FileWatcherEvent }) => void) => () => void;
   onMenuExecuteCommand: (listener: (commandId: string) => void) => () => void;
+  onQueryEvent: (listener: (event: { method: string; params: unknown }) => void) => () => void;
   buildMenu: (menuItems: unknown[], commands: unknown[]) => Promise<{ success: boolean }>;
   windowMinimize: () => void;
   windowMaximize: () => void;

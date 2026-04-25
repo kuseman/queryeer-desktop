@@ -11,6 +11,7 @@ import {
   resolveKeybindingState
 } from "../../plugins/core.commands/keybinding-resolver";
 import { getTextEditorRegistry } from "../../plugins/core.editor/TextEditor/TextEditorRegistry";
+import { queryTextRegistry } from "../../plugins/core.queryengine/QueryTextEditorRegistry";
 
 export async function bootstrapShell() {
   const backendSync: FileBackendSync = {
@@ -50,8 +51,11 @@ export async function bootstrapShell() {
 
   const resolveFileContent = (fileId: string, uri: string): string | undefined => {
     const textEditorRegistry = getTextEditorRegistry();
-    const model = textEditorRegistry.getModelForFile(fileId)
-      ?? textEditorRegistry.getModelForUri(uri);
+    const model =
+      textEditorRegistry.getModelForFile(fileId) ??
+      textEditorRegistry.getModelForUri(uri) ??
+      queryTextRegistry.getModelForFile(fileId) ??
+      queryTextRegistry.getModelForUri(uri);
     return model?.getContent();
   };
 
@@ -117,9 +121,22 @@ export async function bootstrapShell() {
     filesRegistry: filesRegistry!,
     fileMediator: fileMediator!,
     fileWatcher,
-    showDialog: (options) => window.appShell.showDialogMessage(options)
+    showDialog: (options) => window.appShell.showDialogMessage(options),
+    applyRecoveredContent: (fileId, text) => {
+      getTextEditorRegistry().applyRecoveredContent(fileId, text);
+      queryTextRegistry.applyRecoveredContent(fileId, text);
+    }
   });
   await workspaceService.hydrate();
+
+  for (const registry of [getTextEditorRegistry(), queryTextRegistry]) {
+    registry.onContentDirty((fileId, text) => {
+      const file = filesRegistry!.getFile(fileId);
+      if (file) {
+        workspaceService?.handleFileChanged(file, text);
+      }
+    });
+  }
 
   const commandExecution = await host.executeCommand("core.commands.about");
 

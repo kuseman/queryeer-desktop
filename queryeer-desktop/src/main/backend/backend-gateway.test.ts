@@ -61,7 +61,8 @@ const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
             "query.execute",
             "query.cancel",
             "query.progress",
-            "query.resultChunk",
+            "query.chunkStart",
+            "query.chunkRows",
             "query.completed",
             "query.failed"
           ]

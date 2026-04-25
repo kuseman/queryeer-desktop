@@ -46,6 +46,7 @@ export class BackendGateway {
   private requestCounter = 0;
   private startupPromise: Promise<void> | null = null;
   private pingIntervalHandle: NodeJS.Timeout | null = null;
+  private rendererSink: ((method: string, params: unknown) => void) | null = null;
 
   public constructor(
     transportFactory?: (
@@ -92,6 +93,10 @@ export class BackendGateway {
     this.statusStore.initializeMode(this.transport.mode);
     this.syncExecutionSnapshot();
     this.syncLogSnapshot();
+  }
+
+  public setRendererSink(sink: (method: string, params: unknown) => void): void {
+    this.rendererSink = sink;
   }
 
   public wireIpc(): void {
@@ -438,16 +443,23 @@ export class BackendGateway {
       this.executionStore.onProgress(params);
       this.syncExecutionSnapshot();
       this.statusStore.setState("healthy", params.queryExecutionId === "health-probe" ? undefined : params.message);
+      this.rendererSink?.(envelope.method, envelope.params);
       return;
     }
 
-    if (envelope.method === "query.resultChunk") {
+    if (envelope.method === "query.chunkStart") {
+      this.rendererSink?.(envelope.method, envelope.params);
+      return;
+    }
+
+    if (envelope.method === "query.chunkRows") {
       const params = envelope.params as {
         queryExecutionId: string;
         rows?: unknown[][];
       };
       this.executionStore.onResultChunk(params);
       this.syncExecutionSnapshot();
+      this.rendererSink?.(envelope.method, envelope.params);
       return;
     }
 
@@ -457,6 +469,7 @@ export class BackendGateway {
       };
       this.executionStore.onCompleted(params);
       this.syncExecutionSnapshot();
+      this.rendererSink?.(envelope.method, envelope.params);
       return;
     }
 
@@ -467,6 +480,7 @@ export class BackendGateway {
       };
       this.executionStore.onFailed(params);
       this.syncExecutionSnapshot();
+      this.rendererSink?.(envelope.method, envelope.params);
     }
   }
 
