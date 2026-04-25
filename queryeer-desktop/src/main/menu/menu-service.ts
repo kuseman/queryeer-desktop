@@ -88,6 +88,14 @@ export class MenuService {
       ? this.commands.find((c) => c.id === contribution.commandId)
       : undefined;
 
+    if (contribution.role) {
+      return new MenuItem({
+        label: contribution.label,
+        role: contribution.role,
+        accelerator: contribution.accelerator
+      });
+    }
+
     return new MenuItem({
       label: contribution.label,
       accelerator: command?.accelerator,

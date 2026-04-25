@@ -39,75 +39,55 @@ export const coreMenuPlugin: Plugin = {
     context.menu.registerMenuItem({ id: "core.menu.terminal", label: "Terminal", order: 70 });
     context.menu.registerMenuItem({ id: "core.menu.help", label: "Help", order: 80 });
 
-    registerStub("core.menu.edit.undo", "Undo");
-    registerShortcut("core.menu.edit.undo.shortcut", "core.menu.edit.undo", "CmdOrCtrl+Z", 210);
-    registerStub("core.menu.edit.redo", "Redo");
-    registerShortcut("core.menu.edit.redo.shortcut", "core.menu.edit.redo", "CmdOrCtrl+Y", 220);
-    registerStub("core.menu.edit.cut", "Cut");
-    registerShortcut("core.menu.edit.cut.shortcut", "core.menu.edit.cut", "CmdOrCtrl+X", 230);
-    registerStub("core.menu.edit.copy", "Copy");
-    registerShortcut("core.menu.edit.copy.shortcut", "core.menu.edit.copy", "CmdOrCtrl+C", 240);
-    registerStub("core.menu.edit.paste", "Paste");
-    registerShortcut("core.menu.edit.paste.shortcut", "core.menu.edit.paste", "CmdOrCtrl+V", 250);
-    registerStub("core.menu.edit.find", "Find");
-    registerShortcut("core.menu.edit.find.shortcut", "core.menu.edit.find", "CmdOrCtrl+F", 260);
-
     context.menu.registerMenuItem({
       id: "core.menu.edit.undo.item",
       label: "Undo",
       order: 10,
       parentId: "core.menu.edit",
-      commandId: "core.menu.edit.undo"
+      role: "undo",
+      accelerator: "CmdOrCtrl+Z"
     });
     context.menu.registerMenuItem({
       id: "core.menu.edit.redo.item",
       label: "Redo",
       order: 20,
       parentId: "core.menu.edit",
-      commandId: "core.menu.edit.redo"
+      role: "redo",
+      accelerator: "CmdOrCtrl+Y"
     });
+
     context.menu.registerMenuItem({
       id: "core.menu.edit.cut.item",
       label: "Cut",
       order: 30,
       parentId: "core.menu.edit",
-      commandId: "core.menu.edit.cut"
+      role: "cut",
+      accelerator: "CmdOrCtrl+X"
     });
     context.menu.registerMenuItem({
       id: "core.menu.edit.copy.item",
       label: "Copy",
       order: 40,
       parentId: "core.menu.edit",
-      commandId: "core.menu.edit.copy"
+      role: "copy",
+      accelerator: "CmdOrCtrl+C"
     });
     context.menu.registerMenuItem({
       id: "core.menu.edit.paste.item",
       label: "Paste",
       order: 50,
       parentId: "core.menu.edit",
-      commandId: "core.menu.edit.paste"
-    });
-    context.menu.registerMenuItem({
-      id: "core.menu.edit.find.item",
-      label: "Find",
-      order: 60,
-      parentId: "core.menu.edit",
-      commandId: "core.menu.edit.find"
+      role: "paste",
+      accelerator: "CmdOrCtrl+V"
     });
 
-    registerStub("core.menu.selection.selectAll", "Select All");
-    registerShortcut(
-      "core.menu.selection.selectAll.shortcut",
-      "core.menu.selection.selectAll",
-      "CmdOrCtrl+A",
-      310
-    );
     context.menu.registerMenuItem({
       id: "core.menu.selection.selectAll.item",
       label: "Select All",
       order: 10,
       parentId: "core.menu.selection",
-      commandId: "core.menu.selection.selectAll"
+      role: "selectAll",
+      accelerator: "CmdOrCtrl+A"
     });
 
     registerStub("core.menu.view.commandPalette", "Command Palette");
