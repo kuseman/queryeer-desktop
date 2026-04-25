@@ -187,6 +187,16 @@ class PluginRuntimeArchitectureTest
                         {
                             return engineId;
                         }
+
+                        @Override
+                        public void execute(String queryExecutionId, String text, com.queryeer.backend.api.QueryPublisher publisher)
+                        {
+                        }
+
+                        @Override
+                        public void cancel(String queryExecutionId)
+                        {
+                        }
                     });
         }
 

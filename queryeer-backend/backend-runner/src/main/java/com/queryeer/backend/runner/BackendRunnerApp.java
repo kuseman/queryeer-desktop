@@ -27,12 +27,12 @@ import com.queryeer.backend.transport.stdio.FileCloseRequestHandler;
 import com.queryeer.backend.transport.stdio.FileOpenRequestHandler;
 import com.queryeer.backend.transport.stdio.HandshakeRequestHandler;
 import com.queryeer.backend.transport.stdio.HealthPingRequestHandler;
-import com.queryeer.backend.transport.stdio.MockQueryExecutionService;
 import com.queryeer.backend.transport.stdio.NotificationDispatcher;
 import com.queryeer.backend.transport.stdio.NotificationHandler;
 import com.queryeer.backend.transport.stdio.NotificationPublisher;
 import com.queryeer.backend.transport.stdio.QueryCancelRequestHandler;
 import com.queryeer.backend.transport.stdio.QueryExecuteRequestHandler;
+import com.queryeer.backend.transport.stdio.QueryExecutionService;
 import com.queryeer.backend.transport.stdio.RequestDispatcher;
 import com.queryeer.backend.transport.stdio.RequestHandler;
 import com.queryeer.backend.transport.stdio.ResponseWriter;
@@ -77,7 +77,7 @@ public final class BackendRunnerApp
         EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
         ResponseWriter responseWriter = new ResponseWriter(System.out, codec);
         NotificationPublisher notificationPublisher = new NotificationPublisher(responseWriter);
-        MockQueryExecutionService queryExecutionService = new MockQueryExecutionService(notificationPublisher);
+        QueryExecutionService queryExecutionService = new QueryExecutionService(services.queryEngines(), notificationPublisher);
 
         List<RequestHandler> handlers = List.of(new HandshakeRequestHandler(responseWriter), new RuntimeStatusRequestHandler(responseWriter, codec, () -> runtimeStatusSnapshot(runtime)),
                 new HealthPingRequestHandler(startedAt, responseWriter, codec), new QueryExecuteRequestHandler(responseWriter, codec, queryExecutionService),

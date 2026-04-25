@@ -47,6 +47,8 @@ type DialogShowSaveOptions = {
   filters?: { name: string; extensions: string[] }[];
 };
 
+type QueryEvent = { method: string; params: unknown };
+
 type AppShellApi = {
   platform: NodeJS.Platform;
   version: string;
@@ -97,6 +99,7 @@ type AppShellApi = {
     listener: (params: { subscriptionId: string; event: FileWatcherEvent }) => void
   ) => () => void;
   onMenuExecuteCommand: (listener: (commandId: string) => void) => () => void;
+  onQueryEvent: (listener: (event: QueryEvent) => void) => () => void;
   showDialogMessage: (options: DialogShowMessageOptions) => Promise<{ action: string }>;
   showDialogOpen: (options: DialogShowOpenOptions) => Promise<{ canceled: boolean; filePaths: string[] }>;
   showOpenFolder: (options?: DialogShowFolderOptions) => Promise<{ canceled: boolean; folderPath?: string }>;
@@ -198,6 +201,16 @@ const appShellApi: AppShellApi = {
     const channel = "menu:execute-command";
     const wrapped = (_event: Electron.IpcRendererEvent, commandId: string): void => {
       listener(commandId);
+    };
+    ipcRenderer.on(channel, wrapped);
+    return () => {
+      ipcRenderer.off(channel, wrapped);
+    };
+  },
+  onQueryEvent: (listener: (event: QueryEvent) => void) => {
+    const channel = "query:event";
+    const wrapped = (_event: Electron.IpcRendererEvent, payload: QueryEvent): void => {
+      listener(payload);
     };
     ipcRenderer.on(channel, wrapped);
     return () => {

@@ -22,6 +22,12 @@ final class InMemoryQueryEngineRegistry implements QueryEngineRegistry
         return providersById.values();
     }
 
+    @Override
+    public synchronized QueryEngineProvider getProvider(String engineId)
+    {
+        return providersById.get(engineId);
+    }
+
     public synchronized int size()
     {
         return providersById.size();

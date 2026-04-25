@@ -6,6 +6,7 @@ import com.queryeer.backend.api.BackendPlugin;
 import com.queryeer.backend.api.BackendPluginContext;
 import com.queryeer.backend.api.PluginDescriptor;
 import com.queryeer.backend.api.QueryEngineProvider;
+import com.queryeer.backend.api.QueryPublisher;
 
 public final class JdbcBackendPlugin implements BackendPlugin
 {
@@ -25,6 +26,17 @@ public final class JdbcBackendPlugin implements BackendPlugin
                     public String engineId()
                     {
                         return "jdbc";
+                    }
+
+                    @Override
+                    public void execute(String queryExecutionId, String text, QueryPublisher publisher)
+                    {
+                        publisher.failed("INTERNAL", "JDBC execution not yet implemented");
+                    }
+
+                    @Override
+                    public void cancel(String queryExecutionId)
+                    {
                     }
                 });
         context.logger()

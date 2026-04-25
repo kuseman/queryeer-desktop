@@ -10,6 +10,8 @@ import coreLayoutManifest from "./manifests/core.layout.json";
 import coreMenuManifest from "./manifests/core.menu.json";
 import coreObservabilityManifest from "./manifests/core.observability.json";
 import coreWorkspaceManifest from "./manifests/core.workspace.json";
+import coreQueryEngineManifest from "./manifests/core.queryengine.json";
+import coreQueryEngineOutputTextManifest from "./manifests/core.queryengine.output.text.json";
 
 export function loadPluginManifests(): PluginManifestFile[] {
   return [
@@ -23,6 +25,8 @@ export function loadPluginManifests(): PluginManifestFile[] {
     coreDialogManifest as PluginManifestFile,
     coreWorkspaceManifest as PluginManifestFile,
     coreCommandsManifest as PluginManifestFile,
-    coreExplorerManifest as PluginManifestFile
+    coreExplorerManifest as PluginManifestFile,
+    coreQueryEngineManifest as PluginManifestFile,
+    coreQueryEngineOutputTextManifest as PluginManifestFile
   ];
 }

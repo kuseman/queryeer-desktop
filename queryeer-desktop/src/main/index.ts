@@ -200,6 +200,15 @@ app.whenReady().then(() => {
   createMainWindow();
   sendWindowState();
 
+  if (mainWindow) {
+    const win = mainWindow;
+    backendGateway.setRendererSink((method, params) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send("query:event", { method, params });
+      }
+    });
+  }
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();

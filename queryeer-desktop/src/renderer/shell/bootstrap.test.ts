@@ -71,6 +71,7 @@ describe("bootstrapShell diagnostics wiring", () => {
       muteFileWatcherPath: async () => ({ muted: true }),
       onFileWatcherEvent: () => () => {},
       onMenuExecuteCommand: () => () => {},
+      onQueryEvent: () => () => {},
       buildMenu: async () => ({ success: true }),
       windowMinimize: () => {},
       windowMaximize: () => {},

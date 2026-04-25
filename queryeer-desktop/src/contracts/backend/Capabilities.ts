@@ -14,7 +14,8 @@ export const BACKEND_REQUEST_CAPABILITIES: ReadonlyArray<Capability> = [
 
 export const BACKEND_NOTIFICATION_CAPABILITIES: ReadonlyArray<Capability> = [
   "query.progress",
-  "query.resultChunk",
+  "query.chunkStart",
+  "query.chunkRows",
   "query.completed",
   "query.failed",
   "file.change"

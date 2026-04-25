@@ -11,12 +11,13 @@ import com.queryeer.backend.contract.BackendError;
 import com.queryeer.backend.contract.BackendErrorCode;
 import com.queryeer.backend.contract.query.ColumnDefinition;
 import com.queryeer.backend.contract.query.QueryCancelParams;
+import com.queryeer.backend.contract.query.QueryChunkRowsNotification;
+import com.queryeer.backend.contract.query.QueryChunkStartNotification;
 import com.queryeer.backend.contract.query.QueryCompletedNotification;
 import com.queryeer.backend.contract.query.QueryExecuteParams;
 import com.queryeer.backend.contract.query.QueryFailedNotification;
 import com.queryeer.backend.contract.query.QueryMetrics;
 import com.queryeer.backend.contract.query.QueryProgressNotification;
-import com.queryeer.backend.contract.query.QueryResultChunkNotification;
 import com.queryeer.backend.contract.query.ResultSchema;
 
 public final class MockQueryExecutionService
@@ -47,8 +48,9 @@ public final class MockQueryExecutionService
             {
                 return;
             }
-            notificationPublisher.publish("query.resultChunk", new QueryResultChunkNotification(params.queryExecutionId(), 0,
-                    new ResultSchema(List.of(new ColumnDefinition("id", "integer"), new ColumnDefinition("value", "string"))), List.of(List.of(1, "alpha"), List.of(2, "beta")), false));
+            notificationPublisher.publish("query.chunkStart",
+                    new QueryChunkStartNotification(params.queryExecutionId(), 0, new ResultSchema(List.of(new ColumnDefinition("id", "integer"), new ColumnDefinition("value", "string")))));
+            notificationPublisher.publish("query.chunkRows", new QueryChunkRowsNotification(params.queryExecutionId(), 0, List.of(List.of(1, "alpha"), List.of(2, "beta"))));
         }, 280, TimeUnit.MILLISECONDS);
 
         scheduler.schedule(() ->
