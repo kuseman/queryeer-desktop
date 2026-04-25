@@ -27,6 +27,10 @@ vi.mock("../../plugins/core.editor/TextEditor/TextEditorRegistry", () => ({
   })
 }));
 
+vi.mock("../../plugins/core.editor/TextEditor/TextEditorModelRepository", () => ({
+  getTextEditorRepositoryStates: () => [applyRecoveredContentMock]
+}));
+
 beforeEach(() => {
   applyRecoveredContentMock.mockReset();
 });
@@ -134,7 +138,8 @@ function makeHarness(
     showDialog: showDialogMock,
     debounceMs: 25,
     backupDebounceMs: overrides.backupDebounceMs ?? 100,
-    backupMaxIntervalMs: overrides.backupMaxIntervalMs ?? 1_000
+    backupMaxIntervalMs: overrides.backupMaxIntervalMs ?? 1_000,
+    applyRecoveredContent: applyRecoveredContentMock
   });
   onFileChangedListeners.add((file, text) => {
     service.handleFileChanged(file as never, text);

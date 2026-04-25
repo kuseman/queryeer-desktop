@@ -10,8 +10,7 @@ import { createKeybindingService } from "../../plugins/core.commands/keybinding-
 import {
   resolveKeybindingState
 } from "../../plugins/core.commands/keybinding-resolver";
-import { getTextEditorRegistry } from "../../plugins/core.editor/TextEditor/TextEditorRegistry";
-import { queryTextRegistry } from "../../plugins/core.queryengine/QueryTextEditorRegistry";
+import { getTextEditorModelRepositories, getTextEditorRepositoryStates } from "../../plugins/core.editor/TextEditor/TextEditorModelRepository";
 
 export async function bootstrapShell() {
   const backendSync: FileBackendSync = {
@@ -50,13 +49,13 @@ export async function bootstrapShell() {
   };
 
   const resolveFileContent = (fileId: string, uri: string): string | undefined => {
-    const textEditorRegistry = getTextEditorRegistry();
-    const model =
-      textEditorRegistry.getModelForFile(fileId) ??
-      textEditorRegistry.getModelForUri(uri) ??
-      queryTextRegistry.getModelForFile(fileId) ??
-      queryTextRegistry.getModelForUri(uri);
-    return model?.getContent();
+    for (const repo of getTextEditorModelRepositories()) {
+      const model = repo.getModelForFile(fileId) ?? repo.getModelForUri(uri);
+      if (model) {
+        return model.getContent();
+      }
+    }
+    return undefined;
   };
 
   const fileWatcher = new RendererFileWatcherService({
@@ -71,7 +70,9 @@ export async function bootstrapShell() {
   let fileMediator: ReturnType<typeof host.getFileMediator> | null = null;
 
   const onFileChanged = (file: FileEntity, text: string): void => {
-    getTextEditorRegistry().updateModelContent(file.uri, text);
+    for (const repo of getTextEditorRepositoryStates()) {
+      repo.updateModelContent(file.uri, text);
+    }
     workspaceService?.handleFileChanged(file, text);
   };
 
@@ -123,14 +124,15 @@ export async function bootstrapShell() {
     fileWatcher,
     showDialog: (options) => window.appShell.showDialogMessage(options),
     applyRecoveredContent: (fileId, text) => {
-      getTextEditorRegistry().applyRecoveredContent(fileId, text);
-      queryTextRegistry.applyRecoveredContent(fileId, text);
+      for (const repo of getTextEditorRepositoryStates()) {
+        repo.applyRecoveredContent(fileId, text);
+      }
     }
   });
   await workspaceService.hydrate();
 
-  for (const registry of [getTextEditorRegistry(), queryTextRegistry]) {
-    registry.onContentDirty((fileId, text) => {
+  for (const repo of getTextEditorRepositoryStates()) {
+    repo.onContentDirty((fileId, text) => {
       const file = filesRegistry!.getFile(fileId);
       if (file) {
         workspaceService?.handleFileChanged(file, text);

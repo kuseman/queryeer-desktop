@@ -14,6 +14,7 @@ import {
   type WorkspaceSnapshot
 } from "../../contracts/workspace/WorkspaceSnapshot";
 import { getTextEditorRegistry } from "../../plugins/core.editor/TextEditor/TextEditorRegistry";
+import { getTextEditorRepositoryStates } from "../../plugins/core.editor/TextEditor/TextEditorModelRepository";
 
 export type WorkspaceBridge = {
   getWorkspace: () => Promise<WorkspaceSnapshot>;
@@ -103,7 +104,11 @@ export class RendererWorkspaceService {
     this.fileMediator = options.fileMediator;
     this.fileWatcher = options.fileWatcher;
     this.showDialog = options.showDialog;
-    this.applyRecoveredContent = options.applyRecoveredContent ?? ((fileId, text) => getTextEditorRegistry().applyRecoveredContent(fileId, text));
+    this.applyRecoveredContent = options.applyRecoveredContent ?? ((fileId, text) => {
+      for (const repo of getTextEditorRepositoryStates()) {
+        repo.applyRecoveredContent(fileId, text);
+      }
+    });
     this.debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
     this.backupDebounceMs = options.backupDebounceMs ?? DEFAULT_BACKUP_DEBOUNCE_MS;
     this.backupMaxIntervalMs = options.backupMaxIntervalMs ?? DEFAULT_BACKUP_MAX_INTERVAL_MS;
