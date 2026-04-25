@@ -1,3 +1,10 @@
+.observability-editor {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
 .collapsible-section {
   margin-bottom: 12px;
 }
@@ -101,6 +108,26 @@
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
+.backend-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.backend-actions button {
+  border: 1px solid var(--border);
+  background: rgba(7, 15, 25, 0.6);
+  color: var(--text-0);
+  border-radius: 6px;
+  padding: 6px 9px;
+  cursor: pointer;
+  font-size: var(--ui-font-size-sm);
+}
+
+.backend-actions button:hover {
+  border-color: var(--accent);
+}
+
 .backend-log-panel {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -202,5 +229,9 @@
   .backend-log-list li {
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+
+  .backend-actions {
+    flex-direction: column;
   }
 }

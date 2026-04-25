@@ -3,6 +3,10 @@ import type { WorkspaceSnapshot } from "../workspace/WorkspaceSnapshot.js";
 import type { UserKeybindingsDocument } from "../commands/Keybindings.js";
 import type { ExternalFrontendPluginManifest } from "../plugin/ExternalFrontendPluginManifest.js";
 import type { FileWatcherEvent } from "../files/FileWatcher.js";
+import type {
+  SettingsIndexDocument,
+  SettingsModuleDocument
+} from "../settings/SettingsDocuments.js";
 
 export interface ShellApi {
   platform: string;
@@ -26,6 +30,10 @@ export interface ShellApi {
   saveWorkspace: (snapshot: WorkspaceSnapshot) => Promise<{ accepted: boolean }>;
   getUserKeybindings: () => Promise<UserKeybindingsDocument>;
   saveUserKeybindings: (document: UserKeybindingsDocument) => Promise<{ accepted: boolean }>;
+  getSettingsIndex: () => Promise<SettingsIndexDocument>;
+  getSettingsModule: (params: { moduleId: string }) => Promise<SettingsModuleDocument>;
+  saveSettingsIndex: (document: SettingsIndexDocument) => Promise<{ accepted: boolean }>;
+  saveSettingsModule: (params: { moduleId: string; document: SettingsModuleDocument }) => Promise<{ accepted: boolean }>;
   saveWorkspaceBackup: (params: { fileId: string; text: string }) => Promise<{ backupUri: string }>;
   purgeWorkspaceBackups: (params: { fileId: string }) => Promise<{ purged: number }>;
   listWorkspaceBackups: (params: { fileId: string }) => Promise<{ backupPaths: string[] }>;

@@ -54,6 +54,15 @@ describe("bootstrapShell diagnostics wiring", () => {
       saveWorkspace: async () => ({ accepted: true }),
       getUserKeybindings: async () => ({ version: 1 as const, bindings: [], unbound: [] }),
       saveUserKeybindings: async () => ({ accepted: true }),
+      getSettingsIndex: async () => ({ version: 1 as const, updatedAt: new Date(0).toISOString(), modules: {} }),
+      getSettingsModule: async ({ moduleId }: { moduleId: string }) => ({
+        version: 1 as const,
+        moduleId,
+        updatedAt: new Date(0).toISOString(),
+        values: {}
+      }),
+      saveSettingsIndex: async () => ({ accepted: true }),
+      saveSettingsModule: async () => ({ accepted: true }),
       saveWorkspaceBackup: async () => ({ backupUri: "file:///backup" }),
       purgeWorkspaceBackups: async () => ({ purged: 0 }),
       listWorkspaceBackups: async () => ({ backupPaths: [] }),

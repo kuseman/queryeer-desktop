@@ -15,6 +15,13 @@ import type {
 } from "../../contracts/extensions/KeybindingExtension";
 import type { FileSystemExtension } from "../../contracts/extensions/FileSystemExtension";
 import type { TooltipSectionContribution } from "../../contracts/extensions/TooltipExtension";
+import type {
+  AdvancedSettingsRenderer,
+  AdvancedSettingsValidator,
+  SettingDefinition,
+  SettingsContribution,
+  SettingsRegistry
+} from "../../contracts/extensions/SettingsExtension";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import type {
@@ -43,6 +50,12 @@ export type ExtensionSnapshot = {
   };
   tooltip: {
     sections: TooltipSectionContribution[];
+  };
+  settings: {
+    contributions: SettingsContribution[];
+    definitions: SettingDefinition[];
+    advancedRendererIds: string[];
+    advancedValidatorIds: string[];
   };
 };
 
@@ -73,6 +86,10 @@ export class ExtensionRegistry {
   private readonly layoutEditors = new Map<string, LayoutEditorContribution>();
   private readonly layoutWelcomes = new Map<string, LayoutWelcomeContribution>();
   private readonly tooltipSections = new Map<string, TooltipSectionContribution>();
+  private readonly settingsContributions = new Map<string, SettingsContribution>();
+  private readonly settingsDefinitions = new Map<string, SettingDefinition>();
+  private readonly advancedSettingsRenderers = new Map<string, AdvancedSettingsRenderer>();
+  private readonly advancedSettingsValidators = new Map<string, AdvancedSettingsValidator>();
   private shellDefaults: LayoutShellDefaults = DEFAULT_SHELL_DEFAULTS;
   private readonly fileRegistry = new FileRegistry({
     getEditors: () => [...this.layoutEditors.values()]
@@ -177,6 +194,43 @@ export class ExtensionRegistry {
     };
   }
 
+  public createSettingsRegistry(): SettingsRegistry {
+    return {
+      registerSettings: (contribution) => {
+        for (const setting of contribution.settings) {
+          if (setting.moduleId !== contribution.moduleId) {
+            throw new Error(
+              `Setting '${setting.id}' must have moduleId '${contribution.moduleId}'`
+            );
+          }
+          if (!setting.id.startsWith(`${contribution.moduleId}.`)) {
+            throw new Error(
+              `Setting id '${setting.id}' must start with '${contribution.moduleId}.'`
+            );
+          }
+          if (this.settingsDefinitions.has(setting.id)) {
+            throw new Error(`Duplicate setting id '${setting.id}'`);
+          }
+          if (setting.type === "enum" && (!setting.options || setting.options.length === 0)) {
+            throw new Error(`Setting '${setting.id}' is enum but has no options`);
+          }
+          this.settingsDefinitions.set(setting.id, setting);
+        }
+        this.settingsContributions.set(contribution.moduleId, contribution);
+      },
+      registerAdvancedRenderer: (renderer) => {
+        this.advancedSettingsRenderers.set(renderer.id, renderer);
+      },
+      registerAdvancedValidator: (validator) => {
+        this.advancedSettingsValidators.set(validator.id, validator);
+      },
+      listSettingsContributions: () => [...this.settingsContributions.values()],
+      listSettingsDefinitions: () => [...this.settingsDefinitions.values()],
+      getAdvancedRenderer: (id) => this.advancedSettingsRenderers.get(id),
+      getAdvancedValidator: (id) => this.advancedSettingsValidators.get(id)
+    };
+  }
+
   public snapshot(): ExtensionSnapshot {
     return {
       commands: [...this.commands.values()],
@@ -196,6 +250,12 @@ export class ExtensionRegistry {
       },
       tooltip: {
         sections: [...this.tooltipSections.values()]
+      },
+      settings: {
+        contributions: [...this.settingsContributions.values()],
+        definitions: [...this.settingsDefinitions.values()],
+        advancedRendererIds: [...this.advancedSettingsRenderers.keys()],
+        advancedValidatorIds: [...this.advancedSettingsValidators.keys()]
       }
     };
   }

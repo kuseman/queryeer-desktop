@@ -6,6 +6,7 @@ import type { MenuRegistry } from "../extensions/MenuExtension.js";
 import type { KeybindingRegistry } from "../extensions/KeybindingExtension.js";
 import type { DialogExtension } from "../extensions/DialogExtension.js";
 import type { TooltipRegistry } from "../extensions/TooltipExtension.js";
+import type { SettingsRegistry } from "../extensions/SettingsExtension.js";
 import type { PluginManifest } from "./PluginManifest.js";
 
 export type Plugin = {
@@ -27,6 +28,7 @@ export type PluginContext = {
   keybindings: KeybindingRegistry;
   dialog: DialogRegistry;
   tooltip: TooltipRegistry;
+  settings: SettingsRegistry;
 };
 
 export type CommandExecutionResult = {

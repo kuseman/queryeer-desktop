@@ -9,7 +9,9 @@ import "../../contracts/shell/Api";
 import { CoreMenuBar } from "../../plugins/core.menu/MenuBar";
 import type { RendererWorkspaceService } from "../workspace/workspace-service";
 import { Toolbar, StatusBar, Sidebar, SidebarDivider, EditorTabs, EditorPane } from "../../plugins/core.layout";
+import { SettingsModalHost } from "../../plugins/core.settings/SettingsModalHost";
 import { confirmCloseDirtyFile } from "./close-file-guard";
+import "./shell-app.css";
 
 type ShellAppProps = {
   extensions: ExtensionSnapshot;
@@ -391,6 +393,8 @@ export function ShellApp({
           executeCommand={executeCommand}
         />
       )}
+
+      <SettingsModalHost />
     </div>
   );
 }

@@ -10,6 +10,7 @@ Purpose: define practical UI baseline decisions for a slimmer shell that feels c
 - Clear separation between zones via thin borders.
 - Consistent spacing and typography across panels.
 - Icons should be vector-based (SVG), not text glyphs.
+- CSS should be colocated with each module/component domain (avoid adding module-specific styles to global `base.css`).
 
 ## Decisions
 

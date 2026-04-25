@@ -1,0 +1,140 @@
+.explorer-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-1);
+}
+
+.explorer-empty button {
+  margin-top: 8px;
+  padding: 4px 12px;
+  background: var(--accent);
+  border: none;
+  color: var(--text-0);
+  cursor: pointer;
+}
+
+.explorer-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.explorer-toolbar {
+  display: flex;
+  padding: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.explorer-toolbar button {
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-0);
+  cursor: pointer;
+}
+
+.explorer-toolbar button:hover {
+  background: var(--titlebar-hover);
+}
+
+.explorer-tree {
+  flex: 1;
+  overflow: auto;
+}
+
+.explorer-folder {
+  user-select: none;
+}
+
+.explorer-folder-header {
+  display: flex;
+  align-items: center;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.explorer-folder-header:hover {
+  background: var(--titlebar-hover);
+}
+
+.explorer-folder-header.is-selected {
+  background: rgba(0, 120, 215, 0.25);
+}
+
+.explorer-folder-header.is-selected:hover {
+  background: rgba(0, 120, 215, 0.35);
+}
+
+.explorer-chevron {
+  width: 16px;
+  font-size: 10px;
+  color: var(--text-1);
+  transition: transform 0.1s;
+}
+
+.explorer-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.explorer-folder-icon {
+  margin-right: 4px;
+}
+
+.explorer-folder-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explorer-remove {
+  opacity: 0;
+  padding: 0 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-1);
+  cursor: pointer;
+  transition: opacity 0.1s;
+}
+
+.explorer-folder-header:hover .explorer-remove {
+  opacity: 1;
+}
+
+.explorer-folder-content {
+  padding-left: 16px;
+}
+
+.explorer-file {
+  display: flex;
+  align-items: center;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.explorer-file:hover {
+  background: var(--titlebar-hover);
+}
+
+.explorer-file.active {
+  background: var(--accent);
+}
+
+.explorer-file.dirty .explorer-file-name::after {
+  content: " •";
+  color: var(--text-0);
+}
+
+.explorer-file-icon {
+  margin-right: 4px;
+}
+
+.explorer-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explorer-file.is-selected {
+  box-shadow: inset 0 0 2px var(--accent);
+}

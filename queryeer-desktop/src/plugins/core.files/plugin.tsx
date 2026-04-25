@@ -3,6 +3,7 @@ import type { MimeCapability } from "../../contracts/files/FilesRegistry";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import { fileUriToPath } from "../../contracts/files/Resolvers";
 import { getTextEditorRegistry } from "../core.editor/TextEditor/TextEditorRegistry";
+import { getCoreSettingsService } from "../core.settings/service";
 
 const EXTENSION_MIME_MAP: Record<string, string> = {
   txt: "text/plain",
@@ -91,6 +92,26 @@ function renderUnsupportedEditorView(
   );
 }
 
+async function maybeFormatBeforeSave(fileId: string): Promise<void> {
+  const settingsService = getCoreSettingsService();
+  const formatOnSave = settingsService?.getValue("core.editor.formatOnSave") === true;
+  if (!formatOnSave) {
+    return;
+  }
+
+  const textEditorRegistry = getTextEditorRegistry();
+  const activeFile = textEditorRegistry.getActiveFile();
+  if (!activeFile || activeFile.fileId !== fileId) {
+    return;
+  }
+
+  const editor = textEditorRegistry.getActiveEditor();
+  if (!editor) {
+    return;
+  }
+  await editor.format();
+}
+
 export const coreFilesPlugin: Plugin = {
   manifest: {
     id: "core.files",
@@ -158,12 +179,14 @@ export const coreFilesPlugin: Plugin = {
       handler: async () => {
         const activeFileId = context.fileMediator.getActiveFileId();
         if (activeFileId) {
+          await maybeFormatBeforeSave(activeFileId);
           await context.fileMediator.saveFile(activeFileId);
           return;
         }
 
         const activeFromEditor = getTextEditorRegistry().getActiveFile();
         if (activeFromEditor) {
+          await maybeFormatBeforeSave(activeFromEditor.fileId);
           await context.fileMediator.saveFile(activeFromEditor.fileId);
         }
       }

@@ -12,6 +12,7 @@ void React;
 type FakeEditor = {
   id: number;
   layout: ReturnType<typeof vi.fn>;
+  updateOptions: ReturnType<typeof vi.fn>;
   restoreViewState: ReturnType<typeof vi.fn>;
   saveViewState: ReturnType<typeof vi.fn>;
   setModel: ReturnType<typeof vi.fn>;
@@ -24,7 +25,21 @@ type FakeEditor = {
 };
 
 const editors: FakeEditor[] = [];
+const settingsValues = new Map<string, unknown>();
+const settingsSubscribers = new Set<() => void>();
 const modelByUri = new Map<string, { uri: { toString: () => string }; getLanguageId: () => string; getValue: () => string; getValueInRange: () => string; getLineCount: () => number; getLineContent: () => string; getOffsetAt: () => number; getPositionAt: () => { lineNumber: number; column: number }; getWordAtPosition: () => null }>();
+
+vi.mock("../../core.settings/service", () => ({
+  getCoreSettingsService: () => ({
+    getValue: (settingId: string) => settingsValues.get(settingId),
+    subscribe: (listener: () => void) => {
+      settingsSubscribers.add(listener);
+      return () => {
+        settingsSubscribers.delete(listener);
+      };
+    }
+  })
+}));
 
 vi.mock("monaco-editor", () => {
   let nextEditorId = 0;
@@ -36,6 +51,7 @@ vi.mock("monaco-editor", () => {
     const editor: FakeEditor = {
       id: ++nextEditorId,
       layout: vi.fn(),
+      updateOptions: vi.fn(),
       restoreViewState: vi.fn(),
       saveViewState: vi.fn(),
       setModel: vi.fn(),
@@ -124,6 +140,8 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
   beforeEach(async () => {
     (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     editors.length = 0;
+    settingsValues.clear();
+    settingsSubscribers.clear();
     modelByUri.clear();
     await preloadMonaco();
 
@@ -204,5 +222,32 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
     const secondEditor = editors[1];
     expect(secondEditor).toBeTruthy();
     expect(secondEditor.restoreViewState).toHaveBeenCalledWith(runtimeState);
+  });
+
+  it("updates monaco options when editor settings change", async () => {
+    const file = makeFile({ fileId: "file-settings", uri: "file:///settings.sql", dirtyVsDisk: false });
+    filesById.set(file.fileId, file);
+
+    await act(async () => {
+      root.render(<TextEditorComponent file={file} registry={registry} />);
+      await flush();
+    });
+
+    const editor = editors[0];
+    expect(editor).toBeTruthy();
+    expect(editor.updateOptions).toHaveBeenCalled();
+
+    settingsValues.set("core.editor.fontSize", 18);
+    settingsValues.set("core.editor.wordWrap", "on");
+    for (const listener of settingsSubscribers) {
+      listener();
+    }
+
+    expect(editor.updateOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        fontSize: 18,
+        wordWrap: "on"
+      })
+    );
   });
 });
