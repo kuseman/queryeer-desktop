@@ -1,0 +1,470 @@
+.shell-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  background: #2d2d2d;
+}
+
+.shell-toolbar-action {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-0);
+  padding: 5px 9px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--ui-font-size-sm);
+}
+
+.shell-toolbar-action.is-active {
+  border-color: var(--accent);
+  background: rgba(14, 99, 156, 0.5);
+  color: var(--text-0);
+}
+
+.shell-toolbar-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  opacity: 0.9;
+}
+
+.shell-toolbar-empty {
+  color: var(--text-1);
+  font-size: var(--ui-font-size-sm);
+}
+
+.shell-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+  overflow: auto;
+  background: #252526;
+}
+
+.shell-divider {
+  width: 1px;
+  cursor: col-resize;
+  border-radius: 0;
+  background: var(--border);
+  align-self: stretch;
+  position: relative;
+}
+
+.shell-divider::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -2px;
+  right: -2px;
+}
+
+.shell-divider:hover {
+  background: var(--accent-muted);
+}
+
+.shell-editor-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+  background: rgba(6, 12, 22, 0.6);
+  min-height: 28px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-shrink: 0;
+  scrollbar-gutter: stable;
+}
+
+.shell-editor-tab {
+  display: flex;
+  align-items: stretch;
+  border-right: 1px solid var(--border);
+  position: relative;
+}
+
+.shell-editor-tab-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid transparent;
+  color: var(--text-1);
+  font-size: var(--ui-font-size-xs);
+  cursor: pointer;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+.shell-editor-tab-button:hover {
+  background: rgba(173, 194, 219, 0.08);
+  color: var(--text-0);
+}
+
+.shell-editor-tab.is-active .shell-editor-tab-button {
+  background: rgba(7, 15, 25, 0.55);
+  color: var(--text-0);
+}
+
+.shell-editor-tab.is-active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--accent);
+}
+
+.shell-editor-tab-title {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-editor-tab-title.is-modified {
+  color: #e6c200;
+}
+
+.shell-editor-tab-title.is-deleted {
+  color: #ff4d4d;
+  text-decoration: line-through;
+}
+
+.shell-editor-tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin-left: 2px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--text-1);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.shell-editor-tab:hover .shell-editor-tab-close,
+.shell-editor-tab.is-active .shell-editor-tab-close {
+  opacity: 1;
+}
+
+.shell-editor-tab-close:hover {
+  background: rgba(173, 194, 219, 0.2);
+  color: var(--text-0);
+}
+
+.shell-tab-tooltip {
+  position: fixed;
+  z-index: 1000;
+  background: var(--bg-2);
+  border: 1px solid rgba(173, 194, 219, 0.35);
+  border-radius: 6px;
+  padding: 8px 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  min-width: 240px;
+}
+
+.tab-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tab-tooltip-section {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--ui-font-size-xs);
+}
+
+.tab-tooltip-label {
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+
+.tab-tooltip-value {
+  color: var(--text-0);
+  text-align: right;
+  word-break: break-all;
+}
+
+.tab-tooltip-section.severity-warning .tab-tooltip-value {
+  color: #f59e0b;
+}
+
+.tab-tooltip-section.severity-error .tab-tooltip-value {
+  color: #ef4444;
+}
+
+.shell-editor-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.shell-editor-pane {
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.shell-editor-pane .panel-card {
+  padding: 6px 8px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.shell-editor-pane .panel-card h3 {
+  margin: 0;
+  font-size: var(--ui-font-size-xs);
+  font-weight: 500;
+}
+
+.shell-editor-pane .panel-card p {
+  margin: 4px 0 0;
+  font-size: var(--ui-font-size-xs);
+}
+
+.shell-editor-pane .backend-actions {
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.shell-editor-pane .backend-actions button {
+  padding: 2px 8px;
+  font-size: var(--ui-font-size-xs);
+}
+
+.shell-sidebar .panel-card {
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  padding: 0;
+}
+
+.shell-sidebar .panel-card h3 {
+  margin: 0 0 6px;
+  font-size: var(--ui-font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-1);
+}
+
+.shell-sidebar .panel-card-flex {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.shell-sidebar .panel-card-flex .panel-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.sidebar-resize-handle {
+  height: 4px;
+  flex-shrink: 0;
+  cursor: ns-resize;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.sidebar-resize-handle:hover {
+  background: var(--accent);
+}
+
+.is-resizing-sidebar,
+.is-resizing-sidebar * {
+  cursor: ns-resize !important;
+  user-select: none;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 6px;
+  border: none;
+  background: transparent;
+  cursor: default;
+}
+
+.panel-header-interactive {
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.panel-header-interactive:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  font-size: var(--ui-font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-1);
+}
+
+.panel-chevron {
+  font-size: 10px;
+  color: var(--text-2);
+  transition: transform 0.15s ease;
+  margin-right: 4px;
+}
+
+.panel-chevron-open {
+  transform: rotate(90deg);
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  padding-left: 8px;
+}
+
+.panel-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-2);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+.panel-action:hover {
+  background: var(--titlebar-hover);
+  color: var(--text-0);
+}
+
+.panel-content {
+  padding: 4px 6px 6px;
+  overflow: auto;
+  flex: 1;
+}
+
+.panel-card-wide {
+  grid-column: 1 / -1;
+}
+
+.panel-card h2,
+.panel-card h3 {
+  margin: 0 0 10px;
+  font-size: var(--ui-font-size-title);
+}
+
+.panel-card ul {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-1);
+}
+
+.panel-card p {
+  margin: 0;
+}
+
+.panel-card li {
+  margin: 4px 0;
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  font-size: var(--ui-font-size-sm);
+}
+
+.shell-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 24px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border);
+  background: #007acc;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+}
+
+.shell-status-bar-left,
+.shell-status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.shell-status-item {
+  font-size: var(--ui-font-size-xs);
+  color: #ffffff;
+}
+
+.shell-status-item-interactive {
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 1px 4px;
+  transition: background 0.1s ease;
+}
+
+.shell-status-item-interactive:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.shell-status-item-interactive:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@media (max-width: 640px) {
+  .shell-sidebar {
+    overflow: visible;
+  }
+
+  .shell-divider {
+    display: none;
+  }
+
+  .shell-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .shell-status-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

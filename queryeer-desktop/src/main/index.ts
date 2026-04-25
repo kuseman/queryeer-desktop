@@ -18,6 +18,7 @@ import {
   defaultWorkspaceFilePath,
   WorkspaceStore
 } from "./workspace/workspace-store.js";
+import { defaultSettingsDirPath, SettingsStore } from "./settings/settings-store.js";
 
 const isDev = !app.isPackaged;
 const backendGateway = new BackendGateway();
@@ -32,6 +33,7 @@ const fileWatcherService = new FileWatcherMainService({
 });
 let workspaceStore: WorkspaceStore | null = null;
 let keybindingsStore: KeybindingsStore | null = null;
+let settingsStore: SettingsStore | null = null;
 let backupStore: BackupStore | null = null;
 let mainWindow: BrowserWindow | null = null;
 
@@ -196,6 +198,10 @@ app.whenReady().then(() => {
     keybindingsFilePath: defaultKeybindingsFilePath(app.getPath("userData"))
   });
   keybindingsStore.wireIpc();
+  settingsStore = new SettingsStore({
+    settingsDirPath: defaultSettingsDirPath(app.getPath("userData"))
+  });
+  settingsStore.wireIpc();
   backupStore = new BackupStore({
     backupsDir: defaultBackupsDir(app.getPath("userData"))
   });

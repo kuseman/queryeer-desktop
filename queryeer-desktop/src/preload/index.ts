@@ -20,6 +20,10 @@ import type {
 import type { ExternalFrontendPluginManifest } from "../contracts/plugin/ExternalFrontendPluginManifest.js";
 import type { WorkspaceSnapshot } from "../contracts/workspace/WorkspaceSnapshot.js";
 import type { UserKeybindingsDocument } from "../contracts/commands/Keybindings.js";
+import type {
+  SettingsIndexDocument,
+  SettingsModuleDocument
+} from "../contracts/settings/SettingsDocuments.js";
 
 type DialogShowMessageOptions = {
   title: string;
@@ -68,6 +72,10 @@ type AppShellApi = {
   saveWorkspace: (snapshot: WorkspaceSnapshot) => Promise<{ accepted: boolean }>;
   getUserKeybindings: () => Promise<UserKeybindingsDocument>;
   saveUserKeybindings: (document: UserKeybindingsDocument) => Promise<{ accepted: boolean }>;
+  getSettingsIndex: () => Promise<SettingsIndexDocument>;
+  getSettingsModule: (params: { moduleId: string }) => Promise<SettingsModuleDocument>;
+  saveSettingsIndex: (document: SettingsIndexDocument) => Promise<{ accepted: boolean }>;
+  saveSettingsModule: (params: { moduleId: string; document: SettingsModuleDocument }) => Promise<{ accepted: boolean }>;
   saveWorkspaceBackup: (params: {
     fileId: string;
     text: string;
@@ -178,6 +186,18 @@ const appShellApi: AppShellApi = {
   },
   saveUserKeybindings: async (document) => {
     return ipcRenderer.invoke("keybindings:save", document);
+  },
+  getSettingsIndex: async () => {
+    return ipcRenderer.invoke("settings:get-index");
+  },
+  getSettingsModule: async (params) => {
+    return ipcRenderer.invoke("settings:get-module", params);
+  },
+  saveSettingsIndex: async (document) => {
+    return ipcRenderer.invoke("settings:save-index", document);
+  },
+  saveSettingsModule: async (params) => {
+    return ipcRenderer.invoke("settings:save-module", params);
   },
   saveWorkspaceBackup: async (params) => {
     return ipcRenderer.invoke("workspace:save-backup", params);

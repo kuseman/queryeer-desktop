@@ -34,7 +34,13 @@ function makeExtensions(): ExtensionSnapshot {
         statusBarHeight: 24
       }
     },
-    tooltip: { sections: [] }
+    tooltip: { sections: [] },
+    settings: {
+      contributions: [],
+      definitions: [],
+      advancedRendererIds: [],
+      advancedValidatorIds: []
+    }
   };
 }
 

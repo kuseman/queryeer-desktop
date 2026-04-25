@@ -3,6 +3,13 @@ import type * as monacoType from "monaco-editor";
 import type { FileEntity } from "../../../contracts/files/FileEntity";
 import type { TextEditorRegistry } from "./TextEditorRegistry";
 import { MonacoTextEditorApi } from "./MonacoTextEditorApi";
+import { getCoreSettingsService } from "../../core.settings/service";
+import {
+  buildMonacoCreateOptions,
+  buildMonacoModelUpdateOptions,
+  buildMonacoUpdateOptions
+} from "./editor-settings";
+import "./text-editor.css";
 
 void React;
 
@@ -30,6 +37,17 @@ export function TextEditorComponent({ file, registry }: TextEditorComponentProps
   const initGenerationRef = useRef(0);
   const mountedRef = useRef(true);
 
+  const applyEditorSettings = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+    const settingsService = getCoreSettingsService();
+    editor.updateOptions(buildMonacoUpdateOptions(settingsService));
+    const model = editor.getModel();
+    model?.updateOptions(buildMonacoModelUpdateOptions(settingsService));
+  }, []);
+
   const initEditorOnce = useCallback(async (fileToLoad: FileEntity | undefined) => {
     if (initStartedRef.current || editorRef.current) {
       return;
@@ -49,20 +67,11 @@ export function TextEditorComponent({ file, registry }: TextEditorComponentProps
       return;
     }
 
-    const editor = monaco.editor.create(containerRef.current, {
-      value: "",
-      theme: "vs-dark",
-      automaticLayout: true,
-      minimap: { enabled: true },
-      scrollBeyondLastLine: false,
-      fontSize: 14,
-      lineNumbers: "on",
-      renderLineHighlight: "all",
-      glyphMargin: false,
-      folding: true,
-      wordWrap: "off",
-      model: null
-    });
+    const settingsService = getCoreSettingsService();
+    const editor = monaco.editor.create(
+      containerRef.current,
+      buildMonacoCreateOptions(settingsService)
+    );
 
     editorRef.current = editor;
 
@@ -86,6 +95,8 @@ export function TextEditorComponent({ file, registry }: TextEditorComponentProps
     if (width > 0 && height > 0) {
       editor.layout({ width, height });
     }
+
+    applyEditorSettings();
 
     disposablesRef.current.push(
       editor.onDidDispose(() => {
@@ -123,7 +134,7 @@ export function TextEditorComponent({ file, registry }: TextEditorComponentProps
     }
 
     initStartedRef.current = false;
-  }, [registry]);
+  }, [applyEditorSettings, registry]);
 
   useEffect(() => {
     if (!file) return;
@@ -156,6 +167,18 @@ export function TextEditorComponent({ file, registry }: TextEditorComponentProps
       disposablesRef.current = [];
     };
   }, []);
+
+  useEffect(() => {
+    const settingsService = getCoreSettingsService();
+    if (!settingsService) {
+      return;
+    }
+
+    applyEditorSettings();
+    return settingsService.subscribe(() => {
+      applyEditorSettings();
+    });
+  }, [applyEditorSettings]);
 
   return (
     <div className="text-editor-component">

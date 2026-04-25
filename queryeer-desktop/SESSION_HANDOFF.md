@@ -57,6 +57,15 @@
 - **Editor change + save wiring landed**: Monaco content changes now flow through `TextEditorRegistry.notifyChanged(...)` into `FileMediator.notifyChanged(...)` (backend + workspace autosave path), and `core.files.save` now calls `FileMediator.saveFile(...)`. Main/preload bridge gained `file:write`/`writeFile` for real disk writes of `file:` URIs.
 - **Backup recovery semantics updated**: on hydrate, persisted backups are now auto-restored into the working session for both file-backed and untitled editors (not just flagged as recoverable). Restored files are marked `dirtyVsDisk: true` and recovered text is applied through `TextEditorRegistry.applyRecoveredContent(...)` with queued delivery when Monaco model is not yet created.
 - **Backup artifact policy updated**: autosave now writes to one stable backup id per URI (`bkp-<hash(uri)>`) instead of rolling timestamped ids per runtime file id, preventing duplicate backup lineages across restarts.
+- **core.settings foundation implemented**:
+  - new settings extension contract + plugin context wiring (`context.settings`)
+  - new hybrid settings persistence in Electron main (`settings/index.json` + `settings/<moduleId>.json`) with atomic writes and corrupt-file quarantine
+  - preload/shell API methods for settings load/save (`getSettingsIndex`, `getSettingsModule`, `saveSettingsIndex`, `saveSettingsModule`)
+  - renderer `SettingsService` with default resolution, search, subscriptions, debounced persistence, and optional advanced renderer/validator hooks
+  - new `core.settings` plugin with command + keybinding + Tools menu entry (`core.settings.open`)
+  - modal settings UI foundation (search, section tree, details editor)
+  - secret handling is currently Option B: `isSecret` settings are non-editable placeholders (secure secret storage deferred)
+- **Frontend styling convention clarified**: module-specific CSS should be colocated inside each module (for example `core.settings/settings-modal.css`) instead of extending global `renderer/styles/base.css`.
 
 ## What changed in this session
 

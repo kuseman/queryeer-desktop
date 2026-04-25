@@ -1,0 +1,52 @@
+.shell-page {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  height: 100%;
+}
+
+.shell-layout {
+  display: grid;
+  grid-template-columns: auto 1px minmax(0, 1fr) 1px auto;
+  gap: 0;
+  padding: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.shell-main-area {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #1e1e1e;
+  display: flex;
+  flex-direction: column;
+}
+
+.shell-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body.is-resizing-layout {
+  cursor: col-resize;
+  user-select: none;
+}
+
+@media (max-width: 640px) {
+  .shell-main {
+    width: calc(100% - 24px);
+    margin: 16px auto;
+  }
+
+  .shell-layout {
+    grid-template-columns: 1fr;
+    padding: 8px;
+    overflow: auto;
+  }
+}

@@ -88,7 +88,16 @@ function createContext(file?: FileEntity) {
       showOpenFolder: vi.fn(),
       showSaveDialog: vi.fn()
     },
-    tooltip: { registerTooltipSection: vi.fn() }
+    tooltip: { registerTooltipSection: vi.fn() },
+    settings: {
+      registerSettings: vi.fn(),
+      registerAdvancedRenderer: vi.fn(),
+      registerAdvancedValidator: vi.fn(),
+      listSettingsContributions: vi.fn(() => []),
+      listSettingsDefinitions: vi.fn(() => []),
+      getAdvancedRenderer: vi.fn(),
+      getAdvancedValidator: vi.fn()
+    }
   } satisfies PluginContext;
 
   return {
