@@ -67,6 +67,11 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand }: CoreMenu
 
   const acceleratorByCommand = useMemo(() => {
     const map = new Map<string, string>();
+    for (const item of sortedItems) {
+      if (item.accelerator) {
+        map.set(item.commandId ?? item.id, normalizeAccelerator(item.accelerator));
+      }
+    }
     for (const binding of [...keybindings].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
       const isGlobal = (binding.scope ?? "global") === "global";
       const isMenuSafeWhen = binding.when === undefined || binding.when === "global";
@@ -78,7 +83,7 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand }: CoreMenu
       }
     }
     return map;
-  }, [keybindings]);
+  }, [keybindings, sortedItems]);
 
   const getChildren = (id: string): MenuItemContribution[] => {
     return childrenByParent.get(id) ?? [];
@@ -354,7 +359,7 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand }: CoreMenu
                 <span className="shell-titlebar-dropdown-label">{item.label}</span>
                 <span className="shell-titlebar-dropdown-tail">
                   <span className="shell-titlebar-dropdown-accelerator">
-                    {item.commandId ? acceleratorByCommand.get(item.commandId) ?? "" : ""}
+                    {acceleratorByCommand.get(item.commandId ?? item.id) ?? ""}
                   </span>
                   {hasChildren ? <span className="shell-titlebar-dropdown-chevron">&gt;</span> : null}
                 </span>

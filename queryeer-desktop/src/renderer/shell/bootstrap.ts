@@ -153,7 +153,8 @@ export async function bootstrapShell() {
     order: item.order,
     commandId: item.commandId,
     parentId: item.parentId,
-    icon: item.icon
+    icon: item.icon,
+    accelerator: item.accelerator
   }));
 
   const fallbackMenuAccelerators = new Map<string, string>();
