@@ -29,4 +29,8 @@ export class BackendLogBuffer {
   public toArray(): BackendLogEntry[] {
     return [...this.entries];
   }
+
+  public clear(): void {
+    this.entries.length = 0;
+  }
 }

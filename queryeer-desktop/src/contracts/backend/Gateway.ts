@@ -19,9 +19,10 @@ export type BackendGatewayStatus = {
   runtimeStatus?: RuntimeStatusResult;
   backendLogs: BackendLogEntry[];
   error?: string;
+  tracePayloads?: boolean;
 };
 
-export type BackendLogLevel = "debug" | "info" | "warn" | "error";
+export type BackendLogLevel = "trace" | "debug" | "info" | "warn" | "error";
 
 export type BackendLogEntry = {
   timestamp: string;

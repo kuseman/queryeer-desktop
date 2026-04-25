@@ -35,7 +35,7 @@ import {
   type BackendTransport
 } from "./backend-transport.js";
 
-type GatewayLogLevel = "debug" | "info" | "warn" | "error";
+type GatewayLogLevel = "trace" | "debug" | "info" | "warn" | "error";
 
 export class BackendGateway {
   private readonly transport: BackendTransport;
@@ -47,6 +47,8 @@ export class BackendGateway {
   private startupPromise: Promise<void> | null = null;
   private pingIntervalHandle: NodeJS.Timeout | null = null;
   private rendererSink: ((method: string, params: unknown) => void) | null = null;
+  private tracePayloads = false;
+  private logFlowEnabled = true;
 
   public constructor(
     transportFactory?: (
@@ -104,6 +106,12 @@ export class BackendGateway {
 
   public wireIpc(): void {
     ipcMain.handle("backend:get-status", async () => this.getStatus());
+    ipcMain.handle("backend:toggle-trace", async (_event, enabled: boolean) => {
+      this.setTracePayloads(enabled);
+    });
+    ipcMain.handle("backend:set-log-flow", async (_event, enabled: boolean) => {
+      this.setLogFlowEnabled(enabled);
+    });
     ipcMain.handle("backend:execute-query", async (_event, params: QueryExecuteParams) => {
       return this.executeQuery(params);
     });
@@ -133,6 +141,22 @@ export class BackendGateway {
     return this.statusStore.get();
   }
 
+  public setTracePayloads(enabled: boolean): void {
+    this.tracePayloads = enabled;
+    this.statusStore.setTracePayloads(enabled);
+    this.syncLogSnapshot();
+    this.appendLog("info", "gateway", `Trace payloads ${enabled ? "enabled" : "disabled"}`);
+  }
+
+  public setLogFlowEnabled(enabled: boolean): void {
+    this.logFlowEnabled = enabled;
+    if (!enabled) {
+      this.logBuffer.clear();
+      this.syncLogSnapshot();
+    }
+    this.appendLog("info", "gateway", `Log flow ${enabled ? "enabled" : "disabled"}`);
+  }
+
   public async stop(): Promise<void> {
     if (this.pingIntervalHandle) {
       clearInterval(this.pingIntervalHandle);
@@ -154,6 +178,9 @@ export class BackendGateway {
 
     const envelope = this.createRequest("query.execute", params);
     this.appendLog("debug", "gateway", `Sending request ${envelope.id} query.execute`);
+    if (this.tracePayloads) {
+      this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
+    }
     const response = await this.sendRequest(envelope);
     if (!response.result) {
       throw new Error("query.execute failed: missing result");
@@ -164,6 +191,9 @@ export class BackendGateway {
   public async cancelQuery(params: QueryCancelParams): Promise<QueryCancelResult> {
     const envelope = this.createRequest("query.cancel", params);
     this.appendLog("debug", "gateway", `Sending request ${envelope.id} query.cancel`);
+    if (this.tracePayloads) {
+      this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
+    }
     const response = await this.sendRequest(envelope);
     if (!response.result) {
       throw new Error("query.cancel failed: missing result");
@@ -174,6 +204,9 @@ export class BackendGateway {
   public async openFile(params: FileOpenParams): Promise<FileOpenResult> {
     const envelope = this.createRequest("file.open", params);
     this.appendLog("debug", "gateway", `Sending request ${envelope.id} file.open`);
+    if (this.tracePayloads) {
+      this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
+    }
     const response = await this.sendRequest(envelope);
     if (!response.result) {
       throw new Error("file.open failed: missing result");
@@ -184,6 +217,9 @@ export class BackendGateway {
   public async closeFile(params: FileCloseParams): Promise<FileCloseResult> {
     const envelope = this.createRequest("file.close", params);
     this.appendLog("debug", "gateway", `Sending request ${envelope.id} file.close`);
+    if (this.tracePayloads) {
+      this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
+    }
     const response = await this.sendRequest(envelope);
     if (!response.result) {
       throw new Error("file.close failed: missing result");
@@ -194,6 +230,9 @@ export class BackendGateway {
   public async bindFile(params: FileBindParams): Promise<FileBindResult> {
     const envelope = this.createRequest("file.bind", params);
     this.appendLog("debug", "gateway", `Sending request ${envelope.id} file.bind`);
+    if (this.tracePayloads) {
+      this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
+    }
     const response = await this.sendRequest(envelope);
     if (!response.result) {
       throw new Error("file.bind failed: missing result");
@@ -209,6 +248,9 @@ export class BackendGateway {
       params
     };
     this.appendLog("debug", "gateway", `Sending notification file.change (${params.fileId}@${params.version})`);
+    if (this.tracePayloads) {
+      this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
+    }
     try {
       this.transport.sendEnvelope(envelope);
     } catch (error) {
@@ -423,6 +465,9 @@ export class BackendGateway {
   private onBackendEnvelope(envelope: BackendEnvelope): void {
     if (envelope.type === "response") {
       this.appendLog("debug", "gateway", `Received response ${envelope.id}`);
+      if (this.tracePayloads) {
+        this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
+      }
       const resolved = this.pending.resolve(envelope.id, envelope);
       if (!resolved) {
         this.appendLog("warn", "gateway", `No pending request for response ${envelope.id}`);
@@ -433,6 +478,9 @@ export class BackendGateway {
     if (envelope.type === "notification") {
       const qid = envelope.queryId ? ` [${envelope.queryId}]` : "";
       this.appendLog("debug", "gateway", `Received notification ${envelope.method}${qid}`);
+      if (this.tracePayloads) {
+        this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
+      }
       this.handleNotification(envelope);
     }
   }
@@ -500,6 +548,9 @@ export class BackendGateway {
     source: "gateway" | "transport" | "backend",
     message: string
   ): void {
+    if (!this.logFlowEnabled && level !== "info") {
+      return;
+    }
     this.logBuffer.append({ level, source, message: redactLogMessage(message) });
     this.syncLogSnapshot();
   }

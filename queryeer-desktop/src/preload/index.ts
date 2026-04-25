@@ -55,6 +55,8 @@ type AppShellApi = {
   readFile: (uri: string) => Promise<{ success: boolean; content: string }>;
   writeFile: (uri: string, content: string) => Promise<{ success: boolean }>;
   getBackendStatus: () => Promise<BackendGatewayStatus>;
+  toggleBackendTrace: (enabled: boolean) => Promise<void>;
+  setLogFlow: (enabled: boolean) => Promise<void>;
   getExternalFrontendPlugins: () => Promise<ExternalFrontendPluginManifest[]>;
   executeBackendQuery: (params: QueryExecuteParams) => Promise<QueryExecuteResult>;
   cancelBackendQuery: (params: QueryCancelParams) => Promise<QueryCancelResult>;
@@ -109,6 +111,7 @@ type AppShellApi = {
   windowMaximize: () => void;
   windowClose: () => void;
   isWindowMaximized: () => Promise<boolean>;
+  isDev: () => Promise<boolean>;
   onWindowStateChanged: (listener: (state: { maximized: boolean }) => void) => () => void;
 };
 
@@ -123,6 +126,12 @@ const appShellApi: AppShellApi = {
   },
   getBackendStatus: async () => {
     return ipcRenderer.invoke("backend:get-status");
+  },
+  toggleBackendTrace: async (enabled: boolean) => {
+    return ipcRenderer.invoke("backend:toggle-trace", enabled);
+  },
+  setLogFlow: async (enabled: boolean) => {
+    return ipcRenderer.invoke("backend:set-log-flow", enabled);
   },
   getExternalFrontendPlugins: async () => {
     return ipcRenderer.invoke("plugins:get-frontend-targets");
@@ -237,6 +246,9 @@ const appShellApi: AppShellApi = {
   windowClose: () => ipcRenderer.send("window:close"),
   isWindowMaximized: async () => {
     return ipcRenderer.invoke("window:is-maximized");
+  },
+  isDev: async () => {
+    return ipcRenderer.invoke("app:is-dev");
   },
   onWindowStateChanged: (listener) => {
     const channel = "window:state-changed";

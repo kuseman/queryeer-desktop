@@ -33,6 +33,8 @@ describe("bootstrapShell diagnostics wiring", () => {
         recentExecutions: [],
         backendLogs: []
       }),
+      toggleBackendTrace: async () => {},
+      setLogFlow: async () => {},
       getExternalFrontendPlugins: async () => [
         {
           id: "external.bad.module",
@@ -77,6 +79,7 @@ describe("bootstrapShell diagnostics wiring", () => {
       windowMaximize: () => {},
       windowClose: () => {},
       isWindowMaximized: async () => false,
+      isDev: async () => false,
       onWindowStateChanged: () => () => {}
     };
 

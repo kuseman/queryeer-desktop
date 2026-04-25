@@ -71,10 +71,62 @@ function BackendStatusIndicator() {
   return <span>Backend: {status?.state ?? "loading"}</span>;
 }
 
+type CollapsibleSectionProps = {
+  title: string;
+  defaultCollapsed?: boolean;
+  wide?: boolean;
+  children: React.ReactNode;
+};
+
+function CollapsibleSection({ title, defaultCollapsed = true, wide = false, children }: CollapsibleSectionProps) {
+  const storageKey = `observability-section-${title.toLowerCase().replace(/\s+/g, "-")}`;
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      return stored !== null ? JSON.parse(stored) : defaultCollapsed;
+    } catch {
+      return defaultCollapsed;
+    }
+  });
+
+  const handleToggle = (newCollapsed: boolean) => {
+    setCollapsed(newCollapsed);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(newCollapsed));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  return (
+    <details className={`collapsible-section${wide ? " panel-card-wide" : ""}`} open={!collapsed}>
+      <summary onClick={(e) => {
+        e.preventDefault();
+        handleToggle(!collapsed);
+      }}>
+        {title}
+      </summary>
+      {!collapsed && <div className="collapsible-content">{children}</div>}
+    </details>
+  );
+}
+
 function ObservabilityEditor() {
   const [backendStatus, setBackendStatus] = useState<BackendGatewayStatus | null>(null);
+  const [logFlowEnabled, setLogFlowEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
+    window.appShell.isDev().then(async (isDev) => {
+      const initialFlow = isDev;
+      await window.appShell.setLogFlow(initialFlow);
+      setLogFlowEnabled(initialFlow);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (logFlowEnabled === null || !logFlowEnabled) {
+      return;
+    }
     let active = true;
     const refresh = async () => {
       const s = await window.appShell.getBackendStatus();
@@ -90,7 +142,7 @@ function ObservabilityEditor() {
       active = false;
       window.clearInterval(interval);
     };
-  }, []);
+  }, [logFlowEnabled]);
 
   const runtime = getRuntimeData();
   if (!runtime) {
@@ -127,210 +179,249 @@ function ObservabilityEditor() {
       </section>
 
       <section className="shell-runtime-grid">
-        <article className="panel-card">
-          <h2>Plugins</h2>
-          <ul>
-            {hostState.loadedPluginIds.map((pluginId) => (
-              <li key={pluginId}>{pluginId}</li>
-            ))}
-          </ul>
-        </article>
+        <CollapsibleSection title="Plugins" defaultCollapsed={true}>
+          <article className="panel-card">
+            <ul>
+              {hostState.loadedPluginIds.map((pluginId) => (
+                <li key={pluginId}>{pluginId}</li>
+              ))}
+            </ul>
+          </article>
+        </CollapsibleSection>
 
-        <article className="panel-card">
-          <h2>Commands</h2>
-          <ul>
-            {extensions.commands.map((command) => (
-              <li key={command.id}>{command.id}</li>
-            ))}
-          </ul>
-        </article>
+        <CollapsibleSection title="Commands" defaultCollapsed={true}>
+          <article className="panel-card">
+            <ul>
+              {extensions.commands.map((command) => (
+                <li key={command.id}>{command.id}</li>
+              ))}
+            </ul>
+          </article>
+        </CollapsibleSection>
 
-        <article className="panel-card">
-          <h2>Keybindings</h2>
-          <ul>
-            <li>Registered: {extensions.keybindings.length}</li>
-            <li>Invalid user bindings: {keybindingDiagnostics.invalidUserBindings.length}</li>
-            <li>Duplicates resolved: {keybindingDiagnostics.duplicateBindings.length}</li>
-          </ul>
-        </article>
+        <CollapsibleSection title="Keybindings" defaultCollapsed={true}>
+          <article className="panel-card">
+            <ul>
+              <li>Registered: {extensions.keybindings.length}</li>
+              <li>Invalid user bindings: {keybindingDiagnostics.invalidUserBindings.length}</li>
+              <li>Duplicates resolved: {keybindingDiagnostics.duplicateBindings.length}</li>
+            </ul>
+          </article>
+        </CollapsibleSection>
 
-        <article className="panel-card">
-          <h2>Filesystems</h2>
-          <ul>
-            {extensions.filesystems.map((filesystem) => (
-              <li key={filesystem.id}>{filesystem.title}</li>
-            ))}
-          </ul>
-        </article>
+        <CollapsibleSection title="Filesystems" defaultCollapsed={true}>
+          <article className="panel-card">
+            <ul>
+              {extensions.filesystems.map((filesystem) => (
+                <li key={filesystem.id}>{filesystem.title}</li>
+              ))}
+            </ul>
+          </article>
+        </CollapsibleSection>
 
-        <article className="panel-card">
-          <h2>Activation order</h2>
-          <ul>
-            {diagnostics.activationOrder.map((pluginId) => (
-              <li key={pluginId}>{pluginId}</li>
-            ))}
-          </ul>
-        </article>
+        <CollapsibleSection title="Activation order" defaultCollapsed={true}>
+          <article className="panel-card">
+            <ul>
+              {diagnostics.activationOrder.map((pluginId) => (
+                <li key={pluginId}>{pluginId}</li>
+              ))}
+            </ul>
+          </article>
+        </CollapsibleSection>
 
-        <article className="panel-card">
-          <h2>Capabilities</h2>
-          <ul>
-            {diagnostics.providedCapabilities.map((capability) => (
-              <li key={capability}>{capability}</li>
-            ))}
-          </ul>
-        </article>
+        <CollapsibleSection title="Capabilities" defaultCollapsed={true}>
+          <article className="panel-card">
+            <ul>
+              {diagnostics.providedCapabilities.map((capability) => (
+                <li key={capability}>{capability}</li>
+              ))}
+            </ul>
+          </article>
+        </CollapsibleSection>
 
-        <article className="panel-card panel-card-wide">
-          <h2>Manifest diagnostics</h2>
-          <div className="manifest-grid-head">
-            <span>Plugin</span>
-            <span>Module path</span>
-            <span>Dependencies</span>
-            <span>Required capabilities</span>
-            <span>Provided capabilities</span>
-          </div>
-          {diagnostics.pluginManifests.map((manifest) => (
-            <div className="manifest-grid-row" key={manifest.id}>
-              <span>{manifest.id}</span>
-              <span>{manifest.modulePath}</span>
-              <span>{manifest.dependencies.join(", ") || "-"}</span>
-              <span>{manifest.requiredCapabilities.join(", ") || "-"}</span>
-              <span>{manifest.providesCapabilities.join(", ") || "-"}</span>
+        <CollapsibleSection title="Manifest diagnostics" defaultCollapsed={true} wide={true}>
+          <article className="panel-card">
+            <div className="manifest-grid-head">
+              <span>Plugin</span>
+              <span>Module path</span>
+              <span>Dependencies</span>
+              <span>Required capabilities</span>
+              <span>Provided capabilities</span>
             </div>
-          ))}
+            {diagnostics.pluginManifests.map((manifest) => (
+              <div className="manifest-grid-row" key={manifest.id}>
+                <span>{manifest.id}</span>
+                <span>{manifest.modulePath}</span>
+                <span>{manifest.dependencies.join(", ") || "-"}</span>
+                <span>{manifest.requiredCapabilities.join(", ") || "-"}</span>
+                <span>{manifest.providesCapabilities.join(", ") || "-"}</span>
+              </div>
+            ))}
 
-          <h3>External plugin load errors</h3>
-          <div className="manifest-grid-head">
-            <span>Plugin</span>
-            <span>Module path</span>
-            <span>Error</span>
-            <span>-</span>
-            <span>-</span>
-          </div>
-          {(diagnostics.externalLoadErrors?.length ?? 0) === 0 ? (
-            <div className="manifest-grid-row">
-              <span>-</span>
-              <span>-</span>
-              <span>none</span>
+            <h3>External plugin load errors</h3>
+            <div className="manifest-grid-head">
+              <span>Plugin</span>
+              <span>Module path</span>
+              <span>Error</span>
               <span>-</span>
               <span>-</span>
             </div>
-          ) : (
-            (diagnostics.externalLoadErrors ?? []).map((error, index) => (
-              <div className="manifest-grid-row" key={`${error.pluginId}-${index}`}>
-                <span>{error.pluginId}</span>
-                <span>{error.modulePath}</span>
-                <span>{error.message}</span>
+            {(diagnostics.externalLoadErrors?.length ?? 0) === 0 ? (
+              <div className="manifest-grid-row">
+                <span>-</span>
+                <span>-</span>
+                <span>none</span>
                 <span>-</span>
                 <span>-</span>
               </div>
-            ))
-          )}
-        </article>
+            ) : (
+              (diagnostics.externalLoadErrors ?? []).map((error, index) => (
+                <div className="manifest-grid-row" key={`${error.pluginId}-${index}`}>
+                  <span>{error.pluginId}</span>
+                  <span>{error.modulePath}</span>
+                  <span>{error.message}</span>
+                  <span>-</span>
+                  <span>-</span>
+                </div>
+              ))
+            )}
+          </article>
+        </CollapsibleSection>
 
-        <article className="panel-card panel-card-wide">
-          <h2>Backend gateway</h2>
-          <div className="manifest-grid-head">
-            <span>Mode</span>
-            <span>Server</span>
-            <span>Protocol</span>
-            <span>Last ping</span>
-            <span>RTT ms</span>
-          </div>
-          <div className="manifest-grid-row">
-            <span>{backendStatus?.mode ?? "-"}</span>
-            <span>
-              {backendStatus?.serverName
-                ? `${backendStatus.serverName} ${backendStatus.serverVersion ?? ""}`
-                : "-"}
-            </span>
-            <span>{backendStatus?.protocolVersion ?? "-"}</span>
-            <span>{backendStatus?.lastPingAt ?? "-"}</span>
-            <span>
-              {backendStatus?.lastPingRttMs !== undefined
-                ? String(backendStatus.lastPingRttMs)
-                : "-"}
-            </span>
-          </div>
-
-          <h3>Capabilities</h3>
-          <ul>
-            {(backendStatus?.supportedCapabilities ?? []).map((capability) => (
-              <li key={capability}>{capability}</li>
-            ))}
-          </ul>
-
-          <h3>Runtime plugin status</h3>
-          <div className="manifest-grid-head">
-            <span>Plugin</span>
-            <span>State</span>
-            <span>Reason</span>
-            <span>Runtime started</span>
-            <span>Activated IDs</span>
-          </div>
-          {(backendStatus?.runtimeStatus?.pluginStatuses ?? []).map((pluginStatus, index) => (
-            <div className="manifest-grid-row" key={`${pluginStatus.pluginId}-${index}`}>
-              <span>{pluginStatus.pluginId}</span>
-              <span>{pluginStatus.state}</span>
-              <span>{pluginStatus.reason ?? "-"}</span>
-              <span>{index === 0 ? backendStatus?.runtimeStatus?.startedAt ?? "-" : ""}</span>
-              <span>
-                {index === 0
-                  ? (backendStatus?.runtimeStatus?.activatedPluginIds ?? []).join(", ") || "-"
-                  : ""}
-              </span>
+        <CollapsibleSection title="Backend gateway" defaultCollapsed={true} wide={true}>
+          <article className="panel-card">
+            <div className="manifest-grid-head">
+              <span>Mode</span>
+              <span>Server</span>
+              <span>Protocol</span>
+              <span>Last ping</span>
+              <span>RTT ms</span>
             </div>
-          ))}
-
-          <h3>Recent executions</h3>
-          <div className="manifest-grid-head">
-            <span>Execution</span>
-            <span>Engine</span>
-            <span>State</span>
-            <span>Progress</span>
-            <span>Chunks/Rows</span>
-          </div>
-          {(backendStatus?.recentExecutions ?? []).map((execution) => (
-            <div className="manifest-grid-row" key={execution.queryExecutionId}>
-              <span>{execution.queryExecutionId}</span>
-              <span>{execution.engineId ?? "-"}</span>
-              <span>{execution.state}</span>
+            <div className="manifest-grid-row">
+              <span>{backendStatus?.mode ?? "-"}</span>
               <span>
-                {execution.progressPercent !== undefined
-                  ? `${execution.progressPercent}% ${execution.progressMessage ?? ""}`
+                {backendStatus?.serverName
+                  ? `${backendStatus.serverName} ${backendStatus.serverVersion ?? ""}`
                   : "-"}
               </span>
-              <span>{`${execution.chunks}/${execution.rows}`}</span>
+              <span>{backendStatus?.protocolVersion ?? "-"}</span>
+              <span>{backendStatus?.lastPingAt ?? "-"}</span>
+              <span>
+                {backendStatus?.lastPingRttMs !== undefined
+                  ? String(backendStatus.lastPingRttMs)
+                  : "-"}
+              </span>
             </div>
-          ))}
 
-          <h3>Error</h3>
-          <p>{backendStatus?.error ?? "none"}</p>
+            <div style={{ marginTop: "8px", marginBottom: "12px" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={backendStatus?.tracePayloads ?? false}
+                  onChange={async (e) => {
+                    await window.appShell.toggleBackendTrace(e.target.checked);
+                    const s = await window.appShell.getBackendStatus();
+                    setBackendStatus(s);
+                  }}
+                />
+                <span>Trace payloads (log full message content)</span>
+              </label>
+            </div>
 
-          <h3>Backend log panel</h3>
-          <div className="backend-log-panel">
-            {(backendStatus?.backendLogs ?? []).length === 0 ? (
-              <p className="backend-log-empty">No backend logs yet.</p>
-            ) : (
-              <ul className="backend-log-list">
-                {(backendStatus?.backendLogs ?? []).map((entry, index) => (
-                  <li
-                    key={`${entry.timestamp}-${index}`}
-                    className={`backend-log-${entry.level}`}
-                  >
-                    <span className="backend-log-time">
-                      {new Date(entry.timestamp).toLocaleTimeString()}
+            <h3>Capabilities</h3>
+            <ul>
+              {(backendStatus?.supportedCapabilities ?? []).map((capability) => (
+                <li key={capability}>{capability}</li>
+              ))}
+            </ul>
+
+            <h3>Runtime plugin status</h3>
+            <div className="manifest-grid-head">
+              <span>Plugin</span>
+              <span>State</span>
+              <span>Reason</span>
+              <span>Runtime started</span>
+              <span>Activated IDs</span>
+            </div>
+            {(backendStatus?.runtimeStatus?.pluginStatuses ?? []).map((pluginStatus, index) => (
+              <div className="manifest-grid-row" key={`${pluginStatus.pluginId}-${index}`}>
+                <span>{pluginStatus.pluginId}</span>
+                <span>{pluginStatus.state}</span>
+                <span>{pluginStatus.reason ?? "-"}</span>
+                <span>{index === 0 ? backendStatus?.runtimeStatus?.startedAt ?? "-" : ""}</span>
+                <span>
+                  {index === 0
+                    ? (backendStatus?.runtimeStatus?.activatedPluginIds ?? []).join(", ") || "-"
+                    : ""}
+                </span>
+              </div>
+            ))}
+
+            <CollapsibleSection title="Recent executions" defaultCollapsed={true}>
+              <div className="recent-executions-list">
+                <div className="manifest-grid-head">
+                  <span>Execution</span>
+                  <span>Engine</span>
+                  <span>State</span>
+                  <span>Progress</span>
+                  <span>Chunks/Rows</span>
+                </div>
+                {(backendStatus?.recentExecutions ?? []).slice().reverse().map((execution) => (
+                  <div className="manifest-grid-row" key={execution.queryExecutionId}>
+                    <span>{execution.queryExecutionId}</span>
+                    <span>{execution.engineId ?? "-"}</span>
+                    <span>{execution.state}</span>
+                    <span>
+                      {execution.progressPercent !== undefined
+                        ? `${execution.progressPercent}% ${execution.progressMessage ?? ""}`
+                        : "-"}
                     </span>
-                    <span className="backend-log-level">{entry.level}</span>
-                    <span className="backend-log-source">{entry.source}</span>
-                    <span className="backend-log-message">{entry.message}</span>
-                  </li>
+                    <span>{`${execution.chunks}/${execution.rows}`}</span>
+                  </div>
                 ))}
-              </ul>
-            )}
-          </div>
-        </article>
+              </div>
+            </CollapsibleSection>
+
+            <h3>Error</h3>
+            <p>{backendStatus?.error ?? "none"}</p>
+
+            <h3>Backend log panel</h3>
+            <div style={{ marginBottom: "8px" }}>
+              <button
+                className="backend-log-toggle"
+                disabled={logFlowEnabled === null}
+                onClick={async () => {
+                  const newValue = !logFlowEnabled;
+                  await window.appShell.setLogFlow(newValue);
+                  setLogFlowEnabled(newValue);
+                }}
+              >
+                {logFlowEnabled ? "⏸ Pause" : "▶ Resume"}
+              </button>
+            </div>
+            <div className="backend-log-panel">
+              {(backendStatus?.backendLogs ?? []).length === 0 ? (
+                <p className="backend-log-empty">No backend logs yet.</p>
+              ) : (
+                <ul className="backend-log-list">
+                  {(backendStatus?.backendLogs ?? []).slice().reverse().map((entry, index) => (
+                    <li
+                      key={`${entry.timestamp}-${index}`}
+                      className={`backend-log-${entry.level}`}
+                    >
+                      <span className="backend-log-time">
+                        {new Date(entry.timestamp).toLocaleTimeString()}
+                      </span>
+                      <span className="backend-log-level">{entry.level}</span>
+                      <span className="backend-log-source">{entry.source}</span>
+                      <span className="backend-log-message">{entry.message}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </article>
+        </CollapsibleSection>
       </section>
     </div>
   );
