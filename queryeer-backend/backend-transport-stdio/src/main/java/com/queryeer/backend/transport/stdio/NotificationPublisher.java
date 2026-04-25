@@ -15,6 +15,11 @@ public final class NotificationPublisher
 
     public void publish(String method, Object params)
     {
-        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, method, params, null, null));
+        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, null, method, params, null, null));
+    }
+
+    public void publishForQuery(String queryId, String method, Object params)
+    {
+        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, queryId, method, params, null, null));
     }
 }

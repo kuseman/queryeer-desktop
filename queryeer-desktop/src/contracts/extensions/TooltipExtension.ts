@@ -1,4 +1,4 @@
-import type { FileEntity } from "../files/FileEntity";
+import type { FileEntity } from "../files/FileEntity.js";
 
 export type TooltipSeverity = "info" | "warning" | "error";
 

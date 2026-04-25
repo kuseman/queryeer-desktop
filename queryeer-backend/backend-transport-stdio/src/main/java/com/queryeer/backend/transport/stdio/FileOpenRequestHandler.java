@@ -46,7 +46,7 @@ public final class FileOpenRequestHandler implements RequestHandler
         }
         catch (URISyntaxException error)
         {
-            responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null,
+            responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, null,
                     new BackendError(BackendErrorCode.VALIDATION, "Invalid file uri: " + error.getMessage(), null)));
             return;
         }
@@ -59,6 +59,6 @@ public final class FileOpenRequestHandler implements RequestHandler
 
         FileSession session = fileRegistry.open(params.fileId(), uri, params.mimeType(), engineId, connectionId, params.initialText());
 
-        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, new FileOpenResult(session.fileId(), session.backendVersion()), null));
+        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, new FileOpenResult(session.fileId(), session.backendVersion()), null));
     }
 }

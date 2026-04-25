@@ -5,7 +5,7 @@ import type {
   BackendLogEntry,
   Capability,
   RuntimeStatusResult
-} from "../../contracts/backend";
+} from "../../contracts/backend/index.js";
 
 export class BackendStatusStore {
   private status: BackendGatewayStatus = {

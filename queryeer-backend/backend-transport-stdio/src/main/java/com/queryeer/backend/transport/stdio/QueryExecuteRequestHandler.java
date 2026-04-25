@@ -31,7 +31,7 @@ public final class QueryExecuteRequestHandler implements RequestHandler
         QueryExecuteParams params = codec.objectMapper()
                 .convertValue(envelope.params(), QueryExecuteParams.class);
 
-        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, new QueryExecuteResult(true, params.queryExecutionId()), null));
+        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, new QueryExecuteResult(true, params.queryExecutionId()), null));
 
         queryExecutionService.execute(params);
     }

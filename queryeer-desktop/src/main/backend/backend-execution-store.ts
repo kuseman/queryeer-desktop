@@ -1,4 +1,4 @@
-import type { QueryExecutionStatus } from "../../contracts/backend";
+import type { QueryExecutionStatus } from "../../contracts/backend/index.js";
 
 type QueryProgressPayload = {
   queryExecutionId: string;

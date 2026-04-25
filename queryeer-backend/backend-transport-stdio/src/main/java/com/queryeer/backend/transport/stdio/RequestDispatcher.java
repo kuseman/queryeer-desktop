@@ -33,7 +33,7 @@ public final class RequestDispatcher
         {
             String requestId = envelope.id() == null ? "unknown"
                     : envelope.id();
-            responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null,
+            responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, null,
                     new BackendError(BackendErrorCode.METHOD_NOT_FOUND, "Unknown method: " + envelope.method(), Map.of("requestId", requestId, "method", envelope.method()))));
             return;
         }

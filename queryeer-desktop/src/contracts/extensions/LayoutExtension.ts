@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import type { ContentCategory, FileOpenIntent, MimeCapability } from "../files/FilesRegistry";
-import type { FileEntity } from "../files/FileEntity";
+import type { ContentCategory, FileOpenIntent, MimeCapability } from "../files/FilesRegistry.js";
+import type { FileEntity } from "../files/FileEntity.js";
 
 export type LayoutZone =
   | "menuBar"

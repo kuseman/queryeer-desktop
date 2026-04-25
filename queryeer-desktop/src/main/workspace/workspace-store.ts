@@ -5,7 +5,7 @@ import {
   emptyWorkspaceSnapshot,
   WORKSPACE_SCHEMA_VERSION,
   type WorkspaceSnapshot
-} from "../../contracts/workspace/WorkspaceSnapshot";
+} from "../../contracts/workspace/WorkspaceSnapshot.js";
 
 export type WorkspaceStoreOptions = {
   workspaceFilePath: string;

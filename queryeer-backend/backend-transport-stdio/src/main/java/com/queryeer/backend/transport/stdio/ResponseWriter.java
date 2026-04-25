@@ -22,8 +22,10 @@ public final class ResponseWriter
         try
         {
             String json = codec.encode(envelope);
-            output.write(json.getBytes(StandardCharsets.UTF_8));
-            output.write('\n');
+            byte[] body = json.getBytes(StandardCharsets.UTF_8);
+            byte[] header = ("Content-Length: " + body.length + "\r\n\r\n").getBytes(StandardCharsets.US_ASCII);
+            output.write(header);
+            output.write(body);
             output.flush();
         }
         catch (IOException e)

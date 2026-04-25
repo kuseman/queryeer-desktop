@@ -35,6 +35,6 @@ public final class FileCloseRequestHandler implements RequestHandler
         boolean accepted = fileRegistry.close(params.fileId())
                 .isPresent();
 
-        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, new FileCloseResult(params.fileId(), accepted), null));
+        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, new FileCloseResult(params.fileId(), accepted), null));
     }
 }

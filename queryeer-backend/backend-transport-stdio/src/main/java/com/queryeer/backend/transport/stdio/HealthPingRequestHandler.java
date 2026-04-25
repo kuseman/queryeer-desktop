@@ -37,6 +37,6 @@ public final class HealthPingRequestHandler implements RequestHandler
                 .toString()
                 : params.timestamp(), System.currentTimeMillis() - startedAt);
 
-        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, result, null));
+        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, result, null));
     }
 }

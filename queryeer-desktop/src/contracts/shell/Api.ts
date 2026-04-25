@@ -1,8 +1,8 @@
-import type { BackendGatewayStatus } from "../backend";
-import type { WorkspaceSnapshot } from "../workspace/WorkspaceSnapshot";
-import type { UserKeybindingsDocument } from "../commands/Keybindings";
-import type { ExternalFrontendPluginManifest } from "../plugin/ExternalFrontendPluginManifest";
-import type { FileWatcherEvent } from "../files/FileWatcher";
+import type { BackendGatewayStatus } from "../backend/index.js";
+import type { WorkspaceSnapshot } from "../workspace/WorkspaceSnapshot.js";
+import type { UserKeybindingsDocument } from "../commands/Keybindings.js";
+import type { ExternalFrontendPluginManifest } from "../plugin/ExternalFrontendPluginManifest.js";
+import type { FileWatcherEvent } from "../files/FileWatcher.js";
 
 export interface ShellApi {
   platform: string;

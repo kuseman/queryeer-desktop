@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { BackendStatusStore } from "./backend-status-store";
+import { BackendStatusStore } from "./backend-status-store.js";
 
 describe("BackendStatusStore", () => {
   it("initializes with defaults and mode can be updated", () => {

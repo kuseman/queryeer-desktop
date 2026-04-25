@@ -1,6 +1,6 @@
-import type { EngineBinding, FileEntity, ViewStateBag } from "./FileEntity";
-import type { MimeHint } from "./Resolvers";
-import type { FileOpenIntent } from "./FilesRegistry";
+import type { EngineBinding, FileEntity, ViewStateBag } from "./FileEntity.js";
+import type { MimeHint } from "./Resolvers.js";
+import type { FileOpenIntent } from "./FilesRegistry.js";
 
 export type FileOpenHint = {
   mimeType?: string;

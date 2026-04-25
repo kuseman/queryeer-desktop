@@ -1,4 +1,4 @@
-import type { BackendResponseEnvelope } from "../../contracts/backend";
+import type { BackendResponseEnvelope } from "../../contracts/backend/index.js";
 
 export type PendingRequestHandlers = {
   onResolve: (response: BackendResponseEnvelope) => void;

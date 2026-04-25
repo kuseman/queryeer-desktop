@@ -109,11 +109,6 @@ public final class BackendPlatformServices
         return queryEngines;
     }
 
-    public InMemoryMetadataRegistry metadataRegistryView()
-    {
-        return metadata;
-    }
-
     public DefaultFileRegistry fileRegistryView()
     {
         return fileRegistry;

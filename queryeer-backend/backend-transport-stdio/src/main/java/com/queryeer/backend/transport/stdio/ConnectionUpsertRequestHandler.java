@@ -35,7 +35,7 @@ public final class ConnectionUpsertRequestHandler implements RequestHandler
                         .isBlank() ? "conn-" + envelope.id()
                                 : params.connectionId();
 
-        responseWriter.write(
-                new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, new ConnectionUpsertResult(connectionId, 1L, ConnectionCredentialStatus.MISSING), null));
+        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null,
+                new ConnectionUpsertResult(connectionId, 1L, ConnectionCredentialStatus.MISSING), null));
     }
 }

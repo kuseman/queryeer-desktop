@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve, sep } from "node:path";
 import JSZip from "jszip";
-import type { ExternalFrontendPluginManifest } from "../../contracts/plugin/ExternalFrontendPluginManifest";
+import type { ExternalFrontendPluginManifest } from "../../contracts/plugin/ExternalFrontendPluginManifest.js";
 
 type PluginManifestV1 = {
   schemaVersion?: number;

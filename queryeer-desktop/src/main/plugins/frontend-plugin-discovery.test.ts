@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import JSZip from "jszip";
-import { discoverExternalFrontendPlugins } from "./frontend-plugin-discovery";
+import { discoverExternalFrontendPlugins } from "./frontend-plugin-discovery.js";
 
 const tempRoots: string[] = [];
 

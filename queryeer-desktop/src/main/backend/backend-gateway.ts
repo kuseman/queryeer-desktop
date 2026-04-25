@@ -23,17 +23,17 @@ import {
   type QueryCancelResult,
   type QueryExecuteParams,
   type QueryExecuteResult
-} from "../../contracts/backend";
-import { BackendExecutionStore } from "./backend-execution-store";
-import { BackendLogBuffer } from "./backend-log-buffer";
-import { redactErrorMessage, redactLogMessage } from "./backend-log-redaction";
-import { BackendPendingRequestMap } from "./backend-request-pending-map";
-import { BackendStatusStore } from "./backend-status-store";
+} from "../../contracts/backend/index.js";
+import { BackendExecutionStore } from "./backend-execution-store.js";
+import { BackendLogBuffer } from "./backend-log-buffer.js";
+import { redactErrorMessage, redactLogMessage } from "./backend-log-redaction.js";
+import { BackendPendingRequestMap } from "./backend-request-pending-map.js";
+import { BackendStatusStore } from "./backend-status-store.js";
 import {
   MockBackendTransport,
   StdioProcessBackendTransport,
   type BackendTransport
-} from "./backend-transport";
+} from "./backend-transport.js";
 
 type GatewayLogLevel = "debug" | "info" | "warn" | "error";
 
@@ -53,7 +53,7 @@ export class BackendGateway {
       onEnvelope: (envelope: BackendEnvelope) => void,
       onDiagnostic: (event: {
         level: "debug" | "info" | "warn" | "error";
-        source: "transport" | "backend";
+        source: "transport" | "backend" | "backend-console";
         message: string;
       }) => void
     ) => BackendTransport
@@ -64,9 +64,12 @@ export class BackendGateway {
       source
     }: {
       level: "debug" | "info" | "warn" | "error";
-      source: "transport" | "backend";
+      source: "transport" | "backend" | "backend-console";
       message: string;
     }): void => {
+      if (source === "backend-console") {
+        return;
+      }
       this.appendLog(level, source, message);
 
       if (level !== "error") {
@@ -428,7 +431,8 @@ export class BackendGateway {
     }
 
     if (envelope.type === "notification") {
-      this.appendLog("debug", "gateway", `Received notification ${envelope.method}`);
+      const qid = envelope.queryId ? ` [${envelope.queryId}]` : "";
+      this.appendLog("debug", "gateway", `Received notification ${envelope.method}${qid}`);
       this.handleNotification(envelope);
     }
   }

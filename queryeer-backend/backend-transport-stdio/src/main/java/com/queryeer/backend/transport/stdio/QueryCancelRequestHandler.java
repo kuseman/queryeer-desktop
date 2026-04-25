@@ -31,7 +31,7 @@ public final class QueryCancelRequestHandler implements RequestHandler
         QueryCancelParams params = codec.objectMapper()
                 .convertValue(envelope.params(), QueryCancelParams.class);
 
-        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, new QueryCancelResult(true, params.queryExecutionId()), null));
+        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, new QueryCancelResult(true, params.queryExecutionId()), null));
 
         queryExecutionService.cancel(params);
     }

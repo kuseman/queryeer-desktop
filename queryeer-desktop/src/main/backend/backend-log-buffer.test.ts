@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { BackendLogBuffer } from "./backend-log-buffer";
+import { BackendLogBuffer } from "./backend-log-buffer.js";
 
 describe("BackendLogBuffer", () => {
   it("keeps only latest entries within limit", () => {

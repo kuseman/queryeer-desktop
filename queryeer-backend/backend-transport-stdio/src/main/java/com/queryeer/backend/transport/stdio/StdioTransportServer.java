@@ -1,10 +1,9 @@
 package com.queryeer.backend.transport.stdio;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.BackendError;
@@ -15,15 +14,21 @@ import com.queryeer.backend.contract.query.QueryFailedNotification;
 
 public final class StdioTransportServer
 {
-    private final BufferedReader reader;
+    private final FramedReader framedReader;
     private final EnvelopeCodec codec;
     private final ResponseWriter responseWriter;
     private final RequestDispatcher requestDispatcher;
     private final NotificationDispatcher notificationDispatcher;
+    private final ExecutorService handlerExecutor = Executors.newCachedThreadPool(r ->
+    {
+        Thread t = new Thread(r, "StdioTransportServer-handler-dispatcher");
+        t.setDaemon(true);
+        return t;
+    });
 
     public StdioTransportServer(InputStream input, EnvelopeCodec codec, ResponseWriter responseWriter, RequestDispatcher requestDispatcher, NotificationDispatcher notificationDispatcher)
     {
-        this.reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8));
+        this.framedReader = new FramedReader(input, line -> System.err.println("[console] " + line));
         this.codec = codec;
         this.responseWriter = responseWriter;
         this.requestDispatcher = requestDispatcher;
@@ -32,17 +37,15 @@ public final class StdioTransportServer
 
     public void start() throws IOException
     {
-        String line;
-        while ((line = reader.readLine()) != null)
+        String frame;
+        while ((frame = framedReader.readFrame()) != null)
         {
-            if (line.isBlank())
-            {
-                continue;
-            }
-            handleLine(line);
+            final String f = frame;
+            handlerExecutor.submit(() -> handleLine(f));
         }
     }
 
+    @SuppressWarnings("UseSpecificCatch")
     private void handleLine(String line)
     {
         try
@@ -59,7 +62,7 @@ public final class StdioTransportServer
         }
         catch (Exception error)
         {
-            responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, "query.failed",
+            responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, null, "query.failed",
                     new QueryFailedNotification("transport", new BackendError(BackendErrorCode.INTERNAL, error.getMessage(), null)), null, null));
         }
     }

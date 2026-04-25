@@ -3,13 +3,13 @@ import {
   type BackendNotificationEnvelope,
   type BackendRequestEnvelope,
   type BackendResponseEnvelope
-} from "./Envelope";
-import type { BackendNotificationMethod, BackendRequestMethod } from "./Methods";
+} from "./Envelope.js";
+import type { BackendNotificationMethod, BackendRequestMethod } from "./Methods.js";
 import type {
   NotificationParamsOf,
   RequestParamsOf,
   RequestResultOf
-} from "./Types";
+} from "./Types.js";
 
 export function createRequestEnvelope<TMethod extends BackendRequestMethod>(
   id: string,

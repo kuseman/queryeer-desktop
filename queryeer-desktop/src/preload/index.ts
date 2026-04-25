@@ -12,14 +12,14 @@ import type {
   QueryCancelResult,
   QueryExecuteParams,
   QueryExecuteResult
-} from "../contracts/backend";
+} from "../contracts/backend/index.js";
 import type {
   FileWatcherEvent,
   FileWatcherWatchOptions
-} from "../contracts/files/FileWatcher";
-import type { ExternalFrontendPluginManifest } from "../contracts/plugin/ExternalFrontendPluginManifest";
-import type { WorkspaceSnapshot } from "../contracts/workspace/WorkspaceSnapshot";
-import type { UserKeybindingsDocument } from "../contracts/commands/Keybindings";
+} from "../contracts/files/FileWatcher.js";
+import type { ExternalFrontendPluginManifest } from "../contracts/plugin/ExternalFrontendPluginManifest.js";
+import type { WorkspaceSnapshot } from "../contracts/workspace/WorkspaceSnapshot.js";
+import type { UserKeybindingsDocument } from "../contracts/commands/Keybindings.js";
 
 type DialogShowMessageOptions = {
   title: string;

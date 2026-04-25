@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { BackendExecutionStore } from "./backend-execution-store";
+import { BackendExecutionStore } from "./backend-execution-store.js";
 
 describe("BackendExecutionStore", () => {
   it("tracks accepted execution and active ids", () => {

@@ -1,5 +1,5 @@
-import type { LayoutZone } from "../extensions/LayoutExtension";
-import type { EngineBinding, ViewStateBag } from "../files/FileEntity";
+import type { LayoutZone } from "../extensions/LayoutExtension.js";
+import type { EngineBinding, ViewStateBag } from "../files/FileEntity.js";
 
 export const WORKSPACE_SCHEMA_VERSION = 2;
 

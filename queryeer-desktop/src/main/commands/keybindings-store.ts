@@ -5,7 +5,7 @@ import {
   emptyUserKeybindingsDocument,
   KEYBINDINGS_SCHEMA_VERSION,
   type UserKeybindingsDocument
-} from "../../contracts/commands/Keybindings";
+} from "../../contracts/commands/Keybindings.js";
 
 export type KeybindingsStoreOptions = {
   keybindingsFilePath: string;

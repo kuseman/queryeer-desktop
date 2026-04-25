@@ -1,5 +1,5 @@
-import type { FileEntity, FileEntityUpdate, FileOpenInput } from "./FileEntity";
-import type { EditorResolver, MimeHint, MimeResolver } from "./Resolvers";
+import type { FileEntity, FileEntityUpdate, FileOpenInput } from "./FileEntity.js";
+import type { EditorResolver, MimeHint, MimeResolver } from "./Resolvers.js";
 
 export type FilesSubscriber = (files: FileEntity[]) => void;
 

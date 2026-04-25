@@ -1,4 +1,4 @@
-import type { FileEntity } from "./FileEntity";
+import type { FileEntity } from "./FileEntity.js";
 
 export type MimeHint = {
   declared?: string;

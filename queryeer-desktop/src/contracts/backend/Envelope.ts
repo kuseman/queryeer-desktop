@@ -1,4 +1,4 @@
-import type { BackendError } from "./ErrorCode";
+import type { BackendError } from "./ErrorCode.js";
 
 export const BACKEND_PROTOCOL_VERSION = "1.0.0";
 
@@ -31,6 +31,7 @@ export type BackendNotificationEnvelope<
 > = {
   protocolVersion: ProtocolVersion;
   type: "notification";
+  queryId?: string;
   method: TMethod;
   params: TParams;
 };

@@ -8,7 +8,7 @@ import {
   type WatcherFactoryParams,
   type WatcherHandle,
   type WebContentsSink
-} from "./file-watcher-service";
+} from "./file-watcher-service.js";
 
 function makeTestUri(name: string): string {
   return pathToFileURL(join(tmpdir(), name)).toString();
