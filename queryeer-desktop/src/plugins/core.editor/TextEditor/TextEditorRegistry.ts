@@ -4,12 +4,14 @@ import type { FilesRegistry } from "../../../contracts/files/FilesRegistry";
 import { TextEditorModel } from "./TextEditorModel";
 import { TextEditorApi } from "./TextEditorApi";
 import { ViewStateStore } from "./ViewStateStore";
+import { registerTextEditorRepository } from "./TextEditorModelRepository";
 
 let registry: TextEditorRegistry | undefined;
 
 export function getTextEditorRegistry(): TextEditorRegistry {
   if (!registry) {
     registry = new TextEditorRegistry();
+    registerTextEditorRepository(registry);
   }
   return registry;
 }

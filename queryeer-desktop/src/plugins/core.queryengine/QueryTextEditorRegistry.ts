@@ -1,3 +1,7 @@
 import { TextEditorRegistry } from "../core.editor/TextEditor/TextEditorRegistry";
+import { registerTextEditorRepository } from "../core.editor/TextEditor/TextEditorModelRepository";
 
-export const queryTextRegistry = new TextEditorRegistry();
+const queryRegistry = new TextEditorRegistry();
+registerTextEditorRepository(queryRegistry);
+
+export const queryTextRegistry = queryRegistry;
