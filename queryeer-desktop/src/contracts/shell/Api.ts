@@ -10,6 +10,8 @@ export interface ShellApi {
   readFile: (uri: string) => Promise<{ success: boolean; content: string }>;
   writeFile: (uri: string, content: string) => Promise<{ success: boolean }>;
   getBackendStatus: () => Promise<BackendGatewayStatus>;
+  toggleBackendTrace: (enabled: boolean) => Promise<void>;
+  setLogFlow: (enabled: boolean) => Promise<void>;
   getExternalFrontendPlugins: () => Promise<ExternalFrontendPluginManifest[]>;
   executeBackendQuery: (params: {
     queryExecutionId: string;
@@ -49,6 +51,7 @@ export interface ShellApi {
   windowMaximize: () => void;
   windowClose: () => void;
   isWindowMaximized: () => Promise<boolean>;
+  isDev: () => Promise<boolean>;
   onWindowStateChanged: (listener: (state: { maximized: boolean }) => void) => () => void;
 }
 

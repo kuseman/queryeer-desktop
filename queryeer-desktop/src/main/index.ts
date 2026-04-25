@@ -98,6 +98,7 @@ app.whenReady().then(() => {
   });
   ipcMain.on("window:close", () => mainWindow?.close());
   ipcMain.handle("window:is-maximized", () => mainWindow?.isMaximized() ?? false);
+  ipcMain.handle("app:is-dev", () => isDev);
 
   const sendWindowState = () => {
     if (!mainWindow) {

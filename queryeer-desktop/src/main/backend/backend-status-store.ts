@@ -14,7 +14,8 @@ export class BackendStatusStore {
     supportedCapabilities: [],
     activeExecutionIds: [],
     recentExecutions: [],
-    backendLogs: []
+    backendLogs: [],
+    tracePayloads: false
   };
 
   public initializeMode(mode: BackendGatewayMode): void {
@@ -92,6 +93,13 @@ export class BackendStatusStore {
     this.status = {
       ...this.status,
       runtimeStatus
+    };
+  }
+
+  public setTracePayloads(enabled: boolean): void {
+    this.status = {
+      ...this.status,
+      tracePayloads: enabled
     };
   }
 }
