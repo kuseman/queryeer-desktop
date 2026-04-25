@@ -89,8 +89,12 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand }: CoreMenu
     return childrenByParent.get(id) ?? [];
   };
 
+  const getFocusableChildren = (id: string): MenuItemContribution[] => {
+    return getChildren(id).filter((item) => item.type !== "separator");
+  };
+
   const openRoot = (rootId: string) => {
-    const rootChildren = getChildren(rootId);
+    const rootChildren = getFocusableChildren(rootId);
     setMenuBarFocused(true);
     if (rootChildren.length === 0) {
       setOpenPath([]);
@@ -116,6 +120,7 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand }: CoreMenu
   const executeItem = (itemId: string) => {
     const item = itemById.get(itemId);
     if (!item?.commandId) {
+      closeMenus(false);
       return;
     }
     void executeCommand(item.commandId);
@@ -151,7 +156,7 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand }: CoreMenu
     if (!parentId) {
       return;
     }
-    const siblings = getChildren(parentId);
+    const siblings = getFocusableChildren(parentId);
     if (siblings.length === 0) {
       return;
     }
@@ -171,7 +176,7 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand }: CoreMenu
     if (!focusedId) {
       return;
     }
-    const children = getChildren(focusedId);
+    const children = getFocusableChildren(focusedId);
     if (children.length === 0) {
       return;
     }
@@ -183,6 +188,10 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand }: CoreMenu
   const activateFocused = () => {
     const focusedId = focusPath[focusPath.length - 1];
     if (!focusedId) {
+      return;
+    }
+    const focusedItem = itemById.get(focusedId);
+    if (focusedItem?.type === "separator") {
       return;
     }
     if (getChildren(focusedId).length > 0) {
@@ -323,6 +332,14 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand }: CoreMenu
     return (
       <div className={`shell-titlebar-dropdown ${depth > 1 ? "is-nested" : ""}`} role="menu">
         {items.map((item) => {
+          if (item.type === "separator") {
+            return (
+              <div key={item.id} className="shell-titlebar-dropdown-entry shell-titlebar-dropdown-entry-separator">
+                <div className="shell-titlebar-dropdown-separator" role="separator" aria-hidden="true" />
+              </div>
+            );
+          }
+
           const hasChildren = getChildren(item.id).length > 0;
           const isFocused = focusPath[depth] === item.id;
           const isOpen = openPath[depth] === item.id;
@@ -335,7 +352,7 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand }: CoreMenu
                   setMenuBarFocused(true);
                   setFocusPath((previous) => [...previous.slice(0, depth), item.id]);
                   if (hasChildren) {
-                    const children = getChildren(item.id);
+                    const children = getFocusableChildren(item.id);
                     setOpenPath((previous) => [...previous.slice(0, depth), item.id]);
                     if (children.length > 0) {
                       setFocusPath((previous) => [...previous.slice(0, depth), item.id, children[0]!.id]);
@@ -346,7 +363,7 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand }: CoreMenu
                 }}
                 onClick={() => {
                   if (hasChildren) {
-                    const children = getChildren(item.id);
+                    const children = getFocusableChildren(item.id);
                     setOpenPath((previous) => [...previous.slice(0, depth), item.id]);
                     if (children.length > 0) {
                       setFocusPath((previous) => [...previous.slice(0, depth), item.id, children[0]!.id]);

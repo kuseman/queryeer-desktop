@@ -69,6 +69,13 @@ export abstract class TextEditorApi {
 
   abstract updateOptions(options: EditorOptions): void;
 
+  abstract undo(): void;
+  abstract redo(): void;
+  abstract cut(): void;
+  abstract copy(): void;
+  abstract paste(): void;
+  abstract selectAll(): void;
+
   abstract pushUndoStop(): boolean;
   abstract popUndoStop(): boolean;
 

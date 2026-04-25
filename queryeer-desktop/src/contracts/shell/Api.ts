@@ -53,6 +53,19 @@ export interface ShellApi {
   isWindowMaximized: () => Promise<boolean>;
   isDev: () => Promise<boolean>;
   onWindowStateChanged: (listener: (state: { maximized: boolean }) => void) => () => void;
+  zoomIn: () => Promise<void>;
+  zoomOut: () => Promise<void>;
+  zoomReset: () => Promise<void>;
+  undo: () => Promise<void>;
+  redo: () => Promise<void>;
+  cut: () => Promise<void>;
+  copy: () => Promise<void>;
+  paste: () => Promise<void>;
+  selectAll: () => Promise<void>;
+  reloadWindow: () => Promise<void>;
+  forceReloadWindow: () => Promise<void>;
+  toggleFullScreen: () => Promise<void>;
+  toggleDevTools: () => Promise<void>;
 }
 
 declare global {

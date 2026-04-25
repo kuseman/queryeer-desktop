@@ -2,15 +2,121 @@ import type { PluginContext } from "../../../../contracts/plugin/Plugin";
 import type { TextEditorRegistry } from "../TextEditorRegistry";
 import type { TextRange } from "../types";
 
+function runDocumentCommand(command: "undo" | "redo" | "cut" | "copy" | "paste" | "selectAll"): void {
+  if (typeof window !== "undefined" && window.appShell) {
+    if (command === "undo") {
+      void window.appShell.undo();
+      return;
+    }
+    if (command === "redo") {
+      void window.appShell.redo();
+      return;
+    }
+    if (command === "cut") {
+      void window.appShell.cut();
+      return;
+    }
+    if (command === "copy") {
+      void window.appShell.copy();
+      return;
+    }
+    if (command === "paste") {
+      void window.appShell.paste();
+      return;
+    }
+    void window.appShell.selectAll();
+    return;
+  }
+
+  if (typeof document === "undefined") {
+    return;
+  }
+  document.execCommand(command);
+}
+
+function executeEditCommand(
+  registry: TextEditorRegistry,
+  command: "undo" | "redo" | "cut" | "copy" | "paste" | "selectAll"
+): void {
+  const editor = registry.getCommandTargetEditor();
+  if (editor?.getModel()) {
+    editor.focus();
+    if (command === "undo") {
+      editor.undo();
+      return;
+    }
+    if (command === "redo") {
+      editor.redo();
+      return;
+    }
+    if (command === "cut" || command === "copy" || command === "paste") {
+      runDocumentCommand(command);
+      return;
+    }
+    editor.selectAll();
+    return;
+  }
+
+  runDocumentCommand(command);
+}
+
 export function registerTextEditorCommands(
   context: PluginContext,
   registry: TextEditorRegistry
 ): void {
   context.commands.registerCommand({
+    id: "core.edit.undo",
+    title: "Undo",
+    handler: async () => {
+      executeEditCommand(registry, "undo");
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.edit.redo",
+    title: "Redo",
+    handler: async () => {
+      executeEditCommand(registry, "redo");
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.edit.cut",
+    title: "Cut",
+    handler: async () => {
+      executeEditCommand(registry, "cut");
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.edit.copy",
+    title: "Copy",
+    handler: async () => {
+      executeEditCommand(registry, "copy");
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.edit.paste",
+    title: "Paste",
+    handler: async () => {
+      executeEditCommand(registry, "paste");
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.edit.selectAll",
+    title: "Select All",
+    handler: async () => {
+      executeEditCommand(registry, "selectAll");
+    }
+  });
+
+  context.commands.registerCommand({
     id: "core.editor.text.undo",
     title: "Undo",
     handler: async () => {
-      registry.getActiveEditor()?.pushUndoStop();
+      executeEditCommand(registry, "undo");
     }
   });
 
@@ -18,7 +124,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.redo",
     title: "Redo",
     handler: async () => {
-      registry.getActiveEditor()?.popUndoStop();
+      executeEditCommand(registry, "redo");
     }
   });
 
@@ -164,16 +270,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.selectAll",
     title: "Select All",
     handler: async () => {
-      const editor = registry.getActiveEditor();
-      const model = editor?.getModel();
-      if (editor && model) {
-        editor.setSelection({
-          selectionStartLineNumber: 1,
-          selectionStartColumn: 1,
-          positionLineNumber: model.lineCount,
-          positionColumn: model.lineAt(model.lineCount).range.endColumn
-        });
-      }
+      executeEditCommand(registry, "selectAll");
     }
   });
 

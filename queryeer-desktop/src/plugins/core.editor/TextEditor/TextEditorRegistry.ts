@@ -17,6 +17,7 @@ export function getTextEditorRegistry(): TextEditorRegistry {
 }
 
 export class TextEditorRegistry {
+  private static lastCommandEditor: TextEditorApi | null = null;
   private readonly modelsByFileId = new Map<string, TextEditorModel>();
   private readonly modelsByUri = new Map<string, TextEditorModel>();
   private readonly pendingRecoveredContentByFileId = new Map<string, string>();
@@ -28,6 +29,53 @@ export class TextEditorRegistry {
   private contentDirtyListeners: Array<(fileId: string, text: string) => void> = [];
   private filesRegistry: FilesRegistry | null = null;
   private pendingFileForEditor: FileEntity | null = null;
+  private editorFocusDisposables: Disposable[] = [];
+
+  static getLastCommandEditor(): TextEditorApi | null {
+    return TextEditorRegistry.lastCommandEditor;
+  }
+
+  getCommandTargetEditor(): TextEditorApi | null {
+    if (this.editorApi?.getModel()) {
+      return this.editorApi;
+    }
+    const fallback = TextEditorRegistry.lastCommandEditor;
+    if (fallback?.getModel()) {
+      return fallback;
+    }
+    return null;
+  }
+
+  private wireEditorFocusTracking(api: TextEditorApi): void {
+    for (const disposable of this.editorFocusDisposables) {
+      disposable.dispose();
+    }
+
+    const focusDisposables: Disposable[] = [];
+    const focusText = (api as unknown as {
+      onDidFocusEditorText?: (callback: () => void) => Disposable;
+    }).onDidFocusEditorText;
+    const focusWidget = (api as unknown as {
+      onDidFocusEditorWidget?: (callback: () => void) => Disposable;
+    }).onDidFocusEditorWidget;
+
+    if (typeof focusText === "function") {
+      focusDisposables.push(
+        focusText.call(api, () => {
+          TextEditorRegistry.lastCommandEditor = api;
+        })
+      );
+    }
+    if (typeof focusWidget === "function") {
+      focusDisposables.push(
+        focusWidget.call(api, () => {
+          TextEditorRegistry.lastCommandEditor = api;
+        })
+      );
+    }
+
+    this.editorFocusDisposables = focusDisposables;
+  }
 
   setFilesRegistry(registry: FilesRegistry): void {
     this.filesRegistry = registry;
@@ -36,6 +84,7 @@ export class TextEditorRegistry {
 
   onEditorReady(api: TextEditorApi): void {
     this.editorApi = api;
+    this.wireEditorFocusTracking(api);
 
     if (this.activeFileId) {
       const model = this.modelsByFileId.get(this.activeFileId);
@@ -118,6 +167,13 @@ export class TextEditorRegistry {
 
   onEditorDisposed(capturedViewState?: unknown): void {
     this.captureActiveViewState(capturedViewState);
+    for (const disposable of this.editorFocusDisposables) {
+      disposable.dispose();
+    }
+    this.editorFocusDisposables = [];
+    if (this.editorApi && TextEditorRegistry.lastCommandEditor === this.editorApi) {
+      TextEditorRegistry.lastCommandEditor = null;
+    }
     this.editorApi = null;
     this.pendingFileForEditor = null;
     this.activeFileId = null;

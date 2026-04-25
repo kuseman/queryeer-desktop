@@ -107,7 +107,7 @@ describe("core.layout close editor", () => {
 
     expect(registerKeybinding).toHaveBeenCalledWith(
       expect.objectContaining({
-        commandId: "core.layout.closeEditor",
+        commandId: "core.closeActive",
         key: "CmdOrCtrl+W"
       })
     );
@@ -118,7 +118,7 @@ describe("core.layout close editor", () => {
     const { context, commands, closeFile, showMessage } = createContext(file);
     coreLayoutPlugin.activate(context);
 
-    const handler = commands.get("core.layout.closeEditor");
+    const handler = commands.get("core.closeActive");
     expect(handler).toBeTruthy();
     await handler?.();
 
@@ -132,7 +132,7 @@ describe("core.layout close editor", () => {
     showMessage.mockResolvedValueOnce({ action: "cancel" });
     coreLayoutPlugin.activate(context);
 
-    const handler = commands.get("core.layout.closeEditor");
+    const handler = commands.get("core.closeActive");
     await handler?.();
 
     expect(showMessage).toHaveBeenCalledWith(

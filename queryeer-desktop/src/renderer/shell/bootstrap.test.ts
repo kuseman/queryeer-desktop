@@ -80,7 +80,20 @@ describe("bootstrapShell diagnostics wiring", () => {
       windowClose: () => {},
       isWindowMaximized: async () => false,
       isDev: async () => false,
-      onWindowStateChanged: () => () => {}
+      onWindowStateChanged: () => () => {},
+      zoomIn: async () => {},
+      zoomOut: async () => {},
+      zoomReset: async () => {},
+      undo: async () => {},
+      redo: async () => {},
+      cut: async () => {},
+      copy: async () => {},
+      paste: async () => {},
+      selectAll: async () => {},
+      reloadWindow: async () => {},
+      forceReloadWindow: async () => {},
+      toggleFullScreen: async () => {},
+      toggleDevTools: async () => {}
     };
 
     (discoverPluginModules as MockedDiscovery).mockResolvedValue({

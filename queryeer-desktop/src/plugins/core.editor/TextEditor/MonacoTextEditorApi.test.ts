@@ -99,3 +99,27 @@ describe("MonacoTextEditorApi view state", () => {
     expect(setScrollLeft).toHaveBeenCalledWith(12);
   });
 });
+
+describe("MonacoTextEditorApi edit actions", () => {
+  it("routes core edit operations through Monaco command ids", () => {
+    const api = new MonacoTextEditorApi();
+    const trigger = vi.fn();
+    const focus = vi.fn();
+    (api as unknown as { editor: unknown }).editor = { trigger, focus };
+
+    api.undo();
+    api.redo();
+    api.cut();
+    api.copy();
+    api.paste();
+    api.selectAll();
+
+    expect(trigger).toHaveBeenNthCalledWith(1, "command", "undo", null);
+    expect(trigger).toHaveBeenNthCalledWith(2, "command", "redo", null);
+    expect(trigger).toHaveBeenNthCalledWith(3, "command", "editor.action.clipboardCutAction", null);
+    expect(trigger).toHaveBeenNthCalledWith(4, "command", "editor.action.clipboardCopyAction", null);
+    expect(trigger).toHaveBeenNthCalledWith(5, "command", "editor.action.clipboardPasteAction", null);
+    expect(trigger).toHaveBeenNthCalledWith(6, "command", "editor.action.selectAll", null);
+    expect(focus).toHaveBeenCalledTimes(6);
+  });
+});
