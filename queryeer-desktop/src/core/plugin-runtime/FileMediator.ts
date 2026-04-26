@@ -105,7 +105,11 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
       });
 
       if (file.engineBinding) {
-        await backendSync?.openFile?.(file);
+        try {
+          await backendSync?.openFile?.(file);
+        } catch {
+          // best effort - backend may not be running
+        }
       }
 
       activeFileId = file.fileId;
@@ -123,7 +127,11 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
           `Cannot close file '${fileId}' with unsaved changes; pass discardDirty to override.`
         );
       }
-      await backendSync?.closeFile?.(file);
+      try {
+        await backendSync?.closeFile?.(file);
+      } catch {
+        // best effort - backend may not be running
+      }
       filesRegistry.closeFile(fileId);
       if (activeFileId === fileId) {
         activeFileId = null;
@@ -214,11 +222,19 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
         return undefined;
       }
       const wasBound = Boolean(existing.engineBinding);
-      if (!wasBound) {
-        await backendSync?.openFile?.(next);
-      } else {
-        await backendSync?.bindFile?.(next);
-      }
+        if (!wasBound) {
+          try {
+            await backendSync?.openFile?.(next);
+          } catch {
+            // best effort - backend may not be running
+          }
+        } else {
+          try {
+            await backendSync?.bindFile?.(next);
+          } catch {
+            // best effort - backend may not be running
+          }
+        }
       return next;
     },
 
@@ -233,11 +249,19 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
         );
       }
       const queryExecutionId = generateQueryExecutionId();
-      const result = await executeBackendQuery({
-        queryExecutionId,
-        engineId: file.engineBinding.engineId,
-        text
-      });
+      let result: { accepted: boolean; queryExecutionId: string };
+      try {
+        result = await executeBackendQuery({
+          queryExecutionId,
+          engineId: file.engineBinding.engineId,
+          text
+        });
+      } catch {
+        return {
+          queryExecutionId,
+          accepted: false
+        };
+      }
       return {
         queryExecutionId: result.queryExecutionId,
         accepted: result.accepted

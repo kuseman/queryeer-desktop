@@ -121,6 +121,25 @@ export const coreFilesPlugin: Plugin = {
     description: "Owns the frontend file registry and file entity lifecycle"
   },
   activate: (context) => {
+    context.settings.registerSettings({
+      moduleId: "core.files",
+      title: "Files",
+      order: 20,
+      settings: [
+        {
+          id: "core.files.recentFilesMaxCount",
+          moduleId: "core.files",
+          title: "Recent Files",
+          description: "Maximum number of recently opened files to remember.",
+          sectionPath: ["Files", "Recent"],
+          tags: ["recent", "files", "history"],
+          type: "number",
+          defaultValue: 100,
+          constraints: { min: 10, max: 500 }
+        }
+      ]
+    });
+
     context.layout.registerEditor({
       id: "core.files.unsupported",
       title: "Unsupported File",
@@ -168,7 +187,15 @@ export const coreFilesPlugin: Plugin = {
           return;
         }
         for (const filePath of result.filePaths) {
-          await context.fileMediator.openFile(toFileUri(filePath));
+          const uri = toFileUri(filePath);
+          await context.fileMediator.openFile(uri);
+          try {
+            const settingsService = getCoreSettingsService();
+            const maxCount = settingsService?.getValue("core.files.recentFilesMaxCount") as number | undefined;
+            await window.appShell.addRecentFile(uri, maxCount);
+          } catch {
+            // best effort - recent files may fail
+          }
         }
       }
     });
@@ -250,9 +277,77 @@ export const coreFilesPlugin: Plugin = {
     });
 
     context.menu.registerMenuItem({
+      id: "core.files.menu.openRecent",
+      label: "Open Recent",
+      order: 13,
+      parentId: "core.menu.file",
+      dynamicItems: async () => {
+        const entries = await window.appShell.getRecentFiles();
+        const recentFiles = entries.slice(0, 10);
+
+        const items = recentFiles.map((entry, index) => {
+          const fileName = entry.uri.split("/").pop() ?? entry.uri;
+
+          return {
+            id: `core.files.menu.openRecent.${index}`,
+            label: fileName,
+            order: index,
+            parentId: "core.files.menu.openRecent" as string,
+            commandId: `core.files.openRecent.${index}` as string,
+            type: "normal" as const
+          };
+        });
+
+        return items;
+      }
+    });
+
+    for (let i = 0; i < 10; i++) {
+      const index = i;
+      context.commands.registerCommand({
+        id: `core.files.openRecent.${index}`,
+        title: `Open Recent ${index}`,
+        handler: async () => {
+          const entries = await window.appShell.getRecentFiles();
+          const entry = entries[index];
+          if (!entry) {
+            return;
+          }
+
+          const stat = await window.appShell.getStat({ uri: entry.uri });
+          if (!stat.success || !stat.stat?.isFile) {
+            const result = await context.dialog.showMessage({
+              title: "File Not Found",
+              message: `The file "${entry.uri.split("/").pop()}" could not be found.`,
+              severity: "warning",
+              detail: "It may have been moved or deleted. Remove it from recent files?",
+              options: [
+                { label: "Remove", value: "remove" },
+                { label: "Cancel", value: "cancel" }
+              ]
+            });
+            if (result.action === "remove") {
+              await window.appShell.removeRecentFile(entry.uri);
+            }
+            return;
+          }
+
+          await context.fileMediator.openFile(entry.uri);
+          try {
+            const settingsService = getCoreSettingsService();
+            const maxCount = settingsService?.getValue("core.files.recentFilesMaxCount") as number | undefined;
+            await window.appShell.addRecentFile(entry.uri, maxCount);
+          } catch {
+            // best effort
+          }
+        }
+      });
+    }
+
+    context.menu.registerMenuItem({
       id: "core.files.menu.save",
       label: "Save",
-      order: 13,
+      order: 14,
       parentId: "core.menu.file",
       commandId: "core.files.save"
     });
@@ -260,7 +355,7 @@ export const coreFilesPlugin: Plugin = {
     context.menu.registerMenuItem({
       id: "core.files.menu.saveAs",
       label: "Save As",
-      order: 14,
+      order: 15,
       parentId: "core.menu.file",
       commandId: "core.files.saveAs"
     });

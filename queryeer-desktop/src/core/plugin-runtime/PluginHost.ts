@@ -153,6 +153,10 @@ export class PluginHost {
     return this.extensionRegistry.snapshot();
   }
 
+  public async rebuildMenu(): Promise<void> {
+    return this.extensionRegistry.rebuildMenu();
+  }
+
   public getFilesRegistry(): FilesRegistry {
     return this.extensionRegistry.createFilesRegistry();
   }

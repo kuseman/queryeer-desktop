@@ -30,6 +30,16 @@ export class MenuService {
         return { success: false };
       }
     });
+    ipcMain.handle("menu:rebuild", async () => {
+      try {
+        const menu = this.buildMenu();
+        Menu.setApplicationMenu(menu);
+        return { success: true };
+      } catch (err) {
+        console.error("[menu:rebuild] Error:", err);
+        return { success: false };
+      }
+    });
   }
 
   public setExecuteCommand(fn: (commandId: string) => Promise<void>): void {

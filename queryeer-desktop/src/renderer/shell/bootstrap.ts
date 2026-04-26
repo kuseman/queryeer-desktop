@@ -2,6 +2,7 @@ import { PluginHost } from "../../core/plugin-runtime/PluginHost";
 import type { FileBackendSync } from "../../core/plugin-runtime/FileMediator";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import { toPluginManifestFile } from "../../contracts/plugin/PluginManifestFile";
+import type { CommandExecutionResult } from "../../contracts/plugin/Plugin";
 import { RendererFileWatcherService } from "../file-watcher/file-watcher-service";
 import { RendererWorkspaceService } from "../workspace/workspace-service";
 import { discoverPluginModules } from "../../plugins/discovery";
@@ -102,8 +103,52 @@ export async function bootstrapShell() {
   await host.start(discovery.manifests);
   host.setExternalLoadErrors(discovery.loadErrors);
 
+  const rebuildNativeMenu = async (): Promise<void> => {
+    const extensions = host.getExtensions();
+    const menuItems = extensions.menu.items.map((item) => ({
+      id: item.id,
+      label: item.label,
+      type: item.type,
+      order: item.order,
+      commandId: item.commandId,
+      parentId: item.parentId,
+      icon: item.icon,
+      accelerator: item.accelerator,
+      role: item.role
+    }));
+    const fallbackMenuAccelerators = new Map<string, string>();
+    const keybindingState = resolveKeybindingState(
+      extensions,
+      await window.appShell.getUserKeybindings()
+    );
+    for (const contribution of [...keybindingState.resolved].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
+      const isGlobalScope = (contribution.scope ?? "global") === "global";
+      const isGlobalWhen = contribution.when === undefined || contribution.when === "global";
+      if (!isGlobalScope || !isGlobalWhen) {
+        continue;
+      }
+      if (!fallbackMenuAccelerators.has(contribution.commandId)) {
+        fallbackMenuAccelerators.set(contribution.commandId, contribution.key);
+      }
+    }
+    const commands = extensions.commands.map((cmd) => ({
+      id: cmd.id,
+      accelerator: fallbackMenuAccelerators.get(cmd.id)
+    }));
+    await window.appShell.buildMenu(menuItems, commands);
+  };
+
+  const extensions = host.getExtensions();
+  const menuExt = extensions.menu as unknown as { onRebuild: (fn: () => Promise<void>) => void };
+  menuExt.onRebuild(rebuildNativeMenu);
+
+  await host.rebuildMenu();
+  await rebuildNativeMenu();
+
   const keybindingService = createKeybindingService({
-    executeCommand: (commandId) => host.executeCommand(commandId),
+    executeCommand: async (commandId): Promise<CommandExecutionResult> => {
+      return host.executeCommand(commandId);
+    },
     getUserKeybindings: () => window.appShell.getUserKeybindings()
   });
   await keybindingService.initialize(host.getExtensions());
@@ -163,46 +208,6 @@ export async function bootstrapShell() {
     }
   };
   document.addEventListener("keydown", handleZoomKeyboard);
-
-  const extensions = host.getExtensions();
-  const menuItems = extensions.menu.items.map((item) => ({
-    id: item.id,
-    label: item.label,
-    type: item.type,
-    order: item.order,
-    commandId: item.commandId,
-    parentId: item.parentId,
-    icon: item.icon,
-    accelerator: item.accelerator,
-    role: item.role
-  }));
-
-  const fallbackMenuAccelerators = new Map<string, string>();
-  const keybindingState = resolveKeybindingState(
-    extensions,
-    await window.appShell.getUserKeybindings()
-  );
-  for (const contribution of [...keybindingState.resolved].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
-    const isGlobalScope = (contribution.scope ?? "global") === "global";
-    const isGlobalWhen = contribution.when === undefined || contribution.when === "global";
-    if (!isGlobalScope || !isGlobalWhen) {
-      continue;
-    }
-    if (!fallbackMenuAccelerators.has(contribution.commandId)) {
-      fallbackMenuAccelerators.set(contribution.commandId, contribution.key);
-    }
-  }
-
-  const commands = extensions.commands.map((cmd) => ({
-    id: cmd.id,
-    accelerator: fallbackMenuAccelerators.get(cmd.id)
-  }));
-
-  try {
-    await window.appShell.buildMenu(menuItems, commands);
-  } catch (err) {
-    console.error("Failed to build menu:", err);
-  }
 
   setRuntimeData({
     hostState: host.getState(),

@@ -11,8 +11,12 @@ export type MenuItemContribution = {
         "togglefullscreen" | "window" | "minimize" | "zoom" | "close" | "help" |
         "about" | "services" | "hide" | "hideOthers" | "unhide" | "quit";
   accelerator?: string;
+  dynamicItems?: () => Promise<MenuItemContribution[]>;
+  _generatedBy?: string;
 };
 
 export type MenuRegistry = {
   registerMenuItem: (contribution: MenuItemContribution) => void;
+  rebuildMenu: () => Promise<void>;
+  onRebuild: (fn: () => Promise<void>) => void;
 };
