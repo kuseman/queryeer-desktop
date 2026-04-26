@@ -102,7 +102,9 @@ describe("bootstrapShell diagnostics wiring", () => {
       reloadWindow: async () => {},
       forceReloadWindow: async () => {},
       toggleFullScreen: async () => {},
-      toggleDevTools: async () => {}
+      toggleDevTools: async () => {},
+      showItemInFolder: async () => ({ success: true }),
+      openPath: async () => ({ success: true })
     };
 
     (discoverPluginModules as MockedDiscovery).mockResolvedValue({

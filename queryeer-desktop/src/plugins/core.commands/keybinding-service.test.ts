@@ -28,6 +28,7 @@ function makeExtensions(): ExtensionSnapshot {
       views: [],
       editors: [],
       welcomes: [],
+      tabContextMenus: [],
       shellDefaults: {
         visibleZones: ["mainArea", "statusBar"],
         sidebarWidths: { primary: 280, secondary: 320 },

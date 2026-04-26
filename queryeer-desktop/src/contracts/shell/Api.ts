@@ -74,6 +74,8 @@ export interface ShellApi {
   forceReloadWindow: () => Promise<void>;
   toggleFullScreen: () => Promise<void>;
   toggleDevTools: () => Promise<void>;
+  showItemInFolder: (uri: string) => Promise<{ success: boolean }>;
+  openPath: (uri: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 declare global {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useCallback, useRef, useState } from "react";
 import type { ExtensionSnapshot } from "../../core/plugin-runtime/ExtensionRegistry";
 import type { LayoutZone, LayoutEditorContribution } from "../../contracts/extensions/LayoutExtension";
 import type { FileEntity } from "../../contracts/files/FileEntity";
@@ -188,6 +188,25 @@ export function ShellApp({
     [extensions.tooltip.sections]
   );
 
+  const tabContextMenus = useMemo(
+    () => [...extensions.layout.tabContextMenus],
+    [extensions.layout.tabContextMenus]
+  );
+
+  const handleTabContextMenuAction = useCallback(
+    (actionId: string, _file: FileEntity) => {
+      void executeCommand(actionId);
+    },
+    [executeCommand]
+  );
+
+  const handleTabContextMenuOpen = useCallback(
+    (file: FileEntity | null) => {
+      fileMediator.setContextFileId(file?.fileId ?? null);
+    },
+    [fileMediator]
+  );
+
   const closeFile = (fileId: string) => {
     const performClose = () => {
       setOpenFileIds((prev) => {
@@ -350,6 +369,9 @@ export function ShellApp({
               onSelectFile={selectFile}
               onCloseFile={closeFile}
               tooltipContributions={tooltipContributions}
+              tabContextMenus={tabContextMenus}
+              onTabContextMenuAction={handleTabContextMenuAction}
+              onTabContextMenuOpen={handleTabContextMenuOpen}
             />
 
             <EditorPane

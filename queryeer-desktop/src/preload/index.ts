@@ -134,6 +134,8 @@ type AppShellApi = {
   forceReloadWindow: () => Promise<void>;
   toggleFullScreen: () => Promise<void>;
   toggleDevTools: () => Promise<void>;
+  showItemInFolder: (uri: string) => Promise<{ success: boolean }>;
+  openPath: (uri: string) => Promise<{ success: boolean; error?: string }>;
 };
 
 const appShellApi: AppShellApi = {
@@ -321,6 +323,12 @@ const appShellApi: AppShellApi = {
   },
   toggleDevTools: async () => {
     return ipcRenderer.invoke("window:toggle-dev-tools");
+  },
+  showItemInFolder: async (uri: string) => {
+    return ipcRenderer.invoke("shell:show-item-in-folder", { uri });
+  },
+  openPath: async (uri: string) => {
+    return ipcRenderer.invoke("shell:open-path", { uri });
   },
   onWindowStateChanged: (listener) => {
     const channel = "window:state-changed";

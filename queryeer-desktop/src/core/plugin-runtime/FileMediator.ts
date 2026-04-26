@@ -59,6 +59,7 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
   } = options;
 
   let activeFileId: string | null = null;
+  let contextFileId: string | null = null;
 
   return {
     async openFile(uri, hint) {
@@ -191,6 +192,14 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
 
     getActiveFileId() {
       return activeFileId;
+    },
+
+    setContextFileId(fileId) {
+      contextFileId = fileId;
+    },
+
+    getContextFileId() {
+      return contextFileId;
     },
 
     async bindEngine(fileId, engineId, connectionId) {

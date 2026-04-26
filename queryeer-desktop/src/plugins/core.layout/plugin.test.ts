@@ -62,6 +62,8 @@ function createContext(file?: FileEntity) {
       saveFile: vi.fn(),
       setActiveFileId: vi.fn(),
       getActiveFileId: vi.fn(() => file?.fileId ?? null),
+      setContextFileId: vi.fn(),
+      getContextFileId: vi.fn(() => null),
       bindEngine: vi.fn(),
       executeFile: vi.fn(),
       reloadFile: vi.fn(),
@@ -78,6 +80,7 @@ function createContext(file?: FileEntity) {
       registerView: vi.fn(),
       registerEditor: vi.fn(),
       registerWelcome: vi.fn(),
+      registerTabContextMenu: vi.fn(),
       setShellDefaults: vi.fn()
     },
     menu: { registerMenuItem: vi.fn() },

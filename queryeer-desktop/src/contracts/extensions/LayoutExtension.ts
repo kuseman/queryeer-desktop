@@ -72,6 +72,20 @@ export type LayoutWelcomeContribution = {
   render: () => ReactNode;
 };
 
+export type TabContextMenuAction = {
+  id: string;
+  label: string;
+  order?: number;
+  icon?: string;
+  enabledWhen?: string;
+};
+
+export type TabContextMenuContribution = {
+  id: string;
+  order?: number;
+  actions: TabContextMenuAction[];
+};
+
 export type LayoutShellDefaults = {
   visibleZones: LayoutZone[];
   sidebarWidths?: {
@@ -87,5 +101,6 @@ export type LayoutRegistry = {
   registerView: (contribution: LayoutViewContribution) => void;
   registerEditor: (contribution: LayoutEditorContribution) => void;
   registerWelcome: (contribution: LayoutWelcomeContribution) => void;
+  registerTabContextMenu: (contribution: TabContextMenuContribution) => void;
   setShellDefaults: (defaults: LayoutShellDefaults) => void;
 };

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { FileEntity } from "../../contracts/files/FileEntity";
-import type { LayoutEditorContribution } from "../../contracts/extensions/LayoutExtension";
+import type { LayoutEditorContribution, TabContextMenuContribution, TabContextMenuAction } from "../../contracts/extensions/LayoutExtension";
 import type { TooltipSectionContribution } from "../../contracts/extensions/TooltipExtension";
 import { TabTooltip, buildTabTooltip } from "./TabTooltip";
 
@@ -17,6 +17,9 @@ type EditorTabsProps = {
   onSelectFile: (fileId: string) => void;
   onCloseFile: (fileId: string) => void;
   tooltipContributions?: TooltipSectionContribution[];
+  tabContextMenus?: TabContextMenuContribution[];
+  onTabContextMenuAction?: (actionId: string, file: FileEntity) => void;
+  onTabContextMenuOpen?: (file: FileEntity | null) => void;
 };
 
 export function EditorTabs({
@@ -26,9 +29,27 @@ export function EditorTabs({
   tabsRef,
   onSelectFile,
   onCloseFile,
-  tooltipContributions = []
+  tooltipContributions = [],
+  tabContextMenus = [],
+  onTabContextMenuAction,
+  onTabContextMenuOpen
 }: EditorTabsProps) {
   const [hoveredTab, setHoveredTab] = useState<HoveredTab | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: FileEntity } | null>(null);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
+    if (onTabContextMenuOpen) {
+      onTabContextMenuOpen(null as unknown as FileEntity);
+    }
+  }, [onTabContextMenuOpen]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClickOutside = () => closeContextMenu();
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [contextMenu, closeContextMenu]);
 
   if (openFiles.length === 0) {
     return null;
@@ -51,6 +72,30 @@ export function EditorTabs({
       )
     : { sections: [] };
 
+  const allActions = tabContextMenus
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .flatMap((contrib) => contrib.actions)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent, file: FileEntity) => {
+      e.preventDefault();
+      setContextMenu({ x: e.clientX, y: e.clientY, file });
+      onTabContextMenuOpen?.(file);
+    },
+    [onTabContextMenuOpen]
+  );
+
+  const handleActionClick = useCallback(
+    (action: TabContextMenuAction) => {
+      if (contextMenu && onTabContextMenuAction) {
+        onTabContextMenuAction(action.id, contextMenu.file);
+      }
+      setContextMenu(null);
+    },
+    [contextMenu, onTabContextMenuAction]
+  );
+
   return (
     <div ref={tabsRef} className="shell-editor-tabs">
       {openFiles.map((file) => {
@@ -70,6 +115,7 @@ export function EditorTabs({
             key={file.fileId}
             data-file-id={file.fileId}
             className={`shell-editor-tab ${activeFileId === file.fileId ? "is-active" : ""}`}
+            onContextMenu={(e) => handleContextMenu(e, file)}
             onMouseEnter={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();
               setHoveredTab({ fileId: file.fileId, rect });
@@ -106,6 +152,27 @@ export function EditorTabs({
           }}
         >
           <TabTooltip {...tooltipProps} />
+        </div>
+      )}
+      {contextMenu && (
+        <div
+          className="shell-tab-context-menu"
+          style={{
+            left: contextMenu.x,
+            top: contextMenu.y
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {allActions.map((action) => (
+            <div
+              key={action.id}
+              className="shell-tab-context-menu-item"
+              onClick={() => handleActionClick(action)}
+            >
+              {action.icon && <span className={`shell-tab-context-menu-icon ${action.icon}`} />}
+              <span className="shell-tab-context-menu-label">{action.label}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>
