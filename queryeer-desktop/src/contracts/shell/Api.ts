@@ -8,6 +8,13 @@ import type {
   SettingsModuleDocument
 } from "../settings/SettingsDocuments.js";
 
+type RecentFileEntry = {
+  uri: string;
+  lastOpenedAt: string;
+};
+
+export type { RecentFileEntry };
+
 export interface ShellApi {
   platform: string;
   version: string;
@@ -55,6 +62,7 @@ export interface ShellApi {
   onMenuExecuteCommand: (listener: (commandId: string) => void) => () => void;
   onQueryEvent: (listener: (event: { method: string; params: unknown }) => void) => () => void;
   buildMenu: (menuItems: unknown[], commands: unknown[]) => Promise<{ success: boolean }>;
+  rebuildMenu: () => Promise<{ success: boolean }>;
   windowMinimize: () => void;
   windowMaximize: () => void;
   windowClose: () => void;
@@ -76,6 +84,10 @@ export interface ShellApi {
   toggleDevTools: () => Promise<void>;
   showItemInFolder: (uri: string) => Promise<{ success: boolean }>;
   openPath: (uri: string) => Promise<{ success: boolean; error?: string }>;
+  getRecentFiles: () => Promise<RecentFileEntry[]>;
+  addRecentFile: (uri: string, maxCount?: number) => Promise<{ accepted: boolean }>;
+  removeRecentFile: (uri: string) => Promise<{ removed: boolean }>;
+  clearRecentFiles: () => Promise<{ cleared: boolean }>;
 }
 
 declare global {

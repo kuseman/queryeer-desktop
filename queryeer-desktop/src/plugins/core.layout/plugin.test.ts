@@ -83,7 +83,7 @@ function createContext(file?: FileEntity) {
       registerTabContextMenu: vi.fn(),
       setShellDefaults: vi.fn()
     },
-    menu: { registerMenuItem: vi.fn() },
+    menu: { registerMenuItem: vi.fn(), rebuildMenu: vi.fn(), onRebuild: vi.fn() },
     keybindings: { registerKeybinding },
     dialog: {
       showMessage,

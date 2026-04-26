@@ -19,6 +19,7 @@ import {
   WorkspaceStore
 } from "./workspace/workspace-store.js";
 import { defaultSettingsDirPath, SettingsStore } from "./settings/settings-store.js";
+import { defaultRecentFilesPath, RecentFilesStore } from "./recent-files/recent-files-store.js";
 
 const isDev = !app.isPackaged;
 const backendGateway = new BackendGateway();
@@ -35,6 +36,7 @@ let workspaceStore: WorkspaceStore | null = null;
 let keybindingsStore: KeybindingsStore | null = null;
 let settingsStore: SettingsStore | null = null;
 let backupStore: BackupStore | null = null;
+let recentFilesStore: RecentFilesStore | null = null;
 let mainWindow: BrowserWindow | null = null;
 
 const dockIconPath = join(__dirname, "../../resources/icons/icon-128.png");
@@ -227,6 +229,10 @@ app.whenReady().then(() => {
     backupsDir: defaultBackupsDir(app.getPath("userData"))
   });
   backupStore.wireIpc();
+  recentFilesStore = new RecentFilesStore({
+    recentFilesPath: defaultRecentFilesPath(app.getPath("userData"))
+  });
+  recentFilesStore.wireIpc();
   ipcMain.handle("plugins:get-frontend-targets", async () => discoverExternalFrontendPlugins());
   ipcMain.handle("file:read", async (_event, { uri }: { uri: string }) => {
     try {

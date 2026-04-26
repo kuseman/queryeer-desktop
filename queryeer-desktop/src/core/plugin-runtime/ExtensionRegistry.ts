@@ -81,6 +81,7 @@ export class ExtensionRegistry {
   private readonly commands = new Map<string, CommandExtension>();
   private readonly filesystems = new Map<string, FileSystemExtension>();
   private readonly menuItems = new Map<string, MenuItemContribution>();
+  private readonly menuRebuildCallbacks: (() => Promise<void>)[] = [];
   private readonly keybindings = new Map<string, KeybindingContribution>();
   private readonly layoutToolbarActions = new Map<string, LayoutToolbarActionContribution>();
   private readonly layoutStatusItems = new Map<string, LayoutStatusItemContribution>();
@@ -126,8 +127,54 @@ export class ExtensionRegistry {
     return {
       registerMenuItem: (contribution) => {
         this.menuItems.set(contribution.id, contribution);
+      },
+      rebuildMenu: async () => {
+        await this.rebuildMenu();
+        for (const callback of this.menuRebuildCallbacks) {
+          await callback();
+        }
+      },
+      onRebuild: (fn) => {
+        this.menuRebuildCallbacks.push(fn);
       }
     };
+  }
+
+  public async rebuildMenu(): Promise<void> {
+    try {
+      const dynamicItems: MenuItemContribution[] = [];
+      for (const contribution of this.menuItems.values()) {
+        if (contribution.dynamicItems) {
+          const parentId = contribution.id;
+          for (const item of this.menuItems.values()) {
+            if (item._generatedBy === parentId) {
+              this.menuItems.delete(item.id);
+            }
+          }
+        }
+      }
+      for (const contribution of this.menuItems.values()) {
+        if (contribution.dynamicItems) {
+          const items = await contribution.dynamicItems();
+          for (const item of items) {
+            dynamicItems.push({ ...item, _generatedBy: contribution.id });
+          }
+        }
+      }
+      for (const item of dynamicItems) {
+        this.menuItems.set(item.id, item);
+      }
+    } catch {
+      // best effort - ignore dynamic menu errors
+    }
+
+    for (const callback of this.menuRebuildCallbacks) {
+      try {
+        await callback();
+      } catch {
+        // best effort - ignore rebuild callback errors
+      }
+    }
   }
 
   public createKeybindingRegistry(): KeybindingRegistry {
@@ -242,9 +289,12 @@ export class ExtensionRegistry {
       commands: [...this.commands.values()],
       filesystems: [...this.filesystems.values()],
       files: this.fileRegistry.snapshot(),
-      menu: {
-        items: [...this.menuItems.values()]
-      },
+menu: {
+      items: [...this.menuItems.values()],
+      onRebuild: (fn: () => Promise<void>) => {
+        this.menuRebuildCallbacks.push(fn);
+      }
+    } as { items: MenuItemContribution[]; onRebuild: (fn: () => Promise<void>) => void },
       keybindings: [...this.keybindings.values()],
       layout: {
         toolbarActions: [...this.layoutToolbarActions.values()],

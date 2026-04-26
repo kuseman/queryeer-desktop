@@ -53,6 +53,11 @@ type DialogShowSaveOptions = {
 
 type QueryEvent = { method: string; params: unknown };
 
+type RecentFileEntry = {
+  uri: string;
+  lastOpenedAt: string;
+};
+
 type AppShellApi = {
   platform: NodeJS.Platform;
   version: string;
@@ -115,6 +120,7 @@ type AppShellApi = {
   showOpenFolder: (options?: DialogShowFolderOptions) => Promise<{ canceled: boolean; folderPath?: string }>;
   showDialogSave: (options: DialogShowSaveOptions) => Promise<{ canceled: boolean; filePath?: string }>;
   buildMenu: (menuItems: unknown[], commands: unknown[]) => Promise<{ success: boolean }>;
+  rebuildMenu: () => Promise<{ success: boolean }>;
   windowMinimize: () => void;
   windowMaximize: () => void;
   windowClose: () => void;
@@ -136,6 +142,10 @@ type AppShellApi = {
   toggleDevTools: () => Promise<void>;
   showItemInFolder: (uri: string) => Promise<{ success: boolean }>;
   openPath: (uri: string) => Promise<{ success: boolean; error?: string }>;
+  getRecentFiles: () => Promise<RecentFileEntry[]>;
+  addRecentFile: (uri: string, maxCount?: number) => Promise<{ accepted: boolean }>;
+  removeRecentFile: (uri: string) => Promise<{ removed: boolean }>;
+  clearRecentFiles: () => Promise<{ cleared: boolean }>;
 };
 
 const appShellApi: AppShellApi = {
@@ -276,6 +286,9 @@ const appShellApi: AppShellApi = {
   buildMenu: async (menuItems: unknown[], commands: unknown[]) => {
     return ipcRenderer.invoke("menu:build", menuItems, commands);
   },
+  rebuildMenu: async () => {
+    return ipcRenderer.invoke("menu:rebuild");
+  },
   windowMinimize: () => ipcRenderer.send("window:minimize"),
   windowMaximize: () => ipcRenderer.send("window:maximize"),
   windowClose: () => ipcRenderer.send("window:close"),
@@ -329,6 +342,18 @@ const appShellApi: AppShellApi = {
   },
   openPath: async (uri: string) => {
     return ipcRenderer.invoke("shell:open-path", { uri });
+  },
+  getRecentFiles: async () => {
+    return ipcRenderer.invoke("recent:get");
+  },
+  addRecentFile: async (uri: string, maxCount?: number) => {
+    return ipcRenderer.invoke("recent:add", { uri, maxCount });
+  },
+  removeRecentFile: async (uri: string) => {
+    return ipcRenderer.invoke("recent:remove", { uri });
+  },
+  clearRecentFiles: async () => {
+    return ipcRenderer.invoke("recent:clear");
   },
   onWindowStateChanged: (listener) => {
     const channel = "window:state-changed";

@@ -84,6 +84,7 @@ describe("bootstrapShell diagnostics wiring", () => {
       onMenuExecuteCommand: () => () => {},
       onQueryEvent: () => () => {},
       buildMenu: async () => ({ success: true }),
+      rebuildMenu: async () => ({ success: true }),
       windowMinimize: () => {},
       windowMaximize: () => {},
       windowClose: () => {},
@@ -104,7 +105,11 @@ describe("bootstrapShell diagnostics wiring", () => {
       toggleFullScreen: async () => {},
       toggleDevTools: async () => {},
       showItemInFolder: async () => ({ success: true }),
-      openPath: async () => ({ success: true })
+      openPath: async () => ({ success: true }),
+      getRecentFiles: async () => [],
+      addRecentFile: async () => ({ accepted: true }),
+      removeRecentFile: async () => ({ removed: true }),
+      clearRecentFiles: async () => ({ cleared: true })
     };
 
     (discoverPluginModules as MockedDiscovery).mockResolvedValue({
