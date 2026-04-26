@@ -1,0 +1,140 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { FileEntity } from "../../contracts/files/FileEntity";
+import type { PluginContext } from "../../contracts/plugin/Plugin";
+
+const mocks = vi.hoisted(() => ({
+  registerEngineResolverMock: vi.fn()
+}));
+
+vi.mock("./QueryEngineService", () => ({
+  getQueryEngineService: () => ({
+    registerEngineResolver: mocks.registerEngineResolverMock
+  })
+}));
+
+import { registerQueryExecutableEngine } from "./engine-registration";
+
+function makeFile(overrides: Partial<FileEntity> = {}): FileEntity {
+  return {
+    fileId: "file-1",
+    version: 1,
+    uri: "file:///C:/tmp/a.plbsql",
+    mimeType: "application/plbsql",
+    dirtyVsBackend: false,
+    dirtyVsDisk: false,
+    diskState: "inSync",
+    openedAt: new Date().toISOString(),
+    ...overrides
+  };
+}
+
+function createContext(file: FileEntity): PluginContext {
+  const filesById = new Map<string, FileEntity>([[file.fileId, file]]);
+  return {
+    commands: {
+      registerCommand: vi.fn(),
+      executeCommand: vi.fn(async () => ({ commandId: "noop", executed: true }))
+    },
+    filesystems: { registerFileSystem: vi.fn() },
+    files: {
+      capabilities: {
+        registerCapabilities: vi.fn(),
+        hasCapability: vi.fn(() => false),
+        registerContentCategory: vi.fn(),
+        getContentCategory: vi.fn(() => "text" as const)
+      },
+      openFile: vi.fn(),
+      closeFile: vi.fn(),
+      getFile: vi.fn((fileId: string) => filesById.get(fileId)),
+      listFiles: vi.fn(() => [...filesById.values()]),
+      updateFile: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+      registerMimeResolver: vi.fn(),
+      registerEditorResolver: vi.fn(),
+      classifyUri: vi.fn(() => "application/plbsql"),
+      resolveEditor: vi.fn(),
+      getEditorState: vi.fn(),
+      setEditorState: vi.fn(),
+      markDirty: vi.fn()
+    },
+    fileMediator: {
+      openFile: vi.fn(),
+      closeFile: vi.fn(),
+      saveFile: vi.fn(),
+      setActiveFileId: vi.fn(),
+      getActiveFileId: vi.fn(() => null),
+      setContextFileId: vi.fn(),
+      getContextFileId: vi.fn(() => null),
+      bindEngine: vi.fn(),
+      executeFile: vi.fn(),
+      reloadFile: vi.fn(),
+      acceptExternalChange: vi.fn(),
+      discardExternalChange: vi.fn()
+    },
+    fileWatcher: {
+      watch: vi.fn(),
+      mutePath: vi.fn()
+    },
+    layout: {
+      registerToolbarAction: vi.fn(),
+      registerStatusItem: vi.fn(),
+      registerView: vi.fn(),
+      registerEditor: vi.fn(),
+      registerWelcome: vi.fn(),
+      registerTabContextMenu: vi.fn(),
+      registerTabHeaderStyle: vi.fn(),
+      setShellDefaults: vi.fn()
+    },
+    menu: {
+      registerMenuItem: vi.fn(),
+      rebuildMenu: vi.fn(),
+      onRebuild: vi.fn()
+    },
+    keybindings: { registerKeybinding: vi.fn() },
+    dialog: {
+      showMessage: vi.fn(),
+      showOpenDialog: vi.fn(),
+      showOpenFolder: vi.fn(),
+      showSaveDialog: vi.fn()
+    },
+    tooltip: { registerTooltipSection: vi.fn() },
+    settings: {
+      registerSettings: vi.fn(),
+      registerAdvancedRenderer: vi.fn(),
+      registerAdvancedValidator: vi.fn(),
+      listSettingsContributions: vi.fn(() => []),
+      listSettingsDefinitions: vi.fn(() => []),
+      getAdvancedRenderer: vi.fn(),
+      getAdvancedValidator: vi.fn()
+    }
+  };
+}
+
+describe("registerQueryExecutableEngine", () => {
+  beforeEach(() => {
+    mocks.registerEngineResolverMock.mockReset();
+    mocks.registerEngineResolverMock.mockReturnValue(() => {});
+  });
+
+  it("registers capability and matching resolver together", () => {
+    const context = createContext(makeFile());
+
+    registerQueryExecutableEngine(context, {
+      engineId: "payloadbuilder",
+      mimeTypes: ["application/plbsql"]
+    });
+
+    expect(context.files.capabilities.registerCapabilities).toHaveBeenCalledWith(
+      "application/plbsql",
+      ["queryexecutable"]
+    );
+    expect(mocks.registerEngineResolverMock).toHaveBeenCalledTimes(1);
+
+    const resolver = mocks.registerEngineResolverMock.mock.calls[0]?.[0] as
+      | ((params: { fileId?: string }) => string | undefined)
+      | undefined;
+    expect(resolver).toBeTypeOf("function");
+    expect(resolver?.({ fileId: "file-1" })).toBe("payloadbuilder");
+    expect(resolver?.({ fileId: "missing" })).toBeUndefined();
+  });
+});

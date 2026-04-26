@@ -90,6 +90,16 @@
   position: relative;
 }
 
+.shell-editor-tab-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  pointer-events: none;
+  z-index: 2;
+}
+
 .shell-editor-tab-button {
   display: flex;
   align-items: center;

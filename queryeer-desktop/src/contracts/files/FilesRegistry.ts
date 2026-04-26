@@ -3,7 +3,7 @@ import type { EditorResolver, MimeHint, MimeResolver } from "./Resolvers.js";
 
 export type FilesSubscriber = (files: FileEntity[]) => void;
 
-export type MimeCapability = "backupable" | "executable" | "viewable" | "editable";
+export type MimeCapability = "backupable" | "queryexecutable" | "viewable" | "editable";
 
 export type ContentCategory = "text" | "image" | "binary";
 

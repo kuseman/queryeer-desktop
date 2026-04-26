@@ -87,6 +87,23 @@ export type TabContextMenuContribution = {
   actions: TabContextMenuAction[];
 };
 
+export type TabHeaderStyleContext = {
+  file: FileEntity;
+  isActive: boolean;
+  hasCapability: (capability: MimeCapability) => boolean;
+};
+
+export type TabHeaderStyle = {
+  className?: string;
+  indicatorClassName?: string;
+};
+
+export type TabHeaderStyleContribution = {
+  id: string;
+  order?: number;
+  render: (context: TabHeaderStyleContext) => TabHeaderStyle | null;
+};
+
 export type LayoutShellDefaults = {
   visibleZones: LayoutZone[];
   sidebarWidths?: {
@@ -103,5 +120,6 @@ export type LayoutRegistry = {
   registerEditor: (contribution: LayoutEditorContribution) => void;
   registerWelcome: (contribution: LayoutWelcomeContribution) => void;
   registerTabContextMenu: (contribution: TabContextMenuContribution) => void;
+  registerTabHeaderStyle: (contribution: TabHeaderStyleContribution) => void;
   setShellDefaults: (defaults: LayoutShellDefaults) => void;
 };

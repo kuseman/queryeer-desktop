@@ -1,7 +1,13 @@
 import { useState, useCallback, useEffect } from "react";
 import type { FileEntity } from "../../contracts/files/FileEntity";
-import type { LayoutEditorContribution, TabContextMenuContribution, TabContextMenuAction } from "../../contracts/extensions/LayoutExtension";
+import type {
+  LayoutEditorContribution,
+  TabContextMenuContribution,
+  TabContextMenuAction,
+  TabHeaderStyleContribution
+} from "../../contracts/extensions/LayoutExtension";
 import type { TooltipSectionContribution } from "../../contracts/extensions/TooltipExtension";
+import type { MimeCapability } from "../../contracts/files/FilesRegistry";
 import { TabTooltip, buildTabTooltip } from "./TabTooltip";
 
 type HoveredTab = {
@@ -18,6 +24,8 @@ type EditorTabsProps = {
   onCloseFile: (fileId: string) => void;
   tooltipContributions?: TooltipSectionContribution[];
   tabContextMenus?: TabContextMenuContribution[];
+  tabHeaderStyleContributions?: TabHeaderStyleContribution[];
+  hasMimeCapability?: (mimeType: string, capability: MimeCapability) => boolean;
   onTabContextMenuAction?: (actionId: string, file: FileEntity) => void;
   onTabContextMenuOpen?: (file: FileEntity | null) => void;
 };
@@ -31,6 +39,8 @@ export function EditorTabs({
   onCloseFile,
   tooltipContributions = [],
   tabContextMenus = [],
+  tabHeaderStyleContributions = [],
+  hasMimeCapability,
   onTabContextMenuAction,
   onTabContextMenuOpen
 }: EditorTabsProps) {
@@ -77,6 +87,10 @@ export function EditorTabs({
     .flatMap((contrib) => contrib.actions)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
+  const orderedTabHeaderStyleContributions = [...tabHeaderStyleContributions].sort(
+    (a, b) => (a.order ?? 0) - (b.order ?? 0)
+  );
+
   const handleContextMenu = useCallback(
     (e: React.MouseEvent, file: FileEntity) => {
       e.preventDefault();
@@ -104,6 +118,24 @@ export function EditorTabs({
         const dirtyMark = file.dirtyVsDisk || file.dirtyVsBackend ? " •" : "";
 
         let titleClassName = "shell-editor-tab-title";
+        const styleContext = {
+          file,
+          isActive: activeFileId === file.fileId,
+          hasCapability: (capability: MimeCapability) =>
+            hasMimeCapability?.(file.mimeType, capability) ?? false
+        };
+
+        const tabHeaderStyle = orderedTabHeaderStyleContributions
+          .map((contribution) => contribution.render(styleContext))
+          .filter((style): style is NonNullable<typeof style> => style !== null)
+          .reduce(
+            (acc, style) => ({
+              className: [acc.className, style.className].filter(Boolean).join(" "),
+              indicatorClassName: [acc.indicatorClassName, style.indicatorClassName].filter(Boolean).join(" ")
+            }),
+            { className: "", indicatorClassName: "" }
+          );
+
         if (file.diskState === "deletedOnDisk") {
           titleClassName += " is-deleted";
         } else if (file.diskState === "modifiedOnDisk" && file.dirtyVsDisk) {
@@ -114,7 +146,7 @@ export function EditorTabs({
           <div
             key={file.fileId}
             data-file-id={file.fileId}
-            className={`shell-editor-tab ${activeFileId === file.fileId ? "is-active" : ""}`}
+            className={`shell-editor-tab ${activeFileId === file.fileId ? "is-active" : ""} ${tabHeaderStyle.className}`.trim()}
             onContextMenu={(e) => handleContextMenu(e, file)}
             onMouseEnter={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();
@@ -122,6 +154,9 @@ export function EditorTabs({
             }}
             onMouseLeave={() => setHoveredTab(null)}
           >
+            {tabHeaderStyle.indicatorClassName && (
+              <span className={`shell-editor-tab-indicator ${tabHeaderStyle.indicatorClassName}`.trim()} />
+            )}
             <div
               role="button"
               className="shell-editor-tab-button"

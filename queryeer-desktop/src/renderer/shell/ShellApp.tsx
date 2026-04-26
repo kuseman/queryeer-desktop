@@ -199,6 +199,11 @@ export function ShellApp({
     [extensions.layout.tabContextMenus]
   );
 
+  const tabHeaderStyleContributions = useMemo(
+    () => [...extensions.layout.tabHeaderStyles],
+    [extensions.layout.tabHeaderStyles]
+  );
+
   const handleTabContextMenuAction = useCallback(
     (actionId: string, _file: FileEntity) => {
       void executeCommand(actionId);
@@ -379,6 +384,10 @@ export function ShellApp({
               onCloseFile={closeFile}
               tooltipContributions={tooltipContributions}
               tabContextMenus={tabContextMenus}
+              tabHeaderStyleContributions={tabHeaderStyleContributions}
+              hasMimeCapability={(mimeType, capability) =>
+                filesRegistry.capabilities.hasCapability(mimeType, capability)
+              }
               onTabContextMenuAction={handleTabContextMenuAction}
               onTabContextMenuOpen={handleTabContextMenuOpen}
             />

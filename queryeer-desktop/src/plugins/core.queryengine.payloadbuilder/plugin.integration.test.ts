@@ -3,6 +3,7 @@ import type { PluginContext } from "../../contracts/plugin/Plugin";
 
 const mocks = vi.hoisted(() => ({
   registerExecutionContextProviderMock: vi.fn(),
+  registerEngineResolverMock: vi.fn(),
   onQueryEventMock: vi.fn(),
   buildEngineStateMock: vi.fn(),
   applyEngineStatePatchMock: vi.fn(),
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../core.queryengine/QueryEngineService", () => ({
   getQueryEngineService: () => ({
     registerExecutionContextProvider: mocks.registerExecutionContextProviderMock,
+    registerEngineResolver: mocks.registerEngineResolverMock,
     onQueryEvent: mocks.onQueryEventMock
   })
 }));
@@ -84,6 +86,7 @@ function createContext(): PluginContext {
       registerEditor: vi.fn(),
       registerWelcome: vi.fn(),
       registerTabContextMenu: vi.fn(),
+      registerTabHeaderStyle: vi.fn(),
       setShellDefaults: vi.fn()
     },
     menu: {
@@ -114,6 +117,7 @@ function createContext(): PluginContext {
 describe("core.queryengine.payloadbuilder plugin integration", () => {
   beforeEach(() => {
     mocks.registerExecutionContextProviderMock.mockReset();
+    mocks.registerEngineResolverMock.mockReset();
     mocks.onQueryEventMock.mockReset();
     mocks.buildEngineStateMock.mockReset();
     mocks.applyEngineStatePatchMock.mockReset();
@@ -158,6 +162,13 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
     const context = createContext();
 
     coreQueryEnginePayloadbuilderPlugin.activate(context);
+
+    expect(mocks.registerEngineResolverMock).toHaveBeenCalledTimes(1);
+
+    expect(context.files.capabilities.registerCapabilities).toHaveBeenCalledWith(
+      "application/plbsql",
+      ["queryexecutable"]
+    );
 
     const registerViewMock = context.layout.registerView as ReturnType<typeof vi.fn>;
     expect(registerViewMock).toHaveBeenCalledWith(
