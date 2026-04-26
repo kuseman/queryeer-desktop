@@ -11,6 +11,7 @@ import type { RendererWorkspaceService } from "../workspace/workspace-service";
 import { Toolbar, StatusBar, Sidebar, SidebarDivider, EditorTabs, EditorPane } from "../../plugins/core.layout";
 import { SettingsModalHost } from "../../plugins/core.settings/SettingsModalHost";
 import { confirmCloseDirtyFile } from "./close-file-guard";
+import { filterSidebarViews } from "./sidebar-view-filter";
 import "./shell-app.css";
 
 type ShellAppProps = {
@@ -128,20 +129,25 @@ export function ShellApp({
     [extensions.layout.statusItems]
   );
 
+  const viewContext = useMemo(() => {
+    const activeFileForViewContext =
+      activeFileId != null ? files.find((file) => file.fileId === activeFileId) : undefined;
+    return {
+      hasOpenFiles: openFileIds.length > 0,
+      hasActiveFile: activeFileForViewContext != null,
+      activeFileMimeType: activeFileForViewContext?.mimeType,
+      activeFileEditorId: activeFileForViewContext?.editorId
+    };
+  }, [openFileIds.length, activeFileId, files]);
+
   const primaryViews = useMemo(
-    () =>
-      [...extensions.layout.views]
-        .filter((view) => view.defaultZone === "primarySidebar")
-        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
-    [extensions.layout.views]
+    () => filterSidebarViews(extensions.layout.views, "primarySidebar", viewContext),
+    [extensions.layout.views, viewContext]
   );
 
   const secondaryViews = useMemo(
-    () =>
-      [...extensions.layout.views]
-        .filter((view) => view.defaultZone === "secondarySidebar")
-        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
-    [extensions.layout.views]
+    () => filterSidebarViews(extensions.layout.views, "secondarySidebar", viewContext),
+    [extensions.layout.views, viewContext]
   );
 
   const welcomes = useMemo(
@@ -318,6 +324,9 @@ export function ShellApp({
     document.addEventListener("mouseup", onMouseUp);
   };
 
+  const showPrimarySidebar = visibleZones.has("primarySidebar") && primaryViews.length > 0;
+  const showSecondarySidebar = visibleZones.has("secondarySidebar") && secondaryViews.length > 0;
+
   return (
     <div className="shell-page">
       <CoreMenuBar
@@ -334,7 +343,7 @@ export function ShellApp({
       )}
 
       <main className="shell-layout" ref={layoutRef}>
-        {visibleZones.has("primarySidebar") && (
+        {showPrimarySidebar && (
           <Sidebar
             views={primaryViews}
             zone="primarySidebar"
@@ -351,7 +360,7 @@ export function ShellApp({
           />
         )}
 
-        {visibleZones.has("primarySidebar") && (
+        {showPrimarySidebar && (
           <SidebarDivider
             target="primary"
             onResize={beginResize}
@@ -382,7 +391,7 @@ export function ShellApp({
           </div>
         </section>
 
-        {visibleZones.has("secondarySidebar") && (
+        {showSecondarySidebar && (
           <SidebarDivider
             target="secondary"
             onResize={beginResize}
@@ -390,7 +399,7 @@ export function ShellApp({
           />
         )}
 
-        {visibleZones.has("secondarySidebar") && (
+        {showSecondarySidebar && (
           <Sidebar
             views={secondaryViews}
             zone="secondarySidebar"
