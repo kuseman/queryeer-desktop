@@ -12,6 +12,8 @@ import coreMenuManifest from "./manifests/core.menu.json";
 import coreObservabilityManifest from "./manifests/core.observability.json";
 import coreWorkspaceManifest from "./manifests/core.workspace.json";
 import coreQueryEngineManifest from "./manifests/core.queryengine.json";
+import coreQueryEnginePayloadbuilderManifest from "./manifests/core.queryengine.payloadbuilder.json";
+import coreQueryEnginePayloadbuilderElasticsearchManifest from "./manifests/core.queryengine.payloadbuilder.elasticsearch.json";
 import coreQueryEngineOutputTextManifest from "./manifests/core.queryengine.output.text.json";
 
 export function loadPluginManifests(): PluginManifestFile[] {
@@ -29,6 +31,8 @@ export function loadPluginManifests(): PluginManifestFile[] {
     coreSettingsManifest as PluginManifestFile,
     coreExplorerManifest as PluginManifestFile,
     coreQueryEngineManifest as PluginManifestFile,
+    coreQueryEnginePayloadbuilderManifest as PluginManifestFile,
+    coreQueryEnginePayloadbuilderElasticsearchManifest as PluginManifestFile,
     coreQueryEngineOutputTextManifest as PluginManifestFile
   ];
 }

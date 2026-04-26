@@ -29,7 +29,7 @@ public final class JdbcBackendPlugin implements BackendPlugin
                     }
 
                     @Override
-                    public void execute(String queryExecutionId, String text, QueryPublisher publisher)
+                    public void execute(String queryExecutionId, String text, Object engineState, QueryPublisher publisher)
                     {
                         publisher.failed("INTERNAL", "JDBC execution not yet implemented");
                     }

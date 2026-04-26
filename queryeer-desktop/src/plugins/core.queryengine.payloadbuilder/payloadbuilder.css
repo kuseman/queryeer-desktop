@@ -1,0 +1,104 @@
+.payloadbuilder-catalog-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.payloadbuilder-catalog-add-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.payloadbuilder-catalog-input,
+.payloadbuilder-catalog-select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-0);
+  color: var(--text-0);
+  min-height: 28px;
+  padding: 4px 8px;
+}
+
+.payloadbuilder-catalog-button,
+.payloadbuilder-catalog-remove {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-2);
+  color: var(--text-0);
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.payloadbuilder-catalog-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.payloadbuilder-catalog-empty {
+  font-size: var(--ui-font-size-sm);
+  color: var(--text-1);
+}
+
+.payloadbuilder-catalog-fields {
+  display: grid;
+  gap: 4px;
+}
+
+.payloadbuilder-catalog-label {
+  font-size: var(--ui-font-size-sm);
+  color: var(--text-1);
+}
+
+.payloadbuilder-settings-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.payloadbuilder-settings-help {
+  font-size: var(--ui-font-size-sm);
+  color: var(--text-1);
+}
+
+.payloadbuilder-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr) minmax(120px, 1fr) 80px auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.payloadbuilder-settings-detail-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.payloadbuilder-settings-grid-header {
+  font-size: var(--ui-font-size-sm);
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.payloadbuilder-settings-cell {
+  display: grid;
+  gap: 2px;
+}
+
+.payloadbuilder-settings-error {
+  color: #e57373;
+  font-size: 11px;
+}
+
+.payloadbuilder-settings-enabled {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-1);
+  font-size: var(--ui-font-size-sm);
+}
+
+.payloadbuilder-settings-actions {
+  display: inline-flex;
+  gap: 4px;
+}

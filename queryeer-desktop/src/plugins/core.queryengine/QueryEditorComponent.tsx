@@ -83,7 +83,11 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
 
       try {
         const service = getQueryEngineService();
-        const executionId = await service.execute({ engineId: "payloadbuilder", text });
+        const executionId = await service.execute({
+          engineId: "payloadbuilder",
+          fileId: file?.fileId,
+          text
+        });
 
         const unsubscribe = service.subscribe(executionId, (event) => {
           if (event.method === "query.progress") {
@@ -135,7 +139,7 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
     };
 
     void run();
-  }, [updateOutputContext]);
+  }, [file?.fileId, updateOutputContext]);
 
   const handleCancel = useCallback(() => {
     const execution = activeExecutionRef.current;

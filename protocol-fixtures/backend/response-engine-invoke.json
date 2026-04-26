@@ -1,0 +1,13 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "response",
+  "id": "req-fixture-engine-invoke-1",
+  "result": {
+    "result": {
+      "fileId": "file-fixture-1",
+      "payload": {
+        "hello": "world"
+      }
+    }
+  }
+}

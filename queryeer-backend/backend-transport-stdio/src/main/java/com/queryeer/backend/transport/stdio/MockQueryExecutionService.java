@@ -60,7 +60,7 @@ public final class MockQueryExecutionService
             {
                 return;
             }
-            notificationPublisher.publishForQuery(params.queryExecutionId(), "query.completed", new QueryCompletedNotification(params.queryExecutionId(), new QueryMetrics(600, 2)));
+            notificationPublisher.publishForQuery(params.queryExecutionId(), "query.completed", new QueryCompletedNotification(params.queryExecutionId(), new QueryMetrics(600, 2), null));
         }, 460, TimeUnit.MILLISECONDS);
     }
 

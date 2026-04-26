@@ -27,12 +27,20 @@ export interface ShellApi {
   executeBackendQuery: (params: {
     queryExecutionId: string;
     engineId: string;
+    fileId?: string;
     text: string;
+    engineState?: unknown;
   }) => Promise<{ accepted: boolean; queryExecutionId: string }>;
   cancelBackendQuery: (params: {
     queryExecutionId: string;
     reason?: string;
   }) => Promise<{ accepted: boolean; queryExecutionId: string }>;
+  invokeBackendEngine: (params: {
+    engineId: string;
+    fileId?: string;
+    action: string;
+    payload?: unknown;
+  }) => Promise<{ result?: unknown }>;
   getWorkspace: () => Promise<WorkspaceSnapshot>;
   saveWorkspace: (snapshot: WorkspaceSnapshot) => Promise<{ accepted: boolean }>;
   getUserKeybindings: () => Promise<UserKeybindingsDocument>;

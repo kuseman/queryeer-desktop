@@ -79,6 +79,33 @@ export class SettingsService {
     this.rebuildEffectiveValues();
   }
 
+  public async syncRegistryModules(): Promise<void> {
+    const moduleIds = new Set(
+      this.registry.listSettingsContributions().map((contribution) => contribution.moduleId)
+    );
+    let changed = false;
+
+    for (const moduleId of moduleIds) {
+      if (this.moduleDocs.has(moduleId)) {
+        continue;
+      }
+
+      const doc = await this.bridge.getSettingsModule({ moduleId });
+      this.moduleDocs.set(moduleId, {
+        version: SETTINGS_MODULE_VERSION,
+        moduleId,
+        updatedAt: typeof doc.updatedAt === "string" ? doc.updatedAt : new Date(0).toISOString(),
+        values: typeof doc.values === "object" && doc.values !== null ? doc.values : {}
+      });
+      changed = true;
+    }
+
+    if (changed) {
+      this.rebuildEffectiveValues();
+      this.emitValuesChanged();
+    }
+  }
+
   public listDefinitions(query = ""): SettingDefinition[] {
     const normalized = query.trim().toLowerCase();
     if (!normalized) {

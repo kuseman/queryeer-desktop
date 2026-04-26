@@ -515,6 +515,35 @@ describe("TextEditorRegistry view state", () => {
     });
   });
 
+  describe("markDirty", () => {
+    it("syncs active model content from editor before tab switch", () => {
+      const file = makeFile({ fileId: "file-1", uri: "file:///backup.sql" });
+      const model = {
+        setContent: vi.fn(),
+        getDocument: () => makeDocument(file.uri),
+        getUri: () => file.uri
+      };
+      const filesRegistry = {
+        markDirty: vi.fn(),
+        getFile: vi.fn(() => file),
+        setEditorState: vi.fn(),
+        getEditorState: vi.fn()
+      };
+      registry.setFilesRegistry(filesRegistry as any);
+      registry["modelsByFileId"].set(file.fileId, model as any);
+      registry["activeFileId"] = file.fileId;
+      registry["editorApi"] = {
+        ...api,
+        getContent: vi.fn(() => "edited from monaco")
+      } as any;
+
+      registry.markDirty(file.fileId);
+
+      expect(filesRegistry.markDirty).toHaveBeenCalledWith(file.fileId);
+      expect(model.setContent).toHaveBeenCalledWith("edited from monaco");
+    });
+  });
+
   describe("onEditorReady", () => {
     it("restores runtime state from session cache when editor ready", () => {
       const file = makeFile({ fileId: "file-1" });

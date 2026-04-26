@@ -19,6 +19,10 @@ const moduleLoaders: Partial<Record<string, PluginLoader>> = {
   "./core.editor/module": async () => import("./core.editor/module"),
   "./core.explorer/module": async () => import("./core.explorer/module"),
   "./core.queryengine/module": async () => import("./core.queryengine/module"),
+  "./core.queryengine.payloadbuilder/module": async () =>
+    import("./core.queryengine.payloadbuilder/module"),
+  "./core.queryengine.payloadbuilder.elasticsearch/module": async () =>
+    import("./core.queryengine.payloadbuilder.elasticsearch/module"),
   "./core.queryengine.output.text/module": async () => import("./core.queryengine.output.text/module")
 };
 

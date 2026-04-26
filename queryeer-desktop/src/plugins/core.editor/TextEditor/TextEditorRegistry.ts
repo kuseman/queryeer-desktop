@@ -128,6 +128,13 @@ export class TextEditorRegistry {
 
   markDirty(fileId: string): void {
     this.filesRegistry?.markDirty(fileId);
+    const activeModel = this.modelsByFileId.get(fileId);
+    if (activeModel) {
+      const text = this.editorApi?.getContent();
+      if (text !== undefined) {
+        activeModel.setContent(text);
+      }
+    }
     if (this.contentDirtyListeners.length > 0) {
       const text = this.editorApi?.getContent();
       if (text !== undefined) {

@@ -56,6 +56,11 @@ export class MockJavaBackend {
       return;
     }
 
+    if (envelope.method === "engine.invoke") {
+      this.respondEngineInvoke(envelope as BackendRequestEnvelope<"engine.invoke">);
+      return;
+    }
+
     if (envelope.method === "file.open") {
       this.respondFileOpen(envelope as BackendRequestEnvelope<"file.open">);
       return;
@@ -94,6 +99,7 @@ export class MockJavaBackend {
         "health.ping",
         "query.execute",
         "query.cancel",
+        "engine.invoke",
         "query.progress",
         "query.chunkStart",
         "query.chunkRows",
@@ -132,7 +138,7 @@ export class MockJavaBackend {
         }
       ],
       activatedPluginIds: ["query.payloadbuilder", "query.jdbc"],
-      providedCapabilities: ["query.execute", "query.cancel"]
+      providedCapabilities: ["query.execute", "query.cancel", "engine.invoke"]
     };
 
     const response: BackendResponseEnvelope<RuntimeStatusResult> = {
@@ -369,5 +375,29 @@ export class MockJavaBackend {
       id: request.id,
       result
     } satisfies BackendResponseEnvelope<FileBindResult>);
+  }
+
+  private respondEngineInvoke(request: BackendRequestEnvelope<"engine.invoke">): void {
+    const params = request.params as {
+      engineId: string;
+      fileId?: string;
+      action: string;
+      payload?: unknown;
+    };
+
+    this.sink({
+      protocolVersion: BACKEND_PROTOCOL_VERSION,
+      type: "response",
+      id: request.id,
+      result: {
+        result: {
+          ok: true,
+          engineId: params.engineId,
+          fileId: params.fileId,
+          action: params.action,
+          payload: params.payload ?? null
+        }
+      }
+    });
   }
 }

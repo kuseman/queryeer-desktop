@@ -9,6 +9,7 @@ export type Capability =
   | "health.ping"
   | "query.execute"
   | "query.cancel"
+  | "engine.invoke"
   | "connection.upsert"
   | "credential.store"
   | "query.progress"
@@ -83,6 +84,7 @@ export type QueryExecuteParams = {
   fileId?: string;
   text: string;
   parameters?: unknown[];
+  engineState?: unknown;
   options?: {
     maxRows?: number;
     timeoutMs?: number;
@@ -102,6 +104,17 @@ export type QueryCancelParams = {
 export type QueryCancelResult = {
   accepted: boolean;
   queryExecutionId: string;
+};
+
+export type EngineInvokeParams = {
+  engineId: string;
+  fileId?: string;
+  action: string;
+  payload?: unknown;
+};
+
+export type EngineInvokeResult = {
+  result?: unknown;
 };
 
 export type ConnectionUpsertParams = {
@@ -159,6 +172,7 @@ export type QueryCompletedNotification = {
     durationMs?: number;
     rowCount?: number;
   };
+  engineStatePatch?: unknown;
 };
 
 export type QueryFailedNotification = {
@@ -217,6 +231,7 @@ export type BackendMethodParamsMap = {
   "health.ping": PingParams;
   "query.execute": QueryExecuteParams;
   "query.cancel": QueryCancelParams;
+  "engine.invoke": EngineInvokeParams;
   "connection.upsert": ConnectionUpsertParams;
   "credential.store": CredentialStoreParams;
   "file.open": FileOpenParams;
@@ -230,6 +245,7 @@ export type BackendMethodResultMap = {
   "health.ping": PingResult;
   "query.execute": QueryExecuteResult;
   "query.cancel": QueryCancelResult;
+  "engine.invoke": EngineInvokeResult;
   "connection.upsert": ConnectionUpsertResult;
   "credential.store": CredentialStoreResult;
   "file.open": FileOpenResult;

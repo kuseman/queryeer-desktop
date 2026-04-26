@@ -120,6 +120,7 @@ Request params:
   "requestedCapabilities": [
     "query.execute",
     "query.cancel",
+    "engine.invoke",
     "query.progress",
     "query.resultChunk"
   ]
@@ -151,7 +152,7 @@ Success result:
     }
   ],
   "activatedPluginIds": ["query.payloadbuilder"],
-  "providedCapabilities": ["query.execute"]
+  "providedCapabilities": ["query.execute", "engine.invoke"]
 }
 ```
 
@@ -173,6 +174,7 @@ Notes:
     "health.ping",
     "query.execute",
     "query.cancel",
+    "engine.invoke",
     "query.progress",
     "query.resultChunk",
     "query.completed",
@@ -213,8 +215,21 @@ Request params:
   "queryExecutionId": "qx-001",
   "engineId": "payloadbuilder",
   "connectionId": "local-dev",
+  "fileId": "file-001",
   "text": "select * from foo",
   "parameters": [],
+  "engineState": {
+    "payloadbuilder": {
+      "catalogs": {
+        "jdbc1": {
+          "catalogId": "Jdbc",
+          "properties": {
+            "database": "appdb"
+          }
+        }
+      }
+    }
+  },
   "options": {
     "maxRows": 10000,
     "timeoutMs": 120000
@@ -234,6 +249,7 @@ Success result:
 Behavior:
 
 - Execution updates are sent via notifications (`query.progress`, `query.resultChunk`, `query.completed`, `query.failed`).
+- `engineState` is an engine-owned opaque blob. Core protocol forwards it without interpretation.
 
 ## 5.4 `query.cancel`
 
@@ -449,9 +465,61 @@ Rules:
   "metrics": {
     "durationMs": 412,
     "rowCount": 2
+  },
+  "engineStatePatch": {
+    "payloadbuilder": {
+      "catalogs": {
+        "jdbc1": {
+          "properties": {
+            "database": "appdb_reporting"
+          }
+        }
+      }
+    }
   }
 }
 ```
+
+## 5.4a `engine.invoke`
+
+Purpose: execute engine-specific operations that are not query execution (for example completion, schema lookup, metadata fetch, diagnostics, or catalog operations).
+
+Request params:
+
+```json
+{
+  "engineId": "payloadbuilder",
+  "fileId": "file-001",
+  "action": "payloadbuilder.echo",
+  "payload": {
+    "hello": "world"
+  }
+}
+```
+
+Success result:
+
+```json
+{
+  "result": {
+    "fileId": "file-001",
+    "payload": {
+      "hello": "world"
+    }
+  }
+}
+```
+
+Rules:
+
+- `action` is engine-owned and namespaced by convention (for example `payloadbuilder.*`, `jdbc.*`).
+- `payload` and `result` are opaque to the core protocol and transported as `unknown` JSON.
+- Backends SHOULD return `ENGINE_NOT_FOUND` for unknown `engineId` and `VALIDATION` for unsupported or invalid actions.
+
+Rules:
+
+- `engineStatePatch` is an engine-owned opaque blob. Core protocol forwards it without interpretation.
+- Engines SHOULD only return changed values in patches.
 
 ## 6.4a `file.change`
 

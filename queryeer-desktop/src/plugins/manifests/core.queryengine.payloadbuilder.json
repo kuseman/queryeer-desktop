@@ -1,0 +1,11 @@
+{
+  "id": "core.queryengine.payloadbuilder",
+  "name": "Core Query Engine Payloadbuilder",
+  "version": "0.1.0",
+  "kind": "core",
+  "dependencies": ["core.queryengine", "core.layout", "core.files", "core.editor"],
+  "requiredCapabilities": ["query.engine"],
+  "providesCapabilities": ["query.engine.payloadbuilder"],
+  "description": "Payloadbuilder-specific catalog state and sidebar contributions",
+  "modulePath": "./core.queryengine.payloadbuilder/module"
+}
