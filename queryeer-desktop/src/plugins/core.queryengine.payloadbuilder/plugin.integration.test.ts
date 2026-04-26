@@ -154,6 +154,20 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
     expect(mocks.buildEngineStateMock).toHaveBeenCalledTimes(1);
   });
 
+  it("registers payloadbuilder sidebar view with plbsql mime condition", () => {
+    const context = createContext();
+
+    coreQueryEnginePayloadbuilderPlugin.activate(context);
+
+    const registerViewMock = context.layout.registerView as ReturnType<typeof vi.fn>;
+    expect(registerViewMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "core.queryengine.payloadbuilder.catalogs",
+        when: "activeFileMimeType == 'application/plbsql'"
+      })
+    );
+  });
+
   it("applies completed engineStatePatch back into store for payloadbuilder", () => {
     const context = createContext();
     coreQueryEnginePayloadbuilderPlugin.activate(context);

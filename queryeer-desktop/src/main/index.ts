@@ -304,7 +304,6 @@ app.whenReady().then(() => {
     app.setAppUserModelId("com.queryeer.desktop");
   }
 
-  // React dev tools
   if (isDev) {
     void installExtension(REACT_DEVELOPER_TOOLS)
       .then((extension) => console.log(`Added Extension: ${extension.name}`))

@@ -84,6 +84,7 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
       defaultZone: "primarySidebar",
       order: 40,
       canMoveZones: true,
+      when: "activeFileMimeType == 'application/plbsql'",
       render: () => <PayloadbuilderCatalogSidebar />
     });
 

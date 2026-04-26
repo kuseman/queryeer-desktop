@@ -41,6 +41,7 @@ export type LayoutViewContribution = {
   minHeight?: number;
   maxHeight?: number;
   panelActions?: LayoutPanelAction[];
+  when?: string;
   render: () => ReactNode;
 };
 
