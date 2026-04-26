@@ -4,7 +4,12 @@ public interface QueryEngineProvider
 {
     String engineId();
 
-    void execute(String queryExecutionId, String text, QueryPublisher publisher);
+    void execute(String queryExecutionId, String text, Object engineState, QueryPublisher publisher);
+
+    default Object invoke(String fileId, String action, Object payload)
+    {
+        throw new IllegalArgumentException("Unsupported engine action '" + action + "' for engine '" + engineId() + "'");
+    }
 
     void cancel(String queryExecutionId);
 }

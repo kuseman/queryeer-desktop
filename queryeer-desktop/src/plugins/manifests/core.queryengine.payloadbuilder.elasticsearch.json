@@ -1,0 +1,11 @@
+{
+  "id": "core.queryengine.payloadbuilder.elasticsearch",
+  "name": "Core Query Engine Payloadbuilder Elasticsearch",
+  "version": "0.1.0",
+  "kind": "core",
+  "dependencies": ["core.queryengine.payloadbuilder", "core.queryengine", "core.settings"],
+  "requiredCapabilities": ["query.engine.payloadbuilder"],
+  "providesCapabilities": ["query.engine.payloadbuilder.elasticsearch"],
+  "description": "Elasticsearch catalog contribution for payloadbuilder",
+  "modulePath": "./core.queryengine.payloadbuilder.elasticsearch/module"
+}

@@ -248,6 +248,95 @@
   color: var(--state-error-soft);
 }
 
+.settings-list-editor {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 10px;
+  min-height: 260px;
+}
+
+.settings-list-editor-items {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--surface-overlay-weak);
+}
+
+.settings-list-editor-item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.settings-list-editor-item {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-0);
+  cursor: pointer;
+  text-align: left;
+  min-height: 38px;
+  padding: 6px 8px;
+  display: grid;
+  gap: 2px;
+}
+
+.settings-list-editor-item:hover {
+  background: var(--titlebar-hover);
+}
+
+.settings-list-editor-item.is-selected {
+  border-color: var(--accent);
+  background: var(--state-select-bg);
+}
+
+.settings-list-editor-item.is-invalid {
+  border-color: var(--state-error-soft);
+}
+
+.settings-list-editor-item-label {
+  font-size: var(--ui-font-size-sm);
+}
+
+.settings-list-editor-item-subtitle {
+  color: var(--text-2);
+  font-size: var(--ui-font-size-xs);
+}
+
+.settings-list-editor-icon-button,
+.settings-list-editor-add {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-overlay-soft);
+  color: var(--text-0);
+  min-height: 30px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: var(--ui-font-size-sm);
+}
+
+.settings-list-editor-icon-button:disabled,
+.settings-list-editor-add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settings-list-editor-empty {
+  color: var(--text-1);
+  font-size: var(--ui-font-size-sm);
+}
+
+.settings-list-editor-details {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--surface-overlay-weak);
+}
+
 @media (max-width: 920px) {
   .settings-modal {
     width: calc(100vw - 18px);
@@ -262,5 +351,9 @@
   .settings-tree {
     border-right: none;
     border-bottom: 1px solid var(--border);
+  }
+
+  .settings-list-editor {
+    grid-template-columns: 1fr;
   }
 }

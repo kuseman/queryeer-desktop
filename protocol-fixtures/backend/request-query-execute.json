@@ -7,8 +7,21 @@
     "queryExecutionId": "exec-fixture-1",
     "engineId": "payloadbuilder",
     "connectionId": "connection-1",
+    "fileId": "file-fixture-1",
     "text": "select 1",
     "parameters": [1, "two"],
+    "engineState": {
+      "payloadbuilder": {
+        "catalogs": {
+          "jdbc1": {
+            "catalogId": "Jdbc",
+            "properties": {
+              "database": "appdb"
+            }
+          }
+        }
+      }
+    },
     "options": {
       "maxRows": 100,
       "timeoutMs": 15000

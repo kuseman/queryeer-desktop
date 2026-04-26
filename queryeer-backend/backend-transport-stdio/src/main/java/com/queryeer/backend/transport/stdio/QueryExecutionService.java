@@ -52,7 +52,7 @@ public final class QueryExecutionService
         {
             try
             {
-                provider.execute(params.queryExecutionId(), params.text(), publisher);
+                provider.execute(params.queryExecutionId(), params.text(), params.engineState(), publisher);
             }
             catch (Exception e)
             {
@@ -122,7 +122,13 @@ public final class QueryExecutionService
         @Override
         public void completed(long durationMs, long rowCount)
         {
-            notificationPublisher.publishForQuery(executionId, "query.completed", new QueryCompletedNotification(executionId, new QueryMetrics((int) durationMs, (int) rowCount)));
+            completed(durationMs, rowCount, null);
+        }
+
+        @Override
+        public void completed(long durationMs, long rowCount, Object engineStatePatch)
+        {
+            notificationPublisher.publishForQuery(executionId, "query.completed", new QueryCompletedNotification(executionId, new QueryMetrics((int) durationMs, (int) rowCount), engineStatePatch));
         }
 
         @Override

@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.contract.connection.ConnectionUpsertResult;
 import com.queryeer.backend.contract.credential.CredentialStoreResult;
+import com.queryeer.backend.contract.engine.EngineInvokeParams;
+import com.queryeer.backend.contract.engine.EngineInvokeResult;
 import com.queryeer.backend.contract.file.FileBindParams;
 import com.queryeer.backend.contract.file.FileBindResult;
 import com.queryeer.backend.contract.file.FileChangeNotification;
@@ -24,6 +26,7 @@ import com.queryeer.backend.contract.query.QueryCancelResult;
 import com.queryeer.backend.contract.query.QueryChunkRowsNotification;
 import com.queryeer.backend.contract.query.QueryChunkStartNotification;
 import com.queryeer.backend.contract.query.QueryCompletedNotification;
+import com.queryeer.backend.contract.query.QueryExecuteParams;
 import com.queryeer.backend.contract.query.QueryExecuteResult;
 import com.queryeer.backend.contract.query.QueryFailedNotification;
 import com.queryeer.backend.contract.query.QueryProgressNotification;
@@ -106,6 +109,10 @@ class ProtocolFixtureCompatibilityTest
         Assertions.assertEquals(request.id(), response.id());
         Assertions.assertNotNull(response.result());
 
+        QueryExecuteParams params = objectMapper.convertValue(request.params(), QueryExecuteParams.class);
+        Assertions.assertEquals("file-fixture-1", params.fileId());
+        Assertions.assertNotNull(params.engineState());
+
         QueryExecuteResult result = objectMapper.convertValue(response.result(), QueryExecuteResult.class);
         Assertions.assertTrue(result.accepted());
         Assertions.assertEquals("exec-fixture-1", result.queryExecutionId());
@@ -128,6 +135,29 @@ class ProtocolFixtureCompatibilityTest
         QueryCancelResult result = objectMapper.convertValue(response.result(), QueryCancelResult.class);
         Assertions.assertTrue(result.accepted());
         Assertions.assertEquals("exec-fixture-1", result.queryExecutionId());
+    }
+
+    @Test
+    void engineInvokeFixturesAreCompatible() throws IOException
+    {
+        BackendEnvelope request = readFixture("request-engine-invoke.json");
+        BackendEnvelope response = readFixture("response-engine-invoke.json");
+
+        assertEnvelopeBase(request);
+        assertEnvelopeBase(response);
+        Assertions.assertEquals(EnvelopeType.REQUEST, request.type());
+        Assertions.assertEquals(EnvelopeType.RESPONSE, response.type());
+        Assertions.assertEquals("engine.invoke", request.method());
+        Assertions.assertEquals(request.id(), response.id());
+        Assertions.assertNotNull(response.result());
+
+        EngineInvokeParams params = objectMapper.convertValue(request.params(), EngineInvokeParams.class);
+        Assertions.assertEquals("payloadbuilder", params.engineId());
+        Assertions.assertEquals("file-fixture-1", params.fileId());
+        Assertions.assertEquals("payloadbuilder.echo", params.action());
+
+        EngineInvokeResult result = objectMapper.convertValue(response.result(), EngineInvokeResult.class);
+        Assertions.assertNotNull(result.result());
     }
 
     @Test
@@ -234,6 +264,7 @@ class ProtocolFixtureCompatibilityTest
         Assertions.assertNotNull(params.metrics());
         Assertions.assertEquals(2, params.metrics()
                 .rowCount());
+        Assertions.assertNotNull(params.engineStatePatch());
     }
 
     @Test

@@ -60,6 +60,7 @@ const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
             "health.ping",
             "query.execute",
             "query.cancel",
+            "engine.invoke",
             "query.progress",
             "query.chunkStart",
             "query.chunkRows",
@@ -97,8 +98,26 @@ const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
             }
           ],
           activatedPluginIds: ["query.payloadbuilder"],
-          providedCapabilities: ["query.execute"]
+          providedCapabilities: ["query.execute", "engine.invoke"]
         } satisfies RuntimeStatusResult);
+        return;
+      }
+
+      if (envelope.method === "engine.invoke") {
+        const params = envelope.params as {
+          engineId: string;
+          fileId?: string;
+          action: string;
+          payload?: unknown;
+        };
+        respond(envelope.id, {
+          result: {
+            engineId: params.engineId,
+            fileId: params.fileId,
+            action: params.action,
+            payload: params.payload ?? null
+          }
+        });
         return;
       }
 
@@ -204,6 +223,85 @@ describe("BackendGateway", () => {
       );
 
     expect(executeRequest).toBeDefined();
+    await gateway.stop();
+  });
+
+  it("execute query forwards engineState payload over wire", async () => {
+    const { gateway, transport } = createGatewayWithTestTransport();
+    await gateway.start();
+
+    await gateway.executeQuery({
+      queryExecutionId: "exec-engine-state",
+      engineId: "payloadbuilder",
+      text: "select 1",
+      engineState: {
+        payloadbuilder: {
+          catalogs: {
+            es1: {
+              catalogId: "elasticsearch",
+              properties: {
+                connectionId: "cluster1",
+                index: "logs-2026"
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const executeRequest = transport.sendEnvelope.mock.calls
+      .map((call: [BackendEnvelope]) => call[0])
+      .find(
+        (envelope): envelope is BackendRequestEnvelope =>
+          envelope.type === "request" && envelope.method === "query.execute"
+      );
+
+    expect(executeRequest).toBeDefined();
+    expect((executeRequest?.params as QueryExecuteParams).engineState).toEqual({
+      payloadbuilder: {
+        catalogs: {
+          es1: {
+            catalogId: "elasticsearch",
+            properties: {
+              connectionId: "cluster1",
+              index: "logs-2026"
+            }
+          }
+        }
+      }
+    });
+
+    await gateway.stop();
+  });
+
+  it("invokes engine action and returns result envelope", async () => {
+    const { gateway, transport } = createGatewayWithTestTransport();
+    await gateway.start();
+
+    const result = await gateway.invokeEngine({
+      engineId: "payloadbuilder",
+      fileId: "file-1",
+      action: "payloadbuilder.echo",
+      payload: { ping: true }
+    });
+
+    expect(result).toEqual({
+      result: {
+        engineId: "payloadbuilder",
+        fileId: "file-1",
+        action: "payloadbuilder.echo",
+        payload: { ping: true }
+      }
+    });
+
+    const invokeRequest = transport.sendEnvelope.mock.calls
+      .map((call: [BackendEnvelope]) => call[0])
+      .find(
+        (envelope): envelope is BackendRequestEnvelope =>
+          envelope.type === "request" && envelope.method === "engine.invoke"
+      );
+
+    expect(invokeRequest).toBeDefined();
     await gateway.stop();
   });
 

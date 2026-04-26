@@ -2,6 +2,7 @@ import { app, BrowserWindow, webContents, nativeImage, shell } from "electron";
 import { join } from "node:path";
 import { readFile, writeFile, readdir, stat } from "node:fs/promises";
 import { ipcMain } from "electron";
+import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
 import { fileUriToPath } from "../contracts/files/Resolvers.js";
 import { BackendGateway } from "./backend/backend-gateway.js";
 import { chokidarWatcherFactory } from "./file-watcher/chokidar-watcher-factory.js";
@@ -300,7 +301,14 @@ app.whenReady().then(() => {
   if (process.platform === "darwin" && app.dock && !dockIcon.isEmpty()) {
     app.dock.setIcon(dockIcon);
   } else if (process.platform === "win32") {
-    app.setAppUserModelId("com.queryeer.electron");
+    app.setAppUserModelId("com.queryeer.desktop");
+  }
+
+  // React dev tools
+  if (isDev) {
+    void installExtension(REACT_DEVELOPER_TOOLS)
+      .then((extension) => console.log(`Added Extension: ${extension.name}`))
+      .catch((error: unknown) => console.log("An error occurred:", error));
   }
 
   createMainWindow();

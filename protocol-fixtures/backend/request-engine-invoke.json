@@ -1,0 +1,14 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "request",
+  "id": "req-fixture-engine-invoke-1",
+  "method": "engine.invoke",
+  "params": {
+    "engineId": "payloadbuilder",
+    "fileId": "file-fixture-1",
+    "action": "payloadbuilder.echo",
+    "payload": {
+      "hello": "world"
+    }
+  }
+}

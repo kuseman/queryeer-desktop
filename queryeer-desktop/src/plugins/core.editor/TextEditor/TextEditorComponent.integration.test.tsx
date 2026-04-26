@@ -20,7 +20,9 @@ type FakeEditor = {
   focus: ReturnType<typeof vi.fn>;
   onDidDispose: (listener: () => void) => { dispose: () => void };
   onDidFocusEditorWidget: (listener: () => void) => { dispose: () => void };
-  onDidChangeModelContent: (listener: () => void) => { dispose: () => void };
+  onDidChangeModelContent: (listener: (event: unknown) => void) => { dispose: () => void };
+  triggerModelContentChange: () => void;
+  getValue: ReturnType<typeof vi.fn>;
   dispose: () => void;
 };
 
@@ -47,6 +49,7 @@ vi.mock("monaco-editor", () => {
   const createFakeEditor = (): FakeEditor => {
     const disposeListeners: Array<() => void> = [];
     const focusListeners: Array<() => void> = [];
+    const contentChangeListeners: Array<(event: unknown) => void> = [];
 
     const editor: FakeEditor = {
       id: ++nextEditorId,
@@ -56,6 +59,7 @@ vi.mock("monaco-editor", () => {
       saveViewState: vi.fn(),
       setModel: vi.fn(),
       getModel: vi.fn(() => null),
+      getValue: vi.fn(() => "edited from monaco"),
       focus: vi.fn(),
       onDidDispose: (listener) => {
         disposeListeners.push(listener);
@@ -65,7 +69,31 @@ vi.mock("monaco-editor", () => {
         focusListeners.push(listener);
         return { dispose: () => {} };
       },
-      onDidChangeModelContent: (_listener) => ({ dispose: () => {} }),
+      onDidChangeModelContent: (listener) => {
+        contentChangeListeners.push(listener);
+        return { dispose: () => {} };
+      },
+      triggerModelContentChange: () => {
+        for (const listener of contentChangeListeners) {
+          listener({
+            changes: [
+              {
+                range: {
+                  startLineNumber: 1,
+                  startColumn: 1,
+                  endLineNumber: 1,
+                  endColumn: 1
+                },
+                rangeLength: 0,
+                text: "edited"
+              }
+            ],
+            eol: 1,
+            isFlush: false,
+            versionId: 2
+          });
+        }
+      },
       dispose: () => {
         for (const listener of disposeListeners) {
           listener();
@@ -136,6 +164,7 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
   let root: Root;
   let registry: TextEditorRegistry;
   let filesById: Map<string, FileEntity>;
+  let markDirtySpy: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -158,6 +187,7 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
 
     registry = new TextEditorRegistry();
     filesById = new Map<string, FileEntity>();
+    markDirtySpy = vi.fn();
     const mockFilesRegistry: FilesRegistry = {
       capabilities: {
         registerCapabilities: vi.fn(),
@@ -177,7 +207,7 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
       resolveEditor: vi.fn(),
       getEditorState: vi.fn(),
       setEditorState: vi.fn(),
-      markDirty: vi.fn()
+      markDirty: markDirtySpy
     };
     registry.setFilesRegistry(mockFilesRegistry);
 
@@ -249,5 +279,27 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
         wordWrap: "on"
       })
     );
+  });
+
+  it("syncs TextEditorRegistry model content on monaco change events", async () => {
+    const file = makeFile({ fileId: "file-content-sync", uri: "file:///content-sync.sql" });
+    filesById.set(file.fileId, file);
+
+    await act(async () => {
+      root.render(<TextEditorComponent file={file} registry={registry} />);
+      await flush();
+    });
+
+    const editor = editors[0];
+    expect(editor).toBeTruthy();
+
+    await act(async () => {
+      editor.triggerModelContentChange();
+      await flush();
+    });
+
+    const model = registry.getModelForFile(file.fileId);
+    expect(markDirtySpy).toHaveBeenCalledWith(file.fileId);
+    expect(model?.getContent()).toBe("edited from monaco");
   });
 });

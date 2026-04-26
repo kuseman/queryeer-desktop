@@ -15,6 +15,11 @@ public interface QueryPublisher
 
     void completed(long durationMs, long rowCount);
 
+    default void completed(long durationMs, long rowCount, Object engineStatePatch)
+    {
+        completed(durationMs, rowCount);
+    }
+
     /** @param errorCode should match a {@code BackendErrorCode} name, falls back to INTERNAL */
     void failed(String errorCode, String errorMessage);
 }

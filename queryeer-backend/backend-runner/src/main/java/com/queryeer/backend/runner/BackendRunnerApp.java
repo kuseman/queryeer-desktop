@@ -20,6 +20,8 @@ import com.queryeer.backend.plugin.jdbc.JdbcBackendPlugin;
 import com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderBackendPlugin;
 import com.queryeer.backend.transport.stdio.ConnectionUpsertRequestHandler;
 import com.queryeer.backend.transport.stdio.CredentialStoreRequestHandler;
+import com.queryeer.backend.transport.stdio.EngineInvokeRequestHandler;
+import com.queryeer.backend.transport.stdio.EngineInvokeService;
 import com.queryeer.backend.transport.stdio.EnvelopeCodec;
 import com.queryeer.backend.transport.stdio.FileBindRequestHandler;
 import com.queryeer.backend.transport.stdio.FileChangeNotificationHandler;
@@ -78,12 +80,14 @@ public final class BackendRunnerApp
         ResponseWriter responseWriter = new ResponseWriter(System.out, codec);
         NotificationPublisher notificationPublisher = new NotificationPublisher(responseWriter);
         QueryExecutionService queryExecutionService = new QueryExecutionService(services.queryEngines(), notificationPublisher);
+        EngineInvokeService engineInvokeService = new EngineInvokeService(services.queryEngines());
 
         List<RequestHandler> handlers = List.of(new HandshakeRequestHandler(responseWriter), new RuntimeStatusRequestHandler(responseWriter, codec, () -> runtimeStatusSnapshot(runtime)),
                 new HealthPingRequestHandler(startedAt, responseWriter, codec), new QueryExecuteRequestHandler(responseWriter, codec, queryExecutionService),
-                new QueryCancelRequestHandler(responseWriter, codec, queryExecutionService), new ConnectionUpsertRequestHandler(responseWriter, codec),
-                new CredentialStoreRequestHandler(responseWriter, codec), new FileOpenRequestHandler(responseWriter, codec, services.fileRegistryView()),
-                new FileCloseRequestHandler(responseWriter, codec, services.fileRegistryView()), new FileBindRequestHandler(responseWriter, codec, services.fileRegistryView()));
+                new QueryCancelRequestHandler(responseWriter, codec, queryExecutionService), new EngineInvokeRequestHandler(responseWriter, codec, engineInvokeService),
+                new ConnectionUpsertRequestHandler(responseWriter, codec), new CredentialStoreRequestHandler(responseWriter, codec),
+                new FileOpenRequestHandler(responseWriter, codec, services.fileRegistryView()), new FileCloseRequestHandler(responseWriter, codec, services.fileRegistryView()),
+                new FileBindRequestHandler(responseWriter, codec, services.fileRegistryView()));
 
         RequestDispatcher requestDispatcher = new RequestDispatcher(responseWriter, handlers);
 
@@ -125,8 +129,8 @@ public final class BackendRunnerApp
 
         List<DiscoveredPlugin> builtins = new ArrayList<>();
         builtins.add(new DiscoveredPlugin(new PluginManifest(1, "query.payloadbuilder", "Payloadbuilder Query Engine", "0.1.0",
-                new PluginManifest.BackendTarget("com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderBackendPlugin", null, "17"), null, List.of(), List.of("query.execute"), List.of(), null,
-                null), new PayloadbuilderBackendPlugin(), null, false));
+                new PluginManifest.BackendTarget("com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderBackendPlugin", null, "17"), null, List.of(), List.of("query.execute", "engine.invoke"),
+                List.of(), null, null), new PayloadbuilderBackendPlugin(), null, false));
         builtins.add(new DiscoveredPlugin(new PluginManifest(1, "query.jdbc", "JDBC Query Engine", "0.1.0",
                 new PluginManifest.BackendTarget("com.queryeer.backend.plugin.jdbc.JdbcBackendPlugin", null, "17"), null, List.of(), List.of("query.execute"), List.of(), null, null),
                 new JdbcBackendPlugin(), null, false));

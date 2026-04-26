@@ -14,6 +14,8 @@ import {
   type FileCloseResult,
   type FileOpenParams,
   type FileOpenResult,
+  type EngineInvokeParams,
+  type EngineInvokeResult,
   type HandshakeParams,
   type HandshakeResult,
   type PingParams,
@@ -118,6 +120,9 @@ export class BackendGateway {
     ipcMain.handle("backend:cancel-query", async (_event, params: QueryCancelParams) => {
       return this.cancelQuery(params);
     });
+    ipcMain.handle("backend:engine-invoke", async (_event, params: EngineInvokeParams) => {
+      return this.invokeEngine(params);
+    });
     ipcMain.handle("backend:file-open", async (_event, params: FileOpenParams) => {
       return this.openFile(params);
     });
@@ -199,6 +204,16 @@ export class BackendGateway {
       throw new Error("query.cancel failed: missing result");
     }
     return response.result as QueryCancelResult;
+  }
+
+  public async invokeEngine(params: EngineInvokeParams): Promise<EngineInvokeResult> {
+    const envelope = this.createRequest("engine.invoke", params);
+    this.appendLog("debug", "gateway", `Sending request ${envelope.id} engine.invoke`);
+    if (this.tracePayloads) {
+      this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
+    }
+    const response = await this.sendRequest(envelope);
+    return (response.result ?? {}) as EngineInvokeResult;
   }
 
   public async openFile(params: FileOpenParams): Promise<FileOpenResult> {
@@ -398,6 +413,7 @@ export class BackendGateway {
       | "health.ping"
       | "query.execute"
       | "query.cancel"
+      | "engine.invoke"
       | "file.open"
       | "file.close"
       | "file.bind",

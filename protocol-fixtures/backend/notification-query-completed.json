@@ -7,6 +7,17 @@
     "metrics": {
       "durationMs": 120,
       "rowCount": 2
+    },
+    "engineStatePatch": {
+      "payloadbuilder": {
+        "catalogs": {
+          "jdbc1": {
+            "properties": {
+              "database": "appdb_reporting"
+            }
+          }
+        }
+      }
     }
   }
 }
