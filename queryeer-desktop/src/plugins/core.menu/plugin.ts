@@ -34,10 +34,8 @@ export const coreMenuPlugin: Plugin = {
     context.menu.registerMenuItem({ id: "core.menu.edit", label: "Edit", order: 20 });
     context.menu.registerMenuItem({ id: "core.menu.selection", label: "Selection", order: 30 });
     context.menu.registerMenuItem({ id: "core.menu.view", label: "View", order: 40 });
-    context.menu.registerMenuItem({ id: "core.menu.go", label: "Go", order: 50 });
-    context.menu.registerMenuItem({ id: "core.menu.run", label: "Run", order: 60 });
-    context.menu.registerMenuItem({ id: "core.menu.terminal", label: "Terminal", order: 70 });
-    context.menu.registerMenuItem({ id: "core.menu.options", label: "Tools", order: 75 });
+    context.menu.registerMenuItem({ id: "core.menu.tools", label: "Tools", order: 75 });
+    context.menu.registerMenuItem({ id: "core.menu.tools.dev", parentId: "core.menu.tools", label: "Dev", order: 10 });
     context.menu.registerMenuItem({ id: "core.menu.window", label: "Window", order: 78 });
     context.menu.registerMenuItem({ id: "core.menu.help", label: "Help", order: 80 });
 
@@ -162,28 +160,22 @@ export const coreMenuPlugin: Plugin = {
       parentId: "core.menu.view"
     });
     context.menu.registerMenuItem({
-      id: "core.menu.view.reload",
+      id: "core.menu.tools.dev.reload",
       label: "Reload",
       order: 16,
-      parentId: "core.menu.view",
+      parentId: "core.menu.tools.dev",
       commandId: "core.commands.reloadWindow",
       role: "reload",
       accelerator: "CmdOrCtrl+R"
     });
     context.menu.registerMenuItem({
-      id: "core.menu.view.forceReload",
+      id: "core.menu.tools.dev.forceReload",
       label: "Force Reload",
       order: 17,
-      parentId: "core.menu.view",
+      parentId: "core.menu.tools.dev",
       commandId: "core.commands.forceReloadWindow",
       role: "forceReload",
       accelerator: "CmdOrCtrl+Shift+R"
-    });
-    context.menu.registerMenuItem({
-      id: "core.menu.view.separator2",
-      type: "separator",
-      order: 18,
-      parentId: "core.menu.view"
     });
     context.menu.registerMenuItem({
       id: "core.menu.view.appearance",
@@ -227,41 +219,6 @@ export const coreMenuPlugin: Plugin = {
       role: "togglefullscreen"
     });
 
-    registerStub("core.menu.go.quickOpen", "Go to File");
-    registerShortcut("core.menu.go.quickOpen.shortcut", "core.menu.go.quickOpen", "CmdOrCtrl+P", 510);
-    context.menu.registerMenuItem({
-      id: "core.menu.go.quickOpen.item",
-      label: "Go to File...",
-      order: 10,
-      parentId: "core.menu.go",
-      commandId: "core.menu.go.quickOpen"
-    });
-
-    registerStub("core.menu.run.start", "Start Debugging");
-    registerShortcut("core.menu.run.start.shortcut", "core.menu.run.start", "F5", 610);
-    context.menu.registerMenuItem({
-      id: "core.menu.run.start.item",
-      label: "Start Debugging",
-      order: 10,
-      parentId: "core.menu.run",
-      commandId: "core.menu.run.start"
-    });
-
-    registerStub("core.menu.terminal.new", "New Terminal");
-    registerShortcut(
-      "core.menu.terminal.new.shortcut",
-      "core.menu.terminal.new",
-      "CmdOrCtrl+Shift+`",
-      710
-    );
-    context.menu.registerMenuItem({
-      id: "core.menu.terminal.new.item",
-      label: "New Terminal",
-      order: 10,
-      parentId: "core.menu.terminal",
-      commandId: "core.menu.terminal.new"
-    });
-
     context.commands.registerCommand({
       id: "core.commands.toggleDevTools",
       title: "Toggle Developer Tools",
@@ -301,7 +258,7 @@ export const coreMenuPlugin: Plugin = {
       id: "core.menu.tools.toggleDevTools",
       label: "Toggle Developer Tools",
       order: 10,
-      parentId: "core.menu.options",
+      parentId: "core.menu.tools.dev",
       commandId: "core.commands.toggleDevTools",
       role: "toggleDevTools",
       accelerator: "F12"

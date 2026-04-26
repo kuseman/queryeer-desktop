@@ -25,6 +25,8 @@ export type FileMediator = {
   saveFile: (fileId: string) => Promise<void>;
   setActiveFileId: (fileId: string | null) => void;
   getActiveFileId: () => string | null;
+  setContextFileId: (fileId: string | null) => void;
+  getContextFileId: () => string | null;
   bindEngine: (
     fileId: string,
     engineId: string,

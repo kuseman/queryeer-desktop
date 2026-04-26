@@ -1,4 +1,4 @@
-import { app, BrowserWindow, webContents, nativeImage } from "electron";
+import { app, BrowserWindow, webContents, nativeImage, shell } from "electron";
 import { join } from "node:path";
 import { readFile, writeFile, readdir, stat } from "node:fs/promises";
 import { ipcMain } from "electron";
@@ -171,6 +171,27 @@ app.whenReady().then(() => {
       } else {
         window.webContents.openDevTools({ mode: "detach" });
       }
+    }
+  });
+  ipcMain.handle("shell:show-item-in-folder", async (_event, { uri }: { uri: string }) => {
+    try {
+      const filePath = fileUriToPath(uri);
+      shell.showItemInFolder(filePath);
+      return { success: true };
+    } catch {
+      return { success: false };
+    }
+  });
+  ipcMain.handle("shell:open-path", async (_event, { uri }: { uri: string }) => {
+    try {
+      const filePath = fileUriToPath(uri);
+      const result = await shell.openPath(filePath);
+      if (result) {
+        return { success: false, error: result };
+      }
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: String(err) };
     }
   });
 

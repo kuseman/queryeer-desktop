@@ -1,5 +1,6 @@
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import { confirmCloseDirtyFile } from "../../renderer/shell/close-file-guard";
+import { fileUriToPath } from "../../contracts/files/Resolvers";
 
 export const coreLayoutPlugin: Plugin = {
   manifest: {
@@ -137,6 +138,101 @@ export const coreLayoutPlugin: Plugin = {
           </p>
         </div>
       )
+    });
+
+    context.layout.registerTabContextMenu({
+      id: "core.layout.tabContextMenu.default",
+      order: 10,
+      actions: [
+        { id: "core.layout.tab.close", label: "Close", order: 10 },
+        { id: "core.layout.tab.closeOthers", label: "Close Others", order: 20 },
+        { id: "core.layout.tab.closeAll", label: "Close All", order: 30 },
+        { id: "core.layout.tab.copyPath", label: "Copy Path", order: 40 },
+        { id: "core.layout.tab.openInExplorer", label: "Open in System Explorer", order: 50 }
+      ]
+    });
+
+    context.commands.registerCommand({
+      id: "core.layout.tab.close",
+      title: "Close Tab",
+      handler: async () => {
+        const fileId = context.fileMediator.getContextFileId();
+        if (!fileId) return;
+        const file = context.files.getFile(fileId);
+        if (!file) return;
+        const isDirty = file.dirtyVsDisk || file.dirtyVsBackend;
+        if (isDirty) {
+          const shouldClose = await confirmCloseDirtyFile(file, (options) =>
+            context.dialog.showMessage(options)
+          );
+          if (!shouldClose) return;
+        }
+        await context.fileMediator.closeFile(fileId, { discardDirty: true });
+      }
+    });
+
+    context.commands.registerCommand({
+      id: "core.layout.tab.closeOthers",
+      title: "Close Other Tabs",
+      handler: async () => {
+        const fileId = context.fileMediator.getContextFileId();
+        if (!fileId) return;
+        const allFiles = context.files.listFiles();
+        for (const file of allFiles) {
+          if (file.fileId === fileId) continue;
+          const isDirty = file.dirtyVsDisk || file.dirtyVsBackend;
+          if (isDirty) {
+            const shouldClose = await confirmCloseDirtyFile(file, (options) =>
+              context.dialog.showMessage(options)
+            );
+            if (!shouldClose) return;
+          }
+          await context.fileMediator.closeFile(file.fileId, { discardDirty: true });
+        }
+      }
+    });
+
+    context.commands.registerCommand({
+      id: "core.layout.tab.closeAll",
+      title: "Close All Tabs",
+      handler: async () => {
+        const allFiles = context.files.listFiles();
+        for (const file of allFiles) {
+          const isDirty = file.dirtyVsDisk || file.dirtyVsBackend;
+          if (isDirty) {
+            const shouldClose = await confirmCloseDirtyFile(file, (options) =>
+              context.dialog.showMessage(options)
+            );
+            if (!shouldClose) return;
+          }
+          await context.fileMediator.closeFile(file.fileId, { discardDirty: true });
+        }
+      }
+    });
+
+    context.commands.registerCommand({
+      id: "core.layout.tab.copyPath",
+      title: "Copy Tab Path",
+      handler: async () => {
+        const fileId = context.fileMediator.getContextFileId();
+        if (!fileId) return;
+        const file = context.files.getFile(fileId);
+        if (!file) return;
+        const path = fileUriToPath(file.uri);
+        await navigator.clipboard.writeText(path);
+      }
+    });
+
+    context.commands.registerCommand({
+      id: "core.layout.tab.openInExplorer",
+      title: "Open in System Explorer",
+      handler: async () => {
+        const fileId = context.fileMediator.getContextFileId();
+        if (!fileId) return;
+        const file = context.files.getFile(fileId);
+        if (!file) return;
+        await window.appShell.showItemInFolder(file.uri);
+      }
     });
   }
 };

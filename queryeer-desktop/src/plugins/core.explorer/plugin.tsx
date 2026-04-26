@@ -16,7 +16,7 @@ export const coreExplorerPlugin: Plugin = {
     context.layout.registerView({
       id: "core.explorer.view",
       title: "Explorer",
-      defaultZone: "primarySidebar",
+      defaultZone: "secondarySidebar",
       order: 0,
       canMoveZones: true,
       canCollapse: true,
