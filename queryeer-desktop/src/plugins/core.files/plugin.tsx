@@ -28,7 +28,7 @@ const ALL_MIME_CAPABILITIES: MimeCapability[] = [
   "backupable",
   "editable",
   "viewable",
-  "executable"
+  "queryexecutable"
 ];
 
 function toFileUri(filePath: string): string {

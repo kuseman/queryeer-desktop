@@ -3,9 +3,14 @@ type QueryEventListener = (event: QueryEvent) => void;
 type GlobalQueryEventListener = (event: QueryEvent, context?: ExecuteParams) => void;
 type SimpleListener = () => void;
 type ExecutionContextProvider = (params: ExecuteParams) => Partial<ExecuteParams> | void;
+type EngineResolver = (params: Omit<ExecuteParams, "engineId">) => string | undefined;
+type EngineResolverEntry = {
+  resolver: EngineResolver;
+  id: string;
+};
 
 type ExecuteParams = {
-  engineId: string;
+  engineId?: string;
   text: string;
   fileId?: string;
   engineState?: unknown;
@@ -33,6 +38,7 @@ export class QueryEngineService {
   private readonly executeRequestListeners = new Set<SimpleListener>();
   private readonly cancelRequestListeners = new Set<SimpleListener>();
   private readonly executionContextProviders = new Set<ExecutionContextProvider>();
+  private readonly engineResolvers: EngineResolverEntry[] = [];
   private readonly executionContextById = new Map<string, ExecuteParams>();
   private initialized = false;
 
@@ -82,11 +88,27 @@ export class QueryEngineService {
 
   async execute(params: ExecuteParams): Promise<string> {
     const queryExecutionId = crypto.randomUUID();
-    const decoratedParams = this.decorateExecuteParams(params);
+    const engineId = params.engineId ?? this.resolveEngineId(params);
+    if (!engineId) {
+      throw new Error("No query engine matched this file");
+    }
+    const decoratedParams = this.decorateExecuteParams({
+      ...params,
+      engineId
+    });
     this.executionContextById.set(queryExecutionId, decoratedParams);
+    for (const listener of this.globalEventListeners) {
+      listener(
+        {
+          method: "query.started",
+          params: { queryExecutionId }
+        },
+        decoratedParams
+      );
+    }
     await window.appShell.executeBackendQuery({
       queryExecutionId,
-      engineId: decoratedParams.engineId,
+      engineId,
       fileId: decoratedParams.fileId,
       text: decoratedParams.text,
       engineState: decoratedParams.engineState
@@ -143,6 +165,33 @@ export class QueryEngineService {
     };
   }
 
+  registerEngineResolver(resolver: EngineResolver, options?: { id?: string }): () => void {
+    const entry: EngineResolverEntry = {
+      resolver,
+      id: options?.id ?? `resolver-${this.engineResolvers.length + 1}`
+    };
+    this.engineResolvers.push(entry);
+    return () => {
+      const index = this.engineResolvers.indexOf(entry);
+      if (index >= 0) {
+        this.engineResolvers.splice(index, 1);
+      }
+    };
+  }
+
+  getEngineResolverDiagnostics(fileId?: string): {
+    resolvers: string[];
+    matchedEngineId?: string;
+    matchedByResolver?: string;
+  } {
+    const result = this.resolveEngine(fileId ? { fileId, text: "" } : undefined);
+    return {
+      resolvers: this.engineResolvers.map((entry) => entry.id),
+      matchedEngineId: result?.engineId,
+      matchedByResolver: result?.resolverId
+    };
+  }
+
   private decorateExecuteParams(params: ExecuteParams): ExecuteParams {
     let next = { ...params };
     for (const provider of this.executionContextProviders) {
@@ -155,5 +204,27 @@ export class QueryEngineService {
       }
     }
     return next;
+  }
+
+  private resolveEngineId(params: Omit<ExecuteParams, "engineId">): string | undefined {
+    return this.resolveEngine(params)?.engineId;
+  }
+
+  private resolveEngine(
+    params?: Omit<ExecuteParams, "engineId">
+  ): { engineId: string; resolverId: string } | undefined {
+    if (!params) {
+      return undefined;
+    }
+    for (const entry of this.engineResolvers) {
+      const engineId = entry.resolver(params);
+      if (engineId) {
+        return {
+          engineId,
+          resolverId: entry.id
+        };
+      }
+    }
+    return undefined;
   }
 }

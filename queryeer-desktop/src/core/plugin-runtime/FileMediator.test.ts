@@ -11,7 +11,10 @@ function makeEditor(
   id: string,
   supportedMimeTypes?: string[],
   overrides?: Partial<
-    Pick<LayoutEditorContribution, "openIntents" | "priority" | "order" | "supportedContentCategories">
+    Pick<
+      LayoutEditorContribution,
+      "openIntents" | "priority" | "order" | "supportedContentCategories" | "requiredCapabilities"
+    >
   >
 ): LayoutEditorContribution {
   return { id, title: id, supportedMimeTypes, ...overrides, render: () => null };
@@ -124,6 +127,25 @@ describe("FileMediator.openFile", () => {
 
     expect(viewFile.editorId).toBe("editor.viewer");
     expect(editFile.editorId).toBe("editor.editor");
+  });
+
+  it("re-resolves stale hinted editor id from workspace state", async () => {
+    const editors = [
+      makeEditor("core.queryengine.editor", undefined, {
+        requiredCapabilities: ["queryexecutable"],
+        supportedContentCategories: ["text"],
+        priority: 500
+      }),
+      makeEditor("core.editor.text", ["application/sql"], { priority: 100 })
+    ];
+    const { mediator } = setupHarness({ editors });
+
+    const file = await mediator.openFile("file:///legacy.sql", {
+      mimeType: "application/sql",
+      editorId: "core.queryengine.editor"
+    });
+
+    expect(file.editorId).toBe("core.editor.text");
   });
 
   it("does not call backend openFile when no engine binding (lazy)", async () => {

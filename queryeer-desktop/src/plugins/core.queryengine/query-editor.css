@@ -165,3 +165,58 @@
   min-height: 0;
   overflow: auto;
 }
+
+.queryengine-tab-state-running .shell-editor-tab-button {
+  background: rgba(18, 90, 58, 0.42);
+  color: #d8fbe8;
+}
+
+.shell-editor-tab.queryengine-tab-state-running.is-active .shell-editor-tab-button {
+  background: rgba(18, 90, 58, 0.52);
+  color: #e8fff2;
+}
+
+.queryengine-tab-state-running .shell-editor-tab-button:hover {
+  background: rgba(21, 112, 70, 0.52);
+}
+
+.queryengine-tab-state-failed .shell-editor-tab-button {
+  background: rgba(126, 32, 32, 0.38);
+  color: #ffd6d6;
+}
+
+.shell-editor-tab.queryengine-tab-state-failed.is-active .shell-editor-tab-button {
+  background: rgba(148, 36, 36, 0.5);
+  color: #ffe3e3;
+}
+
+.queryengine-tab-state-failed .shell-editor-tab-button:hover {
+  background: rgba(148, 36, 36, 0.48);
+}
+
+.queryengine-tab-indicator-running {
+  overflow: hidden;
+  contain: paint;
+}
+
+.queryengine-tab-indicator-running::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 42%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(68, 201, 132, 0) 0%, rgba(68, 201, 132, 0.95) 50%, rgba(68, 201, 132, 0) 100%);
+  transform: translate3d(-110%, 0, 0);
+  will-change: transform;
+  animation: queryengine-tab-indicator-spin 0.9s linear infinite;
+}
+
+@keyframes queryengine-tab-indicator-spin {
+  from {
+    transform: translate3d(-110%, 0, 0);
+  }
+  to {
+    transform: translate3d(260%, 0, 0);
+  }
+}

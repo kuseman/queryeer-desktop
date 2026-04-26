@@ -1,5 +1,6 @@
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
+import { registerQueryExecutableEngine } from "../core.queryengine/engine-registration";
 import { getCoreSettingsService } from "../core.settings/service";
 import { CatalogInstancesSettingsEditor } from "./CatalogInstancesSettingsEditor";
 import { getPayloadbuilderCatalogStore } from "./catalog-store";
@@ -21,6 +22,10 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
   },
   activate: (context) => {
     getPayloadbuilderCatalogStore().initialize(context.files);
+    registerQueryExecutableEngine(context, {
+      engineId: "payloadbuilder",
+      mimeTypes: ["application/plbsql"]
+    });
 
     context.settings.registerAdvancedValidator({
       id: "core.queryengine.payloadbuilder.catalogInstances.validator",

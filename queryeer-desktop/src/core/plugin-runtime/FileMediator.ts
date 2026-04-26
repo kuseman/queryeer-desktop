@@ -78,22 +78,23 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
         });
 
       let editorId = hint?.editorId;
-      if (!editorId) {
-        const probe: FileEntity = {
-          fileId: "probe",
-          version: 0,
-          uri,
-          mimeType,
-          dirtyVsBackend: false,
-          dirtyVsDisk: false,
-          diskState: "inSync",
-          openedAt: ""
-        };
-        editorId = filesRegistry.resolveEditor(probe, {
-          uri,
-          mimeType,
-          openIntent: hint?.openIntent
-        });
+      const probe: FileEntity = {
+        fileId: "probe",
+        version: 0,
+        uri,
+        mimeType,
+        dirtyVsBackend: false,
+        dirtyVsDisk: false,
+        diskState: "inSync",
+        openedAt: ""
+      };
+      const resolvedEditorId = filesRegistry.resolveEditor(probe, {
+        uri,
+        mimeType,
+        openIntent: hint?.openIntent
+      });
+      if (resolvedEditorId) {
+        editorId = resolvedEditorId;
       }
 
       const file = filesRegistry.openFile({

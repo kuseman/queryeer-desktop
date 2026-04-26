@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import type { BackendGatewayStatus } from "../../contracts/backend";
+import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { Plugin } from "../../contracts/plugin/Plugin";
+import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
+import { getRegisteredQueryExecutableEngines } from "../core.queryengine/engine-registration";
 import { getRuntimeData } from "./runtime-data";
 
 export const OBSERVABILITY_MIME_TYPE = "application/x-observability";
@@ -20,7 +23,11 @@ export const coreObservabilityPlugin: Plugin = {
       title: "Observability",
       order: 1,
       supportedMimeTypes: [OBSERVABILITY_MIME_TYPE],
-      render: () => <ObservabilityEditor />
+      render: () => (
+        <ObservabilityEditor
+          listFiles={() => context.files.listFiles()}
+        />
+      )
     });
 
     context.layout.registerStatusItem({
@@ -111,7 +118,11 @@ function CollapsibleSection({ title, defaultCollapsed = true, wide = false, chil
   );
 }
 
-function ObservabilityEditor() {
+type ObservabilityEditorProps = {
+  listFiles: () => FileEntity[];
+};
+
+function ObservabilityEditor({ listFiles }: ObservabilityEditorProps) {
   const [backendStatus, setBackendStatus] = useState<BackendGatewayStatus | null>(null);
   const [logFlowEnabled, setLogFlowEnabled] = useState<boolean | null>(null);
 
@@ -148,6 +159,10 @@ function ObservabilityEditor() {
   if (!runtime) {
     return <div>Runtime data not available yet.</div>;
   }
+
+  const queryRegistrations = getRegisteredQueryExecutableEngines();
+  const openFiles = listFiles();
+  const queryResolverDiagnostics = getQueryEngineService().getEngineResolverDiagnostics();
 
   const { hostState, diagnostics, extensions, keybindingDiagnostics } = runtime;
   const platformLabel =
@@ -236,6 +251,59 @@ function ObservabilityEditor() {
                 <li key={capability}>{capability}</li>
               ))}
             </ul>
+          </article>
+        </CollapsibleSection>
+
+        <CollapsibleSection title="Query engines" defaultCollapsed={true} wide={true}>
+          <article className="panel-card">
+            <h3>queryexecutable MIME registrations</h3>
+            {queryRegistrations.length === 0 ? (
+              <p>none</p>
+            ) : (
+              <ul>
+                {queryRegistrations.map((registration) => (
+                  <li key={registration.engineId}>
+                    {registration.engineId}: {registration.mimeTypes.join(", ") || "-"}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <h3>Engine resolvers</h3>
+            {queryResolverDiagnostics.resolvers.length === 0 ? (
+              <p>none</p>
+            ) : (
+              <ul>
+                {queryResolverDiagnostics.resolvers.map((resolverId) => (
+                  <li key={resolverId}>{resolverId}</li>
+                ))}
+              </ul>
+            )}
+
+            <h3>Open file matches</h3>
+            {openFiles.length === 0 ? (
+              <p>none</p>
+            ) : (
+              <div className="manifest-grid-head">
+                <span>URI</span>
+                <span>MIME</span>
+                <span>Engine</span>
+                <span>Resolver</span>
+                <span>Binding</span>
+              </div>
+            )}
+            {openFiles.map((file) => {
+              const fileDiagnostics = getQueryEngineService().getEngineResolverDiagnostics(file.fileId);
+              return (
+                <div className="manifest-grid-row" key={file.fileId}>
+                  <span>{file.uri}</span>
+                  <span>{file.mimeType}</span>
+                  <span>{fileDiagnostics.matchedEngineId ?? "none"}</span>
+                  <span>{fileDiagnostics.matchedByResolver ?? "none"}</span>
+                  <span>{file.engineBinding?.engineId ?? "-"}</span>
+                </div>
+              );
+            })}
           </article>
         </CollapsibleSection>
 

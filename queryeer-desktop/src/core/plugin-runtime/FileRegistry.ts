@@ -69,7 +69,6 @@ export class FileRegistry {
       set.add("viewable");
       set.add("editable");
       set.add("backupable");
-      set.add("executable");
     }
   }
 

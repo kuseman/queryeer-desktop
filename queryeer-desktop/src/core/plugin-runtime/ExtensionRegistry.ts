@@ -4,6 +4,7 @@ import type {
   LayoutShellDefaults,
   LayoutStatusItemContribution,
   LayoutToolbarActionContribution,
+  TabHeaderStyleContribution,
   LayoutViewContribution,
   LayoutWelcomeContribution,
   TabContextMenuContribution
@@ -48,6 +49,7 @@ export type ExtensionSnapshot = {
     editors: LayoutEditorContribution[];
     welcomes: LayoutWelcomeContribution[];
     tabContextMenus: TabContextMenuContribution[];
+    tabHeaderStyles: TabHeaderStyleContribution[];
     shellDefaults: LayoutShellDefaults;
   };
   tooltip: {
@@ -89,6 +91,7 @@ export class ExtensionRegistry {
   private readonly layoutEditors = new Map<string, LayoutEditorContribution>();
   private readonly layoutWelcomes = new Map<string, LayoutWelcomeContribution>();
   private readonly tabContextMenus = new Map<string, TabContextMenuContribution>();
+  private readonly tabHeaderStyles = new Map<string, TabHeaderStyleContribution>();
   private readonly tooltipSections = new Map<string, TooltipSectionContribution>();
   private readonly settingsContributions = new Map<string, SettingsContribution>();
   private readonly settingsDefinitions = new Map<string, SettingDefinition>();
@@ -209,6 +212,9 @@ export class ExtensionRegistry {
       registerTabContextMenu: (contribution) => {
         this.tabContextMenus.set(contribution.id, contribution);
       },
+      registerTabHeaderStyle: (contribution) => {
+        this.tabHeaderStyles.set(contribution.id, contribution);
+      },
       setShellDefaults: (defaults) => {
         this.shellDefaults = {
           ...this.shellDefaults,
@@ -303,6 +309,7 @@ menu: {
         editors: [...this.layoutEditors.values()],
         welcomes: [...this.layoutWelcomes.values()],
         tabContextMenus: [...this.tabContextMenus.values()],
+        tabHeaderStyles: [...this.tabHeaderStyles.values()],
         shellDefaults: this.shellDefaults
       },
       tooltip: {
