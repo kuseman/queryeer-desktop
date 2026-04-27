@@ -1,5 +1,6 @@
 import type { FileMediator } from "../files/FileMediator.js";
 import type { FilesRegistry } from "../files/FilesRegistry.js";
+import type { FileStateRegistry } from "../files/FileStateRegistry.js";
 import type { FileWatcherService } from "../files/FileWatcher.js";
 import type { LayoutRegistry } from "../extensions/LayoutExtension.js";
 import type { MenuRegistry } from "../extensions/MenuExtension.js";
@@ -21,6 +22,7 @@ export type PluginContext = {
   commands: CommandRegistry;
   filesystems: FileSystemRegistry;
   files: FilesRegistry;
+  fileState: FileStateRegistry;
   fileMediator: FileMediator;
   fileWatcher: FileWatcherService;
   layout: LayoutRegistry;

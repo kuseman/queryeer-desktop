@@ -18,6 +18,7 @@ import {
   validateDependencies,
   validateRequiredCapabilities
 } from "./PluginValidation";
+import { getFileStateRegistry } from "./FileStateRegistryImpl";
 
 export type PluginHostState = {
   startedAt: string;
@@ -105,6 +106,7 @@ export class PluginHost {
       commands: this.extensionRegistry.createCommandRegistry(),
       filesystems: this.extensionRegistry.createFileSystemRegistry(),
       files: this.extensionRegistry.createFilesRegistry(),
+      fileState: getFileStateRegistry(),
       fileMediator: this.fileMediator,
       fileWatcher: this.fileWatcher,
       layout: this.extensionRegistry.createLayoutRegistry(),

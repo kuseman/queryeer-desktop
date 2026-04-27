@@ -7,6 +7,8 @@ import { getQueryEngineService } from "./QueryEngineService";
 import { getOutputRegistry } from "./output/OutputRegistry";
 import { queryTextRegistry } from "./QueryTextEditorRegistry";
 import type { FileEntity } from "../../contracts/files/FileEntity";
+import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistryImpl";
+import { defineStateKey } from "../../contracts/files/FileStateRegistry";
 
 type Props = {
   file?: FileEntity;
@@ -17,14 +19,15 @@ type ActiveExecution = {
   unsubscribe: () => void;
 };
 
+const OUTPUT_CONTEXT_KEY = defineStateKey<OutputContext>("core.queryengine.outputContext");
+const SELECTED_PRIMARY_KEY = defineStateKey<string>("core.queryengine.selectedPrimary");
+
 export function QueryEditorComponent({ file }: Props): JSX.Element {
   const [outputContext, setOutputContext] = useState<OutputContext>(IDLE_OUTPUT_CONTEXT);
   const [splitPercent, setSplitPercent] = useState(60);
   const [selectedPrimaryId, setSelectedPrimaryId] = useState<string | null>(null);
 
-  const outputByFileIdRef = useRef(new Map<string, OutputContext>());
   const activeExecutionByFileIdRef = useRef(new Map<string, ActiveExecution>());
-  const selectedPrimaryByFileIdRef = useRef(new Map<string, string | null>());
   const handleExecuteRef = useRef<() => void>(() => {});
   const handleCancelRef = useRef<() => void>(() => {});
   const splitContainerRef = useRef<HTMLDivElement>(null);
@@ -40,15 +43,17 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
       setSelectedPrimaryId(null);
       return;
     }
-    setOutputContext(outputByFileIdRef.current.get(fileId) ?? IDLE_OUTPUT_CONTEXT);
-    setSelectedPrimaryId(selectedPrimaryByFileIdRef.current.get(fileId) ?? null);
+    const reg = getFileStateRegistry();
+    setOutputContext(reg.get(fileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT);
+    setSelectedPrimaryId(reg.get(fileId, SELECTED_PRIMARY_KEY) ?? null);
   }, [file?.fileId]);
 
   const updateOutputContextForFile = useCallback(
     (targetFileId: string, updater: (prev: OutputContext) => OutputContext) => {
-      const prevForFile = outputByFileIdRef.current.get(targetFileId) ?? IDLE_OUTPUT_CONTEXT;
-      const next = updater(prevForFile);
-      outputByFileIdRef.current.set(targetFileId, next);
+      const reg = getFileStateRegistry();
+      const prev = reg.get(targetFileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT;
+      const next = updater(prev);
+      reg.set(targetFileId, OUTPUT_CONTEXT_KEY, next);
       if (fileIdRef.current === targetFileId) {
         setOutputContext(next);
       }
@@ -59,7 +64,7 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
   const handleSelectPrimary = useCallback((id: string) => {
     const fileId = fileIdRef.current;
     if (fileId) {
-      selectedPrimaryByFileIdRef.current.set(fileId, id);
+      getFileStateRegistry().set(fileId, SELECTED_PRIMARY_KEY, id);
     }
     setSelectedPrimaryId(id);
     getOutputRegistry().setSelectedPrimary(id);
@@ -84,7 +89,7 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
       const text = editor.getSelectedText() ?? editor.getContent();
       if (!text.trim()) return;
 
-      updateOutputContextForFile(targetFileId, () => ({ ...IDLE_OUTPUT_CONTEXT, state: "running" }));
+      updateOutputContextForFile(targetFileId, () => ({ ...IDLE_OUTPUT_CONTEXT, fileId: targetFileId, state: "running" }));
 
       try {
         const service = getQueryEngineService();
@@ -118,7 +123,7 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
             registry.notifyChunkRows({ resultSetIndex: p.resultSetIndex, rows: p.rows });
 
             // Check if this result set is already over the limit
-            const currentCtx = outputByFileIdRef.current.get(targetFileId) ?? IDLE_OUTPUT_CONTEXT;
+            const currentCtx = getFileStateRegistry().get(targetFileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT;
             const currentSet = currentCtx.resultSets.find((rs) => rs.resultSetIndex === p.resultSetIndex);
 
             if (currentSet?.rowLimitExceeded) {
@@ -156,7 +161,7 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
             }));
 
             // Finalize any open export streams and patch exportPath back into the result set
-            const ctx = outputByFileIdRef.current.get(targetFileId) ?? IDLE_OUTPUT_CONTEXT;
+            const ctx = getFileStateRegistry().get(targetFileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT;
             for (const rs of ctx.resultSets) {
               if (rs.rowLimitExceeded) {
                 void window.appShell

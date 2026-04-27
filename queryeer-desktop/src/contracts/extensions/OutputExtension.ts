@@ -35,6 +35,8 @@ export type OutputContext = {
   metrics: { durationMs?: number; rowCount?: number } | null;
   error: { code: string; message: string } | null;
   progress: { percent?: number; message?: string } | null;
+  /** Identity of the file this context belongs to. Used by contributors for per-file state persistence. */
+  fileId?: string;
 };
 
 export type RowChunk = {

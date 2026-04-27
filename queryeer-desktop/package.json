@@ -28,6 +28,8 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
+    "ag-grid-community": "^35.2.1",
+    "ag-grid-react": "^35.2.1",
     "chokidar": "^4.0.3",
     "jszip": "^3.10.1",
     "monaco-editor": "^0.55.1",
