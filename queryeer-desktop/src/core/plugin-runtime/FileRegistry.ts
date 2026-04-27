@@ -4,6 +4,7 @@ import type {
   FileOpenInput,
   ViewStateBag
 } from "../../contracts/files/FileEntity";
+import { getFileStateRegistry } from "./FileStateRegistryImpl";
 import type {
   EditorResolutionContext,
   ContentCategory,
@@ -312,6 +313,7 @@ export class FileRegistry {
 
   private closeFile(fileId: string): void {
     if (this.files.delete(fileId)) {
+      getFileStateRegistry().evict(fileId);
       this.emit();
     }
   }

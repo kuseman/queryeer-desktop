@@ -15,20 +15,26 @@ function resolvePrimary(
   selectedId: string | null | undefined
 ): OutputContributor | undefined {
   const primaries = contributors.filter((c) => c.mode === "primary");
-  // If the user has a valid manual selection, honour it
   if (selectedId) {
     const selected = primaries.find((c) => c.id === selectedId);
     if (selected) return selected;
   }
-  // Auto-resolve: highest-priority primary whose capability is in features,
-  // or any primary when features are not yet known (null = still running).
-  const eligible = features === null
-    ? primaries
-    : primaries.filter((c) => features.includes(c.capability));
-  return eligible[0]; // already sorted by priority from getContributors()
+  const eligible =
+    features === null
+      ? primaries
+      : primaries.filter((c) => features.includes(c.capability));
+  return eligible[0];
 }
 
-export function OutputPanel({ context, selectedPrimaryId, onExportOpen }: Props): JSX.Element {
+function eligiblePrimaries(
+  contributors: OutputContributor[],
+  features: string[] | null
+): OutputContributor[] {
+  const primaries = contributors.filter((c) => c.mode === "primary");
+  return features === null ? primaries : primaries.filter((c) => features.includes(c.capability));
+}
+
+export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExportOpen }: Props): JSX.Element {
   const [contributors, setContributors] = useState<OutputContributor[]>(() =>
     getOutputRegistry().getContributors()
   );
@@ -42,20 +48,19 @@ export function OutputPanel({ context, selectedPrimaryId, onExportOpen }: Props)
   }, []);
 
   const primaryContributor = resolvePrimary(contributors, context.features, selectedPrimaryId);
+  const primaries = eligiblePrimaries(contributors, context.features);
 
-  // Keep registry in sync with resolved primary so notifyChunkRows targets the right contributor
   useEffect(() => {
     getOutputRegistry().setSelectedPrimary(primaryContributor?.id ?? null);
   }, [primaryContributor?.id]);
 
-  // Ad-hoc contributors: only shown after features resolve and their capability is present
-  const adhocContributors = context.features !== null
-    ? contributors.filter(
-        (c) => c.mode === "adhoc" && context.features!.includes(c.capability)
-      )
-    : [];
+  const adhocContributors =
+    context.features !== null
+      ? contributors.filter(
+          (c) => c.mode === "adhoc" && context.features!.includes(c.capability)
+        )
+      : [];
 
-  // Export affordance: find any result set that exceeded the row limit
   const limitedSets = context.resultSets.filter((rs) => rs.rowLimitExceeded);
   const exportPaths = limitedSets.map((rs) => rs.exportPath).filter(Boolean) as string[];
   const isExportPending = limitedSets.length > 0 && exportPaths.length < limitedSets.length;
@@ -66,16 +71,24 @@ export function OutputPanel({ context, selectedPrimaryId, onExportOpen }: Props)
 
   return (
     <div className="query-output-panel">
+      <div className="query-output-tabs">
+        {primaries.map((c) => (
+          <button
+            key={c.id}
+            className={`query-output-tab${c.id === primaryContributor?.id ? " query-output-tab-active" : ""}`}
+            onClick={() => onSelectPrimary?.(c.id)}
+          >
+            {c.title}
+          </button>
+        ))}
+      </div>
+
       {(isExportPending || exportPaths.length > 0) && (
         <div className="query-output-export-banner">
           {isExportPending
             ? "Writing export file…"
             : exportPaths.map((p) => (
-                <button
-                  key={p}
-                  className="query-output-export-open"
-                  onClick={() => onExportOpen?.(p)}
-                >
+                <button key={p} className="query-output-export-open" onClick={() => onExportOpen?.(p)}>
                   Open full export
                 </button>
               ))}

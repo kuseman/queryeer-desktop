@@ -94,6 +94,7 @@ function createContext(file?: FileEntity) {
       showSaveDialog: vi.fn()
     },
     tooltip: { registerTooltipSection: vi.fn() },
+    fileState: { get: vi.fn(), set: vi.fn(), delete: vi.fn(), evict: vi.fn() },
     settings: {
       registerSettings: vi.fn(),
       registerAdvancedRenderer: vi.fn(),
