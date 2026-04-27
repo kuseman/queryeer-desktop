@@ -8,6 +8,7 @@ export const coreLayoutPlugin: Plugin = {
     name: "Core Layout",
     version: "0.1.0",
     kind: "core",
+    providesCapabilities: ["layout.panels"],
     description: "Registers baseline panel layout capabilities"
   },
   activate: (context) => {

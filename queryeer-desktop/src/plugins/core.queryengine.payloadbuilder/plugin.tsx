@@ -18,6 +18,7 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
     kind: "core",
     description: "Payloadbuilder engine state and catalog sidebar contributions",
     dependencies: ["core.queryengine", "core.layout", "core.files", "core.editor", "core.settings"],
+    requiredCapabilities: ["query.engine"],
     providesCapabilities: ["query.engine.payloadbuilder"]
   },
   activate: (context) => {

@@ -7,6 +7,8 @@ export const coreSettingsPlugin: Plugin = {
     name: "Core Settings",
     version: "0.1.0",
     kind: "core",
+    dependencies: ["core.commands", "core.menu"],
+    providesCapabilities: ["settings.registry"],
     description: "Central settings registry, persistence, and settings dialog foundation"
   },
   activate: async (context) => {

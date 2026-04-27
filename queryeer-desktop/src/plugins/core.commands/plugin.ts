@@ -6,6 +6,7 @@ export const coreCommandsPlugin: Plugin = {
     name: "Core Commands",
     version: "0.1.0",
     kind: "core",
+    providesCapabilities: ["commands.registry"],
     description: "Registers baseline shell commands"
   },
   activate: (context) => {

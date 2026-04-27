@@ -1,31 +1,17 @@
 import type { PluginModule } from "../contracts/plugin/PluginModule";
 import type { PluginManifestFile } from "../contracts/plugin/PluginManifestFile";
-import { loadPluginManifests } from "./manifest-loader";
 import { validatePluginManifestFiles } from "./manifest-validation";
 
-type PluginLoader = () => Promise<{ pluginModule: PluginModule }>;
+const internalEntries = Object.entries(
+  import.meta.glob("./*/module.ts", { eager: true }) as Record<string, { pluginModule: PluginModule }>
+);
 
-const moduleLoaders: Partial<Record<string, PluginLoader>> = {
-  "./core.layout/module": async () => import("./core.layout/module"),
-  "./core.filesystem/module": async () => import("./core.filesystem/module"),
-  "./core.fileWatcher/module": async () => import("./core.fileWatcher/module"),
-  "./core.files/module": async () => import("./core.files/module"),
-  "./core.dialog/module": async () => import("./core.dialog/module"),
-  "./core.workspace/module": async () => import("./core.workspace/module"),
-  "./core.commands/module": async () => import("./core.commands/module"),
-  "./core.settings/module": async () => import("./core.settings/module"),
-  "./core.security/module": async () => import("./core.security/module"),
-  "./core.menu/module": async () => import("./core.menu/module"),
-  "./core.observability/module": async () => import("./core.observability/module"),
-  "./core.editor/module": async () => import("./core.editor/module"),
-  "./core.explorer/module": async () => import("./core.explorer/module"),
-  "./core.queryengine/module": async () => import("./core.queryengine/module"),
-  "./core.queryengine.payloadbuilder/module": async () =>
-    import("./core.queryengine.payloadbuilder/module"),
-  "./core.queryengine.payloadbuilder.elasticsearch/module": async () =>
-    import("./core.queryengine.payloadbuilder.elasticsearch/module"),
-  "./core.queryengine.output.text/module": async () => import("./core.queryengine.output.text/module")
-};
+const internalManifests: PluginManifestFile[] = internalEntries.map(([key, { pluginModule }]) => ({
+  ...pluginModule.manifest,
+  modulePath: key.replace(/\.ts$/, "")
+}));
+
+const internalModules: PluginModule[] = internalEntries.map(([, { pluginModule }]) => pluginModule);
 
 export type PluginDiscoveryResult = {
   manifests: PluginManifestFile[];
@@ -40,16 +26,35 @@ export type PluginDiscoveryResult = {
 export async function discoverPluginModules(
   externalManifests: PluginManifestFile[] = []
 ): Promise<PluginDiscoveryResult> {
-  const mergeResult = mergeManifests(loadPluginManifests(), externalManifests);
-  const manifests = mergeResult.manifests;
+  const { manifests, loadErrors } = mergeManifests(internalManifests, externalManifests);
   validatePluginManifestFiles(manifests);
 
-  const modules = await loadModulesFromManifests(manifests);
-  return {
-    manifests,
-    modules: modules.modules,
-    loadErrors: [...mergeResult.loadErrors, ...modules.loadErrors]
-  };
+  const modules = [...internalModules];
+  const internalIds = new Set(internalManifests.map((m) => m.id));
+
+  for (const manifest of manifests) {
+    if (internalIds.has(manifest.id)) {
+      continue;
+    }
+    try {
+      const loaded = await createExternalLoader(manifest.modulePath)();
+      if (loaded.pluginModule.manifest.id !== manifest.id) {
+        throw new Error(
+          `Plugin id mismatch for '${manifest.modulePath}', expected '${manifest.id}'`
+        );
+      }
+      loaded.pluginModule.plugin.manifest = loaded.pluginModule.manifest;
+      modules.push(loaded.pluginModule);
+    } catch (error) {
+      loadErrors.push({
+        pluginId: manifest.id,
+        modulePath: manifest.modulePath,
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  return { manifests, modules, loadErrors };
 }
 
 function mergeManifests(
@@ -57,19 +62,11 @@ function mergeManifests(
   externalManifests: PluginManifestFile[]
 ): {
   manifests: PluginManifestFile[];
-  loadErrors: {
-    pluginId: string;
-    modulePath: string;
-    message: string;
-  }[];
+  loadErrors: { pluginId: string; modulePath: string; message: string }[];
 } {
   const manifests = [...internalManifests];
-  const loadErrors: {
-    pluginId: string;
-    modulePath: string;
-    message: string;
-  }[] = [];
-  const ids = new Set(manifests.map((manifest) => manifest.id));
+  const loadErrors: { pluginId: string; modulePath: string; message: string }[] = [];
+  const ids = new Set(manifests.map((m) => m.id));
 
   for (const external of externalManifests) {
     if (ids.has(external.id)) {
@@ -80,67 +77,14 @@ function mergeManifests(
       });
       continue;
     }
-
     manifests.push(external);
     ids.add(external.id);
   }
 
-  return {
-    manifests,
-    loadErrors
-  };
+  return { manifests, loadErrors };
 }
 
-async function loadModulesFromManifests(
-  manifests: PluginManifestFile[]
-): Promise<{
-  modules: PluginModule[];
-  loadErrors: {
-    pluginId: string;
-    modulePath: string;
-    message: string;
-  }[];
-}> {
-  const modules: PluginModule[] = [];
-  const loadErrors: {
-    pluginId: string;
-    modulePath: string;
-    message: string;
-  }[] = [];
-
-  for (const manifest of manifests) {
-    const loader = moduleLoaders[manifest.modulePath];
-    const dynamicLoader = loader ?? createExternalLoader(manifest.modulePath);
-
-    try {
-      const loaded = await dynamicLoader();
-      if (loaded.pluginModule.manifest.id !== manifest.id) {
-        throw new Error(
-          `Plugin id mismatch for '${manifest.modulePath}', expected '${manifest.id}'`
-        );
-      }
-
-      loaded.pluginModule.plugin.manifest = loaded.pluginModule.manifest;
-      modules.push(loaded.pluginModule);
-    } catch (error) {
-      if (loader) {
-        throw error;
-      }
-      loadErrors.push({
-        pluginId: manifest.id,
-        modulePath: manifest.modulePath,
-        message: error instanceof Error ? error.message : String(error)
-      });
-    }
-  }
-
-  return {
-    modules,
-    loadErrors
-  };
-}
-
-function createExternalLoader(modulePath: string): PluginLoader {
+function createExternalLoader(modulePath: string): () => Promise<{ pluginModule: PluginModule }> {
   return async () => {
     const normalizedPath = modulePath.replace(/\\/g, "/");
     const moduleUrl = resolveExternalModuleUrl(normalizedPath);
@@ -152,9 +96,7 @@ function createExternalLoader(modulePath: string): PluginLoader {
       throw new Error(`External plugin module '${modulePath}' does not export pluginModule`);
     }
 
-    return {
-      pluginModule: loaded.pluginModule
-    };
+    return { pluginModule: loaded.pluginModule };
   };
 }
 

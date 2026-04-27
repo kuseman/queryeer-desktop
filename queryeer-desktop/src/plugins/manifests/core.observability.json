@@ -1,7 +1,0 @@
-{
-  "id": "core.observability",
-  "name": "Core Observability",
-  "version": "0.1.0",
-  "kind": "core",
-  "modulePath": "./core.observability/module"
-}

@@ -42,6 +42,7 @@ export const coreQueryEnginePlugin: Plugin = {
     kind: "core",
     description: "Execute SQL/PLBSQL queries and display streaming results in a split-pane editor",
     dependencies: ["core.layout", "core.files", "core.editor"],
+    requiredCapabilities: ["editor"],
     providesCapabilities: ["query.engine"]
   },
   activate: (context) => {

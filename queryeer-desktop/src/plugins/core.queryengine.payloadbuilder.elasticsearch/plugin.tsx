@@ -20,6 +20,7 @@ export const coreQueryEnginePayloadbuilderElasticsearchPlugin: Plugin = {
       "core.settings",
       "core.security"
     ],
+    requiredCapabilities: ["query.engine.payloadbuilder"],
     providesCapabilities: ["query.engine.payloadbuilder.elasticsearch"]
   },
   activate: (context) => {

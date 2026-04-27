@@ -6,6 +6,7 @@ export const coreWorkspacePlugin: Plugin = {
     name: "Core Workspace",
     version: "0.1.0",
     kind: "core",
+    providesCapabilities: ["workspace.session"],
     description: "Persists and restores session state (open files, active file, layout)"
   },
   activate: () => {

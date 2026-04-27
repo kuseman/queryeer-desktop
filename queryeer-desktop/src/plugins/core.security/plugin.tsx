@@ -11,6 +11,8 @@ export const coreSecurityPlugin: Plugin = {
     name: "Core Security",
     version: "0.1.0",
     kind: "core",
+    dependencies: ["core.settings"],
+    providesCapabilities: ["security.vault"],
     description: "Centralized vault and security policy settings"
   },
   activate: (context) => {

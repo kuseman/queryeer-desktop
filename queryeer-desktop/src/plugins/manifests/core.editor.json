@@ -1,9 +1,0 @@
-{
-  "id": "core.editor",
-  "name": "Core Editor",
-  "version": "0.1.0",
-  "kind": "core",
-  "providesCapabilities": ["editor"],
-  "description": "Pluggable editor system - owns the editor registry and delegates to editor-type plugins",
-  "modulePath": "./core.editor/module"
-}

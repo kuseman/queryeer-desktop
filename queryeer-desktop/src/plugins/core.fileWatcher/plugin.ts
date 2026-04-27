@@ -6,6 +6,7 @@ export const coreFileWatcherPlugin: Plugin = {
     name: "Core File Watcher",
     version: "0.1.0",
     kind: "core",
+    providesCapabilities: ["fileWatcher.service"],
     description: "Platform file watcher service shared across plugins"
   },
   activate: () => {

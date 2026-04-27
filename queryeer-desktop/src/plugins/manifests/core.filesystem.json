@@ -1,9 +1,0 @@
-{
-  "id": "core.filesystem",
-  "name": "Core Filesystem",
-  "version": "0.1.0",
-  "kind": "core",
-  "providesCapabilities": ["filesystem.local"],
-  "description": "Registers local filesystem scheme",
-  "modulePath": "./core.filesystem/module"
-}

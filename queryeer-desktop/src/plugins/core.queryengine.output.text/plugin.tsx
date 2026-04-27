@@ -97,7 +97,8 @@ export const coreQueryEngineOutputTextPlugin: Plugin = {
     version: "0.1.0",
     kind: "core",
     description: "Table/text output contributor for query results",
-    dependencies: ["core.queryengine"]
+    dependencies: ["core.queryengine"],
+    requiredCapabilities: ["query.engine"]
   },
   activate: () => {
     getOutputRegistry().register({
