@@ -8,6 +8,7 @@ export const coreExplorerPlugin: Plugin = {
     name: "Core Explorer",
     version: "0.1.0",
     kind: "core",
+    providesCapabilities: ["explorer.view"],
     description: "File explorer sidebar for browsing and opening files from added folders"
   },
   activate: (context) => {

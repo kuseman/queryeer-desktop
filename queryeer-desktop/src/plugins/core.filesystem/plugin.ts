@@ -6,6 +6,7 @@ export const coreFileSystemPlugin: Plugin = {
     name: "Core Filesystem",
     version: "0.1.0",
     kind: "core",
+    providesCapabilities: ["filesystem.local"],
     description: "Registers local filesystem scheme"
   },
   activate: (context) => {

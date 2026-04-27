@@ -9,7 +9,8 @@ export const coreEditorPlugin: Plugin = {
     version: "0.1.0",
     kind: "core",
     description: "Pluggable editor system - owns the editor registry and delegates to editor-type plugins",
-    dependencies: ["core.layout"]
+    dependencies: ["core.layout"],
+    providesCapabilities: ["editor"]
   },
   activate: (context) => {
     context.settings.registerSettings({

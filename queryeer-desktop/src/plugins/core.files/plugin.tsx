@@ -118,6 +118,7 @@ export const coreFilesPlugin: Plugin = {
     name: "Core Files",
     version: "0.1.0",
     kind: "core",
+    providesCapabilities: ["files.registry"],
     description: "Owns the frontend file registry and file entity lifecycle"
   },
   activate: (context) => {

@@ -1,8 +1,0 @@
-{
-  "id": "core.dialog",
-  "name": "Core Dialog",
-  "version": "0.1.0",
-  "kind": "core",
-  "description": "Handles dialogs and file open/save operations",
-  "modulePath": "./core.dialog/module"
-}

@@ -6,6 +6,7 @@ export const coreMenuPlugin: Plugin = {
     name: "Core Menu",
     version: "0.1.0",
     kind: "core",
+    providesCapabilities: ["menu"],
     description: "Handles native menu bar and menu item registration"
   },
   activate: (context) => {
