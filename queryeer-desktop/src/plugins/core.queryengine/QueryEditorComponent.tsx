@@ -1,22 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { TextEditorComponent } from "../core.editor/TextEditor/TextEditorComponent";
 import { OutputPanel } from "./output/OutputPanel";
-import type { OutputContext } from "./output/OutputRegistry";
+import type { OutputContext, ResultSet } from "../../contracts/extensions/OutputExtension";
+import { IDLE_OUTPUT_CONTEXT, DEFAULT_OUTPUT_LIMITS } from "../../contracts/extensions/OutputExtension";
 import { getQueryEngineService } from "./QueryEngineService";
+import { getOutputRegistry } from "./output/OutputRegistry";
 import { queryTextRegistry } from "./QueryTextEditorRegistry";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 
 type Props = {
   file?: FileEntity;
-};
-
-const IDLE_CONTEXT: OutputContext = {
-  state: "idle",
-  schema: null,
-  rows: [],
-  metrics: null,
-  error: null,
-  progress: null
 };
 
 type ActiveExecution = {
@@ -25,11 +18,13 @@ type ActiveExecution = {
 };
 
 export function QueryEditorComponent({ file }: Props): JSX.Element {
-  const [outputContext, setOutputContext] = useState<OutputContext>(IDLE_CONTEXT);
+  const [outputContext, setOutputContext] = useState<OutputContext>(IDLE_OUTPUT_CONTEXT);
   const [splitPercent, setSplitPercent] = useState(60);
+  const [selectedPrimaryId, setSelectedPrimaryId] = useState<string | null>(null);
 
   const outputByFileIdRef = useRef(new Map<string, OutputContext>());
   const activeExecutionByFileIdRef = useRef(new Map<string, ActiveExecution>());
+  const selectedPrimaryByFileIdRef = useRef(new Map<string, string | null>());
   const handleExecuteRef = useRef<() => void>(() => {});
   const handleCancelRef = useRef<() => void>(() => {});
   const splitContainerRef = useRef<HTMLDivElement>(null);
@@ -37,19 +32,21 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
   const fileIdRef = useRef(file?.fileId);
   fileIdRef.current = file?.fileId;
 
-  // Restore per-file execution context on tab switch
+  // Restore per-file context and primary selection on tab switch
   useEffect(() => {
     const fileId = file?.fileId;
     if (!fileId) {
-      setOutputContext(IDLE_CONTEXT);
+      setOutputContext(IDLE_OUTPUT_CONTEXT);
+      setSelectedPrimaryId(null);
       return;
     }
-    setOutputContext(outputByFileIdRef.current.get(fileId) ?? IDLE_CONTEXT);
+    setOutputContext(outputByFileIdRef.current.get(fileId) ?? IDLE_OUTPUT_CONTEXT);
+    setSelectedPrimaryId(selectedPrimaryByFileIdRef.current.get(fileId) ?? null);
   }, [file?.fileId]);
 
   const updateOutputContextForFile = useCallback(
     (targetFileId: string, updater: (prev: OutputContext) => OutputContext) => {
-      const prevForFile = outputByFileIdRef.current.get(targetFileId) ?? IDLE_CONTEXT;
+      const prevForFile = outputByFileIdRef.current.get(targetFileId) ?? IDLE_OUTPUT_CONTEXT;
       const next = updater(prevForFile);
       outputByFileIdRef.current.set(targetFileId, next);
       if (fileIdRef.current === targetFileId) {
@@ -59,12 +56,21 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
     []
   );
 
+  const handleSelectPrimary = useCallback((id: string) => {
+    const fileId = fileIdRef.current;
+    if (fileId) {
+      selectedPrimaryByFileIdRef.current.set(fileId, id);
+    }
+    setSelectedPrimaryId(id);
+    getOutputRegistry().setSelectedPrimary(id);
+  }, []);
+
   const handleExecute = useCallback(() => {
     const run = async () => {
       const targetFileId = file?.fileId;
       if (!targetFileId) return;
 
-      // Cancel existing execution for same file before starting a new one
+      // Cancel any existing execution for this file before starting a new one
       const existingExecution = activeExecutionByFileIdRef.current.get(targetFileId);
       if (existingExecution) {
         existingExecution.unsubscribe();
@@ -76,21 +82,13 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
       if (!editor) return;
 
       const text = editor.getSelectedText() ?? editor.getContent();
-
       if (!text.trim()) return;
 
-      // Local mutable accumulators shared by all event callbacks for this execution
-      let accSchema: OutputContext["schema"] = null;
-      const accRows: unknown[][] = [];
-
-      updateOutputContextForFile(targetFileId, () => ({ ...IDLE_CONTEXT, state: "running" }));
+      updateOutputContextForFile(targetFileId, () => ({ ...IDLE_OUTPUT_CONTEXT, state: "running" }));
 
       try {
         const service = getQueryEngineService();
-        const executionId = await service.execute({
-          fileId: targetFileId,
-          text
-        });
+        const executionId = await service.execute({ fileId: targetFileId, text });
 
         const unsubscribe = service.subscribe(executionId, (event) => {
           if (event.method === "query.progress") {
@@ -100,22 +98,79 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
               progress: { percent: p.percent, message: p.message }
             }));
           } else if (event.method === "query.chunkStart") {
-            const p = event.params as { schema: { columns: Array<{ name: string; type: string }> } };
-            accSchema = p.schema;
-            updateOutputContextForFile(targetFileId, (prev) => ({ ...prev, schema: accSchema }));
+            const p = event.params as { resultSetIndex: number; schema: { columns: Array<{ name: string; type: string }> } };
+            updateOutputContextForFile(targetFileId, (prev) => {
+              if (prev.resultSets.some((rs) => rs.resultSetIndex === p.resultSetIndex)) return prev;
+              return {
+                ...prev,
+                resultSets: [
+                  ...prev.resultSets,
+                  { resultSetIndex: p.resultSetIndex, schema: p.schema, rows: [], rowLimitExceeded: false }
+                ]
+              };
+            });
           } else if (event.method === "query.chunkRows") {
-            const p = event.params as { rows: unknown[][] };
-            accRows.push(...p.rows);
-            updateOutputContextForFile(targetFileId, (prev) => ({ ...prev, rows: [...accRows] }));
+            const p = event.params as { resultSetIndex: number; rows: unknown[][] };
+            const registry = getOutputRegistry();
+
+            // Notify the primary contributor before updating state so Ag-Grid can
+            // call applyTransaction() incrementally rather than diffing the full rows array.
+            registry.notifyChunkRows({ resultSetIndex: p.resultSetIndex, rows: p.rows });
+
+            // Check if this result set is already over the limit
+            const currentCtx = outputByFileIdRef.current.get(targetFileId) ?? IDLE_OUTPUT_CONTEXT;
+            const currentSet = currentCtx.resultSets.find((rs) => rs.resultSetIndex === p.resultSetIndex);
+
+            if (currentSet?.rowLimitExceeded) {
+              // Pipe overflow rows to the export file — do not accumulate in memory
+              void window.appShell.appendExportChunk({
+                executionId,
+                resultSetIndex: p.resultSetIndex,
+                rows: p.rows
+              });
+              return;
+            }
+
+            updateOutputContextForFile(targetFileId, (prev) => {
+              const sets = prev.resultSets.map((rs): ResultSet => {
+                if (rs.resultSetIndex !== p.resultSetIndex) return rs;
+                const combined = [...rs.rows, ...p.rows];
+                if (combined.length >= DEFAULT_OUTPUT_LIMITS.maxRows) {
+                  // Open the export stream for this result set (fire-and-forget; path resolved on completed)
+                  void window.appShell.openExportStream({ executionId, resultSetIndex: p.resultSetIndex });
+                  return { ...rs, rows: combined.slice(0, DEFAULT_OUTPUT_LIMITS.maxRows), rowLimitExceeded: true };
+                }
+                return { ...rs, rows: combined };
+              });
+              return { ...prev, resultSets: sets };
+            });
           } else if (event.method === "query.completed") {
-            const p = event.params as { metrics?: { durationMs?: number; rowCount?: number } };
+            const p = event.params as { metrics?: { durationMs?: number; rowCount?: number }; features?: string[] };
             activeExecutionByFileIdRef.current.delete(targetFileId);
             updateOutputContextForFile(targetFileId, (prev) => ({
               ...prev,
               state: "completed",
               metrics: p.metrics ?? null,
+              features: p.features ?? ["rows"],
               progress: null
             }));
+
+            // Finalize any open export streams and patch exportPath back into the result set
+            const ctx = outputByFileIdRef.current.get(targetFileId) ?? IDLE_OUTPUT_CONTEXT;
+            for (const rs of ctx.resultSets) {
+              if (rs.rowLimitExceeded) {
+                void window.appShell
+                  .finalizeExportStream({ executionId, resultSetIndex: rs.resultSetIndex })
+                  .then(({ exportPath }) => {
+                    updateOutputContextForFile(targetFileId, (prev) => ({
+                      ...prev,
+                      resultSets: prev.resultSets.map((s) =>
+                        s.resultSetIndex === rs.resultSetIndex ? { ...s, exportPath } : s
+                      )
+                    }));
+                  });
+              }
+            }
           } else if (event.method === "query.failed") {
             const p = event.params as { error?: { code: string; message: string } };
             activeExecutionByFileIdRef.current.delete(targetFileId);
@@ -132,7 +187,7 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
       } catch (error) {
         activeExecutionByFileIdRef.current.delete(targetFileId);
         updateOutputContextForFile(targetFileId, () => ({
-          ...IDLE_CONTEXT,
+          ...IDLE_OUTPUT_CONTEXT,
           state: "failed",
           error: {
             code: "EXECUTE_ERROR",
@@ -160,7 +215,6 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
     updateOutputContextForFile(targetFileId, (prev) => ({ ...prev, state: "cancelled", progress: null }));
   }, [file?.fileId, updateOutputContextForFile]);
 
-  // Keep refs in sync with latest handler instances
   useEffect(() => {
     handleExecuteRef.current = handleExecute;
   }, [handleExecute]);
@@ -169,7 +223,6 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
     handleCancelRef.current = handleCancel;
   }, [handleCancel]);
 
-  // Subscribe once to service requests triggered by keybindings/commands
   useEffect(() => {
     const service = getQueryEngineService();
     const unsubExec = service.onExecuteRequest(() => handleExecuteRef.current());
@@ -180,7 +233,6 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
     };
   }, []);
 
-  // Cleanup active execution on unmount
   useEffect(() => {
     return () => {
       for (const execution of activeExecutionByFileIdRef.current.values()) {
@@ -190,7 +242,6 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
     };
   }, []);
 
-  // Draggable divider between text and output panes
   const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     isDraggingRef.current = true;
@@ -261,7 +312,12 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
         <div className="query-editor-divider" onMouseDown={handleDividerMouseDown} />
 
         <div className="query-editor-output-pane">
-          <OutputPanel context={outputContext} />
+          <OutputPanel
+            context={outputContext}
+            selectedPrimaryId={selectedPrimaryId}
+            onSelectPrimary={handleSelectPrimary}
+            onExportOpen={(path) => void window.appShell.openPath(path)}
+          />
         </div>
       </div>
     </div>

@@ -166,6 +166,53 @@
   overflow: auto;
 }
 
+.query-output-primary {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.query-output-adhoc {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.query-output-adhoc-title {
+  padding: 3px 10px;
+  font-size: var(--ui-font-size-sm);
+  color: var(--text-1);
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.query-output-adhoc-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.query-output-export-banner {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: var(--ui-font-size-sm);
+  color: var(--text-1);
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.query-output-export-open {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: var(--ui-font-size-sm);
+  padding: 0;
+  text-decoration: underline;
+}
+
 .queryengine-tab-state-running .shell-editor-tab-button {
   background: rgba(18, 90, 58, 0.42);
   color: #d8fbe8;
