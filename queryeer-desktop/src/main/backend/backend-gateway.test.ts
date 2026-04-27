@@ -175,10 +175,12 @@ const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
     onEnvelope?.(response);
   };
 
-  const gateway = new BackendGateway((envelopeHandler, onDiagnostic) => {
-    onEnvelope = envelopeHandler;
-    void onDiagnostic;
-    return transport;
+  const gateway = new BackendGateway({
+    mode: "mock-stdio",
+    create: (callbacks) => {
+      onEnvelope = callbacks.onEnvelope;
+      return transport;
+    }
   });
 
   return {

@@ -1,6 +1,6 @@
 import type { Capability, RuntimeStatusResult } from "./Types.js";
 
-export type BackendGatewayMode = "mock-stdio" | "stdio-process";
+export type BackendGatewayMode = "mock-stdio" | "dev-maven" | "prod-jar";
 
 export type BackendGatewayState = "starting" | "healthy" | "unavailable";
 
