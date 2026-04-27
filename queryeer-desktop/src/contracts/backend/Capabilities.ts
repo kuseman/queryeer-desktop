@@ -2,12 +2,14 @@ import type { Capability } from "./Types.js";
 
 export const BACKEND_REQUEST_CAPABILITIES: ReadonlyArray<Capability> = [
   "backend.runtimeStatus",
+  "security.session.open",
+  "security.session.close",
+  "security.vault.changed",
   "health.ping",
   "query.execute",
   "query.cancel",
   "engine.invoke",
   "connection.upsert",
-  "credential.store",
   "file.open",
   "file.close",
   "file.bind"

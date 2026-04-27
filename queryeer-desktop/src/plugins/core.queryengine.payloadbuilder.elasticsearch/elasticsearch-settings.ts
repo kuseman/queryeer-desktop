@@ -1,4 +1,5 @@
 import { getCoreSettingsService } from "../core.settings/service";
+import type { SecretRefValue } from "../../contracts/security/Security";
 
 export const PAYLOADBUILDER_ELASTICSEARCH_CONNECTIONS_SETTING_ID =
   "core.queryengine.payloadbuilder.elasticsearch.connections";
@@ -9,7 +10,7 @@ export type ElasticsearchConnectionDefinition = {
   endpoint: string;
   authType: "NONE" | "BASIC";
   authUsername?: string;
-  authPassword?: string;
+  authPassword?: string | SecretRefValue;
   enabled: boolean;
 };
 
@@ -23,6 +24,17 @@ function normalizeText(value: unknown): string {
 
 function normalizeAuthType(value: unknown): "NONE" | "BASIC" {
   return normalizeText(value).toUpperCase() === "BASIC" ? "BASIC" : "NONE";
+}
+
+function normalizeSecretRefValue(value: unknown): SecretRefValue | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const secretRef = (value as { secretRef?: unknown }).secretRef;
+  return typeof secretRef === "string" && secretRef.trim()
+    ? { secretRef: secretRef.trim() }
+    : undefined;
 }
 
 export function parseElasticsearchConnectionDefinitions(raw: unknown): ElasticsearchConnectionDefinition[] {
@@ -51,7 +63,8 @@ export function parseElasticsearchConnectionDefinitions(raw: unknown): Elasticse
       endpoint,
       authType,
       authUsername: normalizeText(entry.authUsername) || undefined,
-      authPassword: normalizeText(entry.authPassword) || undefined,
+      authPassword:
+        normalizeSecretRefValue(entry.authPassword) || normalizeText(entry.authPassword) || undefined,
       enabled: typeof entry.enabled === "boolean" ? entry.enabled : true
     });
   }

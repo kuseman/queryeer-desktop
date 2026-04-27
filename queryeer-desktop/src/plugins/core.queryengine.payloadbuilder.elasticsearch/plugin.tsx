@@ -14,7 +14,12 @@ export const coreQueryEnginePayloadbuilderElasticsearchPlugin: Plugin = {
     version: "0.1.0",
     kind: "core",
     description: "Elasticsearch catalog contribution for payloadbuilder",
-    dependencies: ["core.queryengine.payloadbuilder", "core.queryengine", "core.settings"],
+    dependencies: [
+      "core.queryengine.payloadbuilder",
+      "core.queryengine",
+      "core.settings",
+      "core.security"
+    ],
     providesCapabilities: ["query.engine.payloadbuilder.elasticsearch"]
   },
   activate: (context) => {

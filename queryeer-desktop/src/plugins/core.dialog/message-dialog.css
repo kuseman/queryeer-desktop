@@ -1,0 +1,77 @@
+.dialog-message-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--modal-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1290;
+  backdrop-filter: blur(3px);
+}
+
+.dialog-message-modal {
+  width: min(520px, calc(100vw - 24px));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: linear-gradient(180deg, var(--bg-0), var(--bg-1));
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.dialog-message-header h2 {
+  margin: 0;
+  font-size: var(--ui-font-size-title);
+}
+
+.dialog-message-body {
+  margin: 0;
+  color: var(--text-0);
+}
+
+.dialog-message-body.severity-info {
+  color: var(--text-0);
+}
+
+.dialog-message-body.severity-warning {
+  color: var(--state-warning-soft);
+}
+
+.dialog-message-body.severity-error {
+  color: var(--state-error-soft);
+}
+
+.dialog-message-detail {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-overlay-weak);
+  color: var(--text-1);
+  padding: 8px;
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  font-size: var(--ui-font-size-xs);
+}
+
+.dialog-message-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dialog-message-button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-overlay-soft);
+  color: var(--text-0);
+  min-height: 30px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.dialog-message-button.primary {
+  border-color: var(--accent);
+}

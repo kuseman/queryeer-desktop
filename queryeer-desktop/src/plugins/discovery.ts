@@ -14,6 +14,7 @@ const moduleLoaders: Partial<Record<string, PluginLoader>> = {
   "./core.workspace/module": async () => import("./core.workspace/module"),
   "./core.commands/module": async () => import("./core.commands/module"),
   "./core.settings/module": async () => import("./core.settings/module"),
+  "./core.security/module": async () => import("./core.security/module"),
   "./core.menu/module": async () => import("./core.menu/module"),
   "./core.observability/module": async () => import("./core.observability/module"),
   "./core.editor/module": async () => import("./core.editor/module"),

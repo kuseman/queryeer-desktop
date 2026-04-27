@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { CollectionSettingsListEditor } from "../core.settings/CollectionSettingsListEditor";
+import {
+  CollectionSettingsListEditor,
+  useCollectionSettingsPersistence
+} from "../core.settings/CollectionSettingsListEditor";
+import { PasswordFieldInput } from "../core.settings/PasswordFieldInput";
 import {
   parseElasticsearchConnectionDefinitions,
   type ElasticsearchConnectionDefinition
 } from "./elasticsearch-settings";
+import type { SecretRefValue } from "../../contracts/security/Security";
 
 type Row = {
   id: string;
@@ -12,7 +17,7 @@ type Row = {
   endpoint: string;
   authType: "NONE" | "BASIC";
   authUsername: string;
-  authPassword: string;
+  authPassword?: SecretRefValue;
   enabled: boolean;
 };
 
@@ -41,27 +46,40 @@ export function ElasticsearchConnectionsSettingsEditor({ value, readonly, setVal
     }
   }, [rows, selectedRowId]);
 
-  const syncRows = (nextRows: Row[], nextSelectedId?: string): void => {
+  const { persistNow, persistDebounced } = useCollectionSettingsPersistence<Row>({
+    persist: (nextRows) => {
+      setValue(
+        nextRows.map((row) => ({
+          connectionId: row.connectionId,
+          title: row.title || undefined,
+          endpoint: row.endpoint,
+          authType: row.authType,
+          authUsername: row.authUsername || undefined,
+          authPassword: row.authPassword,
+          enabled: row.enabled
+        }))
+      );
+    }
+  });
+
+  const syncRows = (nextRows: Row[], nextSelectedId?: string, options?: { debouncePersist?: boolean }): void => {
     setRows(nextRows);
     if (nextSelectedId !== undefined) {
       setSelectedRowId(nextSelectedId);
     }
 
-    setValue(
-      nextRows.map((row) => ({
-        connectionId: row.connectionId,
-        title: row.title || undefined,
-        endpoint: row.endpoint,
-        authType: row.authType,
-        authUsername: row.authUsername || undefined,
-        authPassword: row.authPassword || undefined,
-        enabled: row.enabled
-      }))
-    );
+    if (options?.debouncePersist) {
+      persistDebounced(nextRows);
+      return;
+    }
+
+    persistNow(nextRows);
   };
 
   const updateRow = (id: string, patch: Partial<Row>): void => {
-    syncRows(rows.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+    syncRows(rows.map((row) => (row.id === id ? { ...row, ...patch } : row)), undefined, {
+      debouncePersist: true
+    });
   };
 
   const addRow = (): void => {
@@ -72,7 +90,6 @@ export function ElasticsearchConnectionsSettingsEditor({ value, readonly, setVal
       endpoint: "",
       authType: "NONE",
       authUsername: "",
-      authPassword: "",
       enabled: true
     };
     syncRows([...rows, next], next.id);
@@ -207,17 +224,17 @@ export function ElasticsearchConnectionsSettingsEditor({ value, readonly, setVal
                     />
                   </div>
                   <div className="payloadbuilder-settings-cell">
-                    <label className="payloadbuilder-catalog-label" htmlFor="payloadbuilder-es-connection-password">
+                    <label
+                      className="payloadbuilder-catalog-label"
+                      htmlFor={`payloadbuilder-es-connection-password-${row.id}`}
+                    >
                       Password
                     </label>
-                    <input
-                      id="payloadbuilder-es-connection-password"
-                      type="password"
-                      className="payloadbuilder-catalog-input"
-                      value={row.authPassword}
-                      readOnly={readonly}
-                      autoComplete="off"
-                      onChange={(event) => updateRow(row.id, { authPassword: event.target.value })}
+                    <PasswordFieldInput
+                      inputId={`payloadbuilder-es-connection-password-${row.id}`}
+                      valueRef={row.authPassword}
+                      readonly={readonly}
+                      onChangeRef={(nextRef) => updateRow(row.id, { authPassword: nextRef })}
                     />
                   </div>
                 </>
@@ -248,7 +265,10 @@ function toRows(definitions: ElasticsearchConnectionDefinition[]): Row[] {
     endpoint: definition.endpoint,
     authType: definition.authType,
     authUsername: definition.authUsername ?? "",
-    authPassword: definition.authPassword ?? "",
+    authPassword:
+      definition.authPassword && typeof definition.authPassword === "object"
+        ? definition.authPassword
+        : undefined,
     enabled: definition.enabled
   }));
 }
@@ -266,7 +286,10 @@ function mergeRows(previous: Row[], definitions: ElasticsearchConnectionDefiniti
       endpoint: definition.endpoint,
       authType: definition.authType,
       authUsername: definition.authUsername ?? "",
-      authPassword: definition.authPassword ?? "",
+      authPassword:
+        definition.authPassword && typeof definition.authPassword === "object"
+          ? definition.authPassword
+          : undefined,
       enabled: definition.enabled
     };
   });

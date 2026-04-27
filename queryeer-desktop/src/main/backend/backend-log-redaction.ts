@@ -8,7 +8,8 @@ const SENSITIVE_KEYS = [
   "clientSecret",
   "authorization",
   "connectionString",
-  "credential"
+  "credential",
+  "sessionKey"
 ];
 
 const REDACTED = "[REDACTED]";

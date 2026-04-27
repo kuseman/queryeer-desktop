@@ -1,0 +1,184 @@
+import { describe, expect, it, vi } from "vitest";
+import { CoreSecurityService } from "./service";
+
+const createService = (options?: {
+  response?: { accepted: boolean; reason?: string };
+  status?: { unlocked: boolean; hasPersistedVault: boolean; hasStoredMasterPassword: boolean };
+  prompt?: (options?: { title?: string; message?: string }) => string | null;
+}) => {
+  const response = options?.response ?? { accepted: true };
+  const status = options?.status ?? {
+    unlocked: false,
+    hasPersistedVault: false,
+    hasStoredMasterPassword: false
+  };
+  const dialog = {
+    showMessage: vi.fn(async () => ({ action: "ok" })),
+    showOpenDialog: vi.fn(),
+    showOpenFolder: vi.fn(),
+    showSaveDialog: vi.fn(),
+    showInputDialog: vi.fn(async (dialogOptions?: { title?: string; message?: string }) => {
+      const value = options?.prompt?.(dialogOptions);
+      if (value === null || value === undefined) {
+        return { canceled: true, value: undefined };
+      }
+      return { canceled: false, value };
+    })
+  };
+
+  const bridge = {
+    getStatus: vi.fn(async () => status),
+    unlock: vi.fn(async () => response),
+    unlockWithStored: vi.fn(async () => response),
+    lock: vi.fn(async () => ({ accepted: true })),
+    storeSecret: vi.fn(async () => ({ secretRef: "secret-ref-1" })),
+    resolveSecret: vi.fn(async () => ({ found: false })),
+    deleteSecret: vi.fn(async () => ({ deleted: true })),
+    rotateMasterPassword: vi.fn(async () => response)
+  };
+
+  const service = new CoreSecurityService(bridge, dialog);
+
+  return { service, dialog, bridge };
+};
+
+describe("CoreSecurityService", () => {
+  it("shows warning dialog when unlock succeeds with reason", async () => {
+    const { service, dialog } = createService({
+      response: {
+        accepted: true,
+        reason: "safeStorage unavailable"
+      }
+    });
+
+    await service.unlock("master");
+
+    expect(dialog.showMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        severity: "warning",
+        message: "safeStorage unavailable"
+      })
+    );
+  });
+
+  it("shows error dialog when unlock fails with reason", async () => {
+    const { service, dialog } = createService({
+      response: {
+        accepted: false,
+        reason: "invalid password"
+      }
+    });
+
+    await service.unlock("master");
+
+    expect(dialog.showMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        severity: "error",
+        message: "invalid password"
+      })
+    );
+  });
+
+  it("does not auto-unlock on first secret store when vault is locked", async () => {
+    const { service, bridge } = createService({
+      response: { accepted: true }
+    });
+
+    await expect(service.storeSecret("secret-value")).rejects.toThrow("Security vault is locked");
+
+    expect(bridge.unlock).not.toHaveBeenCalled();
+    expect(bridge.storeSecret).not.toHaveBeenCalled();
+  });
+
+  it("tries stored unlock first when startup mode uses safeStorage", async () => {
+    const { service, bridge } = createService({
+      status: {
+        unlocked: false,
+        hasPersistedVault: true,
+        hasStoredMasterPassword: true
+      },
+      response: { accepted: true }
+    });
+    vi.spyOn(service, "getUnlockMode").mockReturnValue("startup");
+    vi.spyOn(service, "getMasterPasswordStorage").mockReturnValue("safeStorage");
+
+    const unlocked = await service.ensureUnlockedForSecretAccess();
+
+    expect(unlocked).toBe(true);
+    expect(bridge.unlockWithStored).toHaveBeenCalledTimes(1);
+    expect(bridge.unlock).not.toHaveBeenCalled();
+  });
+
+  it("prompts for master password when interactive unlock is requested", async () => {
+    const prompt = vi.fn(() => "master-pass");
+    const { service, bridge } = createService({
+      status: {
+        unlocked: false,
+        hasPersistedVault: true,
+        hasStoredMasterPassword: false
+      },
+      response: { accepted: true },
+      prompt
+    });
+
+    const unlocked = await service.ensureUnlockedForSecretAccess({ interactive: true });
+
+    expect(unlocked).toBe(true);
+    expect(prompt).toHaveBeenCalledTimes(1);
+    expect(bridge.unlock).toHaveBeenCalledWith({
+      masterPassword: "master-pass",
+      masterPasswordStorage: "ask"
+    });
+  });
+
+  it("does not re-open prompt when first-use prompt is canceled", async () => {
+    const prompt = vi.fn(() => null);
+    const { service, dialog, bridge } = createService({
+      status: {
+        unlocked: false,
+        hasPersistedVault: true,
+        hasStoredMasterPassword: false
+      },
+      prompt
+    });
+
+    const unlocked = await service.ensureUnlockedForSecretAccess({ interactive: true });
+
+    expect(unlocked).toBe(false);
+    expect(prompt).toHaveBeenCalledTimes(1);
+    expect(dialog.showInputDialog).toHaveBeenCalledTimes(1);
+    expect(bridge.unlock).not.toHaveBeenCalled();
+  });
+
+  it("runs action without unlock when payload has no secret refs", async () => {
+    const { service, bridge } = createService({
+      status: {
+        unlocked: false,
+        hasPersistedVault: true,
+        hasStoredMasterPassword: false
+      }
+    });
+    const action = vi.fn(async () => 42);
+
+    const result = await service.runWithSecretsUnlocked({ safe: true }, action);
+
+    expect(result).toBe(42);
+    expect(action).toHaveBeenCalledTimes(1);
+    expect(bridge.unlock).not.toHaveBeenCalled();
+  });
+
+  it("requires unlock when payload contains secret refs", async () => {
+    const { service } = createService({
+      status: {
+        unlocked: false,
+        hasPersistedVault: true,
+        hasStoredMasterPassword: false
+      },
+      prompt: () => null
+    });
+
+    await expect(
+      service.runWithSecretsUnlocked({ authPassword: { secretRef: "secret-ref-1" } }, async () => true)
+    ).rejects.toThrow("Security vault is locked");
+  });
+});

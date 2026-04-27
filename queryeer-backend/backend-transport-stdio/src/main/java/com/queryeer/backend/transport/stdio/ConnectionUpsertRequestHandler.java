@@ -3,7 +3,6 @@ package com.queryeer.backend.transport.stdio;
 import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
-import com.queryeer.backend.contract.connection.ConnectionCredentialStatus;
 import com.queryeer.backend.contract.connection.ConnectionUpsertParams;
 import com.queryeer.backend.contract.connection.ConnectionUpsertResult;
 
@@ -35,7 +34,6 @@ public final class ConnectionUpsertRequestHandler implements RequestHandler
                         .isBlank() ? "conn-" + envelope.id()
                                 : params.connectionId();
 
-        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null,
-                new ConnectionUpsertResult(connectionId, 1L, ConnectionCredentialStatus.MISSING), null));
+        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, new ConnectionUpsertResult(connectionId, 1L), null));
     }
 }

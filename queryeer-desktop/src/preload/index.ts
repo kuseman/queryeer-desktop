@@ -26,6 +26,10 @@ import type {
   SettingsIndexDocument,
   SettingsModuleDocument
 } from "../contracts/settings/SettingsDocuments.js";
+import type {
+  SecurityMasterPasswordStorage,
+  SecurityStatus
+} from "../contracts/security/Security.js";
 
 type DialogShowMessageOptions = {
   title: string;
@@ -84,6 +88,21 @@ type AppShellApi = {
   getSettingsModule: (params: { moduleId: string }) => Promise<SettingsModuleDocument>;
   saveSettingsIndex: (document: SettingsIndexDocument) => Promise<{ accepted: boolean }>;
   saveSettingsModule: (params: { moduleId: string; document: SettingsModuleDocument }) => Promise<{ accepted: boolean }>;
+  getSecurityStatus: () => Promise<SecurityStatus>;
+  unlockSecurity: (params: {
+    masterPassword: string;
+    masterPasswordStorage: SecurityMasterPasswordStorage;
+  }) => Promise<{ accepted: boolean; reason?: string }>;
+  unlockSecurityWithStored: () => Promise<{ accepted: boolean; reason?: string }>;
+  lockSecurity: () => Promise<{ accepted: boolean }>;
+  storeSecret: (params: { plaintext: string; secretRef?: string }) => Promise<{ secretRef: string }>;
+  resolveSecret: (params: { secretRef: string }) => Promise<{ found: boolean; plaintext?: string }>;
+  deleteSecret: (params: { secretRef: string }) => Promise<{ deleted: boolean }>;
+  rotateSecurityMasterPassword: (params: {
+    oldMasterPassword: string;
+    newMasterPassword: string;
+    masterPasswordStorage: SecurityMasterPasswordStorage;
+  }) => Promise<{ accepted: boolean; reason?: string }>;
   saveWorkspaceBackup: (params: {
     fileId: string;
     text: string;
@@ -216,6 +235,30 @@ const appShellApi: AppShellApi = {
   },
   saveSettingsModule: async (params) => {
     return ipcRenderer.invoke("settings:save-module", params);
+  },
+  getSecurityStatus: async () => {
+    return ipcRenderer.invoke("security:get-status");
+  },
+  unlockSecurity: async (params) => {
+    return ipcRenderer.invoke("security:unlock", params);
+  },
+  unlockSecurityWithStored: async () => {
+    return ipcRenderer.invoke("security:unlock-with-stored");
+  },
+  lockSecurity: async () => {
+    return ipcRenderer.invoke("security:lock");
+  },
+  storeSecret: async (params) => {
+    return ipcRenderer.invoke("security:store-secret", params);
+  },
+  resolveSecret: async (params) => {
+    return ipcRenderer.invoke("security:resolve-secret", params);
+  },
+  deleteSecret: async (params) => {
+    return ipcRenderer.invoke("security:delete-secret", params);
+  },
+  rotateSecurityMasterPassword: async (params) => {
+    return ipcRenderer.invoke("security:rotate-master-password", params);
   },
   saveWorkspaceBackup: async (params) => {
     return ipcRenderer.invoke("workspace:save-backup", params);

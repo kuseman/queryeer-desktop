@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
 
 export type CollectionSettingsListItem = {
   id: string;
@@ -82,4 +82,46 @@ export function CollectionSettingsListEditor({
       <section className="settings-list-editor-details">{renderDetails(selectedId)}</section>
     </div>
   );
+}
+
+export function useCollectionSettingsPersistence<T>(options: {
+  persist: (items: T[]) => void;
+  debounceMs?: number;
+}): {
+  persistNow: (items: T[]) => void;
+  persistDebounced: (items: T[]) => void;
+} {
+  const { persist, debounceMs = 300 } = options;
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const persistNow = useCallback((items: T[]) => {
+    clearTimer();
+    persist(items);
+  }, [clearTimer, persist]);
+
+  const persistDebounced = useCallback((items: T[]) => {
+    clearTimer();
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      persist(items);
+    }, debounceMs);
+  }, [clearTimer, debounceMs, persist]);
+
+  useEffect(() => {
+    return () => {
+      clearTimer();
+    };
+  }, [clearTimer]);
+
+  return {
+    persistNow,
+    persistDebounced
+  };
 }

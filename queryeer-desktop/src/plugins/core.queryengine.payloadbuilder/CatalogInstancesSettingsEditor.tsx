@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { CollectionSettingsListEditor } from "../core.settings/CollectionSettingsListEditor";
+import {
+  CollectionSettingsListEditor,
+  useCollectionSettingsPersistence
+} from "../core.settings/CollectionSettingsListEditor";
 import {
   listPayloadbuilderCatalogContributions,
   subscribePayloadbuilderCatalogContributions
@@ -27,6 +30,18 @@ export function CatalogInstancesSettingsEditor({ value, readonly, setValue }: Pr
   const [rows, setRows] = useState<Row[]>(() => toRows(parseCatalogAliasDefinitions(value)));
   const [selectedRowId, setSelectedRowId] = useState<string | undefined>(() => rows[0]?.id);
   const [catalogRevision, setCatalogRevision] = useState(0);
+  const { persistNow, persistDebounced } = useCollectionSettingsPersistence<Row>({
+    persist: (nextRows) => {
+      setValue(
+        nextRows.map((row) => ({
+          alias: row.alias,
+          catalogId: row.catalogId,
+          title: row.title || undefined,
+          enabled: row.enabled
+        }))
+      );
+    }
+  });
 
   const catalogSuggestions = useMemo(() => {
     const suggestions = new Set<string>();
@@ -64,24 +79,22 @@ export function CatalogInstancesSettingsEditor({ value, readonly, setValue }: Pr
     }
   }, [rows, selectedRowId]);
 
-  const syncRows = (nextRows: Row[], nextSelectedId?: string): void => {
+  const syncRows = (nextRows: Row[], nextSelectedId?: string, options?: { debouncePersist?: boolean }): void => {
     setRows(nextRows);
     if (nextSelectedId !== undefined) {
       setSelectedRowId(nextSelectedId);
     }
-    setValue(
-      nextRows.map((row) => ({
-        alias: row.alias,
-        catalogId: row.catalogId,
-        title: row.title || undefined,
-        enabled: row.enabled
-      }))
-    );
+    if (options?.debouncePersist) {
+      persistDebounced(nextRows);
+      return;
+    }
+
+    persistNow(nextRows);
   };
 
   const updateRow = (id: string, patch: Partial<Row>): void => {
     const next = rows.map((row) => (row.id === id ? { ...row, ...patch } : row));
-    syncRows(next);
+    syncRows(next, undefined, { debouncePersist: true });
   };
 
   const removeRow = (id: string): void => {

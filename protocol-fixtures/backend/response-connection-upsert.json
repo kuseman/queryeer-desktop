@@ -4,7 +4,6 @@
   "id": "req-fixture-connection-upsert-1",
   "result": {
     "connectionId": "conn-fixture-1",
-    "version": 1,
-    "credentialStatus": "missing"
+    "version": 1
   }
 }

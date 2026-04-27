@@ -64,6 +64,18 @@ describe("bootstrapShell diagnostics wiring", () => {
       }),
       saveSettingsIndex: async () => ({ accepted: true }),
       saveSettingsModule: async () => ({ accepted: true }),
+      getSecurityStatus: async () => ({
+        unlocked: false,
+        hasPersistedVault: false,
+        hasStoredMasterPassword: false
+      }),
+      unlockSecurity: async () => ({ accepted: true }),
+      unlockSecurityWithStored: async () => ({ accepted: false }),
+      lockSecurity: async () => ({ accepted: true }),
+      storeSecret: async () => ({ secretRef: "secret-ref-1" }),
+      resolveSecret: async () => ({ found: false }),
+      deleteSecret: async () => ({ deleted: false }),
+      rotateSecurityMasterPassword: async () => ({ accepted: true }),
       saveWorkspaceBackup: async () => ({ backupUri: "file:///backup" }),
       purgeWorkspaceBackups: async () => ({ purged: 0 }),
       listWorkspaceBackups: async () => ({ backupPaths: [] }),

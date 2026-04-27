@@ -43,11 +43,10 @@ Status: architecture reference.
 
 ## 3. Secrets
 
-**Rule**: Plaintext secrets never travel through the protocol after `credential.store`. Java holds encrypted blobs, retrieves via handles, decrypts in-process at the moment of use.
+**Rule**: Secret handling is owned by the desktop security boundary and is not currently part of the Java wire protocol.
 
-- Renderer collects credentials in UI; passes through preload to main.
-- Main forwards `credential.store` to Java once.
-- All subsequent `query.execute` / `connection.upsert` use a `connectionId` handle; never password fields.
+- Renderer collects credentials in UI and interacts with main-process security APIs.
+- `query.execute` / `connection.upsert` protocol payloads do not carry secret fields.
 - Logs in any process must redact known sensitive keys (already enforced in main + Java runner).
 
 ## 4. State authority

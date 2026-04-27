@@ -149,20 +149,6 @@ const testFileBindFixtures = () => {
   assert(typeof response.result?.backendVersion === "number", "file.bind backendVersion missing");
 };
 
-const testCredentialStoreFixtures = () => {
-  const request = readFixture("request-credential-store.json");
-  const response = readFixture("response-credential-store.json");
-
-  assertEnvelopeBase(request);
-  assertEnvelopeBase(response);
-  assert(request.type === "request", "Credential store request fixture must be request");
-  assert(response.type === "response", "Credential store response fixture must be response");
-  assert(request.method === "credential.store", "Unexpected credential.store method");
-  assert(request.id === response.id, "Credential store request/response id mismatch");
-  assert(response.result && typeof response.result === "object", "Credential store result is missing");
-  assert(request.params?.connectionId === response.result?.connectionId, "Credential store connectionId mismatch");
-};
-
 const testNotificationFixture = (name, method) => {
   const notification = readFixture(name);
   assertEnvelopeBase(notification);
@@ -177,7 +163,6 @@ testPingFixtures();
 testExecuteFixtures();
 testCancelFixtures();
 testConnectionUpsertFixtures();
-testCredentialStoreFixtures();
 testFileOpenFixtures();
 testFileCloseFixtures();
 testFileBindFixtures();

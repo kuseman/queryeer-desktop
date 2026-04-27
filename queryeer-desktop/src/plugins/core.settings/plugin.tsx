@@ -24,17 +24,6 @@ export const coreSettingsPlugin: Plugin = {
           tags: ["search", "filter"],
           type: "boolean",
           defaultValue: false
-        },
-        {
-          id: "core.settings.secrets.placeholder",
-          moduleId: "core.settings",
-          title: "Secret Storage",
-          description: "Placeholder field showing that secure secret storage is not yet available.",
-          sectionPath: ["Settings", "Security"],
-          tags: ["secret", "key", "token"],
-          type: "string",
-          defaultValue: "",
-          isSecret: true
         }
       ]
     });

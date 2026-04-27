@@ -7,6 +7,10 @@ import type {
   SettingsIndexDocument,
   SettingsModuleDocument
 } from "../settings/SettingsDocuments.js";
+import type {
+  SecurityMasterPasswordStorage,
+  SecurityStatus
+} from "../security/Security.js";
 
 type RecentFileEntry = {
   uri: string;
@@ -49,6 +53,18 @@ export interface ShellApi {
   getSettingsModule: (params: { moduleId: string }) => Promise<SettingsModuleDocument>;
   saveSettingsIndex: (document: SettingsIndexDocument) => Promise<{ accepted: boolean }>;
   saveSettingsModule: (params: { moduleId: string; document: SettingsModuleDocument }) => Promise<{ accepted: boolean }>;
+  getSecurityStatus: () => Promise<SecurityStatus>;
+  unlockSecurity: (params: { masterPassword: string; masterPasswordStorage: SecurityMasterPasswordStorage }) => Promise<{ accepted: boolean; reason?: string }>;
+  unlockSecurityWithStored: () => Promise<{ accepted: boolean; reason?: string }>;
+  lockSecurity: () => Promise<{ accepted: boolean }>;
+  storeSecret: (params: { plaintext: string; secretRef?: string }) => Promise<{ secretRef: string }>;
+  resolveSecret: (params: { secretRef: string }) => Promise<{ found: boolean; plaintext?: string }>;
+  deleteSecret: (params: { secretRef: string }) => Promise<{ deleted: boolean }>;
+  rotateSecurityMasterPassword: (params: {
+    oldMasterPassword: string;
+    newMasterPassword: string;
+    masterPasswordStorage: SecurityMasterPasswordStorage;
+  }) => Promise<{ accepted: boolean; reason?: string }>;
   saveWorkspaceBackup: (params: { fileId: string; text: string }) => Promise<{ backupUri: string }>;
   purgeWorkspaceBackups: (params: { fileId: string }) => Promise<{ purged: number }>;
   listWorkspaceBackups: (params: { fileId: string }) => Promise<{ backupPaths: string[] }>;

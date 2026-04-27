@@ -10,6 +10,8 @@ import { CoreMenuBar } from "../../plugins/core.menu/MenuBar";
 import type { RendererWorkspaceService } from "../workspace/workspace-service";
 import { Toolbar, StatusBar, Sidebar, SidebarDivider, EditorTabs, EditorPane } from "../../plugins/core.layout";
 import { SettingsModalHost } from "../../plugins/core.settings/SettingsModalHost";
+import { InputDialogHost } from "../../plugins/core.dialog/InputDialogHost";
+import { MessageDialogHost } from "../../plugins/core.dialog/MessageDialogHost";
 import { confirmCloseDirtyFile } from "./close-file-guard";
 import { filterSidebarViews } from "./sidebar-view-filter";
 import "./shell-app.css";
@@ -435,6 +437,8 @@ export function ShellApp({
       )}
 
       <SettingsModalHost />
+      <MessageDialogHost />
+      <InputDialogHost />
     </div>
   );
 }

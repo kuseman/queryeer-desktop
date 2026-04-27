@@ -13,7 +13,9 @@ describe("elasticsearch settings", () => {
         endpoint: "https://es.internal",
         authType: "BASIC",
         authUsername: "elastic",
-        authPassword: "secret",
+        authPassword: {
+          secretRef: "secret-ref"
+        },
         enabled: false
       }
     ]);
@@ -34,7 +36,9 @@ describe("elasticsearch settings", () => {
         endpoint: "https://es.internal",
         authType: "BASIC",
         authUsername: "elastic",
-        authPassword: "secret",
+        authPassword: {
+          secretRef: "secret-ref"
+        },
         enabled: false
       }
     ]);

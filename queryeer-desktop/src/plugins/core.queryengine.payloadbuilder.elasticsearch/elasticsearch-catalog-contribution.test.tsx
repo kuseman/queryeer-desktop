@@ -18,7 +18,9 @@ vi.mock("./elasticsearch-settings", () => ({
       endpoint: "https://localhost:9200",
       authType: "BASIC",
       authUsername: "elastic",
-      authPassword: "secret",
+      authPassword: {
+        secretRef: "secret-ref"
+      },
       enabled: true
     }
   ]
@@ -96,7 +98,9 @@ describe("payloadbuilder elasticsearch catalog contribution", () => {
           endpoint: "https://localhost:9200",
           authType: "BASIC",
           authUsername: "elastic",
-          authPassword: "secret"
+          authPassword: {
+            secretRef: "secret-ref"
+          }
         }
       }
     });

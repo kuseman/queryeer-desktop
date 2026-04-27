@@ -114,6 +114,42 @@
   background: var(--surface-overlay-weak);
 }
 
+.settings-tree-group.is-settings-node {
+  min-height: 28px;
+  border: none;
+  background: transparent;
+}
+
+.settings-tree-group.is-settings-node .settings-tree-label {
+  color: var(--text-0);
+  font-size: var(--ui-font-size-sm);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.settings-tree-group.is-settings-node:hover {
+  background: transparent;
+}
+
+.settings-tree-group.is-settings-node.is-selected {
+  border: none;
+  background: transparent;
+}
+
+.settings-tree-group.is-settings-node.is-selected .settings-tree-label {
+  color: var(--text-0);
+}
+
+.settings-tree-group.is-selected {
+  border-color: var(--accent);
+  background: var(--state-select-bg);
+}
+
+.settings-tree-group.is-selected:hover {
+  background: var(--state-select-bg-hover);
+}
+
 .settings-tree-chevron {
   width: 12px;
   color: var(--text-2);
@@ -169,6 +205,11 @@
 .settings-detail {
   overflow: auto;
   padding: 12px;
+}
+
+.settings-group-list {
+  display: grid;
+  gap: 12px;
 }
 
 .settings-card h3 {
@@ -237,6 +278,12 @@
 
 .settings-apply-button:hover {
   background: var(--titlebar-hover);
+}
+
+.settings-password-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .settings-empty {

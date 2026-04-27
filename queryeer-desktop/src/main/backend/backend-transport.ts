@@ -91,27 +91,65 @@ export class StdioProcessBackendTransport implements BackendTransport {
       "exec:java"
     ];
 
-    this.process =
-      process.platform === "win32"
-        ? spawn(
-            "cmd.exe",
-            [
-              "/d",
-              "/s",
-              "/c",
-              `${mvnwPath} ${args.join(" ")}`
-            ],
-            {
-              cwd: repoRoot,
-              stdio: ["pipe", "pipe", "pipe"],
-              windowsHide: true
-            }
-          )
-        : spawn(mvnwPath, args, {
+    const debugArgs = "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:5005";
+    const isDev = true; // TODO: fix
+
+    // Construct your environment
+    const spawnEnv = { 
+      ...process.env, 
+      MAVEN_OPTS: isDev ? debugArgs : "" 
+    };
+
+    this.process = process.platform === "win32"
+      ? spawn(
+          "cmd.exe",
+          [
+            "/d", "/s", "/c",
+            `${mvnwPath} ${args.join(" ")}`
+          ],
+          {
             cwd: repoRoot,
             stdio: ["pipe", "pipe", "pipe"],
-            windowsHide: true
-          });
+            windowsHide: true,
+            env: spawnEnv // Pass the env here
+          }
+        )
+      : spawn(mvnwPath, args, {
+          cwd: repoRoot,
+          stdio: ["pipe", "pipe", "pipe"],
+          windowsHide: true,
+          env: spawnEnv // And here
+        });
+
+    // this.process =
+    //   process.platform === "win32"
+    //     ? spawn(
+    //         "cmd.exe",
+    //         [
+    //           "/d",
+    //           "/s",
+    //           "/c",
+    //           `${mvnwPath} ${args.join(" ")}`
+    //         ],
+    //         {
+    //           cwd: repoRoot,
+    //           stdio: ["pipe", "pipe", "pipe"],
+    //           windowsHide: true,
+    //           env: {
+    //             ...process.env,
+    //             MAVEN_OPTS: debugArgs
+    //           }
+    //         }
+    //       )
+    //     : spawn(mvnwPath, args, {
+    //         cwd: repoRoot,
+    //         stdio: ["pipe", "pipe", "pipe"],
+    //         windowsHide: true,
+    //         env: {
+    //           ...process.env,
+    //           MAVEN_OPTS: debugArgs
+    //         }
+    //       });
 
     this.stdinBroken = false;
     // We consider the transport writable as soon as the process is spawned.
