@@ -5,6 +5,10 @@ import { ipcMain } from "electron";
 import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
 import { fileUriToPath } from "../contracts/files/Resolvers.js";
 import { BackendGateway } from "./backend/backend-gateway.js";
+import { DevBackendTransport } from "./backend/backend-transport-dev.js";
+import { ProdBackendTransport } from "./backend/backend-transport-prod.js";
+import { MockBackendTransport } from "./backend/backend-transport.js";
+import type { BackendTransportFactory } from "./backend/backend-transport.js";
 import { chokidarWatcherFactory } from "./file-watcher/chokidar-watcher-factory.js";
 import { FileWatcherMainService } from "./file-watcher/file-watcher-service.js";
 import { DialogMainService } from "./dialog/dialog-service.js";
@@ -25,7 +29,28 @@ import { SecurityService } from "./security/security-service.js";
 import { defaultSecurityDirPath, VaultStore } from "./security/vault-store.js";
 
 const isDev = !app.isPackaged;
-const backendGateway = new BackendGateway();
+
+function createBackendFactory(): BackendTransportFactory {
+  if (app.isPackaged) {
+    return {
+      mode: "prod-jar",
+      create: (callbacks) => new ProdBackendTransport(callbacks)
+    };
+  }
+  if (process.env.QUERYEER_BACKEND_STDIO === "1") {
+    const devState = { dependenciesPrepared: false };
+    return {
+      mode: "dev-maven",
+      create: (callbacks) => new DevBackendTransport(callbacks, devState)
+    };
+  }
+  return {
+    mode: "mock-stdio",
+    create: (callbacks) => new MockBackendTransport(callbacks.onEnvelope)
+  };
+}
+
+const backendGateway = new BackendGateway(createBackendFactory());
 const dialogService = new DialogMainService();
 const menuService = new MenuService();
 const fileWatcherService = new FileWatcherMainService({

@@ -5,7 +5,7 @@ import {
   type QueryCancelParams
 } from "../../contracts/backend/index.js";
 import { BackendGateway } from "./backend-gateway.js";
-import { StdioProcessBackendTransport, type TransportDiagnostic } from "./backend-transport.js";
+import { DevBackendTransport } from "./backend-transport-dev.js";
 
 const INTEGRATION_STARTUP_TIMEOUT = 120_000;
 
@@ -25,10 +25,11 @@ describe("Backend E2E Integration", () => {
   let gateway: BackendGateway;
 
   beforeAll(async () => {
-    gateway = new BackendGateway(
-      (onEnvelope, onDiagnostic: (event: TransportDiagnostic) => void) =>
-        new StdioProcessBackendTransport(onEnvelope, onDiagnostic)
-    );
+    const devState = { dependenciesPrepared: false };
+    gateway = new BackendGateway({
+      mode: "dev-maven",
+      create: (callbacks) => new DevBackendTransport(callbacks, devState)
+    });
     globalGateway = gateway;
     await gateway.start();
   }, INTEGRATION_STARTUP_TIMEOUT);

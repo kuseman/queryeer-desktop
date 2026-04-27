@@ -37,11 +37,8 @@ import { BackendLogBuffer } from "./backend-log-buffer.js";
 import { redactErrorMessage, redactLogMessage } from "./backend-log-redaction.js";
 import { BackendPendingRequestMap } from "./backend-request-pending-map.js";
 import { BackendStatusStore } from "./backend-status-store.js";
-import {
-  MockBackendTransport,
-  StdioProcessBackendTransport,
-  type BackendTransport
-} from "./backend-transport.js";
+import { WatchdogBackendTransport } from "./backend-transport-watchdog.js";
+import type { BackendTransport, BackendTransportFactory } from "./backend-transport.js";
 
 type GatewayLogLevel = "trace" | "debug" | "info" | "warn" | "error";
 
@@ -64,16 +61,7 @@ export class BackendGateway {
   private tracePayloads = false;
   private logFlowEnabled = true;
 
-  public constructor(
-    transportFactory?: (
-      onEnvelope: (envelope: BackendEnvelope) => void,
-      onDiagnostic: (event: {
-        level: "debug" | "info" | "warn" | "error";
-        source: "transport" | "backend" | "backend-console";
-        message: string;
-      }) => void
-    ) => BackendTransport
-  ) {
+  public constructor(factory: BackendTransportFactory) {
     const onDiagnostic = ({
       level,
       message,
@@ -94,20 +82,14 @@ export class BackendGateway {
       this.statusStore.setState("unavailable", message);
     };
 
-    if (transportFactory) {
-      this.transport = transportFactory(
-        (envelope) => this.onBackendEnvelope(envelope),
+    this.transport = new WatchdogBackendTransport(
+      factory,
+      {
+        onEnvelope: (envelope) => this.onBackendEnvelope(envelope),
         onDiagnostic
-      );
-    } else {
-      const useStdio = process.env.QUERYEER_BACKEND_STDIO === "1";
-      this.transport = useStdio
-        ? new StdioProcessBackendTransport(
-            (envelope) => this.onBackendEnvelope(envelope),
-            onDiagnostic
-          )
-        : new MockBackendTransport((envelope) => this.onBackendEnvelope(envelope));
-    }
+      },
+      () => this.doRestartSequence()
+    );
 
     this.statusStore.initializeMode(this.transport.mode);
     this.syncExecutionSnapshot();
@@ -351,6 +333,35 @@ export class BackendGateway {
       this.appendLog("error", "gateway", `Backend startup failed: ${message}`);
       this.statusStore.setState("unavailable", message);
     }
+  }
+
+  private async doRestartSequence(): Promise<void> {
+    const inner = async (): Promise<void> => {
+      this.appendLog("info", "gateway", "Backend restart sequence initiated");
+      this.statusStore.setState("starting");
+
+      if (this.pingIntervalHandle) {
+        clearInterval(this.pingIntervalHandle);
+        this.pingIntervalHandle = null;
+      }
+      this.pending.rejectAll(new Error("Backend restarted"));
+
+      try {
+        await this.performHandshake();
+        await this.performPing();
+        await this.performRuntimeStatusSync();
+        this.startPingLoop();
+        this.statusStore.setState("healthy");
+        this.appendLog("info", "gateway", "Backend restart sequence completed");
+      } catch (error) {
+        const message = redactErrorMessage(error);
+        this.appendLog("error", "gateway", `Backend restart sequence failed: ${message}`);
+        this.statusStore.setState("unavailable", message);
+      }
+    };
+
+    this.startupPromise = inner();
+    await this.startupPromise;
   }
 
   private async waitUntilHealthy(timeoutMs: number): Promise<void> {

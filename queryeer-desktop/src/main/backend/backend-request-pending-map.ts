@@ -55,6 +55,14 @@ export class BackendPendingRequestMap {
     clearTimeout(entry.timeout);
   }
 
+  public rejectAll(reason: Error): void {
+    for (const [id, entry] of this.pending) {
+      this.pending.delete(id);
+      clearTimeout(entry.timeout);
+      entry.handlers.onReject(reason);
+    }
+  }
+
   public size(): number {
     return this.pending.size;
   }

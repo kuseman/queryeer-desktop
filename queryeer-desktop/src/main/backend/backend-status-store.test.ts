@@ -7,8 +7,8 @@ describe("BackendStatusStore", () => {
     expect(store.get().mode).toBe("mock-stdio");
     expect(store.get().state).toBe("starting");
 
-    store.initializeMode("stdio-process");
-    expect(store.get().mode).toBe("stdio-process");
+    store.initializeMode("dev-maven");
+    expect(store.get().mode).toBe("dev-maven");
   });
 
   it("updates handshake and ping details", () => {
