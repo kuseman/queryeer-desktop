@@ -1,0 +1,83 @@
+import type { ReactNode } from "react";
+
+export type ExecutionState = "idle" | "running" | "completed" | "failed" | "cancelled";
+
+export type Column = { name: string; type: string };
+
+export type ResultSet = {
+  resultSetIndex: number;
+  schema: { columns: Column[] };
+  rows: unknown[][];
+  /**
+   * True once in-memory rows hit DEFAULT_OUTPUT_LIMITS.maxRows.
+   * All rows beyond the limit are streamed to exportPath instead of held in memory.
+   */
+  rowLimitExceeded: boolean;
+  /**
+   * Absolute path to the temp file containing all rows (no cap).
+   * Populated after query.completed finalizes the export stream.
+   * Undefined while the export stream is still open.
+   */
+  exportPath?: string;
+};
+
+export type OutputContext = {
+  state: ExecutionState;
+  resultSets: ResultSet[];
+  /**
+   * null     = features not yet known (query still running)
+   * string[] = resolved from backend on query.completed
+   *
+   * OutputPanel uses this to decide which ad-hoc contributors to open alongside
+   * the primary contributor.
+   */
+  features: string[] | null;
+  metrics: { durationMs?: number; rowCount?: number } | null;
+  error: { code: string; message: string } | null;
+  progress: { percent?: number; message?: string } | null;
+};
+
+export type RowChunk = {
+  resultSetIndex: number;
+  rows: unknown[][];
+};
+
+/**
+ * Registered by an output plugin. Two modes:
+ *
+ * "primary" — competes for the main output surface. The highest-priority primary
+ *             contributor whose capability is in context.features is selected
+ *             automatically. The user can override this selection via the UI.
+ *
+ * "adhoc"   — opens a parallel panel automatically when its capability appears in
+ *             context.features. Not user-selectable as primary.
+ */
+export type OutputContributor = {
+  id: string;
+  /** The feature this contributor handles, e.g. "rows", "plan", "text". */
+  capability: string;
+  mode: "primary" | "adhoc";
+  title: string;
+  /** Lower number = higher priority in auto-resolution. Defaults to 100. */
+  priority?: number;
+  render: (context: OutputContext) => ReactNode;
+  /**
+   * Optional incremental hook called before the context state update on every
+   * chunkRows event. Lets Ag-Grid call applyTransaction() without a full React
+   * re-render. Only invoked for the currently selected primary contributor.
+   */
+  onChunkRows?: (chunk: RowChunk) => void;
+};
+
+export type OutputLimits = { maxRows: number };
+
+export const DEFAULT_OUTPUT_LIMITS: OutputLimits = { maxRows: 100_000 };
+
+export const IDLE_OUTPUT_CONTEXT: OutputContext = {
+  state: "idle",
+  resultSets: [],
+  features: null,
+  metrics: null,
+  error: null,
+  progress: null,
+};

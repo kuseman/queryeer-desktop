@@ -1,5 +1,5 @@
 import type { Plugin } from "../../contracts/plugin/Plugin";
-import type { OutputContext } from "../core.queryengine/output/OutputRegistry";
+import type { OutputContext, ResultSet } from "../../contracts/extensions/OutputExtension";
 import { getOutputRegistry } from "../core.queryengine/output/OutputRegistry";
 
 function ResultsTable({
@@ -7,7 +7,7 @@ function ResultsTable({
   rows,
   metrics
 }: {
-  schema: OutputContext["schema"];
+  schema: ResultSet["schema"];
   rows: unknown[][];
   metrics?: OutputContext["metrics"];
 }): JSX.Element {
@@ -46,15 +46,28 @@ function ResultsTable({
 }
 
 function TextOutputView({ context }: { context: OutputContext }): JSX.Element {
-  // Rows are shown immediately as they stream in, in a stable position.
-  // Progress messages live in the query editor toolbar — not here.
-  if (context.rows.length > 0) {
+  if (context.resultSets.length > 0) {
     return (
-      <ResultsTable
-        schema={context.schema}
-        rows={context.rows}
-        metrics={context.state === "completed" ? (context.metrics ?? undefined) : undefined}
-      />
+      <div className="query-output-text-results">
+        {context.resultSets.map((rs) => (
+          <ResultsTable
+            key={rs.resultSetIndex}
+            schema={rs.schema}
+            rows={rs.rows}
+            metrics={
+              context.resultSets.length === 1 && context.state === "completed"
+                ? (context.metrics ?? undefined)
+                : undefined
+            }
+          />
+        ))}
+        {context.resultSets.length > 1 && context.state === "completed" && context.metrics && (
+          <div className="query-results-metrics">
+            {(context.metrics.rowCount ?? 0).toLocaleString()} rows &middot;{" "}
+            {context.metrics.durationMs ?? 0}ms
+          </div>
+        )}
+      </div>
     );
   }
 
@@ -86,7 +99,7 @@ function TextOutputView({ context }: { context: OutputContext }): JSX.Element {
     return <div className="query-output-text-idle">Press F5 or click Run to execute a query.</div>;
   }
 
-  // running, no rows yet — empty; toolbar already shows the progress message
+  // running, no rows yet — toolbar already shows the progress message
   return <div />;
 }
 
@@ -103,7 +116,10 @@ export const coreQueryEngineOutputTextPlugin: Plugin = {
   activate: () => {
     getOutputRegistry().register({
       id: "core.queryengine.output.text",
+      capability: "rows",
+      mode: "primary",
       title: "Results",
+      priority: 10,
       render: (context) => <TextOutputView context={context} />
     });
   }

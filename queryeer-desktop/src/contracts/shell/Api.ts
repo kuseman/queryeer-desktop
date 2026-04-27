@@ -108,6 +108,9 @@ export interface ShellApi {
   toggleDevTools: () => Promise<void>;
   showItemInFolder: (uri: string) => Promise<{ success: boolean }>;
   openPath: (uri: string) => Promise<{ success: boolean; error?: string }>;
+  openExportStream: (params: { executionId: string; resultSetIndex: number }) => Promise<void>;
+  appendExportChunk: (params: { executionId: string; resultSetIndex: number; rows: unknown[][] }) => Promise<void>;
+  finalizeExportStream: (params: { executionId: string; resultSetIndex: number }) => Promise<{ exportPath: string }>;
   getRecentFiles: () => Promise<RecentFileEntry[]>;
   addRecentFile: (uri: string, maxCount?: number) => Promise<{ accepted: boolean }>;
   removeRecentFile: (uri: string) => Promise<{ removed: boolean }>;

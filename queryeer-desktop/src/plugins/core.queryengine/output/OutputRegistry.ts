@@ -1,19 +1,5 @@
-import type { ReactNode } from "react";
-
-export type OutputContext = {
-  state: "idle" | "running" | "completed" | "failed" | "cancelled";
-  schema: { columns: Array<{ name: string; type: string }> } | null;
-  rows: unknown[][];
-  metrics: { durationMs?: number; rowCount?: number } | null;
-  error: { code: string; message: string } | null;
-  progress: { percent?: number; message?: string } | null;
-};
-
-export type OutputContributor = {
-  id: string;
-  title: string;
-  render: (context: OutputContext) => ReactNode;
-};
+export type { OutputContext, OutputContributor, RowChunk } from "../../../contracts/extensions/OutputExtension";
+import type { OutputContributor, RowChunk } from "../../../contracts/extensions/OutputExtension";
 
 let registryInstance: OutputRegistry | undefined;
 
@@ -27,6 +13,7 @@ export function getOutputRegistry(): OutputRegistry {
 export class OutputRegistry {
   private readonly contributors: OutputContributor[] = [];
   private readonly listeners: Array<() => void> = [];
+  private selectedPrimaryId: string | null = null;
 
   register(contributor: OutputContributor): void {
     this.contributors.push(contributor);
@@ -36,7 +23,25 @@ export class OutputRegistry {
   }
 
   getContributors(): OutputContributor[] {
-    return [...this.contributors];
+    return [...this.contributors].sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100));
+  }
+
+  setSelectedPrimary(id: string | null): void {
+    this.selectedPrimaryId = id;
+  }
+
+  getSelectedPrimaryId(): string | null {
+    return this.selectedPrimaryId;
+  }
+
+  /**
+   * Called on every chunkRows event before the React state update.
+   * Forwards the chunk to the currently selected primary contributor's onChunkRows
+   * hook, allowing Ag-Grid to call applyTransaction() without a full re-render.
+   */
+  notifyChunkRows(chunk: RowChunk): void {
+    const primary = this.contributors.find((c) => c.id === this.selectedPrimaryId);
+    primary?.onChunkRows?.(chunk);
   }
 
   subscribe(listener: () => void): () => void {

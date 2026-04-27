@@ -190,6 +190,8 @@ export type QueryCompletedNotification = {
     durationMs?: number;
     rowCount?: number;
   };
+  /** Which output capabilities this result provides, e.g. ["rows"], ["rows", "plan"]. Absent = ["rows"] by convention. */
+  features?: string[];
   engineStatePatch?: unknown;
 };
 
