@@ -267,7 +267,7 @@
 
 - New doc. Horizontal Electron-main / renderer / Java-backend boundary.
 - Disk ownership rule: Electron main is sole disk authority; backend sees strings.
-- Secrets boundary: plaintext only inside `credential.store`; all subsequent calls use `connectionId` handle.
+- Secrets boundary now moved out of Java protocol and into desktop `core.security` infrastructure.
 - State-authority table: who owns what (files/layout/watchers/backups/engine sessions/executions/connections).
 - Open questions flagged: engine-initiated file reads, large/binary content.
 
@@ -443,13 +443,12 @@
   - sensitive tokens/credentials are now masked before writing to backend log buffer/status panel
   - added unit tests for redaction behavior (`backend-log-redaction.test.ts`)
   - protocol document updated with explicit sensitive-field redaction and no-raw-secret guidance
-- Added first credential-handle contract scaffolding across TS + Java:
-  - new request methods: `connection.upsert`, `credential.store`
-  - TS backend contracts now define params/results for connection metadata upsert and credential store
-  - Java backend-contract now includes corresponding DTOs/enums under `connection` and `credential` packages
-  - Java stdio dispatcher now mocks handling for `connection.upsert` and `credential.store`
-  - handshake capabilities now include new methods
-  - shared protocol fixtures and dual-side fixture checks now include connection/credential method pairs
+- Added connection metadata contract scaffolding across TS + Java:
+  - new request method: `connection.upsert`
+  - TS backend contracts now define params/results for connection metadata upsert
+  - Java stdio dispatcher now mocks handling for `connection.upsert`
+  - handshake capabilities include the method
+  - shared protocol fixtures and dual-side fixture checks include the connection method pair
   - protocol documentation updated with explicit method specs and secret-handling constraints
 - Refactored capability/request dispatch ownership to reduce central orchestration coupling:
   - desktop now has centralized capability constants in `src/contracts/backend/Capabilities.ts`
@@ -460,7 +459,6 @@
     - `QueryExecuteRequestHandler`
     - `QueryCancelRequestHandler`
     - `ConnectionUpsertRequestHandler`
-    - `CredentialStoreRequestHandler`
   - `RequestDispatcher` now routes using handler registry (`RequestHandler` interface + method map)
   - backend handshake supported capabilities centralized in `BackendCapabilities`
 - Added backend platform skeleton v1 in Java backend core:

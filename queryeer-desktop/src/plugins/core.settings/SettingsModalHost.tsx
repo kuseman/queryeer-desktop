@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { SettingDefinition } from "../../contracts/extensions/SettingsExtension";
+import { PasswordFieldInput } from "./PasswordFieldInput";
 import { getCoreSettingsService } from "./service";
 import "./settings-modal.css";
 
@@ -13,11 +14,22 @@ type TreeNode = {
 export function SettingsModalHost(): JSX.Element | null {
   const service = getCoreSettingsService();
   const [isOpen, setIsOpen] = useState(() => service?.isModalOpen() ?? false);
+  const [queryInput, setQueryInput] = useState("");
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedNodeKey, setSelectedNodeKey] = useState<string | null>(null);
   const [expandedNodeKeys, setExpandedNodeKeys] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [, setVersion] = useState(0);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setQuery(queryInput);
+    }, 250);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [queryInput]);
 
   useEffect(() => {
     if (!service) {
@@ -53,10 +65,25 @@ export function SettingsModalHost(): JSX.Element | null {
     if (!isOpen || !service) {
       return;
     }
-    if (!definitions.some((definition) => definition.id === selectedId)) {
-      setSelectedId(definitions[0]?.id ?? null);
+    if (definitions.length === 0) {
+      if (selectedNodeKey !== null) {
+        setSelectedNodeKey(null);
+      }
+      return;
     }
-  }, [definitions, selectedId, isOpen]);
+
+    if (selectedNodeKey && !findTreeNodeByKey(tree, selectedNodeKey)) {
+      setSelectedNodeKey(null);
+      return;
+    }
+
+    if (!selectedNodeKey) {
+      const firstNodeKey = findFirstNodeWithSettings(tree)?.key ?? tree.children[0]?.key ?? null;
+      if (firstNodeKey) {
+        setSelectedNodeKey(firstNodeKey);
+      }
+    }
+  }, [definitions, selectedNodeKey, tree, isOpen, service]);
 
   useEffect(() => {
     if (!isOpen || !service) {
@@ -101,7 +128,10 @@ export function SettingsModalHost(): JSX.Element | null {
     return null;
   }
 
-  const selected = definitions.find((definition) => definition.id === selectedId) ?? null;
+  const selectedNode = selectedNodeKey ? findTreeNodeByKey(tree, selectedNodeKey) : null;
+  const groupedDefinitions = (selectedNode?.settingIds ?? [])
+    .map((settingId) => definitions.find((definition) => definition.id === settingId))
+    .filter((definition): definition is SettingDefinition => Boolean(definition));
 
   const toggleNode = (key: string): void => {
     setExpandedNodeKeys((previous) => {
@@ -133,8 +163,8 @@ export function SettingsModalHost(): JSX.Element | null {
         <div className="settings-modal-toolbar">
           <input
             type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            value={queryInput}
+            onChange={(event) => setQueryInput(event.target.value)}
             placeholder="Search settings"
             className="settings-search-input"
           />
@@ -144,30 +174,35 @@ export function SettingsModalHost(): JSX.Element | null {
           <aside className="settings-tree" aria-label="Settings tree">
             <TreeNodeView
               node={tree}
-              onSelect={setSelectedId}
-              selectedId={selectedId}
+              onSelectNode={(nodeKey) => {
+                setSelectedNodeKey(nodeKey);
+              }}
+              selectedNodeKey={selectedNodeKey}
               expandedNodeKeys={expandedNodeKeys}
               onToggleNode={toggleNode}
             />
           </aside>
 
           <section className="settings-detail" aria-label="Setting details">
-            {selected ? (
-              <SettingEditor
-                definition={selected}
-                value={service.getValue(selected.id)}
-                onChange={async (value) => {
-                  const result = await service.setValue(selected.id, value);
-                  if (!result.ok) {
-                    setError(result.message);
-                    return;
-                  }
-                  setError(null);
-                }}
-              />
-            ) : (
-              <p className="settings-empty">Select a setting to edit</p>
-            )}
+            {groupedDefinitions.length > 0 ? (
+              <div className="settings-group-list">
+                {groupedDefinitions.map((definition) => (
+                  <SettingEditor
+                    key={definition.id}
+                    definition={definition}
+                    value={service.getValue(definition.id)}
+                    onChange={async (value) => {
+                      const result = await service.setValue(definition.id, value);
+                      if (!result.ok) {
+                        setError(result.message);
+                        return;
+                      }
+                      setError(null);
+                    }}
+                  />
+                ))}
+              </div>
+            ) : <p className="settings-empty">Select a settings category to edit</p>}
             {error && <p className="settings-error">{error}</p>}
           </section>
         </div>
@@ -183,6 +218,8 @@ function SettingEditor(props: {
 }): JSX.Element {
   const { definition, value, onChange } = props;
   const [draft, setDraft] = useState(() => (typeof value === "string" ? value : JSON.stringify(value)));
+  const [stringDraft, setStringDraft] = useState(() => (typeof value === "string" ? value : ""));
+  const [numberDraft, setNumberDraft] = useState(() => (typeof value === "number" ? String(value) : "0"));
   const service = getCoreSettingsService();
 
   useEffect(() => {
@@ -190,6 +227,61 @@ function SettingEditor(props: {
       setDraft(typeof value === "string" ? value : JSON.stringify(value, null, 2));
     }
   }, [definition.type, value]);
+
+  useEffect(() => {
+    if (definition.type === "string") {
+      setStringDraft(typeof value === "string" ? value : "");
+    }
+  }, [definition.type, value]);
+
+  useEffect(() => {
+    if (definition.type === "number") {
+      setNumberDraft(typeof value === "number" ? String(value) : "0");
+    }
+  }, [definition.type, value]);
+
+  useEffect(() => {
+    if (definition.type !== "string") {
+      return;
+    }
+
+    const targetValue = typeof value === "string" ? value : "";
+    if (stringDraft === targetValue) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void onChange(stringDraft);
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [definition.type, stringDraft, value, onChange]);
+
+  useEffect(() => {
+    if (definition.type !== "number") {
+      return;
+    }
+
+    const parsed = Number(numberDraft);
+    if (Number.isNaN(parsed)) {
+      return;
+    }
+
+    const targetValue = typeof value === "number" ? value : 0;
+    if (parsed === targetValue) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void onChange(parsed);
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [definition.type, numberDraft, value, onChange]);
 
   const advanced = service?.renderAdvancedSetting(definition, Boolean(definition.isSecret), (next) => {
     void onChange(next);
@@ -210,7 +302,7 @@ function SettingEditor(props: {
       <h3>{definition.title}</h3>
       <p className="settings-setting-id">{definition.id}</p>
       {definition.description && <p className="settings-description">{definition.description}</p>}
-      {definition.isSecret ? (
+      {definition.isSecret && definition.type !== "password" ? (
         <div className="settings-secret-placeholder">Secret storage is not enabled yet.</div>
       ) : (
         <>
@@ -228,19 +320,34 @@ function SettingEditor(props: {
           {definition.type === "string" && (
             <input
               type="text"
-              value={typeof value === "string" ? value : ""}
-              onChange={(event) => void onChange(event.target.value)}
+              value={stringDraft}
+              onChange={(event) => setStringDraft(event.target.value)}
               className="settings-field-input"
+            />
+          )}
+
+          {definition.type === "password" && (
+            <PasswordFieldInput
+              inputId={`settings-password-${definition.id}`}
+              valueRef={
+                typeof value === "string" || (value && typeof value === "object" && "secretRef" in value)
+                  ? (value as string | { secretRef: string })
+                  : undefined
+              }
+              readonly={false}
+              onChangeRef={(nextRef) => {
+                void onChange(nextRef ?? "");
+              }}
             />
           )}
 
           {definition.type === "number" && (
             <input
               type="number"
-              value={typeof value === "number" ? value : 0}
+              value={numberDraft}
               min={definition.constraints?.min}
               max={definition.constraints?.max}
-              onChange={(event) => void onChange(Number(event.target.value))}
+              onChange={(event) => setNumberDraft(event.target.value)}
               className="settings-field-input"
             />
           )}
@@ -308,47 +415,83 @@ function buildTree(definitions: SettingDefinition[]): TreeNode {
     }
     current.settingIds.push(definition.id);
   }
+  normalizeMixedNodes(root);
   return root;
+}
+
+function normalizeMixedNodes(node: TreeNode): void {
+  for (const child of node.children) {
+    normalizeMixedNodes(child);
+  }
+
+  if (node.settingIds.length === 0 || node.children.length === 0) {
+    return;
+  }
+
+  let generalChild = node.children.find((child) => child.name === "General");
+  if (!generalChild) {
+    generalChild = {
+      name: "General",
+      key: `${node.key}/General`,
+      children: [],
+      settingIds: []
+    };
+    node.children.push(generalChild);
+  }
+
+  generalChild.settingIds.push(...node.settingIds);
+  node.settingIds = [];
 }
 
 function TreeNodeView(props: {
   node: TreeNode;
-  selectedId: string | null;
-  onSelect: (settingId: string) => void;
+  selectedNodeKey: string | null;
+  onSelectNode: (nodeKey: string) => void;
   expandedNodeKeys: Set<string>;
   onToggleNode: (key: string) => void;
   depth?: number;
 }): JSX.Element {
-  const { node, selectedId, onSelect, expandedNodeKeys, onToggleNode, depth = 0 } = props;
-  const service = getCoreSettingsService();
-  const definitionsById = new Map(
-    (service?.listDefinitions() ?? []).map((definition) => [definition.id, definition])
-  );
+  const {
+    node,
+    selectedNodeKey,
+    onSelectNode,
+    expandedNodeKeys,
+    onToggleNode,
+    depth = 0
+  } = props;
   return (
     <ul className="settings-tree-list">
       {node.children
-        .sort((a, b) => a.name.localeCompare(b.name))
+        .sort((a, b) => compareTreeNodes(a, b))
         .map((child) => {
           const isExpanded = expandedNodeKeys.has(child.key);
+          const isSettingsNode = child.settingIds.length > 0 && child.children.length === 0;
           return (
             <li key={child.key} className="settings-tree-node">
               <button
                 type="button"
-                className="settings-tree-group"
+                className={`settings-tree-group${isSettingsNode ? " is-settings-node" : ""}${selectedNodeKey === child.key ? " is-selected" : ""}`}
                 style={{ "--settings-depth": depth } as CSSProperties}
-                onClick={() => onToggleNode(child.key)}
-                aria-expanded={isExpanded}
+                onClick={() => {
+                  onSelectNode(child.key);
+                  if (!isSettingsNode) {
+                    onToggleNode(child.key);
+                  }
+                }}
+                aria-expanded={isSettingsNode ? undefined : isExpanded}
               >
-                <span className={`settings-tree-chevron${isExpanded ? " is-expanded" : ""}`}>
-                  {'>'}
-                </span>
+                {!isSettingsNode && (
+                  <span className={`settings-tree-chevron${isExpanded ? " is-expanded" : ""}`}>
+                    {'>'}
+                  </span>
+                )}
                 <span className="settings-tree-label">{child.name}</span>
               </button>
-              {isExpanded && (
+              {isExpanded && !isSettingsNode && (
                 <TreeNodeView
                   node={child}
-                  selectedId={selectedId}
-                  onSelect={onSelect}
+                  selectedNodeKey={selectedNodeKey}
+                  onSelectNode={onSelectNode}
                   expandedNodeKeys={expandedNodeKeys}
                   onToggleNode={onToggleNode}
                   depth={depth + 1}
@@ -357,26 +500,20 @@ function TreeNodeView(props: {
             </li>
           );
         })}
-      {node.settingIds.sort().map((settingId) => {
-        const definition = definitionsById.get(settingId);
-        if (!definition) {
-          return null;
-        }
-        return (
-          <li key={settingId} className="settings-tree-leaf">
-            <button
-              type="button"
-              className={`settings-tree-button${selectedId === settingId ? " is-selected" : ""}`}
-              style={{ "--settings-depth": depth } as CSSProperties}
-              onClick={() => onSelect(settingId)}
-            >
-              {definition.title}
-            </button>
-          </li>
-        );
-      })}
     </ul>
   );
+}
+
+function compareTreeNodes(left: TreeNode, right: TreeNode): number {
+  const leftIsGeneral = left.name === "General";
+  const rightIsGeneral = right.name === "General";
+  if (leftIsGeneral && !rightIsGeneral) {
+    return -1;
+  }
+  if (!leftIsGeneral && rightIsGeneral) {
+    return 1;
+  }
+  return left.name.localeCompare(right.name);
 }
 
 function collectTreeKeys(root: TreeNode): Set<string> {
@@ -393,6 +530,45 @@ function collectTreeKeys(root: TreeNode): Set<string> {
     }
   }
   return keys;
+}
+
+function findTreeNodeByKey(root: TreeNode, key: string): TreeNode | null {
+  if (root.key === key) {
+    return root;
+  }
+
+  const stack = [...root.children];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node) {
+      continue;
+    }
+    if (node.key === key) {
+      return node;
+    }
+    for (const child of node.children) {
+      stack.push(child);
+    }
+  }
+
+  return null;
+}
+
+function findFirstNodeWithSettings(root: TreeNode): TreeNode | null {
+  const stack = [...root.children].reverse();
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) {
+      continue;
+    }
+    if (current.settingIds.length > 0) {
+      return current;
+    }
+    for (const child of [...current.children].reverse()) {
+      stack.push(child);
+    }
+  }
+  return null;
 }
 
 function areSetsEqual(left: Set<string>, right: Set<string>): boolean {

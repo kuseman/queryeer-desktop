@@ -35,6 +35,21 @@ describe("backend-log-redaction", () => {
     expect(redacted).not.toContain("k3");
   });
 
+  it("redacts sessionKeyBase64 in security session open envelope", () => {
+    const message = JSON.stringify({
+      method: "security.session.open",
+      params: {
+        sessionId: "some-uuid",
+        vaultPath: "/some/path/vault.json",
+        sessionKeyBase64: "abc123secretkey=="
+      }
+    });
+
+    const redacted = redactLogMessage(message);
+    expect(redacted).toContain('"sessionKeyBase64":"[REDACTED]"');
+    expect(redacted).not.toContain("abc123secretkey==");
+  });
+
   it("redacts error messages", () => {
     const error = new Error("authorization: bearer-secret");
     const redacted = redactErrorMessage(error);

@@ -143,7 +143,7 @@ export class SettingsService {
     if (!definition) {
       return { ok: false, message: `Unknown setting '${settingId}'` };
     }
-    if (definition.isSecret) {
+    if (definition.isSecret && definition.type !== "password") {
       return { ok: false, message: "Secret storage is not enabled yet" };
     }
 
@@ -318,6 +318,12 @@ export class SettingsService {
           if (!regex.test(value)) {
             return { ok: false, message: "Value does not match required pattern" };
           }
+        }
+        return { ok: true };
+      }
+      case "password": {
+        if (typeof value !== "string") {
+          return { ok: false, message: "Expected a password reference string value" };
         }
         return { ok: true };
       }

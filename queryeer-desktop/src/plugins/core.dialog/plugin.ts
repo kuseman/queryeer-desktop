@@ -1,5 +1,7 @@
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { DialogResult } from "../../contracts/extensions/DialogExtension";
+import { requestInputDialog } from "./input-dialog-service";
+import { requestMessageDialog } from "./message-dialog-service";
 
 const getAppShell = () => {
   return (window as unknown as {
@@ -42,10 +44,7 @@ export const coreDialogPlugin: Plugin = {
     const appShell = getAppShell();
 
     context.dialog.showMessage = async (options) => {
-      if (!appShell) {
-        return { action: "" };
-      }
-      return appShell.showDialogMessage({
+      return requestMessageDialog({
         title: options.title,
         message: options.message,
         severity: options.severity,
@@ -85,6 +84,10 @@ export const coreDialogPlugin: Plugin = {
         defaultPath: options.defaultPath,
         filters: options.filters
       });
+    };
+
+    context.dialog.showInputDialog = async (options) => {
+      return requestInputDialog(options);
     };
   }
 };

@@ -45,7 +45,6 @@ public final class StdioTransportServer
         }
     }
 
-    @SuppressWarnings("UseSpecificCatch")
     private void handleLine(String line)
     {
         try

@@ -20,6 +20,12 @@ import {
   type HandshakeResult,
   type PingParams,
   type PingResult,
+  type SecuritySessionOpenParams,
+  type SecuritySessionOpenResult,
+  type SecuritySessionCloseParams,
+  type SecuritySessionCloseResult,
+  type SecurityVaultChangedParams,
+  type SecurityVaultChangedResult,
   type RuntimeStatusResult,
   type QueryCancelParams,
   type QueryCancelResult,
@@ -38,6 +44,12 @@ import {
 } from "./backend-transport.js";
 
 type GatewayLogLevel = "trace" | "debug" | "info" | "warn" | "error";
+
+const REQUIRED_SECURITY_CAPABILITIES = [
+  "security.session.open",
+  "security.session.close",
+  "security.vault.changed"
+] as const;
 
 export class BackendGateway {
   private readonly transport: BackendTransport;
@@ -178,10 +190,12 @@ export class BackendGateway {
       throw new Error(this.statusStore.get().error ?? "Backend is not healthy yet");
     }
 
-    this.executionStore.markAccepted(params.queryExecutionId, params.engineId);
+    const resolvedParams = this.resolveSecretReferences(params) as QueryExecuteParams;
+
+    this.executionStore.markAccepted(resolvedParams.queryExecutionId, resolvedParams.engineId);
     this.syncExecutionSnapshot();
 
-    const envelope = this.createRequest("query.execute", params);
+    const envelope = this.createRequest("query.execute", resolvedParams);
     this.appendLog("debug", "gateway", `Sending request ${envelope.id} query.execute`);
     if (this.tracePayloads) {
       this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
@@ -207,7 +221,8 @@ export class BackendGateway {
   }
 
   public async invokeEngine(params: EngineInvokeParams): Promise<EngineInvokeResult> {
-    const envelope = this.createRequest("engine.invoke", params);
+    const resolvedParams = this.resolveSecretReferences(params) as EngineInvokeParams;
+    const envelope = this.createRequest("engine.invoke", resolvedParams);
     this.appendLog("debug", "gateway", `Sending request ${envelope.id} engine.invoke`);
     if (this.tracePayloads) {
       this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
@@ -215,6 +230,36 @@ export class BackendGateway {
     const response = await this.sendRequest(envelope);
     return (response.result ?? {}) as EngineInvokeResult;
   }
+
+  public async notifySecuritySessionOpen(params: SecuritySessionOpenParams): Promise<SecuritySessionOpenResult> {
+    const envelope = this.createRequest("security.session.open", params);
+    this.appendLog("debug", "gateway", `Sending request ${envelope.id} security.session.open`);
+    const response = await this.sendRequest(envelope);
+    return (response.result ?? { accepted: false }) as SecuritySessionOpenResult;
+  }
+
+  public async notifySecuritySessionClose(
+    params: SecuritySessionCloseParams
+  ): Promise<SecuritySessionCloseResult> {
+    const envelope = this.createRequest("security.session.close", params);
+    this.appendLog("debug", "gateway", `Sending request ${envelope.id} security.session.close`);
+    const response = await this.sendRequest(envelope);
+    return (response.result ?? { accepted: false }) as SecuritySessionCloseResult;
+  }
+
+  public async notifySecurityVaultChanged(
+    params: SecurityVaultChangedParams
+  ): Promise<SecurityVaultChangedResult> {
+    const envelope = this.createRequest("security.vault.changed", params);
+    this.appendLog("debug", "gateway", `Sending request ${envelope.id} security.vault.changed`);
+    const response = await this.sendRequest(envelope);
+    return (response.result ?? { accepted: false }) as SecurityVaultChangedResult;
+  }
+
+  private resolveSecretReferences(value: unknown): unknown {
+    return value;
+  }
+
 
   public async openFile(params: FileOpenParams): Promise<FileOpenResult> {
     const envelope = this.createRequest("file.open", params);
@@ -360,6 +405,7 @@ export class BackendGateway {
     }
 
     const result = response.result as HandshakeResult;
+    this.ensureRequiredSecurityCapabilities(result.supportedCapabilities);
     this.statusStore.setHandshakeDetails({
       protocolVersion: result.selectedProtocolVersion,
       serverName: result.server.name,
@@ -410,6 +456,9 @@ export class BackendGateway {
     TMethod extends
       | "backend.handshake"
       | "backend.runtimeStatus"
+      | "security.session.open"
+      | "security.session.close"
+      | "security.vault.changed"
       | "health.ping"
       | "query.execute"
       | "query.cancel"
@@ -573,5 +622,18 @@ export class BackendGateway {
 
   private syncLogSnapshot(): void {
     this.statusStore.updateLogs(this.logBuffer.toArray());
+  }
+
+  private ensureRequiredSecurityCapabilities(supportedCapabilities: readonly string[]): void {
+    const missing = REQUIRED_SECURITY_CAPABILITIES.filter(
+      (capability) => !supportedCapabilities.includes(capability)
+    );
+    if (missing.length === 0) {
+      return;
+    }
+
+    throw new Error(
+      `Backend missing required security capabilities: ${missing.join(", ")}`
+    );
   }
 }

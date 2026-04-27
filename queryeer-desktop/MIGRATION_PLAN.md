@@ -334,7 +334,7 @@ Rule: dependencies point inward only; transport and engine details must not leak
   - shared protocol fixture suite now covers handshake/ping/execute/cancel and query notifications on both desktop and backend-contract checks
   - gateway negative-path tests added (timeouts/send failures/ping failure/unknown response id) and migration CI workflow now runs desktop+backend drift guardrails on PR/push
   - desktop diagnostics now redact sensitive fields in backend/gateway transport logs before surfacing in UI status panel
-  - credential-handle contract scaffold added (`connection.upsert`, `credential.store`) with TS/Java contract updates, protocol fixtures, and mock stdio dispatch support
+  - connection metadata contract scaffold added (`connection.upsert`) with TS/Java contract updates, protocol fixtures, and mock stdio dispatch support
   - capability/dispatch responsibilities were decomposed: desktop capability constants centralized and Java stdio dispatcher refactored into per-method handlers with registry-based dispatch
   - Java backend platform skeleton v1 now wired: default plugin context services in backend-core, runtime activate/deactivate orchestration, runner composition integration, and architecture tests for lifecycle/wiring
   - backend-core plugin governance now includes dependency + capability validation, cycle detection, and runtime status model (`loaded`/`skipped`/`activated`/`failed`/`deactivated`) with tests

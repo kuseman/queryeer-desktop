@@ -45,6 +45,14 @@ function makeRegistry(): SettingsRegistry {
           type: "string",
           defaultValue: "",
           isSecret: true
+        },
+        {
+          id: "core.editor.tokenRef",
+          moduleId: "core.editor",
+          title: "API Token Ref",
+          sectionPath: ["Editor"],
+          type: "password",
+          defaultValue: ""
         }
       ]
     }
@@ -169,6 +177,33 @@ describe("SettingsService", () => {
 
     expect(result.ok).toBe(false);
     expect(service.getValue("core.editor.token")).toBe("");
+  });
+
+  it("accepts password setting ref value", async () => {
+    const service = new SettingsService({
+      registry: makeRegistry(),
+      bridge: {
+        getSettingsIndex: async () => ({
+          version: SETTINGS_INDEX_VERSION,
+          updatedAt: "now",
+          modules: {}
+        }),
+        getSettingsModule: async ({ moduleId }) => ({
+          version: SETTINGS_MODULE_VERSION,
+          moduleId,
+          updatedAt: "now",
+          values: {}
+        }),
+        saveSettingsIndex: async () => ({ accepted: true }),
+        saveSettingsModule: async () => ({ accepted: true })
+      }
+    });
+    await service.initialize();
+
+    const result = await service.setValue("core.editor.tokenRef", "secret-ref-1");
+
+    expect(result.ok).toBe(true);
+    expect(service.getValue("core.editor.tokenRef")).toBe("secret-ref-1");
   });
 
   it("searches by title and tags", async () => {

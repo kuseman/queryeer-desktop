@@ -1,0 +1,65 @@
+.dialog-input-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--modal-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1300;
+  backdrop-filter: blur(3px);
+}
+
+.dialog-input-modal {
+  width: min(420px, calc(100vw - 24px));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: linear-gradient(180deg, var(--bg-0), var(--bg-1));
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.dialog-input-header h2 {
+  margin: 0;
+  font-size: var(--ui-font-size-title);
+}
+
+.dialog-input-message {
+  margin: 0;
+  color: var(--text-1);
+}
+
+.dialog-input-field {
+  border: 1px solid var(--border);
+  background: var(--surface-overlay-weak);
+  color: var(--text-0);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: var(--ui-font-size-sm);
+}
+
+.dialog-input-field:focus {
+  outline: none;
+  border-color: var(--accent-muted);
+}
+
+.dialog-input-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dialog-input-button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-overlay-soft);
+  color: var(--text-0);
+  min-height: 30px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.dialog-input-button.primary {
+  border-color: var(--accent);
+}

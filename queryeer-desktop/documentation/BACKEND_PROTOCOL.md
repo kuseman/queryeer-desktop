@@ -299,15 +299,78 @@ Success result:
 ```json
 {
   "connectionId": "conn-001",
-  "version": 2,
-  "credentialStatus": "present"
+  "version": 2
+}
+```
+
+## 5.2.1 `security.session.open`
+
+Purpose: open backend-side security session context for secret resolution. This is a control-plane request from desktop main to backend.
+
+Request params:
+
+```json
+{
+  "sessionId": "sec-session-001",
+  "vaultPath": "C:/Users/user/AppData/Roaming/Queryeer/security/vault.json",
+  "sessionKeyBase64": "<derived-session-key-base64>",
+  "vaultUpdatedAt": "2026-04-27T10:00:00.000Z"
+}
+```
+
+Success result:
+
+```json
+{
+  "accepted": true
+}
+```
+
+## 5.2.2 `security.session.close`
+
+Purpose: close backend-side security session and clear in-memory secret/key caches.
+
+Request params:
+
+```json
+{
+  "sessionId": "sec-session-001",
+  "reason": "lock"
+}
+```
+
+Success result:
+
+```json
+{
+  "accepted": true
+}
+```
+
+## 5.2.3 `security.vault.changed`
+
+Purpose: notify backend that vault file metadata changed so resolver cache can invalidate/reload.
+
+Request params:
+
+```json
+{
+  "vaultPath": "C:/Users/user/AppData/Roaming/Queryeer/security/vault.json",
+  "vaultUpdatedAt": "2026-04-27T10:05:00.000Z"
+}
+```
+
+Success result:
+
+```json
+{
+  "accepted": true
 }
 ```
 
 Rules:
 
 - Request MUST NOT include secret fields such as `password`, `token`, or `clientSecret`.
-- Secret material is handled exclusively via `credential.store`.
 
 ## 5.6a `file.open`
 
@@ -390,35 +453,6 @@ Rules:
 ## 5.6d `query.execute` fileId extension
 
 `query.execute` params accept an optional `fileId`. When present and the backend has a matching open file session, the backend SHOULD reuse the cached parse tree rather than re-parsing `text`. `text` remains accepted for stateless callers.
-
-## 5.6 `credential.store`
-
-Purpose: store/rotate secrets for a connection (to be encrypted at rest in backend).
-
-Request params:
-
-```json
-{
-  "connectionId": "conn-001",
-  "credentialKind": "password",
-  "password": "plaintext-user-input"
-}
-```
-
-Success result:
-
-```json
-{
-  "connectionId": "conn-001",
-  "credentialId": "cred-001",
-  "version": 3
-}
-```
-
-Rules:
-
-- Backend MUST treat all fields in this method as sensitive and avoid plaintext logging.
-- Backend SHOULD encrypt secret payloads before persistence.
 
 ## 6. Notifications (v1)
 
@@ -591,6 +625,10 @@ Error payload schema:
 - Java validates again at protocol adapter boundary.
 - No arbitrary code evaluation or dynamic method invocation.
 - Protocol payloads SHOULD avoid carrying raw secrets (passwords, tokens, API keys) where a stable id/handle can be used instead.
+- Preferred payload secret marker is `{ "secretRef": "<ref-id>" }` at the value position.
+- Backend resolves structured secret wrappers only (`{ "secretRef": "<ref-id>" }`) before engine/plugin invocation.
+- `security.*` control requests MUST never log sensitive values (`sessionKeyBase64`, secret refs, decrypted plaintext).
+- `security.session.open` transports a derived session key and MUST NOT transport raw master password.
 - Desktop and backend diagnostic logs MUST redact sensitive fields before persistence/display.
 - Sensitive field names include (non-exhaustive): `password`, `secret`, `token`, `apiKey`, `clientSecret`, `authorization`, `connectionString`, `credential`.
 
@@ -633,7 +671,7 @@ Current Java stdio scaffold implementation status:
 - `query.execute` implemented (mocked progressive notifications); `fileId` field accepted but not yet consumed
 - `query.cancel` implemented (mocked cancellation notification)
 - `backend.runtimeStatus` implemented
-- `connection.upsert` / `credential.store` request handling scaffolded
+- `connection.upsert` request handling scaffolded
 - `file.open` / `file.close` / `file.bind` request handlers implemented against `DefaultFileRegistry`; no engine-specific `FileSessionHandler` yet
 - `file.change` notification handler implemented
 

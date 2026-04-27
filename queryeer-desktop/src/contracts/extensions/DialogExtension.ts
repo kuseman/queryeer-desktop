@@ -32,4 +32,10 @@ export type DialogExtension = {
     defaultPath?: string;
     filters?: { name: string; extensions: string[] }[];
   }) => Promise<{ canceled: boolean; filePath?: string }>;
+  showInputDialog?: (options: {
+    title: string;
+    message: string;
+    placeholder?: string;
+    password?: boolean;
+  }) => Promise<{ canceled: boolean; value?: string }>;
 };

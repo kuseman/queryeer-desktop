@@ -1,6 +1,12 @@
 import type { ReactNode } from "react";
 
-export type SettingsValueType = "boolean" | "string" | "number" | "enum" | "json";
+export type SettingsValueType =
+  | "boolean"
+  | "string"
+  | "password"
+  | "number"
+  | "enum"
+  | "json";
 
 export type SettingOption = {
   value: string;

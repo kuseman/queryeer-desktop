@@ -29,11 +29,13 @@ public final class QueryExecutionService
     private final Map<String, QueryEngineProvider> activeExecutions = new ConcurrentHashMap<>();
     private final QueryEngineRegistry engineRegistry;
     private final NotificationPublisher notificationPublisher;
+    private final SecretRefPayloadResolver secretResolver;
 
-    public QueryExecutionService(QueryEngineRegistry engineRegistry, NotificationPublisher notificationPublisher)
+    public QueryExecutionService(QueryEngineRegistry engineRegistry, NotificationPublisher notificationPublisher, SecretRefPayloadResolver secretResolver)
     {
         this.engineRegistry = engineRegistry;
         this.notificationPublisher = notificationPublisher;
+        this.secretResolver = secretResolver;
     }
 
     public void execute(QueryExecuteParams params)
@@ -52,7 +54,12 @@ public final class QueryExecutionService
         {
             try
             {
-                provider.execute(params.queryExecutionId(), params.text(), params.engineState(), publisher);
+                Object resolvedEngineState = secretResolver.materialize(params.engineState());
+                provider.execute(params.queryExecutionId(), params.text(), resolvedEngineState, publisher);
+            }
+            catch (SecretRefPayloadResolver.SecretResolutionException e)
+            {
+                publisher.failed(BackendErrorCode.VALIDATION.name(), e.getMessage());
             }
             catch (Exception e)
             {

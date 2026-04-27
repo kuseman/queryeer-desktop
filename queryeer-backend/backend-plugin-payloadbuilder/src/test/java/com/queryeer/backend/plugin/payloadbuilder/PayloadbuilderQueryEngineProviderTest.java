@@ -31,6 +31,7 @@ class PayloadbuilderQueryEngineProviderTest
         Assertions.assertEquals(Map.of("hello", "world"), asMap.get("payload"));
     }
 
+    @SuppressWarnings("unchecked")
     @Test
     void invokeCapabilitiesIncludesCatalogActions()
     {

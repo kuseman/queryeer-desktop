@@ -89,14 +89,14 @@ function ElasticsearchPanel({ fileId, alias, properties, setProperty }: Payloadb
         action: "payloadbuilder.es.listIndices",
         payload: {
           alias,
-          properties: {
-            endpoint: selectedConnection.endpoint,
-            authType: selectedConnection.authType,
-            authUsername: selectedConnection.authUsername,
-            authPassword: selectedConnection.authPassword
+            properties: {
+              endpoint: selectedConnection.endpoint,
+              authType: selectedConnection.authType,
+              authUsername: selectedConnection.authUsername,
+              authPassword: selectedConnection.authPassword
+            }
           }
-        }
-      })) as ListIndicesResult | undefined;
+        })) as ListIndicesResult | undefined;
       const next = Array.isArray(result?.indices)
         ? result.indices.filter((entry): entry is string => typeof entry === "string")
         : [];

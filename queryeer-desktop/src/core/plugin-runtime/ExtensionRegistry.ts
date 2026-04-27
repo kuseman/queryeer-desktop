@@ -241,6 +241,9 @@ export class ExtensionRegistry {
       },
       showSaveDialog: async () => {
         return { canceled: true, filePath: undefined };
+      },
+      showInputDialog: async () => {
+        return { canceled: true, value: undefined };
       }
     };
   }

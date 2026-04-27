@@ -17,7 +17,7 @@ Status: draft implementation baseline (v1)
 
 - v1 scope model: single `workspace` scope.
 - Save mode: auto-apply in memory, debounced persistence.
-- Secrets in v1: placeholder-only (`isSecret` => read-only message).
+- Secret values in v1 use reference ids for `type: "password"` settings (for example `secret-ref-...`) with vault-backed storage in `core.security`.
 
 ## Contribution contract
 
@@ -29,6 +29,11 @@ Modules contribute settings through `context.settings.registerSettings(...)` wit
   - `title`, `description`, `sectionPath`, `tags`
   - `type`, `defaultValue`, optional constraints/options
   - optional `advanced.rendererId` and `advanced.validatorId`
+
+Security convention:
+
+- Password settings store secret references (not plaintext).
+- UI modules should use structured secret values (`{ "secretRef": "..." }`) for runtime payloads.
 
 Advanced settings are supported through optional renderer/validator registration while still requiring declarative metadata for indexing/search/navigation.
 

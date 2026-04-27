@@ -6,12 +6,14 @@ import type {
 
 export type Capability =
   | "backend.runtimeStatus"
+  | "security.session.open"
+  | "security.session.close"
+  | "security.vault.changed"
   | "health.ping"
   | "query.execute"
   | "query.cancel"
   | "engine.invoke"
   | "connection.upsert"
-  | "credential.store"
   | "query.progress"
   | "query.chunkStart"
   | "query.chunkRows"
@@ -51,6 +53,35 @@ export type PingParams = {
 export type PingResult = {
   timestamp: string;
   uptimeMs: number;
+};
+
+export type SecuritySessionOpenParams = {
+  sessionId: string;
+  vaultPath: string;
+  sessionKeyBase64: string;
+  vaultUpdatedAt?: string;
+};
+
+export type SecuritySessionOpenResult = {
+  accepted: boolean;
+};
+
+export type SecuritySessionCloseParams = {
+  sessionId?: string;
+  reason: "lock" | "rotate" | "shutdown" | "error";
+};
+
+export type SecuritySessionCloseResult = {
+  accepted: boolean;
+};
+
+export type SecurityVaultChangedParams = {
+  vaultPath: string;
+  vaultUpdatedAt?: string;
+};
+
+export type SecurityVaultChangedResult = {
+  accepted: boolean;
 };
 
 export type RuntimePluginState =
@@ -130,19 +161,6 @@ export type ConnectionUpsertParams = {
 
 export type ConnectionUpsertResult = {
   connectionId: string;
-  version: number;
-  credentialStatus: "missing" | "present";
-};
-
-export type CredentialStoreParams = {
-  connectionId: string;
-  credentialKind: "password";
-  password: string;
-};
-
-export type CredentialStoreResult = {
-  connectionId: string;
-  credentialId: string;
   version: number;
 };
 
@@ -228,12 +246,14 @@ export type FileChangeNotification = {
 export type BackendMethodParamsMap = {
   "backend.handshake": HandshakeParams;
   "backend.runtimeStatus": RuntimeStatusParams;
+  "security.session.open": SecuritySessionOpenParams;
+  "security.session.close": SecuritySessionCloseParams;
+  "security.vault.changed": SecurityVaultChangedParams;
   "health.ping": PingParams;
   "query.execute": QueryExecuteParams;
   "query.cancel": QueryCancelParams;
   "engine.invoke": EngineInvokeParams;
   "connection.upsert": ConnectionUpsertParams;
-  "credential.store": CredentialStoreParams;
   "file.open": FileOpenParams;
   "file.close": FileCloseParams;
   "file.bind": FileBindParams;
@@ -242,12 +262,14 @@ export type BackendMethodParamsMap = {
 export type BackendMethodResultMap = {
   "backend.handshake": HandshakeResult;
   "backend.runtimeStatus": RuntimeStatusResult;
+  "security.session.open": SecuritySessionOpenResult;
+  "security.session.close": SecuritySessionCloseResult;
+  "security.vault.changed": SecurityVaultChangedResult;
   "health.ping": PingResult;
   "query.execute": QueryExecuteResult;
   "query.cancel": QueryCancelResult;
   "engine.invoke": EngineInvokeResult;
   "connection.upsert": ConnectionUpsertResult;
-  "credential.store": CredentialStoreResult;
   "file.open": FileOpenResult;
   "file.close": FileCloseResult;
   "file.bind": FileBindResult;

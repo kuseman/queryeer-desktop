@@ -1,3 +1,5 @@
+import { getCoreSecurityService } from "../core.security/service";
+
 type QueryEvent = { method: string; params: unknown };
 type QueryEventListener = (event: QueryEvent) => void;
 type GlobalQueryEventListener = (event: QueryEvent, context?: ExecuteParams) => void;
@@ -106,12 +108,14 @@ export class QueryEngineService {
         decoratedParams
       );
     }
-    await window.appShell.executeBackendQuery({
-      queryExecutionId,
-      engineId,
-      fileId: decoratedParams.fileId,
-      text: decoratedParams.text,
-      engineState: decoratedParams.engineState
+    await runWithSecretsUnlocked(decoratedParams.engineState, async () => {
+      await window.appShell.executeBackendQuery({
+        queryExecutionId,
+        engineId,
+        fileId: decoratedParams.fileId,
+        text: decoratedParams.text,
+        engineState: decoratedParams.engineState
+      });
     });
     return queryExecutionId;
   }
@@ -121,7 +125,9 @@ export class QueryEngineService {
   }
 
   async invoke(params: EngineInvokeParams): Promise<unknown> {
-    const response = await window.appShell.invokeBackendEngine(params);
+    const response = await runWithSecretsUnlocked(params.payload, async () => {
+      return window.appShell.invokeBackendEngine(params);
+    });
     return response.result;
   }
 
@@ -227,4 +233,13 @@ export class QueryEngineService {
     }
     return undefined;
   }
+}
+
+async function runWithSecretsUnlocked<T>(payload: unknown, action: () => Promise<T>): Promise<T> {
+  const security = getCoreSecurityService();
+  if (!security) {
+    return action();
+  }
+
+  return security.runWithSecretsUnlocked(payload, action, { interactive: true });
 }

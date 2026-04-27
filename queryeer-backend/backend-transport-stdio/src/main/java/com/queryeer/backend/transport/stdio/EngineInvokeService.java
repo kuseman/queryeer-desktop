@@ -8,10 +8,12 @@ import com.queryeer.backend.contract.engine.EngineInvokeParams;
 public final class EngineInvokeService
 {
     private final QueryEngineRegistry engineRegistry;
+    private final SecretRefPayloadResolver secretResolver;
 
-    public EngineInvokeService(QueryEngineRegistry engineRegistry)
+    public EngineInvokeService(QueryEngineRegistry engineRegistry, SecretRefPayloadResolver secretResolver)
     {
         this.engineRegistry = engineRegistry;
+        this.secretResolver = secretResolver;
     }
 
     public Object invoke(EngineInvokeParams params)
@@ -24,7 +26,12 @@ public final class EngineInvokeService
 
         try
         {
-            return provider.invoke(params.fileId(), params.action(), params.payload());
+            Object resolvedPayload = secretResolver.materialize(params.payload());
+            return provider.invoke(params.fileId(), params.action(), resolvedPayload);
+        }
+        catch (SecretRefPayloadResolver.SecretResolutionException e)
+        {
+            throw new EngineInvokeException(BackendErrorCode.VALIDATION, e.getMessage());
         }
         catch (IllegalArgumentException e)
         {

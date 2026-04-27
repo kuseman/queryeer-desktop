@@ -1,6 +1,7 @@
 import type { PluginManifestFile } from "../contracts/plugin/PluginManifestFile";
 import coreCommandsManifest from "./manifests/core.commands.json";
 import coreSettingsManifest from "./manifests/core.settings.json";
+import coreSecurityManifest from "./manifests/core.security.json";
 import coreDialogManifest from "./manifests/core.dialog.json";
 import coreEditorManifest from "./manifests/core.editor.json";
 import coreExplorerManifest from "./manifests/core.explorer.json";
@@ -29,6 +30,7 @@ export function loadPluginManifests(): PluginManifestFile[] {
     coreWorkspaceManifest as PluginManifestFile,
     coreCommandsManifest as PluginManifestFile,
     coreSettingsManifest as PluginManifestFile,
+    coreSecurityManifest as PluginManifestFile,
     coreExplorerManifest as PluginManifestFile,
     coreQueryEngineManifest as PluginManifestFile,
     coreQueryEnginePayloadbuilderManifest as PluginManifestFile,

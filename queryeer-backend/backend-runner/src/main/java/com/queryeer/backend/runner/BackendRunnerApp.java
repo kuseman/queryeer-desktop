@@ -19,7 +19,6 @@ import com.queryeer.backend.core.PluginRuntimeStatus;
 import com.queryeer.backend.plugin.jdbc.JdbcBackendPlugin;
 import com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderBackendPlugin;
 import com.queryeer.backend.transport.stdio.ConnectionUpsertRequestHandler;
-import com.queryeer.backend.transport.stdio.CredentialStoreRequestHandler;
 import com.queryeer.backend.transport.stdio.EngineInvokeRequestHandler;
 import com.queryeer.backend.transport.stdio.EngineInvokeService;
 import com.queryeer.backend.transport.stdio.EnvelopeCodec;
@@ -39,6 +38,11 @@ import com.queryeer.backend.transport.stdio.RequestDispatcher;
 import com.queryeer.backend.transport.stdio.RequestHandler;
 import com.queryeer.backend.transport.stdio.ResponseWriter;
 import com.queryeer.backend.transport.stdio.RuntimeStatusRequestHandler;
+import com.queryeer.backend.transport.stdio.SecretRefPayloadResolver;
+import com.queryeer.backend.transport.stdio.SecuritySessionBridge;
+import com.queryeer.backend.transport.stdio.SecuritySessionCloseRequestHandler;
+import com.queryeer.backend.transport.stdio.SecuritySessionOpenRequestHandler;
+import com.queryeer.backend.transport.stdio.SecurityVaultChangedRequestHandler;
 import com.queryeer.backend.transport.stdio.StdioTransportServer;
 
 public final class BackendRunnerApp
@@ -79,13 +83,16 @@ public final class BackendRunnerApp
         EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
         ResponseWriter responseWriter = new ResponseWriter(System.out, codec);
         NotificationPublisher notificationPublisher = new NotificationPublisher(responseWriter);
-        QueryExecutionService queryExecutionService = new QueryExecutionService(services.queryEngines(), notificationPublisher);
-        EngineInvokeService engineInvokeService = new EngineInvokeService(services.queryEngines());
+        SecuritySessionBridge securitySessionBridge = new SecuritySessionBridge();
+        SecretRefPayloadResolver secretResolver = new SecretRefPayloadResolver(securitySessionBridge, codec.objectMapper());
+        QueryExecutionService queryExecutionService = new QueryExecutionService(services.queryEngines(), notificationPublisher, secretResolver);
+        EngineInvokeService engineInvokeService = new EngineInvokeService(services.queryEngines(), secretResolver);
 
         List<RequestHandler> handlers = List.of(new HandshakeRequestHandler(responseWriter), new RuntimeStatusRequestHandler(responseWriter, codec, () -> runtimeStatusSnapshot(runtime)),
-                new HealthPingRequestHandler(startedAt, responseWriter, codec), new QueryExecuteRequestHandler(responseWriter, codec, queryExecutionService),
-                new QueryCancelRequestHandler(responseWriter, codec, queryExecutionService), new EngineInvokeRequestHandler(responseWriter, codec, engineInvokeService),
-                new ConnectionUpsertRequestHandler(responseWriter, codec), new CredentialStoreRequestHandler(responseWriter, codec),
+                new SecuritySessionOpenRequestHandler(responseWriter, codec, securitySessionBridge), new SecuritySessionCloseRequestHandler(responseWriter, securitySessionBridge),
+                new SecurityVaultChangedRequestHandler(responseWriter, codec, securitySessionBridge), new HealthPingRequestHandler(startedAt, responseWriter, codec),
+                new QueryExecuteRequestHandler(responseWriter, codec, queryExecutionService), new QueryCancelRequestHandler(responseWriter, codec, queryExecutionService),
+                new EngineInvokeRequestHandler(responseWriter, codec, engineInvokeService), new ConnectionUpsertRequestHandler(responseWriter, codec),
                 new FileOpenRequestHandler(responseWriter, codec, services.fileRegistryView()), new FileCloseRequestHandler(responseWriter, codec, services.fileRegistryView()),
                 new FileBindRequestHandler(responseWriter, codec, services.fileRegistryView()));
 

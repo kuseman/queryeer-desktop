@@ -57,6 +57,9 @@ const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
           selectedProtocolVersion: BACKEND_PROTOCOL_VERSION,
           supportedCapabilities: [
             "backend.runtimeStatus",
+            "security.session.open",
+            "security.session.close",
+            "security.vault.changed",
             "health.ping",
             "query.execute",
             "query.cancel",
@@ -274,6 +277,61 @@ describe("BackendGateway", () => {
     await gateway.stop();
   });
 
+  it("forwards structured secret refs on query.execute", async () => {
+    const { gateway, transport } = createGatewayWithTestTransport();
+    await gateway.start();
+
+    await gateway.executeQuery({
+      queryExecutionId: "exec-secret-ref",
+      engineId: "payloadbuilder",
+      text: "select 1",
+      engineState: {
+        payloadbuilder: {
+          catalogs: {
+            es1: {
+              catalogId: "elasticsearch",
+              properties: {
+                authUsername: "elastic",
+                authPassword: {
+                  secretRef: "secret-ref-1"
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const executeRequest = transport.sendEnvelope.mock.calls
+      .map((call: [BackendEnvelope]) => call[0])
+      .find(
+        (envelope): envelope is BackendRequestEnvelope =>
+          envelope.type === "request" && envelope.method === "query.execute"
+      );
+
+    expect(executeRequest).toBeDefined();
+    expect(executeRequest?.params).toEqual({
+      queryExecutionId: "exec-secret-ref",
+      engineId: "payloadbuilder",
+      text: "select 1",
+      engineState: {
+        payloadbuilder: {
+          catalogs: {
+            es1: {
+              catalogId: "elasticsearch",
+              properties: {
+                authUsername: "elastic",
+                authPassword: { secretRef: "secret-ref-1" }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    await gateway.stop();
+  });
+
   it("invokes engine action and returns result envelope", async () => {
     const { gateway, transport } = createGatewayWithTestTransport();
     await gateway.start();
@@ -302,6 +360,80 @@ describe("BackendGateway", () => {
       );
 
     expect(invokeRequest).toBeDefined();
+    await gateway.stop();
+  });
+
+  it("forwards structured secret refs on engine.invoke", async () => {
+    const { gateway, transport } = createGatewayWithTestTransport();
+    await gateway.start();
+
+    await gateway.invokeEngine({
+      engineId: "payloadbuilder",
+      action: "payloadbuilder.es.listIndices",
+      payload: {
+        properties: {
+          authPassword: {
+            secretRef: "secret-ref-2"
+          }
+        }
+      }
+    });
+
+    const invokeRequest = transport.sendEnvelope.mock.calls
+      .map((call: [BackendEnvelope]) => call[0])
+      .find(
+        (envelope): envelope is BackendRequestEnvelope =>
+          envelope.type === "request" && envelope.method === "engine.invoke"
+      );
+
+    expect(invokeRequest).toBeDefined();
+    expect(invokeRequest?.params).toEqual({
+      engineId: "payloadbuilder",
+      action: "payloadbuilder.es.listIndices",
+      payload: {
+        properties: {
+          authPassword: { secretRef: "secret-ref-2" }
+        }
+      }
+    });
+
+    await gateway.stop();
+  });
+
+  it("forwards nested structured secret refs on engine.invoke", async () => {
+    const { gateway, transport } = createGatewayWithTestTransport();
+    await gateway.start();
+
+    await gateway.invokeEngine({
+      engineId: "payloadbuilder",
+      action: "payloadbuilder.custom",
+      payload: {
+        properties: {
+          apiKey: {
+            secretRef: "secret-ref-api-key"
+          }
+        }
+      }
+    });
+
+    const invokeRequest = transport.sendEnvelope.mock.calls
+      .map((call: [BackendEnvelope]) => call[0])
+      .find(
+        (envelope): envelope is BackendRequestEnvelope =>
+          envelope.type === "request" && envelope.method === "engine.invoke"
+      );
+
+    expect(invokeRequest).toBeDefined();
+    expect(invokeRequest?.params).toEqual({
+      engineId: "payloadbuilder",
+      action: "payloadbuilder.custom",
+      payload: {
+        properties: {
+          apiKey: { secretRef: "secret-ref-api-key" }
+        }
+      }
+    });
+
     await gateway.stop();
   });
 

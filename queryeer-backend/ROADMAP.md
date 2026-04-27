@@ -19,7 +19,7 @@
 - [x] Add notification DTOs (`progress`, `resultChunk`, `completed`, `failed`)
 - [x] Align JSON envelope type wire values with desktop protocol casing
 - [x] Add fixture compatibility tests for handshake/ping shared with desktop fixtures
-- [x] Add DTOs for `connection.upsert` / `credential.store` credential-handle flow
+- [x] Add DTOs for `connection.upsert` connection metadata flow
 - [x] Add DTOs for `backend.runtimeStatus` runtime diagnostics flow
 - [x] Add DTOs for `file.open` / `file.close` / `file.bind` request flow
 - [x] Add DTO for `file.change` notification
@@ -45,7 +45,7 @@
 - [x] Add `query.execute` / `query.cancel` dispatch with mock notifications
 - [x] Add protocol error mapping
 - [x] Refactor transport into decomposed components + manual DI wiring
-- [x] Add mock dispatch handlers for `connection.upsert` / `credential.store`
+- [x] Add mock dispatch handler for `connection.upsert`
 - [x] Refactor request dispatch into handler registry + per-method handlers
 - [x] Add `backend.runtimeStatus` dispatch handler exposing runtime snapshot
 - [x] Add unit tests for request dispatcher routing + unknown-method error mapping
@@ -92,7 +92,7 @@
 - [x] Add desktop gateway negative-path tests (timeouts/send failures/ping failure/unknown response id)
 - [x] Add CI workflow executing desktop tests + protocol fixtures + backend contract fixture tests
 - [~] Implement protocol/diagnostics secret redaction (desktop side done; backend side pending)
-- [~] Implement credential-handle flow (`connection.upsert` / `credential.store`) (contract + mock dispatch done; encryption persistence pending)
+- [~] Implement secret integration around `connection.upsert` (desktop `core.security` in progress; backend bridge pending decision)
 - [x] Centralize desktop backend capability declarations for handshake requests
 - [x] Establish Java backend platform skeleton v1 (service composition + runtime lifecycle baseline)
 - [x] Add backend-core governance tests (dependencies/capabilities/cycles/status transitions)

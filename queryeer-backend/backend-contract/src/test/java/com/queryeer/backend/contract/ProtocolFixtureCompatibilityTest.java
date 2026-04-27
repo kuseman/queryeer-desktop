@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.contract.connection.ConnectionUpsertResult;
-import com.queryeer.backend.contract.credential.CredentialStoreResult;
 import com.queryeer.backend.contract.engine.EngineInvokeParams;
 import com.queryeer.backend.contract.engine.EngineInvokeResult;
 import com.queryeer.backend.contract.file.FileBindParams;
@@ -176,26 +175,6 @@ class ProtocolFixtureCompatibilityTest
 
         ConnectionUpsertResult result = objectMapper.convertValue(response.result(), ConnectionUpsertResult.class);
         Assertions.assertEquals("conn-fixture-1", result.connectionId());
-        Assertions.assertEquals(1L, result.version());
-    }
-
-    @Test
-    void credentialStoreFixturesAreCompatible() throws IOException
-    {
-        BackendEnvelope request = readFixture("request-credential-store.json");
-        BackendEnvelope response = readFixture("response-credential-store.json");
-
-        assertEnvelopeBase(request);
-        assertEnvelopeBase(response);
-        Assertions.assertEquals(EnvelopeType.REQUEST, request.type());
-        Assertions.assertEquals(EnvelopeType.RESPONSE, response.type());
-        Assertions.assertEquals("credential.store", request.method());
-        Assertions.assertEquals(request.id(), response.id());
-        Assertions.assertNotNull(response.result());
-
-        CredentialStoreResult result = objectMapper.convertValue(response.result(), CredentialStoreResult.class);
-        Assertions.assertEquals("conn-fixture-1", result.connectionId());
-        Assertions.assertEquals("cred-fixture-1", result.credentialId());
         Assertions.assertEquals(1L, result.version());
     }
 
