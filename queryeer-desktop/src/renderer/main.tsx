@@ -10,7 +10,8 @@ async function startApp(): Promise<void> {
     filesRegistry,
     fileMediator,
     workspaceService,
-    executeCommand
+    executeCommand,
+    canExecuteCommand
   } = await bootstrapShell();
 
   createRoot(document.getElementById("root")!).render(
@@ -21,6 +22,7 @@ async function startApp(): Promise<void> {
         fileMediator={fileMediator}
         workspaceService={workspaceService}
         executeCommand={executeCommand}
+        canExecuteCommand={canExecuteCommand}
       />
     </React.StrictMode>
   );

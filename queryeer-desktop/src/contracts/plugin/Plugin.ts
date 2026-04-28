@@ -46,6 +46,7 @@ export type CommandRegistry = {
     handler: () => void | Promise<void>;
   }) => void;
   executeCommand: (commandId: string) => Promise<CommandExecutionResult>;
+  canExecuteCommand: (commandId: string) => boolean;
 };
 
 export type FileSystemRegistry = {

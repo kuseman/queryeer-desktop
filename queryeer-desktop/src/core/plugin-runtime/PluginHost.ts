@@ -12,6 +12,7 @@ import {
 } from "./FileMediator";
 import type { PluginDiagnostics } from "./PluginDiagnostics";
 import { PluginRegistry } from "./PluginRegistry";
+import type { ContextValues } from "../../plugins/core.commands/when-evaluator";
 import {
   orderPluginsByDependencies,
   validateDependencies,
@@ -37,11 +38,12 @@ export type PluginHostOptions = {
     defaultPath?: string;
     filters?: { name: string; extensions: string[] }[];
   }) => Promise<{ canceled: boolean; filePath?: string }>;
+  getCommandContextValues?: () => ContextValues;
 };
 
 export class PluginHost {
   private readonly pluginRegistry = new PluginRegistry();
-  private readonly extensionRegistry = new ExtensionRegistry();
+  private readonly extensionRegistry: ExtensionRegistry;
   private readonly fileMediator: FileMediator;
   private readonly fileWatcher: FileWatcherService;
   private readonly activePlugins: Plugin[] = [];
@@ -54,6 +56,7 @@ export class PluginHost {
   };
 
   constructor(options: PluginHostOptions) {
+    this.extensionRegistry = new ExtensionRegistry(options.getCommandContextValues);
     this.fileWatcher = options.fileWatcher;
     this.fileMediator = createFileMediator({
       filesRegistry: this.extensionRegistry.createFilesRegistry(),
@@ -175,6 +178,10 @@ export class PluginHost {
 
   public async executeCommand(commandId: string) {
     return this.extensionRegistry.executeCommand(commandId);
+  }
+
+  public canExecuteCommand(commandId: string): boolean {
+    return this.extensionRegistry.canExecuteCommand(commandId);
   }
 
   public getDiagnostics(): PluginDiagnostics {

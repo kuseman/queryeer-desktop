@@ -33,7 +33,8 @@ function createContext(file: FileEntity): PluginContext {
   return {
     commands: {
       registerCommand: vi.fn(),
-      executeCommand: vi.fn(async () => ({ commandId: "noop", executed: true }))
+      executeCommand: vi.fn(async () => ({ commandId: "noop", executed: true })),
+      canExecuteCommand: vi.fn(() => true)
     },
     filesystems: { registerFileSystem: vi.fn() },
     files: {

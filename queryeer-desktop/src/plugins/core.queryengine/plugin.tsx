@@ -129,6 +129,7 @@ export const coreQueryEnginePlugin: Plugin = {
       id: "core.queryengine.execute",
       title: "Execute Query",
       category: "Query",
+      enablement: "backendHealthy",
       handler: async () => {
         queryEngineService.requestExecute();
       }
@@ -138,6 +139,7 @@ export const coreQueryEnginePlugin: Plugin = {
       id: "core.queryengine.cancel",
       title: "Cancel Query",
       category: "Query",
+      enablement: "backendHealthy",
       handler: async () => {
         queryEngineService.requestCancel();
       }

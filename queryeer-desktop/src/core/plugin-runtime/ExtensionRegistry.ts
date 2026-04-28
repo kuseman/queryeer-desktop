@@ -31,6 +31,7 @@ import type {
   DialogRegistry,
   FileSystemRegistry
 } from "../../contracts/plugin/Plugin";
+import type { ContextValues } from "../../plugins/core.commands/when-evaluator";
 import { CommandBus } from "./CommandBus";
 import { FileRegistry } from "./FileRegistry";
 
@@ -79,7 +80,7 @@ const DEFAULT_SHELL_DEFAULTS: LayoutShellDefaults = {
 };
 
 export class ExtensionRegistry {
-  private readonly commandBus = new CommandBus();
+  private readonly commandBus: CommandBus;
   private readonly commands = new Map<string, CommandExtension>();
   private readonly filesystems = new Map<string, FileSystemExtension>();
   private readonly menuItems = new Map<string, MenuItemContribution>();
@@ -102,16 +103,27 @@ export class ExtensionRegistry {
     getEditors: () => [...this.layoutEditors.values()]
   });
 
+  public constructor(getCommandContextValues?: () => ContextValues) {
+    this.commandBus = new CommandBus(() => getCommandContextValues?.() ?? {});
+  }
+
   public createCommandRegistry(): CommandRegistry {
     return {
       registerCommand: (command) => {
         this.commands.set(command.id, command);
-        this.commandBus.register(command.id, command.handler);
+        this.commandBus.register(command.id, command.handler, command.enablement);
       },
       executeCommand: async (commandId) => {
         return this.commandBus.execute(commandId);
+      },
+      canExecuteCommand: (commandId) => {
+        return this.commandBus.canExecute(commandId);
       }
     };
+  }
+
+  public canExecuteCommand(commandId: string): boolean {
+    return this.commandBus.canExecute(commandId);
   }
 
   public createFileSystemRegistry(): FileSystemRegistry {

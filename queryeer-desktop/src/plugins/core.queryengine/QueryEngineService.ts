@@ -89,6 +89,7 @@ export class QueryEngineService {
   }
 
   async execute(params: ExecuteParams): Promise<string> {
+    await ensureBackendHealthy();
     const queryExecutionId = crypto.randomUUID();
     const engineId = params.engineId ?? this.resolveEngineId(params);
     if (!engineId) {
@@ -121,10 +122,12 @@ export class QueryEngineService {
   }
 
   async cancel(queryExecutionId: string): Promise<void> {
+    await ensureBackendHealthy();
     await window.appShell.cancelBackendQuery({ queryExecutionId });
   }
 
   async invoke(params: EngineInvokeParams): Promise<unknown> {
+    await ensureBackendHealthy();
     const response = await runWithSecretsUnlocked(params.payload, async () => {
       return window.appShell.invokeBackendEngine(params);
     });
@@ -233,6 +236,14 @@ export class QueryEngineService {
     }
     return undefined;
   }
+}
+
+async function ensureBackendHealthy(): Promise<void> {
+  const status = await window.appShell.getBackendStatus();
+  if (status.state === "healthy") {
+    return;
+  }
+  throw new Error("Backend is not up and running yet. Please wait a moment and try again.");
 }
 
 async function runWithSecretsUnlocked<T>(payload: unknown, action: () => Promise<T>): Promise<T> {

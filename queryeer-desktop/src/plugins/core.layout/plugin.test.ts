@@ -32,7 +32,8 @@ function createContext(file?: FileEntity) {
       }) => {
         commands.set(command.id, command.handler);
       },
-      executeCommand: vi.fn(async () => ({ commandId: "x", executed: true }))
+      executeCommand: vi.fn(async () => ({ commandId: "x", executed: true })),
+      canExecuteCommand: vi.fn(() => true)
     },
     filesystems: { registerFileSystem: vi.fn() },
     files: {
