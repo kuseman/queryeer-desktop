@@ -21,6 +21,7 @@ type ActiveExecution = {
 
 const OUTPUT_CONTEXT_KEY = defineStateKey<OutputContext>("core.queryengine.outputContext");
 const SELECTED_PRIMARY_KEY = defineStateKey<string>("core.queryengine.selectedPrimary");
+const TEXT_OUTPUT_PRIMARY_ID = "core.queryengine.output.text";
 
 export function QueryEditorComponent({ file }: Props): JSX.Element {
   const [outputContext, setOutputContext] = useState<OutputContext>(IDLE_OUTPUT_CONTEXT);
@@ -28,6 +29,7 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
   const [selectedPrimaryId, setSelectedPrimaryId] = useState<string | null>(null);
 
   const activeExecutionByFileIdRef = useRef(new Map<string, ActiveExecution>());
+  const executionPrimaryOverrideByFileIdRef = useRef(new Map<string, string | null>());
   const handleExecuteRef = useRef<() => void>(() => {});
   const handleCancelRef = useRef<() => void>(() => {});
   const splitContainerRef = useRef<HTMLDivElement>(null);
@@ -45,7 +47,8 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
     }
     const reg = getFileStateRegistry();
     setOutputContext(reg.get(fileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT);
-    setSelectedPrimaryId(reg.get(fileId, SELECTED_PRIMARY_KEY) ?? null);
+    const override = executionPrimaryOverrideByFileIdRef.current.get(fileId);
+    setSelectedPrimaryId(override ?? reg.get(fileId, SELECTED_PRIMARY_KEY) ?? null);
   }, [file?.fileId]);
 
   const updateOutputContextForFile = useCallback(
@@ -60,6 +63,18 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
     },
     []
   );
+
+  const setExecutionPrimaryOverride = useCallback((targetFileId: string, outputId: string | null) => {
+    if (outputId === null) {
+      executionPrimaryOverrideByFileIdRef.current.delete(targetFileId);
+    } else {
+      executionPrimaryOverrideByFileIdRef.current.set(targetFileId, outputId);
+    }
+    if (fileIdRef.current === targetFileId) {
+      const manual = getFileStateRegistry().get(targetFileId, SELECTED_PRIMARY_KEY) ?? null;
+      setSelectedPrimaryId(outputId ?? manual);
+    }
+  }, []);
 
   const handleSelectPrimary = useCallback((id: string) => {
     const fileId = fileIdRef.current;
@@ -88,6 +103,8 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
 
       const text = editor.getSelectedText() ?? editor.getContent();
       if (!text.trim()) return;
+
+      setExecutionPrimaryOverride(targetFileId, null);
 
       updateOutputContextForFile(targetFileId, () => ({ ...IDLE_OUTPUT_CONTEXT, fileId: targetFileId, state: "running" }));
 
@@ -160,6 +177,10 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
               progress: null
             }));
 
+            const ctxAfterComplete = getFileStateRegistry().get(targetFileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT;
+            const hasRows = ctxAfterComplete.resultSets.some((rs) => rs.rows.length > 0);
+            setExecutionPrimaryOverride(targetFileId, hasRows ? null : TEXT_OUTPUT_PRIMARY_ID);
+
             // Finalize any open export streams and patch exportPath back into the result set
             const ctx = getFileStateRegistry().get(targetFileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT;
             for (const rs of ctx.resultSets) {
@@ -185,6 +206,7 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
               error: p.error ?? { code: "UNKNOWN", message: "Query failed" },
               progress: null
             }));
+            setExecutionPrimaryOverride(targetFileId, TEXT_OUTPUT_PRIMARY_ID);
           }
         });
 
@@ -199,11 +221,12 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
             message: error instanceof Error ? error.message : String(error)
           }
         }));
+        setExecutionPrimaryOverride(targetFileId, TEXT_OUTPUT_PRIMARY_ID);
       }
     };
 
     void run();
-  }, [file?.fileId, updateOutputContextForFile]);
+  }, [file?.fileId, setExecutionPrimaryOverride, updateOutputContextForFile]);
 
   const handleCancel = useCallback(() => {
     const targetFileId = file?.fileId;

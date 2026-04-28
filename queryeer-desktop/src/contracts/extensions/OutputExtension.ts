@@ -60,6 +60,8 @@ export type OutputContributor = {
   capability: string;
   mode: "primary" | "adhoc";
   title: string;
+  /** Optional icon URL used in output tabs. */
+  icon?: string;
   /** Lower number = higher priority in auto-resolution. Defaults to 100. */
   priority?: number;
   render: (context: OutputContext) => ReactNode;

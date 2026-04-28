@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { OutputContext, OutputContributor } from "../../../contracts/extensions/OutputExtension";
 import { getOutputRegistry } from "./OutputRegistry";
 
@@ -34,10 +34,16 @@ function eligiblePrimaries(
   return features === null ? primaries : primaries.filter((c) => features.includes(c.capability));
 }
 
+function hasAnyRows(context: OutputContext): boolean {
+  return context.resultSets.some((rs) => rs.rows.length > 0);
+}
+
 export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExportOpen }: Props): JSX.Element {
   const [contributors, setContributors] = useState<OutputContributor[]>(() =>
     getOutputRegistry().getContributors()
   );
+  const primaryHostRef = useRef<HTMLDivElement | null>(null);
+  const pendingFocusPrimaryIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const registry = getOutputRegistry();
@@ -49,9 +55,37 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
 
   const primaryContributor = resolvePrimary(contributors, context.features, selectedPrimaryId);
   const primaries = eligiblePrimaries(contributors, context.features);
+  const highestByCapability = new Map<string, OutputContributor>();
+  for (const contributor of primaries) {
+    if (!highestByCapability.has(contributor.capability)) {
+      highestByCapability.set(contributor.capability, contributor);
+    }
+  }
+
+  const contextForPrimary = (contributor: OutputContributor): OutputContext => {
+    if (
+      context.state === "completed"
+      && hasAnyRows(context)
+      && highestByCapability.get(contributor.capability)?.id !== contributor.id
+    ) {
+      return { ...context, resultSets: [] };
+    }
+    return context;
+  };
 
   useEffect(() => {
     getOutputRegistry().setSelectedPrimary(primaryContributor?.id ?? null);
+  }, [primaryContributor?.id]);
+
+  useEffect(() => {
+    if (!primaryContributor?.id) return;
+    if (pendingFocusPrimaryIdRef.current !== primaryContributor.id) return;
+    pendingFocusPrimaryIdRef.current = null;
+
+    const host = primaryHostRef.current;
+    if (!host) return;
+    const target = host.querySelector("[data-output-focus-target='true']") as HTMLElement | null;
+    target?.focus({ preventScroll: true });
   }, [primaryContributor?.id]);
 
   const adhocContributors =
@@ -76,8 +110,12 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
           <button
             key={c.id}
             className={`query-output-tab${c.id === primaryContributor?.id ? " query-output-tab-active" : ""}`}
-            onClick={() => onSelectPrimary?.(c.id)}
+            onClick={() => {
+              pendingFocusPrimaryIdRef.current = c.id;
+              onSelectPrimary?.(c.id);
+            }}
           >
+            {c.icon && <img src={c.icon} alt="" className="query-output-tab-icon" aria-hidden="true" />}
             {c.title}
           </button>
         ))}
@@ -95,9 +133,16 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
         </div>
       )}
 
-      <div className="query-output-primary">
-        {primaryContributor
-          ? primaryContributor.render(context)
+      <div className="query-output-primary" ref={primaryHostRef}>
+        {primaries.length > 0
+          ? primaries.map((contributor) => (
+              <div
+                key={contributor.id}
+                style={{ display: contributor.id === primaryContributor?.id ? "block" : "none", height: "100%" }}
+              >
+                {contributor.render(contextForPrimary(contributor))}
+              </div>
+            ))
           : <div className="query-output-empty">No output view available.</div>}
       </div>
 
