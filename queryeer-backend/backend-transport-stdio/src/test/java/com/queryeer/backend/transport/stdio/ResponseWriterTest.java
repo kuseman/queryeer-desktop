@@ -2,7 +2,10 @@ package com.queryeer.backend.transport.stdio;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -100,5 +103,29 @@ class ResponseWriterTest
                 .trim());
 
         Assertions.assertEquals(expectedByteCount, declaredLength);
+    }
+
+    @Test
+    void invokesBrokenPipeListenerWhenWriteFails() throws Exception
+    {
+        ObjectMapper objectMapper = new ObjectMapper();
+        EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
+        AtomicBoolean listenerInvoked = new AtomicBoolean(false);
+        ResponseWriter writer = new ResponseWriter(new OutputStream()
+        {
+            @Override
+            public void write(int b) throws IOException
+            {
+                throw new IOException("Pipe closed");
+            }
+        }, codec);
+        writer.onBrokenPipe(() -> listenerInvoked.set(true));
+
+        IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
+                () -> writer.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, "req-1", null, null, null, "ok", null)));
+
+        Assertions.assertTrue(listenerInvoked.get());
+        Assertions.assertTrue(exception.getMessage()
+                .contains("Could not write envelope"));
     }
 }
