@@ -12,8 +12,11 @@ import { Toolbar, StatusBar, Sidebar, SidebarDivider, EditorTabs, EditorPane } f
 import { SettingsModalHost } from "../../plugins/core.settings/SettingsModalHost";
 import { InputDialogHost } from "../../plugins/core.dialog/InputDialogHost";
 import { MessageDialogHost } from "../../plugins/core.dialog/MessageDialogHost";
+import { filterMenuItemsByWhen } from "../../plugins/core.menu/menu-item-filter";
 import { confirmCloseDirtyFile } from "./close-file-guard";
 import { filterSidebarViews } from "./sidebar-view-filter";
+import { filterToolbarActions } from "./toolbar-action-filter";
+import { resolveFirstAcceleratorsByCommand } from "./accelerator-utils";
 import "./shell-app.css";
 
 type ShellAppProps = {
@@ -23,6 +26,7 @@ type ShellAppProps = {
   workspaceService: RendererWorkspaceService;
   executeCommand: (commandId: string) => Promise<CommandExecutionResult>;
   canExecuteCommand: (commandId: string) => boolean;
+  onCommandContextChanged: (listener: () => void) => () => void;
 };
 
 export function ShellApp({
@@ -31,7 +35,8 @@ export function ShellApp({
   fileMediator,
   workspaceService,
   executeCommand,
-  canExecuteCommand
+  canExecuteCommand,
+  onCommandContextChanged
 }: ShellAppProps): JSX.Element {
   const [visibleZones, setVisibleZones] = useState<Set<LayoutZone>>(() => {
     const restored = workspaceService.restoredLayout()?.visibleZones;
@@ -87,6 +92,7 @@ export function ShellApp({
     () => workspaceService.restoredActiveFileId() ?? filesRegistry.listFiles()[0]?.fileId ?? null
   );
   const activeFileIdRef = useRef<string | null>(activeFileId);
+  const [, setCommandContextVersion] = useState(0);
   const layoutRef = useRef<HTMLElement | null>(null);
   const tabsRef = useRef<HTMLDivElement | null>(null);
 
@@ -97,6 +103,12 @@ export function ShellApp({
   useEffect(() => {
     workspaceService.setActiveFileSnapshotProvider(() => activeFileIdRef.current);
   }, [workspaceService]);
+
+  useEffect(() => {
+    return onCommandContextChanged(() => {
+      setCommandContextVersion((version) => version + 1);
+    });
+  }, [onCommandContextChanged]);
 
   const toggleZone = (zone: LayoutZone) => {
     setVisibleZones((previous) => {
@@ -111,11 +123,6 @@ export function ShellApp({
       return next;
     });
   };
-
-  const toolbarActions = useMemo(
-    () => [...extensions.layout.toolbarActions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
-    [extensions.layout.toolbarActions]
-  );
 
   const statusItemsLeft = useMemo(
     () =>
@@ -136,13 +143,27 @@ export function ShellApp({
   const viewContext = useMemo(() => {
     const activeFileForViewContext =
       activeFileId != null ? files.find((file) => file.fileId === activeFileId) : undefined;
+    const hasActiveQueryExecutableFile = activeFileForViewContext
+      ? filesRegistry.capabilities.hasCapability(activeFileForViewContext.mimeType, "queryexecutable")
+      : false;
     return {
       hasOpenFiles: openFileIds.length > 0,
       hasActiveFile: activeFileForViewContext != null,
       activeFileMimeType: activeFileForViewContext?.mimeType,
-      activeFileEditorId: activeFileForViewContext?.editorId
+      activeFileEditorId: activeFileForViewContext?.editorId,
+      hasActiveQueryExecutableFile
     };
-  }, [openFileIds.length, activeFileId, files]);
+  }, [openFileIds.length, activeFileId, files, filesRegistry]);
+
+  const toolbarActions = useMemo(
+    () => filterToolbarActions(extensions.layout.toolbarActions, viewContext),
+    [extensions.layout.toolbarActions, viewContext]
+  );
+
+  const menuItems = useMemo(
+    () => filterMenuItemsByWhen(extensions.menu.items, viewContext),
+    [extensions.menu.items, viewContext]
+  );
 
   const primaryViews = useMemo(
     () => filterSidebarViews(extensions.layout.views, "primarySidebar", viewContext),
@@ -171,6 +192,18 @@ export function ShellApp({
     }
     return map;
   }, [editors]);
+
+  const commandTitleById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const command of extensions.commands) {
+      map.set(command.id, command.title);
+    }
+    return map;
+  }, [extensions.commands]);
+
+  const acceleratorByCommand = useMemo(() => {
+    return resolveFirstAcceleratorsByCommand(extensions.keybindings, window.appShell.platform);
+  }, [extensions.layout.toolbarActions, extensions.keybindings]);
 
   const openFiles = useMemo(
     () =>
@@ -335,11 +368,19 @@ export function ShellApp({
 
   const showPrimarySidebar = visibleZones.has("primarySidebar") && primaryViews.length > 0;
   const showSecondarySidebar = visibleZones.has("secondarySidebar") && secondaryViews.length > 0;
+  const shellGridTemplateColumns =
+    showPrimarySidebar && showSecondarySidebar
+      ? `${primarySidebarWidth}px 1px minmax(0, 1fr) 1px ${secondarySidebarWidth}px`
+      : showPrimarySidebar
+        ? `${primarySidebarWidth}px 1px minmax(0, 1fr)`
+        : showSecondarySidebar
+          ? `minmax(0, 1fr) 1px ${secondarySidebarWidth}px`
+          : "minmax(0, 1fr)";
 
   return (
     <div className="shell-page">
       <CoreMenuBar
-        menuItems={extensions.menu.items}
+        menuItems={menuItems}
         keybindings={extensions.keybindings}
         executeCommand={executeCommand}
         canExecuteCommand={canExecuteCommand}
@@ -350,10 +391,13 @@ export function ShellApp({
           visibleZones={visibleZones}
           onToggleZone={toggleZone}
           canExecuteCommand={canExecuteCommand}
+          executeCommand={executeCommand}
+          getCommandTitle={(commandId) => commandTitleById.get(commandId)}
+          getCommandAccelerator={(commandId) => acceleratorByCommand.get(commandId)}
         />
       )}
 
-      <main className="shell-layout" ref={layoutRef}>
+      <main className="shell-layout" ref={layoutRef} style={{ gridTemplateColumns: shellGridTemplateColumns }}>
         {showPrimarySidebar && (
           <Sidebar
             views={primaryViews}

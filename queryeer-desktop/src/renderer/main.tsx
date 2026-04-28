@@ -11,7 +11,8 @@ async function startApp(): Promise<void> {
     fileMediator,
     workspaceService,
     executeCommand,
-    canExecuteCommand
+    canExecuteCommand,
+    onCommandContextChanged
   } = await bootstrapShell();
 
   createRoot(document.getElementById("root")!).render(
@@ -23,6 +24,7 @@ async function startApp(): Promise<void> {
         workspaceService={workspaceService}
         executeCommand={executeCommand}
         canExecuteCommand={canExecuteCommand}
+        onCommandContextChanged={onCommandContextChanged}
       />
     </React.StrictMode>
   );

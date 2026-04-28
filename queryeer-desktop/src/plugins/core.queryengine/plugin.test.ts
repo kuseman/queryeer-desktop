@@ -243,13 +243,13 @@ describe("core.queryengine plugin", () => {
     expect(registerCommandMock).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "core.queryengine.execute",
-        enablement: "backendHealthy"
+        enablement: "backendHealthy && editorFocus && hasActiveQueryExecutableFile && activeFileMetadata.core.queryengine.tabState != 'running'"
       })
     );
     expect(registerCommandMock).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "core.queryengine.cancel",
-        enablement: "backendHealthy"
+        enablement: "backendHealthy && editorFocus && hasActiveQueryExecutableFile && activeFileMetadata.core.queryengine.tabState == 'running'"
       })
     );
   });

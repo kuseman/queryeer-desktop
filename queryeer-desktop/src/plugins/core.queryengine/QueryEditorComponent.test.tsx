@@ -6,6 +6,8 @@ import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistr
 
 const mocks = vi.hoisted(() => {
   const subscribeByExecutionId = new Map<string, (event: { method: string; params?: unknown }) => void>();
+  const executeRequestListeners = new Set<() => void>();
+  const cancelRequestListeners = new Set<() => void>();
   return {
     executeMock: vi.fn(async () => "exec-1"),
     cancelMock: vi.fn(async () => {}),
@@ -15,13 +17,21 @@ const mocks = vi.hoisted(() => {
         subscribeByExecutionId.delete(executionId);
       };
     }),
-    onExecuteRequestMock: vi.fn(() => () => {}),
-    onCancelRequestMock: vi.fn(() => () => {}),
+    onExecuteRequestMock: vi.fn((listener: () => void) => {
+      executeRequestListeners.add(listener);
+      return () => executeRequestListeners.delete(listener);
+    }),
+    onCancelRequestMock: vi.fn((listener: () => void) => {
+      cancelRequestListeners.add(listener);
+      return () => cancelRequestListeners.delete(listener);
+    }),
     getActiveEditorMock: vi.fn(() => ({
       getSelectedText: () => undefined,
       getContent: () => "select 1"
     })),
-    subscribeByExecutionId
+    subscribeByExecutionId,
+    executeRequestListeners,
+    cancelRequestListeners
   };
 });
 
@@ -86,6 +96,8 @@ describe("QueryEditorComponent execution state across tab switches", () => {
     mocks.onCancelRequestMock.mockClear();
     mocks.getActiveEditorMock.mockClear();
     mocks.subscribeByExecutionId.clear();
+    mocks.executeRequestListeners.clear();
+    mocks.cancelRequestListeners.clear();
     getFileStateRegistry().evict("file-1");
     getFileStateRegistry().evict("file-2");
     mocks.executeMock.mockResolvedValue("exec-1");
@@ -110,55 +122,34 @@ describe("QueryEditorComponent execution state across tab switches", () => {
       root.render(<QueryEditorComponent file={file1} />);
     });
 
-    const clickRun = async () => {
-      const runButton = [...rootElement.querySelectorAll("button")].find((button) =>
-        button.textContent?.includes("Run")
-      );
-      expect(runButton).toBeTruthy();
-      await act(async () => {
-        runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        await Promise.resolve();
-      });
-    };
-
-    const getRunButton = () =>
-      [...rootElement.querySelectorAll("button")].find((button) => button.textContent?.includes("Run"));
-
-    const getStopButton = () =>
-      [...rootElement.querySelectorAll("button")].find((button) => button.textContent?.includes("Stop"));
-
-    await clickRun();
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
 
     expect(mocks.executeMock).toHaveBeenCalledWith(
       expect.objectContaining({
         fileId: "file-1"
       })
     );
-    expect(getRunButton()?.disabled).toBe(true);
-    expect(getStopButton()?.disabled).toBe(false);
-
     await act(async () => {
       root.render(<QueryEditorComponent file={file2} />);
     });
-
-    expect(getRunButton()?.disabled).toBe(false);
-    expect(getStopButton()?.disabled).toBe(true);
 
     await act(async () => {
       root.render(<QueryEditorComponent file={file1} />);
     });
 
-    expect(getRunButton()?.disabled).toBe(true);
-    expect(getStopButton()?.disabled).toBe(false);
-
     await act(async () => {
-      getStopButton()?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      for (const listener of mocks.cancelRequestListeners) {
+        listener();
+      }
       await Promise.resolve();
     });
 
     expect(mocks.cancelMock).toHaveBeenCalledWith("exec-1");
-    expect(getRunButton()?.disabled).toBe(false);
-    expect(getStopButton()?.disabled).toBe(true);
   });
 
   it("tracks concurrent executions per file across tab switches", async () => {
@@ -171,70 +162,46 @@ describe("QueryEditorComponent execution state across tab switches", () => {
       root.render(<QueryEditorComponent file={file1} />);
     });
 
-    const clickRun = async () => {
-      const runButton = [...rootElement.querySelectorAll("button")].find((button) =>
-        button.textContent?.includes("Run")
-      );
-      expect(runButton).toBeTruthy();
-      await act(async () => {
-        runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        await Promise.resolve();
-      });
-    };
-
-    const clickStop = async () => {
-      const stopButton = [...rootElement.querySelectorAll("button")].find((button) =>
-        button.textContent?.includes("Stop")
-      );
-      expect(stopButton).toBeTruthy();
-      await act(async () => {
-        stopButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        await Promise.resolve();
-      });
-    };
-
-    const getRunButton = () =>
-      [...rootElement.querySelectorAll("button")].find((button) => button.textContent?.includes("Run"));
-
-    const getStopButton = () =>
-      [...rootElement.querySelectorAll("button")].find((button) => button.textContent?.includes("Stop"));
-
-    await clickRun();
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
     expect(mocks.executeMock).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
         fileId: "file-1"
       })
     );
-    expect(getRunButton()?.disabled).toBe(true);
-    expect(getStopButton()?.disabled).toBe(false);
-
     await act(async () => {
       root.render(<QueryEditorComponent file={file2} />);
     });
 
-    expect(getRunButton()?.disabled).toBe(false);
-    expect(getStopButton()?.disabled).toBe(true);
-
-    await clickRun();
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
     expect(mocks.executeMock).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         fileId: "file-2"
       })
     );
-    expect(getRunButton()?.disabled).toBe(true);
-    expect(getStopButton()?.disabled).toBe(false);
-
-    await clickStop();
+    await act(async () => {
+      for (const listener of mocks.cancelRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
     expect(mocks.cancelMock).toHaveBeenCalledWith("exec-2");
 
     await act(async () => {
       root.render(<QueryEditorComponent file={file1} />);
     });
 
-    expect(getRunButton()?.disabled).toBe(true);
-    expect(getStopButton()?.disabled).toBe(false);
   });
 
   it("temporarily switches active output to text when query fails", async () => {
@@ -244,13 +211,10 @@ describe("QueryEditorComponent execution state across tab switches", () => {
       root.render(<QueryEditorComponent file={file1} />);
     });
 
-    const runButton = [...rootElement.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("Run")
-    );
-    expect(runButton).toBeTruthy();
-
     await act(async () => {
-      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
       await Promise.resolve();
     });
 
@@ -274,13 +238,10 @@ describe("QueryEditorComponent execution state across tab switches", () => {
       root.render(<QueryEditorComponent file={file1} />);
     });
 
-    const runButton = [...rootElement.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("Run")
-    );
-    expect(runButton).toBeTruthy();
-
     await act(async () => {
-      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
       await Promise.resolve();
     });
 

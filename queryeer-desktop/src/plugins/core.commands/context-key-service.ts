@@ -4,6 +4,7 @@ export type ContextKeyService = {
   get: (key: string) => string | number | boolean | undefined;
   set: (key: string, value: string | number | boolean | undefined) => void;
   snapshot: () => ContextValues;
+  onDidChange: (listener: () => void) => () => void;
   dispose: () => void;
 };
 
@@ -33,16 +34,31 @@ export function createContextKeyService(documentRef: Document = document): Conte
     ["explorerFocus", false],
     ["inputFocus", false]
   ]);
+  const listeners = new Set<() => void>();
+
+  const notifyChanged = () => {
+    for (const listener of listeners) {
+      listener();
+    }
+  };
+
+  const update = (key: string, value: string | number | boolean | undefined) => {
+    if (values.get(key) === value) {
+      return;
+    }
+    values.set(key, value);
+    notifyChanged();
+  };
 
   const refreshFocusContext = () => {
     const active = documentRef.activeElement instanceof HTMLElement ? documentRef.activeElement : null;
-    values.set("inputFocus", isInputLike(active));
-    values.set(
+    update("inputFocus", isInputLike(active));
+    update(
       "editorFocus",
       hasClosest(active, ["[data-context='editor']", ".shell-editor-pane", ".shell-editor-content"])
     );
-    values.set("terminalFocus", hasClosest(active, ["[data-context='terminal']", ".terminal", ".xterm"]));
-    values.set(
+    update("terminalFocus", hasClosest(active, ["[data-context='terminal']", ".terminal", ".xterm"]));
+    update(
       "explorerFocus",
       hasClosest(active, ["[data-context='explorer']", ".shell-sidebar-primary"])
     );
@@ -60,7 +76,7 @@ export function createContextKeyService(documentRef: Document = document): Conte
   return {
     get: (key) => values.get(key),
     set: (key, value) => {
-      values.set(key, value);
+      update(key, value);
     },
     snapshot: () => {
       const snapshot: ContextValues = {};
@@ -68,6 +84,12 @@ export function createContextKeyService(documentRef: Document = document): Conte
         snapshot[key] = value;
       }
       return snapshot;
+    },
+    onDidChange: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
     },
     dispose: () => {
       documentRef.removeEventListener("focusin", onFocusIn);

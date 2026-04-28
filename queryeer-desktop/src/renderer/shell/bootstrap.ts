@@ -13,9 +13,15 @@ import {
 } from "../../plugins/core.commands/keybinding-resolver";
 import { getTextEditorModelRepositories, getTextEditorRepositoryStates } from "../../plugins/core.editor/TextEditor/TextEditorModelRepository";
 import { createBackendCommandContext } from "./backend-command-context";
+import { filterMenuItemsByWhen } from "../../plugins/core.menu/menu-item-filter";
+import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
+import type { FileMediator } from "../../contracts/files/FileMediator";
+import { flattenContextObject } from "./context-value-flatten";
+import { createContextKeyService } from "../../plugins/core.commands/context-key-service";
 
 export async function bootstrapShell() {
   const commandContext = createBackendCommandContext();
+  const uiContext = createContextKeyService();
   await commandContext.initialize();
 
   const backendSync: FileBackendSync = {
@@ -71,8 +77,8 @@ export async function bootstrapShell() {
   });
 
   let workspaceService: RendererWorkspaceService | null = null;
-  let filesRegistry: ReturnType<typeof host.getFilesRegistry> | null = null;
-  let fileMediator: ReturnType<typeof host.getFileMediator> | null = null;
+  let filesRegistry: FilesRegistry | null = null;
+  let fileMediator: FileMediator | null = null;
 
   const onFileChanged = (file: FileEntity, text: string): void => {
     for (const repo of getTextEditorRepositoryStates()) {
@@ -91,7 +97,21 @@ export async function bootstrapShell() {
     muteFileWatcherPath: (uri, durationMs) => fileWatcher.mutePath(uri, durationMs),
     resolveFileContent,
     showSaveDialog: (options) => window.appShell.showDialogSave(options),
-    getCommandContextValues: () => commandContext.snapshot()
+    getCommandContextValues: () => {
+      const snapshot = commandContext.snapshot();
+      const activeFileId = fileMediator?.getActiveFileId() ?? null;
+      const activeFile = activeFileId ? filesRegistry?.getFile(activeFileId) : undefined;
+      const isQueryExecutable = activeFile
+        ? filesRegistry?.capabilities.hasCapability(activeFile.mimeType, "queryexecutable") === true
+        : false;
+      const metadataContext = flattenContextObject("activeFileMetadata", activeFile?.metadata);
+      return {
+        ...snapshot,
+        ...uiContext.snapshot(),
+        hasActiveQueryExecutableFile: isQueryExecutable,
+        ...metadataContext
+      };
+    }
   });
 
   filesRegistry = host.getFilesRegistry();
@@ -110,13 +130,14 @@ export async function bootstrapShell() {
 
   const rebuildNativeMenu = async (): Promise<void> => {
     const extensions = host.getExtensions();
-    const menuItems = extensions.menu.items.map((item) => ({
+    const menuItems = filterMenuItemsByWhen(extensions.menu.items, commandContext.snapshot()).map((item) => ({
       id: item.id,
       label: item.label,
       type: item.type,
       order: item.order,
       commandId: item.commandId,
       parentId: item.parentId,
+      when: item.when,
       icon: item.icon,
       accelerator: item.accelerator,
       role: item.role
@@ -246,6 +267,14 @@ export async function bootstrapShell() {
     commandExecution,
     executeCommand,
     canExecuteCommand: (commandId: string) => host.canExecuteCommand(commandId),
+    onCommandContextChanged: (listener: () => void) => {
+      const offBackend = commandContext.onDidChange(listener);
+      const offUi = uiContext.onDidChange(listener);
+      return () => {
+        offBackend();
+        offUi();
+      };
+    },
     diagnostics: host.getDiagnostics()
   };
 }

@@ -200,6 +200,20 @@ export const coreFilesPlugin: Plugin = {
         }
       }
     });
+    
+    context.layout.registerToolbarAction({
+      id: "core.files.toolbar.open",
+      order: 20,
+      commandId: "core.files.open",
+      icon: "file-open"
+    });
+
+    context.layout.registerToolbarAction({
+      id: "core.files.toolbar.new",
+      order: 30,
+      commandId: "core.files.new",
+      icon: "file-new"
+    });
 
     context.commands.registerCommand({
       id: "core.files.save",
@@ -226,6 +240,14 @@ export const coreFilesPlugin: Plugin = {
       handler: async () => {
         console.log("Save as command executed");
       }
+    });
+
+    context.layout.registerToolbarAction({
+      id: "core.files.toolbar.save",
+      order: 40,
+      commandId: "core.files.save",
+      icon: "file-save",
+      when: "hasActiveFile"
     });
 
     context.keybindings.registerKeybinding({
@@ -266,7 +288,8 @@ export const coreFilesPlugin: Plugin = {
       label: "New",
       order: 11,
       parentId: "core.menu.file",
-      commandId: "core.files.new"
+      commandId: "core.files.new",
+      icon: "file-new"
     });
 
     context.menu.registerMenuItem({
@@ -274,7 +297,8 @@ export const coreFilesPlugin: Plugin = {
       label: "Open",
       order: 12,
       parentId: "core.menu.file",
-      commandId: "core.files.open"
+      commandId: "core.files.open",
+      icon: "file-open"
     });
 
     context.menu.registerMenuItem({
@@ -350,7 +374,8 @@ export const coreFilesPlugin: Plugin = {
       label: "Save",
       order: 14,
       parentId: "core.menu.file",
-      commandId: "core.files.save"
+      commandId: "core.files.save",
+      icon: "file-save"
     });
 
     context.menu.registerMenuItem({

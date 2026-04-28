@@ -81,16 +81,23 @@ export const coreLayoutPlugin: Plugin = {
 
     context.layout.registerToolbarAction({
       id: "core.layout.toolbar.togglePrimarySidebar",
-      title: "",
-      order: 10,
+      order: 0,
+      alignment: "west",
       commandId: "core.layout.togglePrimarySidebar",
       icon: "sidebar-primary"
     });
 
     context.layout.registerToolbarAction({
+      id: "core.layout.toolbar.separator.sidebar",
+      type: "separator",
+      order: 10,
+      alignment: "west"
+    });
+
+    context.layout.registerToolbarAction({
       id: "core.layout.toolbar.toggleSecondarySidebar",
-      title: "",
-      order: 20,
+      order: 30,
+      alignment: "east",
       commandId: "core.layout.toggleSecondarySidebar",
       icon: "sidebar-secondary"
     });

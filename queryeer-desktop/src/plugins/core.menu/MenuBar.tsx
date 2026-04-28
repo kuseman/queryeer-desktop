@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import type { KeybindingContribution } from "../../contracts/extensions/KeybindingExtension";
 import type { MenuItemContribution } from "../../contracts/extensions/MenuExtension";
 import queryeerLogoUrl from "../../assets/icons/queryeer-logo.svg";
+import { layoutToolbarIconMap } from "../../renderer/icons/LayoutIcons";
+import {
+  normalizeAcceleratorForPlatform,
+  resolveGlobalAcceleratorsByCommand
+} from "../../renderer/shell/accelerator-utils";
 
 type CoreMenuBarProps = {
   menuItems: MenuItemContribution[];
@@ -9,14 +14,6 @@ type CoreMenuBarProps = {
   executeCommand: (commandId: string) => Promise<unknown>;
   canExecuteCommand: (commandId: string) => boolean;
 };
-
-function normalizeAccelerator(accelerator: string): string {
-  return accelerator
-    .replace(/CmdOrCtrl/g, window.appShell.platform === "darwin" ? "Cmd" : "Ctrl")
-    .replace(/\bCommand\b/g, "Cmd")
-    .replace(/\bControl\b/g, "Ctrl")
-    .replace(/\bPlus\b/g, "+");
-}
 
 function isTextInputTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
@@ -67,20 +64,17 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand, canExecute
   }, [sortedItems]);
 
   const acceleratorByCommand = useMemo(() => {
+    const platform = window.appShell.platform;
     const map = new Map<string, string>();
     for (const item of sortedItems) {
       if (item.accelerator) {
-        map.set(item.commandId ?? item.id, normalizeAccelerator(item.accelerator));
+        map.set(item.commandId ?? item.id, normalizeAcceleratorForPlatform(item.accelerator, platform));
       }
     }
-    for (const binding of [...keybindings].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
-      const isGlobal = (binding.scope ?? "global") === "global";
-      const isMenuSafeWhen = binding.when === undefined || binding.when === "global";
-      if (!isGlobal || !isMenuSafeWhen) {
-        continue;
-      }
-      if (!map.has(binding.commandId)) {
-        map.set(binding.commandId, normalizeAccelerator(binding.key));
+    const globalFallback = resolveGlobalAcceleratorsByCommand(keybindings, platform);
+    for (const [commandId, accelerator] of globalFallback.entries()) {
+      if (!map.has(commandId)) {
+        map.set(commandId, accelerator);
       }
     }
     return map;
@@ -381,7 +375,10 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand, canExecute
                   executeItem(item.id);
                 }}
               >
-                <span className="shell-titlebar-dropdown-label">{item.label}</span>
+                <span className="shell-titlebar-dropdown-label-wrap">
+                  {renderIcon(item.icon)}
+                  <span className="shell-titlebar-dropdown-label">{item.label}</span>
+                </span>
                 <span className="shell-titlebar-dropdown-tail">
                   <span className="shell-titlebar-dropdown-accelerator">
                     {acceleratorByCommand.get(item.commandId ?? item.id) ?? ""}
@@ -490,3 +487,13 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand, canExecute
     </header>
   );
 }
+  const renderIcon = (icon: string | undefined): JSX.Element => {
+    if (!icon) {
+      return <span className="shell-titlebar-dropdown-icon shell-titlebar-dropdown-icon-empty" aria-hidden="true" />;
+    }
+    const IconComponent = layoutToolbarIconMap[icon];
+    if (!IconComponent) {
+      return <span className="shell-titlebar-dropdown-icon shell-titlebar-dropdown-icon-empty" aria-hidden="true" />;
+    }
+    return <IconComponent className="shell-titlebar-dropdown-icon" />;
+  };
