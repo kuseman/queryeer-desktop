@@ -3,7 +3,7 @@ import type {
   LayoutRegistry,
   LayoutShellDefaults,
   LayoutStatusItemContribution,
-  LayoutToolbarActionContribution,
+  LayoutToolbarContribution,
   TabHeaderStyleContribution,
   LayoutViewContribution,
   LayoutWelcomeContribution,
@@ -44,7 +44,7 @@ export type ExtensionSnapshot = {
   };
   keybindings: KeybindingContribution[];
   layout: {
-    toolbarActions: LayoutToolbarActionContribution[];
+    toolbarActions: LayoutToolbarContribution[];
     statusItems: LayoutStatusItemContribution[];
     views: LayoutViewContribution[];
     editors: LayoutEditorContribution[];
@@ -86,7 +86,7 @@ export class ExtensionRegistry {
   private readonly menuItems = new Map<string, MenuItemContribution>();
   private readonly menuRebuildCallbacks: (() => Promise<void>)[] = [];
   private readonly keybindings = new Map<string, KeybindingContribution>();
-  private readonly layoutToolbarActions = new Map<string, LayoutToolbarActionContribution>();
+  private readonly layoutToolbarActions = new Map<string, LayoutToolbarContribution>();
   private readonly layoutStatusItems = new Map<string, LayoutStatusItemContribution>();
   private readonly layoutViews = new Map<string, LayoutViewContribution>();
   private readonly layoutEditors = new Map<string, LayoutEditorContribution>();

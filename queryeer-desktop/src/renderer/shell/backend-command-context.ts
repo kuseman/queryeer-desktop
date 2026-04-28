@@ -3,6 +3,7 @@ import type { ContextValues } from "../../plugins/core.commands/when-evaluator";
 export type BackendCommandContext = {
   snapshot: () => ContextValues;
   initialize: () => Promise<void>;
+  onDidChange: (listener: () => void) => () => void;
   dispose: () => void;
 };
 
@@ -13,8 +14,16 @@ export function createBackendCommandContext(pollIntervalMs = 1200): BackendComma
     backendUnavailable: false
   };
   let intervalHandle: number | null = null;
+  const listeners = new Set<() => void>();
+
+  const notifyChanged = () => {
+    for (const listener of listeners) {
+      listener();
+    }
+  };
 
   const refresh = async () => {
+    const previous = `${values.backendHealthy}|${values.backendStarting}|${values.backendUnavailable}`;
     try {
       const status = await window.appShell.getBackendStatus();
       values.backendHealthy = status.state === "healthy";
@@ -25,6 +34,10 @@ export function createBackendCommandContext(pollIntervalMs = 1200): BackendComma
       values.backendStarting = false;
       values.backendUnavailable = true;
     }
+    const next = `${values.backendHealthy}|${values.backendStarting}|${values.backendUnavailable}`;
+    if (next !== previous) {
+      notifyChanged();
+    }
   };
 
   return {
@@ -34,6 +47,12 @@ export function createBackendCommandContext(pollIntervalMs = 1200): BackendComma
       intervalHandle = window.setInterval(() => {
         void refresh();
       }, pollIntervalMs);
+    },
+    onDidChange: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
     },
     dispose: () => {
       if (intervalHandle !== null) {

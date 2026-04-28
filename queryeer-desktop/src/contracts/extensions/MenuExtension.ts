@@ -4,6 +4,7 @@ export type MenuItemContribution = {
   order?: number;
   commandId?: string;
   parentId?: string;
+  when?: string;
   icon?: string;
   type?: "normal" | "separator" | "submenu" | "checkbox" | "radio";
   role?: "undo" | "redo" | "cut" | "copy" | "paste" | "selectAll" | "reload" |

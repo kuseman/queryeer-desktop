@@ -14,13 +14,28 @@ export type SidebarZone = "primarySidebar" | "secondarySidebar";
 
 export type DockPlacement = "start" | "end" | "before" | "after";
 
+export type LayoutActionIconRenderer = (props: { className?: string }) => ReactNode;
+
 export type LayoutToolbarActionContribution = {
   id: string;
-  title: string;
+  type?: "action";
+  title?: string;
   order?: number;
+  alignment?: "west" | "east";
   commandId: string;
-  icon?: string;
+  icon?: string | LayoutActionIconRenderer;
+  when?: string;
 };
+
+export type LayoutToolbarSeparatorContribution = {
+  id: string;
+  type: "separator";
+  order?: number;
+  alignment?: "west" | "east";
+  when?: string;
+};
+
+export type LayoutToolbarContribution = LayoutToolbarActionContribution | LayoutToolbarSeparatorContribution;
 
 export type LayoutPanelAction = {
   id: string;
@@ -114,7 +129,7 @@ export type LayoutShellDefaults = {
 };
 
 export type LayoutRegistry = {
-  registerToolbarAction: (contribution: LayoutToolbarActionContribution) => void;
+  registerToolbarAction: (contribution: LayoutToolbarContribution) => void;
   registerStatusItem: (contribution: LayoutStatusItemContribution) => void;
   registerView: (contribution: LayoutViewContribution) => void;
   registerEditor: (contribution: LayoutEditorContribution) => void;

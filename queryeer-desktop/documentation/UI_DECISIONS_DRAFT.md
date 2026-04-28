@@ -88,6 +88,19 @@ Guidelines:
 - Active/hover state handled by surrounding button classes.
 - Prefer a consistent icon set style (outline or filled, not mixed).
 
+Implementation convention:
+
+- Use React TSX icon components for small interactive shell glyphs (`toolbar`, `tabs`, `menu affordances`) where state styling (`hover`, `active`, `disabled`) is driven by `currentColor`.
+- Keep these in `src/renderer/icons/*` and reference by stable icon ids (for example via icon maps).
+- Use standalone `.svg` assets for branding and richer illustrative visuals (for example logos and output-type artwork).
+- Keep asset SVG files near the feature that owns them (or under `src/assets` for shared branding assets).
+
+Current examples in repository:
+
+- TSX icon components: `src/renderer/icons/LayoutIcons.tsx`.
+- Branding asset SVG: `src/assets/icons/queryeer-logo.svg`.
+- Illustrative feature SVG assets: `src/plugins/core.queryengine.output.table/output-table.svg`, `src/plugins/core.queryengine.output.text/output-text.svg`.
+
 ## Proposed design tokens (initial)
 
 ```css

@@ -291,47 +291,8 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
     document.addEventListener("mouseup", onUp);
   }, []);
 
-  const isRunning = outputContext.state === "running";
-
   return (
     <div className="query-editor">
-      <div className="query-editor-toolbar">
-        <button
-          className="query-editor-btn query-editor-btn-run"
-          onClick={handleExecute}
-          disabled={isRunning}
-          title="Execute (F5)"
-        >
-          ▶ Run
-        </button>
-        <button
-          className="query-editor-btn query-editor-btn-stop"
-          onClick={handleCancel}
-          disabled={!isRunning}
-          title="Cancel"
-        >
-          ■ Stop
-        </button>
-        <div className="query-editor-status">
-          {isRunning && outputContext.progress?.message && (
-            <span className="query-editor-status-running">
-              {outputContext.progress.message}
-            </span>
-          )}
-          {outputContext.state === "completed" && outputContext.metrics && (
-            <span className="query-editor-status-ok">
-              ✓ {outputContext.metrics.rowCount ?? 0} rows · {outputContext.metrics.durationMs ?? 0}ms
-            </span>
-          )}
-          {outputContext.state === "failed" && outputContext.error && (
-            <span className="query-editor-status-error">✗ {outputContext.error.code}</span>
-          )}
-          {outputContext.state === "cancelled" && (
-            <span className="query-editor-status-cancelled">Cancelled</span>
-          )}
-        </div>
-      </div>
-
       <div className="query-editor-split" ref={splitContainerRef}>
         <div className="query-editor-text-pane" style={{ flexBasis: `${splitPercent}%` }}>
           <TextEditorComponent file={file} registry={queryTextRegistry} />

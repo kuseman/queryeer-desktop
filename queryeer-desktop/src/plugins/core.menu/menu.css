@@ -195,6 +195,24 @@
   min-width: 0;
 }
 
+.shell-titlebar-dropdown-label-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.shell-titlebar-dropdown-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+.shell-titlebar-dropdown-icon-empty {
+  opacity: 0;
+}
+
 .shell-titlebar-dropdown-tail {
   display: inline-flex;
   align-items: center;

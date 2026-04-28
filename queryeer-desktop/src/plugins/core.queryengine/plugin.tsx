@@ -3,6 +3,7 @@ import type { FileEntity } from "../../contracts/files/FileEntity";
 import { getQueryEngineService } from "./QueryEngineService";
 import { queryTextRegistry } from "./QueryTextEditorRegistry";
 import { QueryEditorComponent } from "./QueryEditorComponent";
+import { QueryRunIcon, QueryStopIcon } from "./query-toolbar-icons";
 
 const QUERY_TAB_STATE_METADATA_KEY = "core.queryengine.tabState";
 
@@ -129,7 +130,7 @@ export const coreQueryEnginePlugin: Plugin = {
       id: "core.queryengine.execute",
       title: "Execute Query",
       category: "Query",
-      enablement: "backendHealthy",
+      enablement: "backendHealthy && editorFocus && hasActiveQueryExecutableFile && activeFileMetadata.core.queryengine.tabState != 'running'",
       handler: async () => {
         queryEngineService.requestExecute();
       }
@@ -139,10 +140,27 @@ export const coreQueryEnginePlugin: Plugin = {
       id: "core.queryengine.cancel",
       title: "Cancel Query",
       category: "Query",
-      enablement: "backendHealthy",
+      enablement: "backendHealthy && editorFocus && hasActiveQueryExecutableFile && activeFileMetadata.core.queryengine.tabState == 'running'",
       handler: async () => {
         queryEngineService.requestCancel();
       }
+    });
+
+    context.layout.registerToolbarAction({
+      id: "core.queryengine.toolbar.execute",
+      title: "Execute",
+      order: 40,
+      commandId: "core.queryengine.execute",
+      icon: QueryRunIcon,
+      when: "hasActiveQueryExecutableFile"
+    });
+
+    context.layout.registerToolbarAction({
+      id: "core.queryengine.toolbar.cancel",
+      order: 41,
+      commandId: "core.queryengine.cancel",
+      icon: QueryStopIcon,
+      when: "hasActiveQueryExecutableFile"
     });
 
     context.keybindings.registerKeybinding({
