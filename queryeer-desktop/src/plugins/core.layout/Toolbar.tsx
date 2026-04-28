@@ -5,6 +5,7 @@ type ToolbarProps = {
   toolbarActions: LayoutToolbarActionContribution[];
   visibleZones: ReadonlySet<LayoutZone>;
   onToggleZone: (zone: LayoutZone) => void;
+  canExecuteCommand: (commandId: string) => boolean;
 };
 
 const zoneToggleByCommand: Record<string, "primarySidebar" | "secondarySidebar" | undefined> = {
@@ -12,7 +13,7 @@ const zoneToggleByCommand: Record<string, "primarySidebar" | "secondarySidebar" 
   "core.layout.toggleSecondarySidebar": "secondarySidebar"
 };
 
-export function Toolbar({ toolbarActions, visibleZones, onToggleZone }: ToolbarProps) {
+export function Toolbar({ toolbarActions, visibleZones, onToggleZone, canExecuteCommand }: ToolbarProps) {
   const isZoneVisible = (zone: LayoutZone) => visibleZones.has(zone);
 
   const renderIcon = (icon: string | undefined) => {
@@ -29,6 +30,9 @@ export function Toolbar({ toolbarActions, visibleZones, onToggleZone }: ToolbarP
         <span className="shell-toolbar-empty">No toolbar actions contributed yet.</span>
       ) : (
         toolbarActions.map((action) => (
+          (() => {
+            const isDisabled = !canExecuteCommand(action.commandId);
+            return (
           <button
             key={action.id}
             type="button"
@@ -38,12 +42,16 @@ export function Toolbar({ toolbarActions, visibleZones, onToggleZone }: ToolbarP
                 : ""
             }`}
             title={action.title}
+            disabled={isDisabled}
             aria-pressed={
               zoneToggleByCommand[action.commandId]
                 ? isZoneVisible(zoneToggleByCommand[action.commandId] as "primarySidebar" | "secondarySidebar")
                 : undefined
             }
             onClick={() => {
+              if (isDisabled) {
+                return;
+              }
               if (action.commandId === "core.layout.togglePrimarySidebar") {
                 onToggleZone("primarySidebar");
                 return;
@@ -57,6 +65,8 @@ export function Toolbar({ toolbarActions, visibleZones, onToggleZone }: ToolbarP
             {renderIcon(action.icon)}
             <span>{action.title}</span>
           </button>
+            );
+          })()
         ))
       )}
     </section>

@@ -12,8 +12,12 @@ import {
   resolveKeybindingState
 } from "../../plugins/core.commands/keybinding-resolver";
 import { getTextEditorModelRepositories, getTextEditorRepositoryStates } from "../../plugins/core.editor/TextEditor/TextEditorModelRepository";
+import { createBackendCommandContext } from "./backend-command-context";
 
 export async function bootstrapShell() {
+  const commandContext = createBackendCommandContext();
+  await commandContext.initialize();
+
   const backendSync: FileBackendSync = {
     openFile: async (file, initialText) => {
       if (!file.engineBinding) {
@@ -86,7 +90,8 @@ export async function bootstrapShell() {
     readFile: (uri) => window.appShell.readFile(uri),
     muteFileWatcherPath: (uri, durationMs) => fileWatcher.mutePath(uri, durationMs),
     resolveFileContent,
-    showSaveDialog: (options) => window.appShell.showDialogSave(options)
+    showSaveDialog: (options) => window.appShell.showDialogSave(options),
+    getCommandContextValues: () => commandContext.snapshot()
   });
 
   filesRegistry = host.getFilesRegistry();
@@ -145,9 +150,24 @@ export async function bootstrapShell() {
   await host.rebuildMenu();
   await rebuildNativeMenu();
 
+  const executeCommand = async (commandId: string): Promise<CommandExecutionResult> => {
+    const result = await host.executeCommand(commandId);
+    if (result.executed) {
+      return result;
+    }
+    if (result.reason === "disabled-by-enablement") {
+      await window.appShell.showDialogMessage({
+        title: "Backend not ready",
+        message: "Backend is not up and running yet. Please wait a moment and try again.",
+        severity: "warning"
+      });
+    }
+    return result;
+  };
+
   const keybindingService = createKeybindingService({
     executeCommand: async (commandId): Promise<CommandExecutionResult> => {
-      return host.executeCommand(commandId);
+      return executeCommand(commandId);
     },
     getUserKeybindings: () => window.appShell.getUserKeybindings()
   });
@@ -185,10 +205,10 @@ export async function bootstrapShell() {
     });
   }
 
-  const commandExecution = await host.executeCommand("core.commands.about");
+  const commandExecution = await executeCommand("core.commands.about");
 
   window.appShell.onMenuExecuteCommand((commandId: string) => {
-    void host.executeCommand(commandId);
+    void executeCommand(commandId);
   });
 
   const handleZoomKeyboard = (event: KeyboardEvent) => {
@@ -224,7 +244,8 @@ export async function bootstrapShell() {
     fileMediator,
     workspaceService,
     commandExecution,
-    executeCommand: (commandId: string) => host.executeCommand(commandId),
+    executeCommand,
+    canExecuteCommand: (commandId: string) => host.canExecuteCommand(commandId),
     diagnostics: host.getDiagnostics()
   };
 }

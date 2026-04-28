@@ -10,6 +10,7 @@ type SidebarProps = {
   onPanelStateChange?: (viewId: string, isOpen: boolean) => void;
   onPanelResize?: (viewId: string, height: number) => void;
   onExecuteCommand?: (commandId: string) => void;
+  canExecuteCommand?: (commandId: string) => boolean;
 };
 
 export function Sidebar({
@@ -20,7 +21,8 @@ export function Sidebar({
   panelHeights: initialHeights = {},
   onPanelStateChange,
   onPanelResize,
-  onExecuteCommand
+  onExecuteCommand,
+  canExecuteCommand
 }: SidebarProps) {
   const [flexHeights, setFlexHeights] = useState<Record<string, number>>(initialHeights);
   const panelRefs = useRef<Map<string, HTMLElement>>(new Map());
@@ -102,6 +104,7 @@ export function Sidebar({
             onResizeHandleMouseDown={(e) => startResize(e, prevView!.id)}
             onToggle={(isOpen) => onPanelStateChange?.(view.id, isOpen)}
             onExecuteCommand={onExecuteCommand}
+            canExecuteCommand={canExecuteCommand}
           />
         );
       })}
@@ -119,6 +122,7 @@ type CollapsiblePanelProps = {
   onResizeHandleMouseDown?: (e: React.MouseEvent) => void;
   onToggle?: (isOpen: boolean) => void;
   onExecuteCommand?: (commandId: string) => void;
+  canExecuteCommand?: (commandId: string) => boolean;
 };
 
 function CollapsiblePanel({
@@ -130,7 +134,8 @@ function CollapsiblePanel({
   showResizeHandle,
   onResizeHandleMouseDown,
   onToggle,
-  onExecuteCommand
+  onExecuteCommand,
+  canExecuteCommand
 }: CollapsiblePanelProps) {
   const [isOpen, setIsOpen] = useState(initialIsOpen);
 
@@ -171,17 +176,26 @@ function CollapsiblePanel({
         {view.panelActions && view.panelActions.length > 0 && (
           <div className="panel-actions">
             {view.panelActions.map((action) => (
+              (() => {
+                const isDisabled = canExecuteCommand ? !canExecuteCommand(action.commandId) : false;
+                return (
               <button
                 key={action.id}
                 className="panel-action"
                 title={action.title}
+                disabled={isDisabled}
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (isDisabled) {
+                    return;
+                  }
                   onExecuteCommand?.(action.commandId);
                 }}
               >
                 {action.icon}
               </button>
+                );
+              })()
             ))}
           </div>
         )}

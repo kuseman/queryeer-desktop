@@ -7,6 +7,7 @@ type CoreMenuBarProps = {
   menuItems: MenuItemContribution[];
   keybindings: KeybindingContribution[];
   executeCommand: (commandId: string) => Promise<unknown>;
+  canExecuteCommand: (commandId: string) => boolean;
 };
 
 function normalizeAccelerator(accelerator: string): string {
@@ -28,7 +29,7 @@ function isTextInputTarget(target: EventTarget | null): boolean {
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 }
 
-export function CoreMenuBar({ menuItems, keybindings, executeCommand }: CoreMenuBarProps): JSX.Element {
+export function CoreMenuBar({ menuItems, keybindings, executeCommand, canExecuteCommand }: CoreMenuBarProps): JSX.Element {
   const [openPath, setOpenPath] = useState<string[]>([]);
   const [focusPath, setFocusPath] = useState<string[]>([]);
   const [menuBarFocused, setMenuBarFocused] = useState(false);
@@ -120,6 +121,11 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand }: CoreMenu
   const executeItem = (itemId: string) => {
     const item = itemById.get(itemId);
     if (!item?.commandId) {
+      closeMenus(false);
+      return;
+    }
+    if (!canExecuteCommand(item.commandId)) {
+      void executeCommand(item.commandId);
       closeMenus(false);
       return;
     }
@@ -341,6 +347,7 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand }: CoreMenu
           }
 
           const hasChildren = getChildren(item.id).length > 0;
+          const isDisabled = item.commandId ? !canExecuteCommand(item.commandId) : false;
           const isFocused = focusPath[depth] === item.id;
           const isOpen = openPath[depth] === item.id;
           return (
@@ -348,6 +355,7 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand }: CoreMenu
               <button
                 type="button"
                 className={`shell-titlebar-dropdown-item ${isFocused ? "is-focused" : ""}`}
+                disabled={isDisabled}
                 onMouseEnter={() => {
                   setMenuBarFocused(true);
                   setFocusPath((previous) => [...previous.slice(0, depth), item.id]);
@@ -407,6 +415,7 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand }: CoreMenu
                 className={`shell-titlebar-menu-item ${isFocused ? "is-focused" : ""} ${
                   isOpen ? "is-open" : ""
                 }`}
+                disabled={item.commandId ? !canExecuteCommand(item.commandId) : false}
                 onClick={() => {
                   if (!hasChildren) {
                     executeItem(item.id);

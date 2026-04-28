@@ -22,6 +22,7 @@ type ShellAppProps = {
   fileMediator: FileMediator;
   workspaceService: RendererWorkspaceService;
   executeCommand: (commandId: string) => Promise<CommandExecutionResult>;
+  canExecuteCommand: (commandId: string) => boolean;
 };
 
 export function ShellApp({
@@ -29,7 +30,8 @@ export function ShellApp({
   filesRegistry,
   fileMediator,
   workspaceService,
-  executeCommand
+  executeCommand,
+  canExecuteCommand
 }: ShellAppProps): JSX.Element {
   const [visibleZones, setVisibleZones] = useState<Set<LayoutZone>>(() => {
     const restored = workspaceService.restoredLayout()?.visibleZones;
@@ -340,12 +342,14 @@ export function ShellApp({
         menuItems={extensions.menu.items}
         keybindings={extensions.keybindings}
         executeCommand={executeCommand}
+        canExecuteCommand={canExecuteCommand}
       />
       {visibleZones.has("toolBar") && (
         <Toolbar
           toolbarActions={toolbarActions}
           visibleZones={visibleZones}
           onToggleZone={toggleZone}
+          canExecuteCommand={canExecuteCommand}
         />
       )}
 
@@ -363,7 +367,10 @@ export function ShellApp({
             onPanelResize={(viewId, height) =>
               setPanelHeights((prev) => ({ ...prev, [viewId]: height }))
             }
-            onExecuteCommand={executeCommand}
+            onExecuteCommand={(commandId) => {
+              void executeCommand(commandId);
+            }}
+            canExecuteCommand={canExecuteCommand}
           />
         )}
 
@@ -423,7 +430,10 @@ export function ShellApp({
             onPanelResize={(viewId, height) =>
               setPanelHeights((prev) => ({ ...prev, [viewId]: height }))
             }
-            onExecuteCommand={executeCommand}
+            onExecuteCommand={(commandId) => {
+              void executeCommand(commandId);
+            }}
+            canExecuteCommand={canExecuteCommand}
           />
         )}
       </main>
@@ -433,6 +443,7 @@ export function ShellApp({
           statusItemsLeft={statusItemsLeft}
           statusItemsRight={statusItemsRight}
           executeCommand={executeCommand}
+          canExecuteCommand={canExecuteCommand}
         />
       )}
 

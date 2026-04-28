@@ -50,7 +50,8 @@ function createContext(file: FileEntity): PluginContext {
   return {
     commands: {
       registerCommand: vi.fn(),
-      executeCommand: vi.fn(async () => ({ commandId: "noop", executed: true }))
+      executeCommand: vi.fn(async () => ({ commandId: "noop", executed: true })),
+      canExecuteCommand: vi.fn(() => true)
     },
     filesystems: { registerFileSystem: vi.fn() },
     files: {
@@ -229,6 +230,25 @@ describe("core.queryengine plugin", () => {
         metadata: expect.objectContaining({
           "core.queryengine.tabState": "failed"
         })
+      })
+    );
+  });
+
+  it("marks backend-dependent commands with backendHealthy enablement", () => {
+    const context = createContext(makeFile());
+    coreQueryEnginePlugin.activate(context);
+
+    const registerCommandMock = context.commands.registerCommand as ReturnType<typeof vi.fn>;
+    expect(registerCommandMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "core.queryengine.execute",
+        enablement: "backendHealthy"
+      })
+    );
+    expect(registerCommandMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "core.queryengine.cancel",
+        enablement: "backendHealthy"
       })
     );
   });
