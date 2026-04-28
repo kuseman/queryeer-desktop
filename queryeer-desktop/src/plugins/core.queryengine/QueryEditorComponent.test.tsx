@@ -2,6 +2,7 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileEntity } from "../../contracts/files/FileEntity";
+import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistryImpl";
 
 const mocks = vi.hoisted(() => {
   const subscribeByExecutionId = new Map<string, (event: { method: string; params?: unknown }) => void>();
@@ -29,8 +30,12 @@ vi.mock("../core.editor/TextEditor/TextEditorComponent", () => ({
 }));
 
 vi.mock("./output/OutputPanel", () => ({
-  OutputPanel: ({ context }: { context: { state: string } }) => (
-    <div data-testid="mock-output" data-state={context.state} />
+  OutputPanel: ({ context, selectedPrimaryId }: { context: { state: string }; selectedPrimaryId?: string | null }) => (
+    <div
+      data-testid="mock-output"
+      data-state={context.state}
+      data-selected-primary={selectedPrimaryId ?? ""}
+    />
   )
 }));
 
@@ -81,6 +86,8 @@ describe("QueryEditorComponent execution state across tab switches", () => {
     mocks.onCancelRequestMock.mockClear();
     mocks.getActiveEditorMock.mockClear();
     mocks.subscribeByExecutionId.clear();
+    getFileStateRegistry().evict("file-1");
+    getFileStateRegistry().evict("file-2");
     mocks.executeMock.mockResolvedValue("exec-1");
 
     rootElement = document.createElement("div");
@@ -228,5 +235,65 @@ describe("QueryEditorComponent execution state across tab switches", () => {
 
     expect(getRunButton()?.disabled).toBe(true);
     expect(getStopButton()?.disabled).toBe(false);
+  });
+
+  it("temporarily switches active output to text when query fails", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} />);
+    });
+
+    const runButton = [...rootElement.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Run")
+    );
+    expect(runButton).toBeTruthy();
+
+    await act(async () => {
+      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(mocks.subscribeMock).toHaveBeenCalled();
+    const listener = [...mocks.subscribeByExecutionId.values()][0];
+    expect(listener).toBeTruthy();
+
+    await act(async () => {
+      listener?.({ method: "query.failed", params: { error: { code: "E", message: "boom" } } });
+      await Promise.resolve();
+    });
+
+    const output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.text");
+  });
+
+  it("temporarily switches active output to text when query has no rows", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} />);
+    });
+
+    const runButton = [...rootElement.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Run")
+    );
+    expect(runButton).toBeTruthy();
+
+    await act(async () => {
+      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(mocks.subscribeMock).toHaveBeenCalled();
+    const listener = [...mocks.subscribeByExecutionId.values()][0];
+    expect(listener).toBeTruthy();
+
+    await act(async () => {
+      listener?.({ method: "query.completed", params: { metrics: { rowCount: 0 }, features: ["rows"] } });
+      await Promise.resolve();
+    });
+
+    const output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.text");
   });
 });

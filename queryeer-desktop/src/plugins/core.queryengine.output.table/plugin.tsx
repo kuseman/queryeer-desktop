@@ -12,6 +12,7 @@ import { defineStateKey } from "../../contracts/files/FileStateRegistry";
 import { writeToClipboard } from "./clipboard/ClipboardRegistry";
 import { computeSelection, extendSelection, isCellSelected, isRowSelected, getBoundingBox } from "./clipboard/CellSelectionModel";
 import type { SelectionAnchor, SelectionModel } from "./clipboard/CellSelectionModel";
+import outputTableIconUrl from "./output-table.svg";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -60,6 +61,7 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
   const appliedCountRef = useRef(0);
+  const bindingRef = useRef<string>("");
 
   // Custom rectangular cell selection — managed independently of AG Grid's row selection.
   const [selection, setSelection] = useState<SelectionModel | null>(() =>
@@ -70,10 +72,13 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
   selectionRef.current = selection;
   const anchorRef = useRef<SelectionAnchor | null>(null);
 
-  // Restore anchor from file state on mount — runs once per TableGrid instance (unique key per file+resultSet).
   useEffect(() => {
-    if (fileId) anchorRef.current = getFileStateRegistry().get(fileId, SELECTION_KEY)?.[resultSetIndex]?.anchor ?? null;
-  }, []);
+    if (fileId) {
+      anchorRef.current = getFileStateRegistry().get(fileId, SELECTION_KEY)?.[resultSetIndex]?.anchor ?? null;
+    } else {
+      anchorRef.current = null;
+    }
+  }, [fileId, resultSetIndex]);
 
   // Drag state: tracks whether a mouse-drag selection is in progress.
   const isDraggingRef = useRef(false);
@@ -133,8 +138,6 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
     },
   }), [schema]);
 
-  const savedState = fileId ? getFileStateRegistry().get(fileId, GRID_STATE_KEY) : undefined;
-
   const onGridReady = useCallback(
     (params: GridReadyEvent) => {
       apiRef.current = params.api;
@@ -146,6 +149,31 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
     },
     [schema]
   );
+
+  useEffect(() => {
+    const api = apiRef.current;
+    if (!api) return;
+
+    const binding = `${fileId ?? ""}:${resultSetIndex}`;
+    if (bindingRef.current === binding) return;
+    bindingRef.current = binding;
+
+    const savedSelection = fileId
+      ? (getFileStateRegistry().get(fileId, SELECTION_KEY)?.[resultSetIndex] ?? { selection: null, anchor: null })
+      : { selection: null, anchor: null };
+    selectionRef.current = savedSelection.selection;
+    setSelection(savedSelection.selection);
+    anchorRef.current = savedSelection.anchor;
+
+    api.setGridOption("rowData", rows.map((r) => mapRow(r, schema.columns)));
+    appliedCountRef.current = rows.length;
+
+    const savedState = fileId ? getFileStateRegistry().get(fileId, GRID_STATE_KEY) : undefined;
+    if (savedState) {
+      (api as unknown as { setState?: (state: GridState) => void }).setState?.(savedState);
+    }
+    api.refreshCells({ force: true });
+  }, [fileId, resultSetIndex, rows, schema]);
 
   // After AG Grid renders its first batch of rows, repaint cells so restored selection is visible.
   const onFirstDataRendered = useCallback((params: FirstDataRenderedEvent) => {
@@ -305,7 +333,6 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
         onCellMouseDown={onCellMouseDown}
         onCellMouseOver={onCellMouseOver}
         onCellClicked={onCellClicked}
-        initialState={savedState}
         rowBuffer={30}
         suppressMovableColumns={false}
       />
@@ -336,12 +363,8 @@ function TableOutputView({ context }: { context: OutputContext }): JSX.Element {
   }, [context.fileId]);
 
   if (context.resultSets.length === 0) {
-    if (context.state === "failed" && context.error) {
-      return (
-        <div className="table-output-empty">
-          <strong>{context.error.code}</strong> — {context.error.message}
-        </div>
-      );
+    if (context.state === "failed") {
+      return <div />;
     }
     if (context.state === "completed") {
       return (
@@ -363,7 +386,7 @@ function TableOutputView({ context }: { context: OutputContext }): JSX.Element {
   const activeSet = context.resultSets[clampedIndex];
 
   return (
-    <div className="table-output-container">
+    <div className="table-output-container" tabIndex={-1} data-output-focus-target="true">
       {context.resultSets.length > 1 && (
         <div className="table-output-result-tabs">
           {context.resultSets.map((rs, i) => (
@@ -380,7 +403,6 @@ function TableOutputView({ context }: { context: OutputContext }): JSX.Element {
 
       <div className="table-output-grid">
         <TableGrid
-          key={`${context.fileId ?? ""}:${activeSet.resultSetIndex}`}
           resultSetIndex={activeSet.resultSetIndex}
           schema={activeSet.schema}
           rows={activeSet.rows}
@@ -421,6 +443,7 @@ export const coreQueryEngineOutputTablePlugin: Plugin = {
       capability: "rows",
       mode: "primary",
       title: "Results",
+      icon: outputTableIconUrl,
       priority: 0,
       render: (context) => <TableOutputView context={context} />
     });
