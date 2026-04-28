@@ -102,6 +102,7 @@ public final class BackendRunnerApp
         NotificationDispatcher notificationDispatcher = new NotificationDispatcher(notificationHandlers);
 
         StdioTransportServer transportServer = new StdioTransportServer(System.in, codec, responseWriter, requestDispatcher, notificationDispatcher);
+        responseWriter.onBrokenPipe(transportServer::stop);
         System.err.println(withCorrelation("Queryeer backend runner started (stdio mode).", null));
         try
         {
@@ -109,7 +110,10 @@ public final class BackendRunnerApp
         }
         catch (IOException e)
         {
-            throw new IllegalStateException("Failed to start stdio transport", e);
+            if (!transportServer.isStopped())
+            {
+                throw new IllegalStateException("Failed to start stdio transport", e);
+            }
         }
         finally
         {

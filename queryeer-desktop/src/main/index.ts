@@ -27,6 +27,7 @@ import { defaultSettingsDirPath, SettingsStore } from "./settings/settings-store
 import { defaultRecentFilesPath, RecentFilesStore } from "./recent-files/recent-files-store.js";
 import { SecurityService } from "./security/security-service.js";
 import { defaultSecurityDirPath, VaultStore } from "./security/vault-store.js";
+import { createBeforeQuitHandler } from "./app-shutdown.js";
 
 const isDev = !app.isPackaged;
 
@@ -67,6 +68,12 @@ let backupStore: BackupStore | null = null;
 let recentFilesStore: RecentFilesStore | null = null;
 let securityService: SecurityService | null = null;
 let mainWindow: BrowserWindow | null = null;
+
+const beforeQuitHandler = createBeforeQuitHandler({
+  stopBackend: () => backendGateway.stop(),
+  flushWorkspace: () => workspaceStore?.flush() ?? Promise.resolve(),
+  requestQuit: () => app.quit()
+});
 
 const dockIconPath = join(__dirname, "../../resources/icons/icon-128.png");
 const windowIconPath = join(__dirname, "../../resources/icons/icon-256.png");
@@ -376,8 +383,10 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
-    void backendGateway.stop();
-    void workspaceStore?.flush();
     app.quit();
   }
+});
+
+app.on("before-quit", (event) => {
+  beforeQuitHandler(event);
 });

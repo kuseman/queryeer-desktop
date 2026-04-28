@@ -14,6 +14,7 @@ import com.queryeer.backend.contract.query.QueryFailedNotification;
 
 public final class StdioTransportServer
 {
+    private final InputStream input;
     private final FramedReader framedReader;
     private final EnvelopeCodec codec;
     private final ResponseWriter responseWriter;
@@ -25,9 +26,11 @@ public final class StdioTransportServer
         t.setDaemon(true);
         return t;
     });
+    private volatile boolean stopped;
 
     public StdioTransportServer(InputStream input, EnvelopeCodec codec, ResponseWriter responseWriter, RequestDispatcher requestDispatcher, NotificationDispatcher notificationDispatcher)
     {
+        this.input = input;
         this.framedReader = new FramedReader(input, line -> System.err.println("[console] " + line));
         this.codec = codec;
         this.responseWriter = responseWriter;
@@ -38,11 +41,32 @@ public final class StdioTransportServer
     public void start() throws IOException
     {
         String frame;
-        while ((frame = framedReader.readFrame()) != null)
+        while (!stopped
+                && (frame = framedReader.readFrame()) != null)
         {
             final String f = frame;
             handlerExecutor.submit(() -> handleLine(f));
         }
+        stop();
+    }
+
+    public void stop()
+    {
+        stopped = true;
+        handlerExecutor.shutdownNow();
+        try
+        {
+            input.close();
+        }
+        catch (IOException e)
+        {
+            // Ignore close failures while shutting down transport.
+        }
+    }
+
+    public boolean isStopped()
+    {
+        return stopped;
     }
 
     private void handleLine(String line)

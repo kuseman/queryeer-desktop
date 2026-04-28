@@ -3,6 +3,7 @@ package com.queryeer.backend.transport.stdio;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 
 import com.queryeer.backend.contract.BackendEnvelope;
 
@@ -10,6 +11,9 @@ public final class ResponseWriter
 {
     private final OutputStream output;
     private final EnvelopeCodec codec;
+    private volatile Runnable brokenPipeListener = () ->
+    {
+    };
 
     public ResponseWriter(OutputStream output, EnvelopeCodec codec)
     {
@@ -30,7 +34,13 @@ public final class ResponseWriter
         }
         catch (IOException e)
         {
+            brokenPipeListener.run();
             throw new IllegalStateException("Could not write envelope", e);
         }
+    }
+
+    public void onBrokenPipe(Runnable listener)
+    {
+        this.brokenPipeListener = Objects.requireNonNull(listener, "listener");
     }
 }
