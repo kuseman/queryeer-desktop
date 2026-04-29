@@ -168,7 +168,7 @@ Debouncing of `notifyChanged` → `file.change` lives in the mediator with a con
 
 ### 5.3 `executeFile`
 
-Pulls current text from the editor model, ensures the backend session is up to date (flush pending debounced change), then calls `query.execute` with the `fileId` so the backend reuses the cached parse tree.
+Pulls current text from the editor model, ensures the backend session is up to date (flush pending debounced change), then calls `queryengine.execute` with the `fileId` so the backend reuses the cached parse tree.
 
 ## 6. Protocol additions
 
@@ -209,9 +209,9 @@ Additive, backward-compatible (protocol minor bump). Java DTOs go under `queryee
 { "fileId": "f-001", "engineId": "payloadbuilder", "connectionId": "conn-001" }
 ```
 
-### 6.5 `query.execute` extension
+### 6.5 `queryengine.execute` extension
 
-Add optional `fileId` to `query.execute` params. When `fileId` is present and the backend has a matching session, backend SHOULD reuse the cached parse tree instead of re-parsing `text`. `text` remains accepted for stateless callers (probes, CLI).
+Add optional `fileId` to `queryengine.execute` params. When `fileId` is present and the backend has a matching session, backend SHOULD reuse the cached parse tree instead of re-parsing `text`. `text` remains accepted for stateless callers (probes, CLI).
 
 ## 7. Extension contract expansions
 
@@ -259,8 +259,8 @@ Five independently merge-able increments. The app stays bootable after each. **I
 | 1 | Core FE registry | done | `core.files` plugin, `FileEntity` type, `FileRegistry`, wired into `PluginContext`. `ShellApp.tsx` now drives tabs from `openFileIds`. |
 | 2 | Resolvers + mime | done | `MimeResolver` / `EditorResolver` chains; `LayoutEditorContribution.supportedMimeTypes` added. `dev-query-probe` declares `application/x-payloadbuilder`. |
 | 3 | Mediator | done | `FileMediator` with openFile / closeFile / saveFile / notifyChanged / bindEngine / executeFile / reloadFile / acceptExternalChange / discardExternalChange. Backend-sync hook + onFileChanged hook for workspace autosave. Owns the change debouncing. |
-| 4 | Protocol + Java registry | done | `file.open/close/bind` requests + `file.change` notification on both sides. Fixtures + Java `ProtocolFixtureCompatibilityTest`. `FileRegistry` + `FileSessionHandler` + `FileSessionHandlerRegistry` SPI in `backend-api`. `DefaultFileRegistry` in `backend-core`. Request/notification handlers in `backend-transport-stdio`. `query.execute` accepts optional `fileId`. |
-| 5 | Engine binding + execute | **deferred** | `files.registerEngineResolver`; payloadbuilder implements `FileSessionHandler` and caches parse trees; backend reuses cached parse tree via `query.execute.fileId`. Premature without an editor + output wiring; revisit when those land. |
+| 4 | Protocol + Java registry | done | `file.open/close/bind` requests + `file.change` notification on both sides. Fixtures + Java `ProtocolFixtureCompatibilityTest`. `FileRegistry` + `FileSessionHandler` + `FileSessionHandlerRegistry` SPI in `backend-api`. `DefaultFileRegistry` in `backend-core`. Request/notification handlers in `backend-transport-stdio`. `queryengine.execute` accepts optional `fileId`. |
+| 5 | Engine binding + execute | **deferred** | `files.registerEngineResolver`; payloadbuilder implements `FileSessionHandler` and caches parse trees; backend reuses cached parse tree via `queryengine.execute.fileId`. Premature without an editor + output wiring; revisit when those land. |
 
 ## 9. Key decisions (locked)
 

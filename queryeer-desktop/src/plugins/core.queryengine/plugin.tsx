@@ -117,10 +117,10 @@ export const coreQueryEnginePlugin: Plugin = {
         return;
       }
 
-      if (event.method === "query.completed") {
+      if (event.method === "queryengine.completed") {
         fileIdByExecutionId.delete(params.queryExecutionId);
         writeQueryTabState(context, fileId, undefined);
-      } else if (event.method === "query.failed") {
+      } else if (event.method === "queryengine.failed") {
         fileIdByExecutionId.delete(params.queryExecutionId);
         writeQueryTabState(context, fileId, "failed");
       }

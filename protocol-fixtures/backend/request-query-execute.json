@@ -2,7 +2,7 @@
   "protocolVersion": "1.0.0",
   "type": "request",
   "id": "req-fixture-query-execute-1",
-  "method": "query.execute",
+  "method": "queryengine.execute",
   "params": {
     "queryExecutionId": "exec-fixture-1",
     "engineId": "payloadbuilder",

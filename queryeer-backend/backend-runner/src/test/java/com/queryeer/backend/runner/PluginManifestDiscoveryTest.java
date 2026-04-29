@@ -34,7 +34,7 @@ class PluginManifestDiscoveryTest
                     "entrypointClass": "com.example.DoesNotMatter"
                   },
                   "dependencies": [],
-                  "providesCapabilities": ["query.execute"],
+                  "providesCapabilities": ["queryengine.execute"],
                   "requiredCapabilities": []
                 }
                 """;

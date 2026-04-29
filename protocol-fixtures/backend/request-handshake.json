@@ -11,12 +11,12 @@
     "supportedProtocolMajors": [1],
     "requestedCapabilities": [
       "health.ping",
-      "query.execute",
-      "query.cancel",
-      "query.progress",
-      "query.resultChunk",
-      "query.completed",
-      "query.failed"
+      "queryengine.execute",
+      "queryengine.cancel",
+      "queryengine.progress",
+      "queryengine.resultChunk",
+      "queryengine.completed",
+      "queryengine.failed"
     ]
   }
 }

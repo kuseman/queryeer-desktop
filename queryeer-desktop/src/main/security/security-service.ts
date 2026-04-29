@@ -85,7 +85,7 @@ export class SecurityService {
   }
 
   public async invalidateBackendSession(): Promise<void> {
-    await this.closeBackendSecuritySession("error");
+    this.currentSessionId = null;
     this.masterKey = null;
   }
 

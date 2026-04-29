@@ -48,7 +48,7 @@ Out of scope in this version:
   "protocolVersion": "1.0.0",
   "type": "request",
   "id": "req-123",
-  "method": "query.execute",
+  "method": "queryengine.execute",
   "params": {
     "queryExecutionId": "qx-001",
     "engineId": "payloadbuilder",
@@ -93,7 +93,7 @@ Out of scope in this version:
 {
   "protocolVersion": "1.0.0",
   "type": "notification",
-  "method": "query.progress",
+  "method": "queryengine.progress",
   "params": {
     "queryExecutionId": "qx-001",
     "percent": 25,
@@ -118,11 +118,11 @@ Request params:
   },
   "supportedProtocolMajors": [1],
   "requestedCapabilities": [
-    "query.execute",
-    "query.cancel",
+    "queryengine.execute",
+    "queryengine.cancel",
     "engine.invoke",
-    "query.progress",
-    "query.resultChunk"
+    "queryengine.progress",
+    "queryengine.resultChunk"
   ]
 }
 ```
@@ -152,7 +152,7 @@ Success result:
     }
   ],
   "activatedPluginIds": ["query.payloadbuilder"],
-  "providedCapabilities": ["query.execute", "engine.invoke"]
+  "providedCapabilities": ["queryengine.execute", "engine.invoke"]
 }
 ```
 
@@ -172,13 +172,13 @@ Notes:
   "selectedProtocolVersion": "1.0.0",
   "supportedCapabilities": [
     "health.ping",
-    "query.execute",
-    "query.cancel",
+    "queryengine.execute",
+    "queryengine.cancel",
     "engine.invoke",
-    "query.progress",
-    "query.resultChunk",
-    "query.completed",
-    "query.failed"
+    "queryengine.progress",
+    "queryengine.resultChunk",
+    "queryengine.completed",
+    "queryengine.failed"
   ]
 }
 ```
@@ -204,7 +204,7 @@ Success result:
 }
 ```
 
-## 5.3 `query.execute`
+## 5.3 `queryengine.execute`
 
 Purpose: start query execution asynchronously.
 
@@ -249,11 +249,11 @@ Success result:
 
 Behavior:
 
-- Execution updates are sent via notifications (`query.progress`, `query.resultChunk`, `query.completed`, `query.failed`).
+- Execution updates are sent via notifications (`queryengine.progress`, `queryengine.resultChunk`, `queryengine.completed`, `queryengine.failed`).
 - `engineState` is an engine-owned opaque blob. Core protocol forwards it without interpretation.
 - Payloadbuilder engine state may include `payloadbuilder.defaultCatalogAlias` to request session default catalog alias.
 
-## 5.4 `query.cancel`
+## 5.4 `queryengine.cancel`
 
 Purpose: cancel an active query.
 
@@ -452,13 +452,13 @@ Rules:
 - If the file was previously unbound, backend creates the engine session on bind.
 - If the file was already bound, backend rebinds (may invalidate caches).
 
-## 5.6d `query.execute` fileId extension
+## 5.6d `queryengine.execute` fileId extension
 
-`query.execute` params accept an optional `fileId`. When present and the backend has a matching open file session, the backend SHOULD reuse the cached parse tree rather than re-parsing `text`. `text` remains accepted for stateless callers.
+`queryengine.execute` params accept an optional `fileId`. When present and the backend has a matching open file session, the backend SHOULD reuse the cached parse tree rather than re-parsing `text`. `text` remains accepted for stateless callers.
 
 ## 6. Notifications (v1)
 
-## 6.1 `query.progress`
+## 6.1 `queryengine.progress`
 
 ```json
 {
@@ -468,7 +468,7 @@ Rules:
 }
 ```
 
-## 6.2 `query.resultChunk`
+## 6.2 `queryengine.resultChunk`
 
 ```json
 {
@@ -495,7 +495,7 @@ Rules:
 - `schema.columns[*].type` MUST be one of: `string`, `boolean`, `int`, `long`, `decimal`, `float`, `double`, `datetime`, `datetimeoffset`, `object`, `array`, `table`, `any`, `null`.
 - Backends with richer/native type systems MUST map to this canonical set before emitting notifications.
 
-## 6.3 `query.completed`
+## 6.3 `queryengine.completed`
 
 ```json
 {
@@ -576,7 +576,7 @@ Rules:
 - Debouncing lives on the renderer (mediator); backend MUST tolerate out-of-order or rapid bursts.
 - `version` MUST be monotonically increasing per `fileId`; backend MAY drop notifications with a stale `version`.
 
-## 6.4 `query.failed`
+## 6.4 `queryengine.failed`
 
 ```json
 {
@@ -613,7 +613,7 @@ Error payload schema:
 
 - `backend.handshake`: fail if no response within 10s
 - `health.ping`: soft timeout 3s, hard timeout 10s
-- `query.execute`: request timeout only for acceptance; completion comes via notifications
+- `queryengine.execute`: request timeout only for acceptance; completion comes via notifications
 - On backend process crash, gateway restarts with capped retries (for example 3 retries with backoff)
 
 ## 9. Correlation identifiers
@@ -647,16 +647,16 @@ Error payload schema:
 
 ### 11.2 Execute and stream
 
-1. Electron sends `query.execute` (`queryExecutionId=qx-001`).
+1. Electron sends `queryengine.execute` (`queryExecutionId=qx-001`).
 2. Java responds `accepted=true`.
-3. Java emits `query.progress` and one or more `query.resultChunk` notifications.
-4. Java emits `query.completed`.
+3. Java emits `queryengine.progress` and one or more `queryengine.resultChunk` notifications.
+4. Java emits `queryengine.completed`.
 
 ### 11.3 Cancel
 
-1. Electron sends `query.cancel` (`queryExecutionId=qx-001`).
+1. Electron sends `queryengine.cancel` (`queryExecutionId=qx-001`).
 2. Java responds `accepted=true`.
-3. Java emits `query.failed` with `code=CANCELLED` or emits `query.completed` with partial results, based on engine semantics.
+3. Java emits `queryengine.failed` with `code=CANCELLED` or emits `queryengine.completed` with partial results, based on engine semantics.
 
 ## 12. Implementation checklist
 
@@ -672,8 +672,8 @@ Current Java stdio scaffold implementation status:
 
 - `backend.handshake` implemented
 - `health.ping` implemented
-- `query.execute` implemented (mocked progressive notifications); `fileId` field accepted but not yet consumed
-- `query.cancel` implemented (mocked cancellation notification)
+- `queryengine.execute` implemented (mocked progressive notifications); `fileId` field accepted but not yet consumed
+- `queryengine.cancel` implemented (mocked cancellation notification)
 - `backend.runtimeStatus` implemented
 - `connection.upsert` request handling scaffolded
 - `file.open` / `file.close` / `file.bind` request handlers implemented against `DefaultFileRegistry`; no engine-specific `FileSessionHandler` yet

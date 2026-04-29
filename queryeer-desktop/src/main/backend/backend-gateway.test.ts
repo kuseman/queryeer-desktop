@@ -63,14 +63,14 @@ const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
             "security.session.close",
             "security.vault.changed",
             "health.ping",
-            "query.execute",
-            "query.cancel",
+            "queryengine.execute",
+            "queryengine.cancel",
             "engine.invoke",
-            "query.progress",
-            "query.chunkStart",
-            "query.chunkRows",
-            "query.completed",
-            "query.failed"
+            "queryengine.progress",
+            "queryengine.chunkStart",
+            "queryengine.chunkRows",
+            "queryengine.completed",
+            "queryengine.failed"
           ]
         } satisfies HandshakeResult);
         return;
@@ -103,7 +103,7 @@ const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
             }
           ],
           activatedPluginIds: ["query.payloadbuilder"],
-          providedCapabilities: ["query.execute", "engine.invoke"]
+          providedCapabilities: ["queryengine.execute", "engine.invoke"]
         } satisfies RuntimeStatusResult);
         return;
       }
@@ -126,7 +126,7 @@ const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
         return;
       }
 
-      if (envelope.method === "query.execute") {
+      if (envelope.method === "queryengine.execute") {
         if (behavior.failExecuteSend) {
           throw new Error("Simulated execute send failure");
         }
@@ -141,7 +141,7 @@ const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
         return;
       }
 
-      if (envelope.method === "query.cancel") {
+      if (envelope.method === "queryengine.cancel") {
         const params = envelope.params as QueryCancelParams;
         respond(envelope.id, {
           accepted: true,
@@ -204,7 +204,7 @@ describe("BackendGateway", () => {
     const status = gateway.getStatus();
     expect(status.state).toBe("healthy");
     expect(status.serverName).toBe("queryeer-java-backend");
-    expect(status.supportedCapabilities).toContain("query.execute");
+    expect(status.supportedCapabilities).toContain("queryengine.execute");
 
     await gateway.stop();
   });
@@ -261,7 +261,7 @@ describe("BackendGateway", () => {
       .map((call: [BackendEnvelope]) => call[0])
       .find(
         (envelope): envelope is BackendRequestEnvelope =>
-          envelope.type === "request" && envelope.method === "query.execute"
+          envelope.type === "request" && envelope.method === "queryengine.execute"
       );
 
     expect(executeRequest).toBeDefined();
@@ -295,7 +295,7 @@ describe("BackendGateway", () => {
       .map((call: [BackendEnvelope]) => call[0])
       .find(
         (envelope): envelope is BackendRequestEnvelope =>
-          envelope.type === "request" && envelope.method === "query.execute"
+          envelope.type === "request" && envelope.method === "queryengine.execute"
       );
 
     expect(executeRequest).toBeDefined();
@@ -316,7 +316,7 @@ describe("BackendGateway", () => {
     await gateway.stop();
   });
 
-  it("forwards structured secret refs on query.execute", async () => {
+  it("forwards structured secret refs on queryengine.execute", async () => {
     const { gateway, transport } = createGatewayWithTestTransport();
     await gateway.start();
 
@@ -345,7 +345,7 @@ describe("BackendGateway", () => {
       .map((call: [BackendEnvelope]) => call[0])
       .find(
         (envelope): envelope is BackendRequestEnvelope =>
-          envelope.type === "request" && envelope.method === "query.execute"
+          envelope.type === "request" && envelope.method === "queryengine.execute"
       );
 
     expect(executeRequest).toBeDefined();
@@ -521,7 +521,7 @@ describe("BackendGateway", () => {
       text: "select 1"
     });
 
-    const assertion = expect(executePromise).rejects.toThrow("Request timeout: query.execute");
+    const assertion = expect(executePromise).rejects.toThrow("Request timeout: queryengine.execute");
 
     await vi.advanceTimersByTimeAsync(10_001);
     await assertion;

@@ -8,8 +8,8 @@ Scope: Build payloadbuilder-specific catalog configuration foundation with front
 - [x] Alias uniqueness is enforced per file (not global)
 - [x] Core protocol remains engine-agnostic (no payloadbuilder-specific method/shape in core contracts)
 - [ ] Use generic core fields:
-  - [x] `query.execute.engineState?: unknown`
-  - [x] `query.completed.engineStatePatch?: unknown`
+  - [x] `queryengine.execute.engineState?: unknown`
+  - [x] `queryengine.completed.engineStatePatch?: unknown`
 - [x] Payloadbuilder-specific state persists in `FileEntity.persistentViewState["payloadbuilder.catalogs"]`
 - [ ] Every contract change updates both:
   - [x] `queryeer-desktop/src/contracts/backend/*`
@@ -114,7 +114,7 @@ Scope: Build payloadbuilder-specific catalog configuration foundation with front
 - [x] Keep deterministic ordering (stable serialization for testability)
 
 ### 4.2 Completion reconciliation
-- [x] On `query.completed`, inspect `engineStatePatch`
+- [x] On `queryengine.completed`, inspect `engineStatePatch`
 - [x] Apply patch into store
 - [x] Persist merged state to `persistentViewState`
 - [x] Trigger UI updates for affected alias panels
@@ -139,7 +139,7 @@ Scope: Build payloadbuilder-specific catalog configuration foundation with front
 - [x] Diff and emit `engineStatePatch` for changed aliases/properties only
 
 ### 5.3 Hook execution notifications
-- [x] Ensure `query.completed` includes `engineStatePatch` when non-empty
+- [x] Ensure `queryengine.completed` includes `engineStatePatch` when non-empty
 - [x] Keep non-payloadbuilder engines unaffected
 
 ### 5.4 Tests
@@ -211,7 +211,7 @@ Do this only when catalog UI needs backend calls (eg list indices/databases).
 - [x] Added settings-driven alias-to-catalog mapping contribution in `core.queryengine.payloadbuilder`.
 - [x] Added payloadbuilder backend engine-state adapter and `QuerySession` apply/diff flow.
 - [x] Updated protocol docs and fixtures with compatibility tests.
-- [x] Added payloadbuilder plugin integration tests for execute `engineState` and `query.completed` patch reconciliation.
+- [x] Added payloadbuilder plugin integration tests for execute `engineState` and `queryengine.completed` patch reconciliation.
 - [x] Added payloadbuilder store tests for enabled filtering and configured alias ordering.
 - [x] Added backend payloadbuilder tests for engine-state apply/diff and malformed-state validation failures.
 - [x] Added payloadbuilder sidebar host tests for panel ordering and alias-to-panel bindings.

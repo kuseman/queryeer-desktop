@@ -234,7 +234,7 @@
 - `src/contracts/files/FilesRegistry.ts` + `core/plugin-runtime/FileRegistry.ts` — open/close/list/update/subscribe + resolver registration + `classifyUri`/`resolveEditor`.
 - `src/contracts/files/Resolvers.ts` — MimeResolver/EditorResolver/MimeHint + baseline mime resolver in `core.files` (extension map for common types). `LayoutEditorContribution` gained `supportedMimeTypes?: string[]`.
 - `src/contracts/files/FileMediator.ts` + `core/plugin-runtime/FileMediator.ts` — openFile (classifies, lazy backend-bind), closeFile (dirty check), saveFile (disk-version stamp; stub for real disk write), notifyChanged (debounced backend `file.change`), bindEngine, executeFile, reloadFile, acceptExternalChange, discardExternalChange. `onFileChanged` callback option for workspace autosave hook.
-- TS protocol additions (`src/contracts/backend/`): `file.open` / `file.close` / `file.bind` requests + `file.change` notification + optional `fileId` on `query.execute`.
+- TS protocol additions (`src/contracts/backend/`): `file.open` / `file.close` / `file.bind` requests + `file.change` notification + optional `fileId` on `queryengine.execute`.
 - Preload + `BackendGateway` IPC handlers for the new protocol methods; `MockBackendTransport` responds success.
 - Java contracts (`queryeer-backend/backend-contract/.../file/`): `FileOpenParams/Result`, `FileCloseParams/Result`, `FileBindParams/Result`, `FileChangeNotification`, `FileEngineBindingParams`. `QueryExecuteParams` extended with `fileId`.
 - Java SPI (`backend-api`): `FileSession`, `FileSessionHandler`, `FileSessionHandlerRegistry`, `FileRegistry`. `BackendPluginContext.fileSessions()` added.
@@ -369,12 +369,12 @@
   - `queryeer-backend` verify now enforces formatting + style at `validate` phase
 - Implemented first end-to-end backend plugin communication flow in desktop mock path:
   - gateway now supports IPC methods `backend:execute-query` and `backend:cancel-query`
-  - mock backend now handles `query.execute` / `query.cancel`
+  - mock backend now handles `queryengine.execute` / `queryengine.cancel`
   - progress/chunk/completed/failed notifications update execution state in gateway
   - renderer diagnostics can run/cancel mock queries and display recent execution states
 - Implemented Java stdio transport scaffold for first protocol set:
   - NDJSON read/write loop in `backend-transport-stdio`
-  - method handlers for `backend.handshake`, `health.ping`, `query.execute`, `query.cancel`
+  - method handlers for `backend.handshake`, `health.ping`, `queryengine.execute`, `queryengine.cancel`
   - mocked query notifications (`progress`, `resultChunk`, `completed`, `failed`)
   - backend runner now launches transport on `System.in` / `System.out`
 - Refactored Java transport into manual DI/wiring composition:
@@ -422,16 +422,16 @@
 - Added first gateway orchestration unit tests in desktop:
   - `backend-gateway.ts` now supports injectable transport factory for testability
   - new tests validate startup handshake/ping transition to `healthy`
-  - new tests validate `query.execute` request dispatch and execution status tracking
+  - new tests validate `queryengine.execute` request dispatch and execution status tracking
 - Expanded shared protocol fixture coverage and cross-runtime checks:
-  - added fixtures for `query.execute` and `query.cancel` request/response pairs
-  - added fixtures for `query.progress`, `query.resultChunk`, `query.completed`, `query.failed` notifications
+  - added fixtures for `queryengine.execute` and `queryengine.cancel` request/response pairs
+  - added fixtures for `queryengine.progress`, `queryengine.resultChunk`, `queryengine.completed`, `queryengine.failed` notifications
   - extended desktop fixture script to validate execute/cancel and notification fixtures
   - extended backend `ProtocolFixtureCompatibilityTest` to decode/validate execute/cancel and all query notifications
 - Added gateway negative-path tests in desktop:
   - handshake timeout (`backend.handshake` no response)
-  - `query.execute` send failure path
-  - `query.execute` timeout path
+  - `queryengine.execute` send failure path
+  - `queryengine.execute` timeout path
   - unknown response id warning log path
   - ping loop failure path (error response -> unavailable)
 - Added CI workflow for migration guardrails:
@@ -560,7 +560,7 @@
 - Any plugin still setting `registerCommand({ accelerator: ... })` will now fail to compile; migrate to keybinding contributions.
 - Desktop defaults to mock transport unless `QUERYEER_BACKEND_STDIO=1` is set.
 - Java stdio transport protocol handling is real, but execution internals and credential persistence remain mocked/stubbed.
-- `FileSessionHandler` SPI exists in `backend-api`, but no engine plugin implements it yet — parse-tree reuse via `query.execute.fileId` is not live.
+- `FileSessionHandler` SPI exists in `backend-api`, but no engine plugin implements it yet — parse-tree reuse via `queryengine.execute.fileId` is not live.
 - External plugin discovery currently focuses on manifest-first loading and isolated classloaders; signature validation and hot-reload are intentionally deferred.
 - Frontend target discovery is now represented in runner contracts but Java-side frontend targets are still not consumed directly by desktop runtime.
 - Shared TS/Java fixtures and CI checks cover handshake/ping/query/connection/credential/file.* contract shapes.

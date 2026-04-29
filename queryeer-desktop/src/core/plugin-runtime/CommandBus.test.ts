@@ -5,13 +5,13 @@ describe("CommandBus", () => {
   it("blocks execution when enablement evaluates false", async () => {
     const handler = vi.fn();
     const bus = new CommandBus(() => ({ backendHealthy: false }));
-    bus.register("query.execute", handler, "backendHealthy");
+    bus.register("queryengine.execute", handler, "backendHealthy");
 
-    expect(bus.canExecute("query.execute")).toBe(false);
+    expect(bus.canExecute("queryengine.execute")).toBe(false);
 
-    const result = await bus.execute("query.execute");
+    const result = await bus.execute("queryengine.execute");
     expect(result).toEqual({
-      commandId: "query.execute",
+      commandId: "queryengine.execute",
       executed: false,
       reason: "disabled-by-enablement"
     });
@@ -21,11 +21,11 @@ describe("CommandBus", () => {
   it("executes command when enablement evaluates true", async () => {
     const handler = vi.fn();
     const bus = new CommandBus(() => ({ backendHealthy: true }));
-    bus.register("query.execute", handler, "backendHealthy");
+    bus.register("queryengine.execute", handler, "backendHealthy");
 
-    const result = await bus.execute("query.execute");
+    const result = await bus.execute("queryengine.execute");
     expect(result).toEqual({
-      commandId: "query.execute",
+      commandId: "queryengine.execute",
       executed: true
     });
     expect(handler).toHaveBeenCalledOnce();

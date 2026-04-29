@@ -195,7 +195,7 @@ describe("core.queryengine plugin", () => {
       })
     );
 
-    listener?.({ method: "query.completed", params: { queryExecutionId: "q-1" } }, {});
+    listener?.({ method: "queryengine.completed", params: { queryExecutionId: "q-1" } }, {});
     expect(context.files.updateFile).toHaveBeenLastCalledWith(
       "file-1",
       expect.objectContaining({
@@ -223,7 +223,7 @@ describe("core.queryengine plugin", () => {
       { method: "query.started", params: { queryExecutionId: "q-2" } },
       { fileId: "file-1" }
     );
-    listener?.({ method: "query.failed", params: { queryExecutionId: "q-2" } }, {});
+    listener?.({ method: "queryengine.failed", params: { queryExecutionId: "q-2" } }, {});
 
     expect(context.files.updateFile).toHaveBeenLastCalledWith(
       "file-1",

@@ -144,7 +144,7 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
     });
 
     getQueryEngineService().onQueryEvent((event, executeContext) => {
-      if (event.method !== "query.completed") {
+      if (event.method !== "queryengine.completed") {
         return;
       }
       if (executeContext?.engineId !== "payloadbuilder" || !executeContext.fileId) {

@@ -46,7 +46,7 @@ Status: architecture reference.
 **Rule**: Secret handling is owned by the desktop security boundary and is not currently part of the Java wire protocol.
 
 - Renderer collects credentials in UI and interacts with main-process security APIs.
-- `query.execute` / `connection.upsert` protocol payloads do not carry secret fields.
+- `queryengine.execute` / `connection.upsert` protocol payloads do not carry secret fields.
 - Logs in any process must redact known sensitive keys (already enforced in main + Java runner).
 
 ## 4. State authority

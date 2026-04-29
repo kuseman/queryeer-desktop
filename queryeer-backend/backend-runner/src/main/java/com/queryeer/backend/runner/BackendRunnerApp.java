@@ -154,10 +154,10 @@ public final class BackendRunnerApp
 
         List<DiscoveredPlugin> builtins = new ArrayList<>();
         builtins.add(new DiscoveredPlugin(new PluginManifest(1, "query.payloadbuilder", "Payloadbuilder Query Engine", "0.1.0",
-                new PluginManifest.BackendTarget("com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderBackendPlugin", null, "17"), null, List.of(), List.of("query.execute", "engine.invoke"),
-                List.of(), null, null), new PayloadbuilderBackendPlugin(), null, false));
+                new PluginManifest.BackendTarget("com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderBackendPlugin", null, "17"), null, List.of(),
+                List.of("queryengine.execute", "engine.invoke"), List.of(), null, null), new PayloadbuilderBackendPlugin(), null, false));
         builtins.add(new DiscoveredPlugin(new PluginManifest(1, "query.jdbc", "JDBC Query Engine", "0.1.0",
-                new PluginManifest.BackendTarget("com.queryeer.backend.plugin.jdbc.JdbcBackendPlugin", null, "17"), null, List.of(), List.of("query.execute"), List.of(), null, null),
+                new PluginManifest.BackendTarget("com.queryeer.backend.plugin.jdbc.JdbcBackendPlugin", null, "17"), null, List.of(), List.of("queryengine.execute"), List.of(), null, null),
                 new JdbcBackendPlugin(), null, false));
         return builtins;
     }

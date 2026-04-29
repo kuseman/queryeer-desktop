@@ -6,8 +6,8 @@ export const BACKEND_REQUEST_CAPABILITIES: ReadonlyArray<Capability> = [
   "security.session.close",
   "security.vault.changed",
   "health.ping",
-  "query.execute",
-  "query.cancel",
+  "queryengine.execute",
+  "queryengine.cancel",
   "engine.invoke",
   "connection.upsert",
   "file.open",
@@ -16,11 +16,11 @@ export const BACKEND_REQUEST_CAPABILITIES: ReadonlyArray<Capability> = [
 ];
 
 export const BACKEND_NOTIFICATION_CAPABILITIES: ReadonlyArray<Capability> = [
-  "query.progress",
-  "query.chunkStart",
-  "query.chunkRows",
-  "query.completed",
-  "query.failed",
+  "queryengine.progress",
+  "queryengine.chunkStart",
+  "queryengine.chunkRows",
+  "queryengine.completed",
+  "queryengine.failed",
   "file.change"
 ];
 

@@ -160,8 +160,8 @@ Electron main process (`backend.gateway`) talks only protocol envelopes.
 
 - startup: `backend.handshake`
 - liveness: `health.ping`
-- execution: `query.execute` + notifications
-- cancellation: `query.cancel`
+- execution: `queryengine.execute` + notifications
+- cancellation: `queryengine.cancel`
 
 Java runner is the protocol server, plugins remain transport-agnostic.
 

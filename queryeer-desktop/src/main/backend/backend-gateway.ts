@@ -185,27 +185,27 @@ export class BackendGateway {
     this.executionStore.markAccepted(resolvedParams.queryExecutionId, resolvedParams.engineId);
     this.syncExecutionSnapshot();
 
-    const envelope = this.createRequest("query.execute", resolvedParams);
-    this.appendLog("debug", "gateway", `Sending request ${envelope.id} query.execute`);
+    const envelope = this.createRequest("queryengine.execute", resolvedParams);
+    this.appendLog("debug", "gateway", `Sending request ${envelope.id} queryengine.execute`);
     if (this.tracePayloads) {
       this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
     }
     const response = await this.sendRequest(envelope);
     if (!response.result) {
-      throw new Error("query.execute failed: missing result");
+      throw new Error("queryengine.execute failed: missing result");
     }
     return response.result as QueryExecuteResult;
   }
 
   public async cancelQuery(params: QueryCancelParams): Promise<QueryCancelResult> {
-    const envelope = this.createRequest("query.cancel", params);
-    this.appendLog("debug", "gateway", `Sending request ${envelope.id} query.cancel`);
+    const envelope = this.createRequest("queryengine.cancel", params);
+    this.appendLog("debug", "gateway", `Sending request ${envelope.id} queryengine.cancel`);
     if (this.tracePayloads) {
       this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
     }
     const response = await this.sendRequest(envelope);
     if (!response.result) {
-      throw new Error("query.cancel failed: missing result");
+      throw new Error("queryengine.cancel failed: missing result");
     }
     return response.result as QueryCancelResult;
   }
@@ -479,8 +479,8 @@ export class BackendGateway {
       | "security.session.close"
       | "security.vault.changed"
       | "health.ping"
-      | "query.execute"
-      | "query.cancel"
+      | "queryengine.execute"
+      | "queryengine.cancel"
       | "engine.invoke"
       | "file.open"
       | "file.close"
@@ -570,7 +570,7 @@ export class BackendGateway {
   }
 
   private handleNotification(envelope: BackendNotificationEnvelope): void {
-    if (envelope.method === "query.progress") {
+    if (envelope.method === "queryengine.progress") {
       const params = envelope.params as {
         queryExecutionId: string;
         percent?: number;
@@ -583,12 +583,12 @@ export class BackendGateway {
       return;
     }
 
-    if (envelope.method === "query.chunkStart") {
+    if (envelope.method === "queryengine.chunkStart") {
       this.rendererSink?.(envelope.method, envelope.params);
       return;
     }
 
-    if (envelope.method === "query.chunkRows") {
+    if (envelope.method === "queryengine.chunkRows") {
       const params = envelope.params as {
         queryExecutionId: string;
         rows?: unknown[][];
@@ -599,7 +599,7 @@ export class BackendGateway {
       return;
     }
 
-    if (envelope.method === "query.completed") {
+    if (envelope.method === "queryengine.completed") {
       const params = envelope.params as {
         queryExecutionId: string;
       };
@@ -609,7 +609,7 @@ export class BackendGateway {
       return;
     }
 
-    if (envelope.method === "query.failed") {
+    if (envelope.method === "queryengine.failed") {
       const params = envelope.params as {
         queryExecutionId: string;
         error?: { code?: string; message?: string };

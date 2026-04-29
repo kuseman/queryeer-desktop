@@ -46,13 +46,13 @@ export class MockJavaBackend {
       return;
     }
 
-    if (envelope.method === "query.execute") {
-      this.respondExecute(envelope as BackendRequestEnvelope<"query.execute">);
+    if (envelope.method === "queryengine.execute") {
+      this.respondExecute(envelope as BackendRequestEnvelope<"queryengine.execute">);
       return;
     }
 
-    if (envelope.method === "query.cancel") {
-      this.respondCancel(envelope as BackendRequestEnvelope<"query.cancel">);
+    if (envelope.method === "queryengine.cancel") {
+      this.respondCancel(envelope as BackendRequestEnvelope<"queryengine.cancel">);
       return;
     }
 
@@ -97,14 +97,14 @@ export class MockJavaBackend {
       supportedCapabilities: [
         "backend.runtimeStatus",
         "health.ping",
-        "query.execute",
-        "query.cancel",
+        "queryengine.execute",
+        "queryengine.cancel",
         "engine.invoke",
-        "query.progress",
-        "query.chunkStart",
-        "query.chunkRows",
-        "query.completed",
-        "query.failed",
+        "queryengine.progress",
+        "queryengine.chunkStart",
+        "queryengine.chunkRows",
+        "queryengine.completed",
+        "queryengine.failed",
         "file.open",
         "file.close",
         "file.bind",
@@ -138,7 +138,7 @@ export class MockJavaBackend {
         }
       ],
       activatedPluginIds: ["query.payloadbuilder", "query.jdbc"],
-      providedCapabilities: ["query.execute", "query.cancel", "engine.invoke"]
+      providedCapabilities: ["queryengine.execute", "queryengine.cancel", "engine.invoke"]
     };
 
     const response: BackendResponseEnvelope<RuntimeStatusResult> = {
@@ -167,10 +167,10 @@ export class MockJavaBackend {
 
     this.sink(response);
 
-    const heartbeat: BackendNotificationEnvelope<"query.progress", { queryExecutionId: string; percent: number; message: string }> = {
+    const heartbeat: BackendNotificationEnvelope<"queryengine.progress", { queryExecutionId: string; percent: number; message: string }> = {
       protocolVersion: BACKEND_PROTOCOL_VERSION,
       type: "notification",
-      method: "query.progress",
+      method: "queryengine.progress",
       params: {
         queryExecutionId: "health-probe",
         percent: 100,
@@ -180,7 +180,7 @@ export class MockJavaBackend {
     this.sink(heartbeat);
   }
 
-  private respondExecute(request: BackendRequestEnvelope<"query.execute">): void {
+  private respondExecute(request: BackendRequestEnvelope<"queryengine.execute">): void {
     const params = request.params as {
       queryExecutionId: string;
       engineId?: string;
@@ -209,7 +209,7 @@ export class MockJavaBackend {
         this.sink({
           protocolVersion: BACKEND_PROTOCOL_VERSION,
           type: "notification",
-          method: "query.progress",
+          method: "queryengine.progress",
           params: {
             queryExecutionId: params.queryExecutionId,
             percent: 20,
@@ -227,7 +227,7 @@ export class MockJavaBackend {
         this.sink({
           protocolVersion: BACKEND_PROTOCOL_VERSION,
           type: "notification",
-          method: "query.chunkStart",
+          method: "queryengine.chunkStart",
           params: {
             queryExecutionId: params.queryExecutionId,
             resultSetIndex: 0,
@@ -242,7 +242,7 @@ export class MockJavaBackend {
         this.sink({
           protocolVersion: BACKEND_PROTOCOL_VERSION,
           type: "notification",
-          method: "query.chunkRows",
+          method: "queryengine.chunkRows",
           params: {
             queryExecutionId: params.queryExecutionId,
             resultSetIndex: 0,
@@ -263,7 +263,7 @@ export class MockJavaBackend {
         this.sink({
           protocolVersion: BACKEND_PROTOCOL_VERSION,
           type: "notification",
-          method: "query.chunkRows",
+          method: "queryengine.chunkRows",
           params: {
             queryExecutionId: params.queryExecutionId,
             resultSetIndex: 0,
@@ -281,7 +281,7 @@ export class MockJavaBackend {
         this.sink({
           protocolVersion: BACKEND_PROTOCOL_VERSION,
           type: "notification",
-          method: "query.completed",
+          method: "queryengine.completed",
           params: {
             queryExecutionId: params.queryExecutionId,
             metrics: {
@@ -296,7 +296,7 @@ export class MockJavaBackend {
     this.timers.set(params.queryExecutionId, timers);
   }
 
-  private respondCancel(request: BackendRequestEnvelope<"query.cancel">): void {
+  private respondCancel(request: BackendRequestEnvelope<"queryengine.cancel">): void {
     const params = request.params as {
       queryExecutionId: string;
     };
@@ -323,7 +323,7 @@ export class MockJavaBackend {
     this.sink({
       protocolVersion: BACKEND_PROTOCOL_VERSION,
       type: "notification",
-      method: "query.failed",
+      method: "queryengine.failed",
       params: {
         queryExecutionId: params.queryExecutionId,
         error: {
