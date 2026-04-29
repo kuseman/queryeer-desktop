@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginContext } from "../../contracts/plugin/Plugin";
+import type { PayloadbuilderCatalogContribution } from "./catalog-contributions";
 
 const mocks = vi.hoisted(() => ({
   registerExecutionContextProviderMock: vi.fn(),
@@ -8,7 +9,10 @@ const mocks = vi.hoisted(() => ({
   buildEngineStateMock: vi.fn(),
   applyEngineStatePatchMock: vi.fn(),
   initializeStoreMock: vi.fn(),
-  getCoreSettingsServiceMock: vi.fn(() => null)
+  getCoreSettingsServiceMock: vi.fn<() => unknown | null>(() => null),
+  listContributionsMock: vi.fn<() => PayloadbuilderCatalogContribution[]>(() => []),
+  subscribeContributionsMock: vi.fn<(listener: () => void) => () => void>(() => () => {}),
+  onSettingsInitializedMock: vi.fn<(listener: (service: unknown) => void) => () => void>(() => () => {})
 }));
 
 vi.mock("../core.queryengine/QueryEngineService", () => ({
@@ -23,12 +27,21 @@ vi.mock("./catalog-store", () => ({
   getPayloadbuilderCatalogStore: () => ({
     initialize: mocks.initializeStoreMock,
     buildEngineState: mocks.buildEngineStateMock,
-    applyEngineStatePatch: mocks.applyEngineStatePatchMock
+    applyEngineStatePatch: mocks.applyEngineStatePatchMock,
+    setDefaultCatalogAlias: vi.fn()
   })
 }));
 
+vi.mock("./catalog-contributions", () => ({
+  listPayloadbuilderCatalogContributions: () => mocks.listContributionsMock(),
+  subscribePayloadbuilderCatalogContributions: (listener: () => void) =>
+    mocks.subscribeContributionsMock(listener)
+}));
+
 vi.mock("../core.settings/service", () => ({
-  getCoreSettingsService: () => mocks.getCoreSettingsServiceMock()
+  getCoreSettingsService: () => mocks.getCoreSettingsServiceMock(),
+  onCoreSettingsServiceInitialized: (listener: (service: unknown) => void) =>
+    mocks.onSettingsInitializedMock(listener)
 }));
 
 import { coreQueryEnginePayloadbuilderPlugin } from "./plugin";
@@ -125,7 +138,12 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
     mocks.applyEngineStatePatchMock.mockReset();
     mocks.initializeStoreMock.mockReset();
     mocks.getCoreSettingsServiceMock.mockReset();
+    mocks.listContributionsMock.mockReset();
+    mocks.subscribeContributionsMock.mockReset();
+    mocks.onSettingsInitializedMock.mockReset();
     mocks.getCoreSettingsServiceMock.mockReturnValue(null);
+    mocks.subscribeContributionsMock.mockReturnValue(() => {});
+    mocks.onSettingsInitializedMock.mockReturnValue(() => {});
   });
 
   it("wires payloadbuilder engineState into execute context", () => {
@@ -240,5 +258,82 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
     );
 
     expect(mocks.applyEngineStatePatchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("adapts catalog instance setting with newly contributed catalogs", async () => {
+    const context = createContext();
+    const setValueMock = vi.fn(async () => ({ ok: true }));
+    mocks.listContributionsMock.mockReturnValue([
+      {
+        catalogId: "filesystem",
+        title: "Filesystem",
+        defaultAlias: "fs",
+        allowMultiple: false
+      }
+    ]);
+    mocks.getCoreSettingsServiceMock.mockReturnValue({
+      refreshSchemaFromRegistry: vi.fn(),
+      syncRegistryModules: vi.fn(async () => {}),
+      getValue: vi.fn(() => []),
+      setValue: setValueMock
+    });
+
+    coreQueryEnginePayloadbuilderPlugin.activate(context);
+    await Promise.resolve();
+
+    expect(setValueMock).toHaveBeenCalledWith(
+      "core.queryengine.payloadbuilder.catalogInstances",
+      [
+        {
+          alias: "fs",
+          catalogId: "filesystem",
+          title: "Filesystem",
+          enabled: true
+        }
+      ]
+    );
+  });
+
+  it("adapts catalog setting when new contribution is registered after activation", async () => {
+    const context = createContext();
+    const setValueMock = vi.fn(async () => ({ ok: true }));
+    let contributionListener: (() => void) | undefined;
+    mocks.subscribeContributionsMock.mockImplementation((listener: () => void) => {
+      contributionListener = listener;
+      return () => {};
+    });
+    mocks.getCoreSettingsServiceMock.mockReturnValue({
+      refreshSchemaFromRegistry: vi.fn(),
+      syncRegistryModules: vi.fn(async () => {}),
+      getValue: vi.fn(() => []),
+      setValue: setValueMock
+    });
+    mocks.listContributionsMock.mockReturnValue([]);
+
+    coreQueryEnginePayloadbuilderPlugin.activate(context);
+    await Promise.resolve();
+
+    mocks.listContributionsMock.mockReturnValue([
+      {
+        catalogId: "filesystem",
+        title: "Filesystem",
+        defaultAlias: "fs",
+        allowMultiple: false
+      }
+    ]);
+    contributionListener?.();
+    await Promise.resolve();
+
+    expect(setValueMock).toHaveBeenCalledWith(
+      "core.queryengine.payloadbuilder.catalogInstances",
+      [
+        {
+          alias: "fs",
+          catalogId: "filesystem",
+          title: "Filesystem",
+          enabled: true
+        }
+      ]
+    );
   });
 });

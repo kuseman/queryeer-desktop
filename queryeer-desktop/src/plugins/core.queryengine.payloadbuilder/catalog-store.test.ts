@@ -16,6 +16,10 @@ vi.mock("./catalog-contributions", () => ({
       return undefined;
     }
     return {
+      catalogId: "elasticsearch",
+      title: "Elasticsearch",
+      defaultAlias: "es",
+      allowMultiple: true,
       filterPersistedProperties: (properties: Record<string, unknown>) => ({
         connectionId: typeof properties.connectionId === "string" ? properties.connectionId : "",
         index: typeof properties.index === "string" ? properties.index : ""
@@ -168,6 +172,33 @@ describe("payloadbuilder catalog store", () => {
     ]);
 
     expect(store.buildEngineState(file.fileId)).toBeUndefined();
+  });
+
+  it("includes valid default catalog alias in engine state", () => {
+    getConfiguredCatalogAliasesMock.mockReturnValue([
+      { alias: "jdbc1", catalogId: "Jdbc", enabled: true },
+      { alias: "jdbc2", catalogId: "Jdbc", enabled: true }
+    ]);
+
+    const filesRegistry = new FileRegistry().createFilesRegistry();
+    const store = getPayloadbuilderCatalogStore();
+    store.initialize(filesRegistry);
+
+    const file = filesRegistry.openFile({
+      uri: "untitled:file-default",
+      mimeType: "application/sql"
+    });
+
+    store.setDefaultCatalogAlias(file.fileId, "jdbc2");
+    expect(store.buildEngineState(file.fileId)).toEqual({
+      payloadbuilder: {
+        defaultCatalogAlias: "jdbc2",
+        catalogs: {
+          jdbc1: { catalogId: "Jdbc", properties: {} },
+          jdbc2: { catalogId: "Jdbc", properties: {} }
+        }
+      }
+    });
   });
 
   it("filters persisted viewstate but keeps runtime engine payload", () => {

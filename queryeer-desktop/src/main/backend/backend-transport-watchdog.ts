@@ -21,7 +21,8 @@ export class WatchdogBackendTransport implements BackendTransport {
   public constructor(
     private readonly factory: BackendTransportFactory,
     private readonly outerCallbacks: Omit<BackendTransportCallbacks, "onDied">,
-    private readonly onRestartReady: () => Promise<void>
+    private readonly onRestartReady: () => Promise<void>,
+    private readonly onTransportDied?: () => void
   ) {
     this.mode = factory.mode;
   }
@@ -57,6 +58,7 @@ export class WatchdogBackendTransport implements BackendTransport {
 
   private handleDied(): void {
     this.current = null;
+    this.onTransportDied?.();
     if (this.stopped) {
       return;
     }

@@ -10,6 +10,8 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.queryeer.backend.contract.runtime.RuntimePluginState;
 import com.queryeer.backend.contract.runtime.RuntimePluginStatus;
 import com.queryeer.backend.contract.runtime.RuntimeStatusResult;
@@ -58,7 +60,10 @@ public final class BackendRunnerApp
 
     public static void main(String[] args)
     {
+        int exitCode = 0;
         ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new JavaTimeModule());
+        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         PluginDiscoveryService discoveryService = new PluginDiscoveryService(objectMapper);
 
         PluginRuntime runtime = new PluginRuntime();
@@ -112,8 +117,15 @@ public final class BackendRunnerApp
         {
             if (!transportServer.isStopped())
             {
+                exitCode = 1;
                 throw new IllegalStateException("Failed to start stdio transport", e);
             }
+        }
+        catch (Throwable t)
+        {
+            exitCode = 1;
+            services.logger()
+                    .error(withCorrelation("Unhandled stdio transport failure", null), t);
         }
         finally
         {
@@ -123,9 +135,11 @@ public final class BackendRunnerApp
             }
             catch (Exception e)
             {
+                exitCode = 1;
                 services.logger()
                         .error(withCorrelation("Failed to deactivate backend plugins", null), e);
             }
+            System.exit(exitCode);
         }
     }
 

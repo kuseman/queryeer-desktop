@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { TextEditorComponent } from "../core.editor/TextEditor/TextEditorComponent";
 import { OutputPanel } from "./output/OutputPanel";
-import type { OutputContext, ResultSet } from "../../contracts/extensions/OutputExtension";
+import type { OutputContext, ResultSet, ColumnType } from "../../contracts/extensions/OutputExtension";
 import { IDLE_OUTPUT_CONTEXT, DEFAULT_OUTPUT_LIMITS } from "../../contracts/extensions/OutputExtension";
 import { getQueryEngineService } from "./QueryEngineService";
 import { getOutputRegistry } from "./output/OutputRegistry";
@@ -120,7 +120,7 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
               progress: { percent: p.percent, message: p.message }
             }));
           } else if (event.method === "query.chunkStart") {
-            const p = event.params as { resultSetIndex: number; schema: { columns: Array<{ name: string; type: string }> } };
+            const p = event.params as { resultSetIndex: number; schema: { columns: Array<{ name: string; type: ColumnType }> } };
             updateOutputContextForFile(targetFileId, (prev) => {
               if (prev.resultSets.some((rs) => rs.resultSetIndex === p.resultSetIndex)) return prev;
               return {

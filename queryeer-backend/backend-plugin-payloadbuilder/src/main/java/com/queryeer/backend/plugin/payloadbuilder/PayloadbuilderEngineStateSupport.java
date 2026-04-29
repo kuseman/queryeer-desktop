@@ -18,19 +18,25 @@ final class PayloadbuilderEngineStateSupport
     {
         if (!(engineState instanceof Map<?, ?> root))
         {
-            return new PayloadbuilderCatalogState(Map.of());
+            return new PayloadbuilderCatalogState(null, Map.of());
         }
 
         Object payloadbuilder = root.get("payloadbuilder");
         if (!(payloadbuilder instanceof Map<?, ?> payloadbuilderMap))
         {
-            return new PayloadbuilderCatalogState(Map.of());
+            return new PayloadbuilderCatalogState(null, Map.of());
+        }
+
+        String defaultCatalogAlias = normalizeAlias(payloadbuilderMap.get("defaultCatalogAlias"));
+        if (defaultCatalogAlias.isEmpty())
+        {
+            defaultCatalogAlias = null;
         }
 
         Object catalogs = payloadbuilderMap.get("catalogs");
         if (!(catalogs instanceof Map<?, ?> catalogsMap))
         {
-            return new PayloadbuilderCatalogState(Map.of());
+            return new PayloadbuilderCatalogState(defaultCatalogAlias, Map.of());
         }
 
         Map<String, PayloadbuilderCatalogState.Instance> byAlias = new LinkedHashMap<>();
@@ -73,11 +79,21 @@ final class PayloadbuilderEngineStateSupport
             byAlias.put(alias, new PayloadbuilderCatalogState.Instance(alias, catalogId, properties));
         }
 
-        return new PayloadbuilderCatalogState(byAlias);
+        if (defaultCatalogAlias != null
+                && !byAlias.containsKey(defaultCatalogAlias))
+        {
+            throw new IllegalArgumentException("defaultCatalogAlias must match a mapped alias");
+        }
+
+        return new PayloadbuilderCatalogState(defaultCatalogAlias, byAlias);
     }
 
     static void applyToSession(QuerySession session, PayloadbuilderCatalogState state)
     {
+        if (state.defaultCatalogAlias() != null)
+        {
+            session.setDefaultCatalogAlias(state.defaultCatalogAlias());
+        }
         for (PayloadbuilderCatalogState.Instance instance : state.instancesByAlias()
                 .values())
         {
@@ -141,7 +157,7 @@ final class PayloadbuilderEngineStateSupport
         return text.trim();
     }
 
-    record PayloadbuilderCatalogState(Map<String, Instance> instancesByAlias)
+    record PayloadbuilderCatalogState(String defaultCatalogAlias, Map<String, Instance> instancesByAlias)
     {
         record Instance(String alias, String catalogId, Map<String, Object> properties)
         {

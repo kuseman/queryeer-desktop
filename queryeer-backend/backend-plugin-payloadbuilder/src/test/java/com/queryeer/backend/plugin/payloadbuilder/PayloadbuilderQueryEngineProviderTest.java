@@ -1,5 +1,8 @@
 package com.queryeer.backend.plugin.payloadbuilder;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -12,6 +15,10 @@ import com.queryeer.backend.api.QueryPublisher;
 import se.kuseman.payloadbuilder.api.catalog.Column;
 import se.kuseman.payloadbuilder.api.catalog.ResolvedType;
 import se.kuseman.payloadbuilder.api.catalog.Schema;
+import se.kuseman.payloadbuilder.api.execution.Decimal;
+import se.kuseman.payloadbuilder.api.execution.EpochDateTime;
+import se.kuseman.payloadbuilder.api.execution.EpochDateTimeOffset;
+import se.kuseman.payloadbuilder.api.execution.ObjectVector;
 import se.kuseman.payloadbuilder.api.execution.TupleVector;
 import se.kuseman.payloadbuilder.api.execution.ValueVector;
 
@@ -42,7 +49,7 @@ class PayloadbuilderQueryEngineProviderTest
         Assertions.assertTrue(result instanceof Map);
         Map<?, ?> asMap = (Map<?, ?>) result;
         Assertions.assertEquals(Set.of("engine.capabilities", "payloadbuilder.echo", "payloadbuilder.es.listIndices"), Set.copyOf((List<String>) asMap.get("actions")));
-        Assertions.assertEquals(Set.of("elasticsearch"), Set.copyOf((Set<String>) asMap.get("catalogIds")));
+        Assertions.assertEquals(Set.of("elasticsearch", "filesystem"), Set.copyOf((Set<String>) asMap.get("catalogIds")));
     }
 
     @Test
@@ -93,6 +100,19 @@ class PayloadbuilderQueryEngineProviderTest
     }
 
     @Test
+    void executeIncludesExceptionTypeInFailureMessage()
+    {
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider();
+        RecordingPublisher publisher = new RecordingPublisher();
+
+        provider.execute("exec-3", "select from", null, publisher);
+
+        Assertions.assertEquals("INTERNAL", publisher.errorCode);
+        Assertions.assertNotNull(publisher.errorMessage);
+        Assertions.assertTrue(publisher.errorMessage.contains(":"));
+    }
+
+    @Test
     void publishTupleVectorInChunksSplitsRowsIntoMultipleNotifications()
     {
         ChunkRecordingPublisher publisher = new ChunkRecordingPublisher();
@@ -102,6 +122,109 @@ class PayloadbuilderQueryEngineProviderTest
 
         Assertions.assertEquals(250, publishedRows);
         Assertions.assertEquals(List.of(100, 100, 50), publisher.chunkSizes);
+    }
+
+    @Test
+    void publishTupleVectorInChunksConvertsComplexTypesToNestedJavaStructures()
+    {
+        ChunkRowsPublisher publisher = new ChunkRowsPublisher();
+
+        TupleVector objectTuple = TupleVector.of(Schema.of(Column.of("objectField", ResolvedType.INT), Column.of("objectText", ResolvedType.STRING)), ValueVector.literalInt(42, 1),
+                ValueVector.literalString("obj", 1));
+
+        ValueVector objectVector = ValueVector.literalObject(ObjectVector.wrap(objectTuple), 1);
+
+        TupleVector nestedTable = TupleVector.of(Schema.of(Column.of("nestedId", ResolvedType.INT), Column.of("nestedText", ResolvedType.STRING)), ValueVector.range(10, 12),
+                ValueVector.literalString("n", 2));
+
+        ValueVector arrayVector = ValueVector.literalArray(ValueVector.range(1, 4), 1);
+        ValueVector tableVector = ValueVector.literalTable(nestedTable, 1);
+        ValueVector nullString = ValueVector.literalNull(ResolvedType.STRING, 1);
+
+        TupleVector tupleVector = TupleVector.of(Schema.of(Column.of("arr", ResolvedType.array(ResolvedType.INT)), Column.of("obj", ResolvedType.object(objectTuple.getSchema())),
+                Column.of("tbl", ResolvedType.table(nestedTable.getSchema())), Column.of("nullable", ResolvedType.STRING)), arrayVector, objectVector, tableVector, nullString);
+
+        int publishedRows = PayloadbuilderQueryEngineProvider.publishTupleVectorInChunks(publisher, tupleVector, 100);
+
+        Assertions.assertEquals(1, publishedRows);
+        Assertions.assertNotNull(publisher.rows);
+        Assertions.assertEquals(1, publisher.rows.size());
+
+        List<Object> row = publisher.rows.get(0);
+        Assertions.assertEquals(List.of(1, 2, 3), row.get(0));
+        Assertions.assertEquals(Map.of("objectField", 42, "objectText", "obj"), row.get(1));
+        Assertions.assertEquals(List.of(Map.of("nestedId", 10, "nestedText", "n"), Map.of("nestedId", 11, "nestedText", "n")), row.get(2));
+        Assertions.assertNull(row.get(3));
+    }
+
+    @Test
+    void publishTupleVectorInChunksConvertsNonComplexRuntimeTypesToSerializableValues()
+    {
+        ChunkRowsPublisher publisher = new ChunkRowsPublisher();
+
+        ValueVector decimal = ValueVector.literalDecimal(Decimal.from("123.45"), 1);
+        ValueVector dateTime = ValueVector.literalDateTime(EpochDateTime.from("2025-01-02T03:04:05"), 1);
+        ValueVector dateTimeOffset = ValueVector.literalDateTimeOffset(EpochDateTimeOffset.from("2025-01-02T03:04:05Z"), 1);
+        ValueVector utf8string = ValueVector.literalString("hello", 1);
+
+        //@formatter:off
+        TupleVector tupleVector = TupleVector.of(
+                Schema.of(
+                       Column.of("d", ResolvedType.DECIMAL),
+                       Column.of("dt", ResolvedType.of(Column.Type.DateTime)),
+                       Column.of("dto", ResolvedType.of(Column.Type.DateTimeOffset)),
+                       Column.of("s", ResolvedType.of(Column.Type.String))
+                ),
+                decimal,
+                dateTime,
+                dateTimeOffset,
+                utf8string);
+        //@formatter:on
+
+        int publishedRows = PayloadbuilderQueryEngineProvider.publishTupleVectorInChunks(publisher, tupleVector, 100);
+
+        Assertions.assertEquals(1, publishedRows);
+        Assertions.assertNotNull(publisher.rows);
+        List<Object> row = publisher.rows.get(0);
+        Assertions.assertEquals(new BigDecimal("123.45"), row.get(0));
+        Assertions.assertEquals(LocalDateTime.parse("2025-01-02T03:04:05"), row.get(1));
+        Assertions.assertEquals(ZonedDateTime.parse("2025-01-02T03:04:05Z"), row.get(2));
+        Assertions.assertEquals("hello", row.get(3));
+    }
+
+    @Test
+    void publishTupleVectorInChunksConvertsAnyRuntimeWrappersToSerializableValues()
+    {
+        ChunkRowsPublisher publisher = new ChunkRowsPublisher();
+
+        ValueVector anyDecimal = ValueVector.literalAny(1, Decimal.from("77.01"));
+        ValueVector anyDateTime = ValueVector.literalAny(1, EpochDateTime.from("2025-01-02T03:04:05"));
+        ValueVector anyDateTimeOffset = ValueVector.literalAny(1, EpochDateTimeOffset.from("2025-01-02T03:04:05Z"));
+        ValueVector utf8string = ValueVector.literalString("hello", 1);
+
+        //@formatter:off
+        TupleVector tupleVector = TupleVector.of(
+                Schema.of(
+                    Column.of("d", ResolvedType.ANY),
+                    Column.of("dt", ResolvedType.ANY),
+                    Column.of("dto", ResolvedType.ANY),
+                    Column.of("s", ResolvedType.ANY)
+                ), anyDecimal,
+                anyDateTime,
+                anyDateTimeOffset,
+                utf8string);
+        //@formatter:on
+
+        int publishedRows = PayloadbuilderQueryEngineProvider.publishTupleVectorInChunks(publisher, tupleVector, 100);
+
+        Assertions.assertEquals(1, publishedRows);
+        Assertions.assertNotNull(publisher.rows);
+        List<Object> row = publisher.rows.get(0);
+        Assertions.assertEquals(new BigDecimal("77.01"), row.get(0));
+        Assertions.assertFalse(row.get(0) instanceof Decimal);
+        Assertions.assertEquals(LocalDateTime.parse("2025-01-02T03:04:05"), row.get(1));
+        Assertions.assertEquals(ZonedDateTime.parse("2025-01-02T03:04:05Z"), row.get(2));
+        Assertions.assertEquals("hello", row.get(3));
     }
 
     private static final class RecordingPublisher implements QueryPublisher
@@ -167,6 +290,37 @@ class PayloadbuilderQueryEngineProviderTest
         public void resultSetRows(List<List<Object>> rows)
         {
             chunkSizes.add(rows.size());
+        }
+
+        @Override
+        public void completed(long durationMs, long rowCount)
+        {
+        }
+
+        @Override
+        public void failed(String errorCode, String errorMessage)
+        {
+        }
+    }
+
+    private static final class ChunkRowsPublisher implements QueryPublisher
+    {
+        private List<List<Object>> rows;
+
+        @Override
+        public void progress(int percent, String message)
+        {
+        }
+
+        @Override
+        public void resultSetStart(List<String> columnNames, List<String> columnTypes)
+        {
+        }
+
+        @Override
+        public void resultSetRows(List<List<Object>> rows)
+        {
+            this.rows = rows;
         }
 
         @Override

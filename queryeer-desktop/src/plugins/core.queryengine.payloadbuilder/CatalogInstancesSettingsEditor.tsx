@@ -20,6 +20,10 @@ type Row = {
   enabled: boolean;
 };
 
+type CatalogRule = {
+  allowMultiple: boolean;
+};
+
 type Props = {
   value: unknown;
   readonly: boolean;
@@ -45,7 +49,6 @@ export function CatalogInstancesSettingsEditor({ value, readonly, setValue }: Pr
 
   const catalogSuggestions = useMemo(() => {
     const suggestions = new Set<string>();
-    suggestions.add("elasticsearch");
     for (const contribution of listPayloadbuilderCatalogContributions()) {
       suggestions.add(contribution.catalogId);
     }
@@ -57,6 +60,16 @@ export function CatalogInstancesSettingsEditor({ value, readonly, setValue }: Pr
     }
     return [...suggestions].sort((a, b) => a.localeCompare(b));
   }, [catalogRevision, rows]);
+
+  const catalogRules = useMemo(() => {
+    const rules = new Map<string, CatalogRule>();
+    for (const contribution of listPayloadbuilderCatalogContributions()) {
+      rules.set(contribution.catalogId, {
+        allowMultiple: contribution.allowMultiple
+      });
+    }
+    return rules;
+  }, [catalogRevision]);
 
   useEffect(() => {
     return subscribePayloadbuilderCatalogContributions(() => {
@@ -105,10 +118,14 @@ export function CatalogInstancesSettingsEditor({ value, readonly, setValue }: Pr
   };
 
   const addRow = (): void => {
+    const availableCatalogId = catalogSuggestions.find((catalogId) => canUseCatalogId(rows, undefined, catalogId, catalogRules));
+    if (!availableCatalogId) {
+      return;
+    }
     const next: Row = {
       id: crypto.randomUUID(),
       alias: "",
-      catalogId: catalogSuggestions[0] ?? "",
+      catalogId: availableCatalogId,
       title: "",
       enabled: true
     };
@@ -126,6 +143,9 @@ export function CatalogInstancesSettingsEditor({ value, readonly, setValue }: Pr
       id: crypto.randomUUID(),
       alias: buildCloneAlias(source.alias, rows)
     };
+    if (!canUseCatalogId(rows, undefined, clone.catalogId, catalogRules)) {
+      return;
+    }
     syncRows([...rows, clone], clone.id);
   };
 
@@ -198,13 +218,21 @@ export function CatalogInstancesSettingsEditor({ value, readonly, setValue }: Pr
                   className="payloadbuilder-catalog-select"
                   value={row.catalogId}
                   disabled={readonly}
-                  onChange={(event) => updateRow(row.id, { catalogId: event.target.value })}
+                  onChange={(event) => {
+                    const nextCatalogId = event.target.value;
+                    if (!canUseCatalogId(rows, row.id, nextCatalogId, catalogRules)) {
+                      return;
+                    }
+                    updateRow(row.id, { catalogId: nextCatalogId });
+                  }}
                 >
-                  {catalogSuggestions.map((suggestion) => (
+                  {catalogSuggestions
+                    .filter((suggestion) => suggestion === row.catalogId || canUseCatalogId(rows, row.id, suggestion, catalogRules))
+                    .map((suggestion) => (
                     <option key={suggestion} value={suggestion}>
                       {suggestion}
                     </option>
-                  ))}
+                    ))}
                 </select>
                 {rowErrors[row.id]?.catalogId && (
                   <div className="payloadbuilder-settings-error">{rowErrors[row.id].catalogId}</div>
@@ -318,7 +346,52 @@ function buildRowErrors(rows: Row[]): Record<string, { alias?: string; catalogId
       errors[row.id] = rowError;
     }
   }
+
+  const catalogCounts = new Map<string, number>();
+  for (const row of rows) {
+    const catalogId = row.catalogId.trim();
+    if (!catalogId) continue;
+    catalogCounts.set(catalogId, (catalogCounts.get(catalogId) ?? 0) + 1);
+  }
+
+  const rules = new Map(
+    listPayloadbuilderCatalogContributions().map((contribution) => [
+      contribution.catalogId,
+      contribution.allowMultiple
+    ])
+  );
+
+  for (const row of rows) {
+    const catalogId = row.catalogId.trim();
+    if (!catalogId) {
+      continue;
+    }
+    const allowMultiple = rules.get(catalogId);
+    if (allowMultiple === false && (catalogCounts.get(catalogId) ?? 0) > 1) {
+      errors[row.id] = {
+        ...(errors[row.id] ?? {}),
+        catalogId: "This catalog can only be mapped once"
+      };
+    }
+  }
   return errors;
+}
+
+function canUseCatalogId(
+  rows: Row[],
+  currentRowId: string | undefined,
+  catalogId: string,
+  rules: Map<string, CatalogRule>
+): boolean {
+  const normalized = catalogId.trim();
+  if (!normalized) {
+    return true;
+  }
+  const rule = rules.get(normalized);
+  if (!rule || rule.allowMultiple) {
+    return true;
+  }
+  return !rows.some((row) => row.id !== currentRowId && row.catalogId.trim() === normalized);
 }
 
 function toRows(definitions: PayloadbuilderCatalogAliasDefinition[]): Row[] {

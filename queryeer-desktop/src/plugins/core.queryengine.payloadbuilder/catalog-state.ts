@@ -13,6 +13,7 @@ export type PayloadbuilderCatalogInstance = {
 
 export type PayloadbuilderCatalogsDocument = {
   schemaVersion: number;
+  defaultCatalogAlias?: string;
   instancesByAlias: Record<string, { catalogId: string; properties?: Record<string, unknown> }>;
 };
 
@@ -35,6 +36,7 @@ export function validateAlias(rawAlias: string): string {
 export function emptyCatalogDocument(): PayloadbuilderCatalogsDocument {
   return {
     schemaVersion: SCHEMA_VERSION,
+    defaultCatalogAlias: undefined,
     instancesByAlias: {}
   };
 }
@@ -47,6 +49,10 @@ export function parseCatalogDocument(raw: unknown): PayloadbuilderCatalogsDocume
   const instancesRaw = raw.instancesByAlias;
   const next: PayloadbuilderCatalogsDocument = {
     schemaVersion: SCHEMA_VERSION,
+    defaultCatalogAlias:
+      typeof raw.defaultCatalogAlias === "string" && raw.defaultCatalogAlias.trim()
+        ? raw.defaultCatalogAlias.trim()
+        : undefined,
     instancesByAlias: {}
   };
 
@@ -120,6 +126,7 @@ export function applyEngineStatePatch(
 
   const merged: PayloadbuilderCatalogsDocument = {
     schemaVersion: SCHEMA_VERSION,
+    defaultCatalogAlias: document.defaultCatalogAlias,
     instancesByAlias: {
       ...document.instancesByAlias
     }
@@ -170,6 +177,7 @@ export function upsertInstance(
 
   return {
     schemaVersion: SCHEMA_VERSION,
+    defaultCatalogAlias: document.defaultCatalogAlias,
     instancesByAlias: {
       ...document.instancesByAlias,
       [alias]: {
@@ -189,6 +197,8 @@ export function removeInstance(
   delete next[normalizedAlias];
   return {
     schemaVersion: SCHEMA_VERSION,
+    defaultCatalogAlias:
+      document.defaultCatalogAlias === normalizedAlias ? undefined : document.defaultCatalogAlias,
     instancesByAlias: next
   };
 }
@@ -210,6 +220,7 @@ export function setInstanceProperty(
 
   return {
     schemaVersion: SCHEMA_VERSION,
+    defaultCatalogAlias: document.defaultCatalogAlias,
     instancesByAlias: {
       ...document.instancesByAlias,
       [normalizedAlias]: {

@@ -11,8 +11,10 @@ export type PayloadbuilderCatalogPanelProps = {
 export type PayloadbuilderCatalogContribution = {
   catalogId: string;
   title: string;
+  defaultAlias: string;
+  allowMultiple: boolean;
   order?: number;
-  renderPanel: (props: PayloadbuilderCatalogPanelProps) => ReactNode;
+  renderPanel?: (props: PayloadbuilderCatalogPanelProps) => ReactNode;
   filterPersistedProperties?: (properties: Record<string, unknown>) => Record<string, unknown>;
   resolveRuntimeProperties?: (properties: Record<string, unknown>) => Record<string, unknown>;
 };

@@ -1,7 +1,7 @@
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import { registerQueryExecutableEngine } from "../core.queryengine/engine-registration";
-import { getCoreSettingsService } from "../core.settings/service";
+import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../core.settings/service";
 import { CatalogInstancesSettingsEditor } from "./CatalogInstancesSettingsEditor";
 import { getPayloadbuilderCatalogStore } from "./catalog-store";
 import {
@@ -9,6 +9,10 @@ import {
   PAYLOADBUILDER_CATALOG_INSTANCES_SETTING_ID
 } from "./catalog-settings";
 import { PayloadbuilderCatalogSidebar } from "./PayloadbuilderCatalogSidebar";
+import {
+  listPayloadbuilderCatalogContributions,
+  subscribePayloadbuilderCatalogContributions
+} from "./catalog-contributions";
 
 export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
   manifest: {
@@ -42,6 +46,11 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
             message:
               "Each item must be unique and include non-empty alias and catalogId"
           };
+        }
+
+        const multiplicity = validateMultiplicity(parsed);
+        if (multiplicity) {
+          return { ok: false, message: multiplicity };
         }
 
         return { ok: true };
@@ -82,7 +91,20 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
     if (settingsService) {
       settingsService.refreshSchemaFromRegistry();
       void settingsService.syncRegistryModules();
+      void adaptCatalogInstancesSettings(settingsService);
     }
+
+    onCoreSettingsServiceInitialized((initializedSettingsService) => {
+      void adaptCatalogInstancesSettings(initializedSettingsService);
+    });
+
+    subscribePayloadbuilderCatalogContributions(() => {
+      const service = getCoreSettingsService();
+      if (!service) {
+        return;
+      }
+      void adaptCatalogInstancesSettings(service);
+    });
 
     context.layout.registerView({
       id: "core.queryengine.payloadbuilder.catalogs",
@@ -90,8 +112,26 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
       defaultZone: "primarySidebar",
       order: 40,
       canMoveZones: true,
+      panelActions: [
+        {
+          id: "core.queryengine.payloadbuilder.catalogs.settings",
+          icon: "⚙",
+          title: "Open catalog alias mapping settings",
+          commandId: "core.queryengine.payloadbuilder.catalogs.openSettings"
+        }
+      ],
       when: "activeFileMimeType == 'application/plbsql'",
       render: () => <PayloadbuilderCatalogSidebar />
+    });
+
+    context.commands.registerCommand({
+      id: "core.queryengine.payloadbuilder.catalogs.openSettings",
+      title: "Open Payloadbuilder Catalog Alias Mapping",
+      category: "Preferences",
+      handler: () => {
+        const service = getCoreSettingsService();
+        service?.openModalForSetting(PAYLOADBUILDER_CATALOG_INSTANCES_SETTING_ID);
+      }
     });
 
     getQueryEngineService().registerExecutionContextProvider((params) => {
@@ -121,3 +161,66 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
     });
   }
 };
+
+function validateMultiplicity(definitions: ReturnType<typeof parseCatalogAliasDefinitions>): string | undefined {
+  const contributions = listPayloadbuilderCatalogContributions();
+  const byCatalogId = new Map(contributions.map((item) => [item.catalogId, item]));
+  const catalogUsage = new Map<string, number>();
+  for (const definition of definitions) {
+    const count = (catalogUsage.get(definition.catalogId) ?? 0) + 1;
+    catalogUsage.set(definition.catalogId, count);
+    const contribution = byCatalogId.get(definition.catalogId);
+    if (contribution && !contribution.allowMultiple && count > 1) {
+      return `Catalog '${definition.catalogId}' does not allow multiple aliases`;
+    }
+  }
+  return undefined;
+}
+
+async function adaptCatalogInstancesSettings(settingsService: {
+  getValue: (settingId: string) => unknown;
+  setValue: (settingId: string, value: unknown) => Promise<{ ok: boolean }>;
+}): Promise<void> {
+  const current = parseCatalogAliasDefinitions(
+    settingsService.getValue(PAYLOADBUILDER_CATALOG_INSTANCES_SETTING_ID)
+  );
+  const merged = [...current];
+  const byCatalogId = new Map<string, number>();
+  for (const entry of current) {
+    byCatalogId.set(entry.catalogId, (byCatalogId.get(entry.catalogId) ?? 0) + 1);
+  }
+
+  const takenAliases = new Set(current.map((item) => item.alias));
+  for (const contribution of listPayloadbuilderCatalogContributions()) {
+    const currentCount = byCatalogId.get(contribution.catalogId) ?? 0;
+    if (currentCount > 0) {
+      continue;
+    }
+    const alias = createUniqueAlias(contribution.defaultAlias, takenAliases);
+    merged.push({
+      alias,
+      catalogId: contribution.catalogId,
+      title: contribution.title,
+      enabled: true
+    });
+    takenAliases.add(alias);
+    byCatalogId.set(contribution.catalogId, 1);
+  }
+
+  if (merged.length === current.length) {
+    return;
+  }
+  await settingsService.setValue(PAYLOADBUILDER_CATALOG_INSTANCES_SETTING_ID, merged);
+}
+
+function createUniqueAlias(baseAlias: string, taken: Set<string>): string {
+  const normalized = baseAlias.trim() || "catalog";
+  if (!taken.has(normalized)) {
+    return normalized;
+  }
+  let suffix = 2;
+  while (taken.has(`${normalized}${suffix}`)) {
+    suffix++;
+  }
+  return `${normalized}${suffix}`;
+}

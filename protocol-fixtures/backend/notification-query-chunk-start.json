@@ -9,7 +9,7 @@
       "columns": [
         {
           "name": "id",
-          "type": "integer"
+          "type": "int"
         }
       ]
     }

@@ -84,6 +84,11 @@ export class SecurityService {
     });
   }
 
+  public async invalidateBackendSession(): Promise<void> {
+    await this.closeBackendSecuritySession("error");
+    this.masterKey = null;
+  }
+
   private async getStatus(): Promise<SecurityStatus> {
     return {
       unlocked: this.masterKey !== null,

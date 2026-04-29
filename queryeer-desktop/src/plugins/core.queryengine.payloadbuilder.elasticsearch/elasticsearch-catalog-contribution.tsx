@@ -20,6 +20,8 @@ export function registerPayloadbuilderElasticsearchCatalogContribution(): void {
   registerPayloadbuilderCatalogContribution({
     catalogId: ELASTICSEARCH_CATALOG_ID,
     title: "Elasticsearch",
+    defaultAlias: "es",
+    allowMultiple: true,
     order: 10,
     filterPersistedProperties: (properties) => ({
       connectionId: asText(properties.connectionId),

@@ -60,4 +60,26 @@ class PayloadbuilderEngineStateSupportTest
 
         Assertions.assertNull(PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, state));
     }
+
+    @Test
+    void parseRejectsUnknownDefaultCatalogAlias()
+    {
+        Map<String, Object> invalidState = Map.of("payloadbuilder", Map.of("defaultCatalogAlias", "jdbc2", "catalogs", Map.of("jdbc1", Map.of("catalogId", "Jdbc", "properties", Map.of()))));
+
+        IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class, () -> PayloadbuilderEngineStateSupport.parse(invalidState));
+
+        Assertions.assertEquals("defaultCatalogAlias must match a mapped alias", error.getMessage());
+    }
+
+    @Test
+    void applyToSessionSetsDefaultCatalogAlias()
+    {
+        Map<String, Object> stateRoot = Map.of("payloadbuilder", Map.of("defaultCatalogAlias", "jdbc1", "catalogs", Map.of("jdbc1", Map.of("catalogId", "Jdbc", "properties", Map.of()))));
+        PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state = PayloadbuilderEngineStateSupport.parse(stateRoot);
+        QuerySession session = new QuerySession(new CatalogRegistry());
+
+        PayloadbuilderEngineStateSupport.applyToSession(session, state);
+
+        Assertions.assertEquals("jdbc1", session.getDefaultCatalogAlias());
+    }
 }

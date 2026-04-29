@@ -170,11 +170,27 @@ export type QueryProgressNotification = {
   message?: string;
 };
 
+export type QueryColumnType =
+  | "string"
+  | "boolean"
+  | "int"
+  | "long"
+  | "decimal"
+  | "float"
+  | "double"
+  | "datetime"
+  | "datetimeoffset"
+  | "object"
+  | "array"
+  | "table"
+  | "any"
+  | "null";
+
 export type QueryChunkStartNotification = {
   queryExecutionId: string;
   resultSetIndex: number;
   schema: {
-    columns: Array<{ name: string; type: string }>;
+    columns: Array<{ name: string; type: QueryColumnType }>;
   };
 };
 

@@ -58,6 +58,7 @@ export class BackendGateway {
   private startupPromise: Promise<void> | null = null;
   private pingIntervalHandle: NodeJS.Timeout | null = null;
   private rendererSink: ((method: string, params: unknown) => void) | null = null;
+  private transportDiedHook: (() => void) | null = null;
   private tracePayloads = false;
   private logFlowEnabled = true;
 
@@ -88,7 +89,10 @@ export class BackendGateway {
         onEnvelope: (envelope) => this.onBackendEnvelope(envelope),
         onDiagnostic
       },
-      () => this.doRestartSequence()
+      () => this.doRestartSequence(),
+      () => {
+        this.transportDiedHook?.();
+      }
     );
 
     this.statusStore.initializeMode(this.transport.mode);
@@ -98,6 +102,10 @@ export class BackendGateway {
 
   public setRendererSink(sink: (method: string, params: unknown) => void): void {
     this.rendererSink = sink;
+  }
+
+  public setOnTransportDiedHook(hook: (() => void) | null): void {
+    this.transportDiedHook = hook;
   }
 
   public wireIpc(): void {

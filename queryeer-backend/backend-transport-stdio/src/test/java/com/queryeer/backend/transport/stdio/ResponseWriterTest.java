@@ -17,6 +17,11 @@ import com.queryeer.backend.contract.ProtocolVersion;
 
 class ResponseWriterTest
 {
+    private static final class CyclicPayload
+    {
+        private CyclicPayload self;
+    }
+
     @Test
     void writesContentLengthFramedEnvelope() throws Exception
     {
@@ -127,5 +132,25 @@ class ResponseWriterTest
         Assertions.assertTrue(listenerInvoked.get());
         Assertions.assertTrue(exception.getMessage()
                 .contains("Could not write envelope"));
+    }
+
+    @Test
+    void doesNotInvokeBrokenPipeListenerWhenEncodingFails() throws Exception
+    {
+        ObjectMapper objectMapper = new ObjectMapper();
+        EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
+        AtomicBoolean listenerInvoked = new AtomicBoolean(false);
+        ResponseWriter writer = new ResponseWriter(new ByteArrayOutputStream(), codec);
+        writer.onBrokenPipe(() -> listenerInvoked.set(true));
+
+        CyclicPayload payload = new CyclicPayload();
+        payload.self = payload;
+
+        IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
+                () -> writer.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, null, "query.chunkRows", payload, null, null)));
+
+        Assertions.assertFalse(listenerInvoked.get());
+        Assertions.assertTrue(exception.getMessage()
+                .contains("Could not encode envelope"));
     }
 }

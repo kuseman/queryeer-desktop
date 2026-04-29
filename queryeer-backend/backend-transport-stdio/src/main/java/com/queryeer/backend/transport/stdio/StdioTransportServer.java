@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.queryeer.backend.api.ErrorMessages;
 import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.BackendError;
 import com.queryeer.backend.contract.BackendErrorCode;
@@ -83,10 +84,10 @@ public final class StdioTransportServer
                 notificationDispatcher.dispatch(envelope);
             }
         }
-        catch (Exception error)
+        catch (Throwable error)
         {
             responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, null, "query.failed",
-                    new QueryFailedNotification("transport", new BackendError(BackendErrorCode.INTERNAL, error.getMessage(), null)), null, null));
+                    new QueryFailedNotification("transport", new BackendError(BackendErrorCode.INTERNAL, ErrorMessages.buildFailureMessage(error), null)), null, null));
         }
     }
 }

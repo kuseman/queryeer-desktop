@@ -5,6 +5,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.queryeer.backend.contract.BackendEnvelope;
 
 public final class ResponseWriter
@@ -23,10 +24,19 @@ public final class ResponseWriter
 
     public synchronized void write(BackendEnvelope envelope)
     {
+        final byte[] body;
         try
         {
             String json = codec.encode(envelope);
-            byte[] body = json.getBytes(StandardCharsets.UTF_8);
+            body = json.getBytes(StandardCharsets.UTF_8);
+        }
+        catch (JsonProcessingException e)
+        {
+            throw new IllegalStateException("Could not encode envelope", e);
+        }
+
+        try
+        {
             byte[] header = ("Content-Length: " + body.length + "\r\n\r\n").getBytes(StandardCharsets.US_ASCII);
             output.write(header);
             output.write(body);
