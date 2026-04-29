@@ -1,7 +1,7 @@
 {
   "protocolVersion": "1.0.0",
   "type": "notification",
-  "method": "query.completed",
+  "method": "queryengine.completed",
   "params": {
     "queryExecutionId": "exec-fixture-1",
     "metrics": {

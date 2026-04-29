@@ -213,7 +213,7 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
 
     listener?.(
       {
-        method: "query.completed",
+        method: "queryengine.completed",
         params: {
           engineStatePatch: {
             payloadbuilder: {
@@ -244,16 +244,16 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
     });
 
     listener?.(
-      { method: "query.completed", params: { engineStatePatch: { ignored: true } } },
+      { method: "queryengine.completed", params: { engineStatePatch: { ignored: true } } },
       { engineId: "jdbc", fileId: "file-1" }
     );
-    listener?.({ method: "query.completed", params: {} }, { engineId: "payloadbuilder", fileId: "file-1" });
+    listener?.({ method: "queryengine.completed", params: {} }, { engineId: "payloadbuilder", fileId: "file-1" });
     listener?.(
-      { method: "query.completed", params: { engineStatePatch: { ignored: true } } },
+      { method: "queryengine.completed", params: { engineStatePatch: { ignored: true } } },
       { engineId: "payloadbuilder" }
     );
     listener?.(
-      { method: "query.failed", params: { engineStatePatch: { ignored: true } } },
+      { method: "queryengine.failed", params: { engineStatePatch: { ignored: true } } },
       { engineId: "payloadbuilder", fileId: "file-1" }
     );
 

@@ -223,7 +223,7 @@ describe("QueryEditorComponent execution state across tab switches", () => {
     expect(listener).toBeTruthy();
 
     await act(async () => {
-      listener?.({ method: "query.failed", params: { error: { code: "E", message: "boom" } } });
+      listener?.({ method: "queryengine.failed", params: { error: { code: "E", message: "boom" } } });
       await Promise.resolve();
     });
 
@@ -250,7 +250,7 @@ describe("QueryEditorComponent execution state across tab switches", () => {
     expect(listener).toBeTruthy();
 
     await act(async () => {
-      listener?.({ method: "query.completed", params: { metrics: { rowCount: 0 }, features: ["rows"] } });
+      listener?.({ method: "queryengine.completed", params: { metrics: { rowCount: 0 }, features: ["rows"] } });
       await Promise.resolve();
     });
 

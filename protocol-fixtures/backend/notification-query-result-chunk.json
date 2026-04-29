@@ -1,7 +1,7 @@
 {
   "protocolVersion": "1.0.0",
   "type": "notification",
-  "method": "query.resultChunk",
+  "method": "queryengine.resultChunk",
   "params": {
     "queryExecutionId": "exec-fixture-1",
     "chunkIndex": 0,

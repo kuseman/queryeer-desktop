@@ -22,7 +22,7 @@ public final class QueryExecuteRequestHandler implements RequestHandler
     @Override
     public String method()
     {
-        return "query.execute";
+        return "queryengine.execute";
     }
 
     @Override

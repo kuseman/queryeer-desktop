@@ -15,7 +15,7 @@
 - [x] Initial envelope/error/protocol version skeleton
 - [x] Add typed DTOs for `backend.handshake`
 - [x] Add typed DTOs for `health.ping`
-- [x] Add typed DTOs for `query.execute` / `query.cancel`
+- [x] Add typed DTOs for `queryengine.execute` / `queryengine.cancel`
 - [x] Add notification DTOs (`progress`, `resultChunk`, `completed`, `failed`)
 - [x] Align JSON envelope type wire values with desktop protocol casing
 - [x] Add fixture compatibility tests for handshake/ping shared with desktop fixtures
@@ -42,7 +42,7 @@
 - [x] Initial transport server stub
 - [x] Implement NDJSON envelope reader/writer
 - [x] Implement method dispatch for `handshake` + `ping`
-- [x] Add `query.execute` / `query.cancel` dispatch with mock notifications
+- [x] Add `queryengine.execute` / `queryengine.cancel` dispatch with mock notifications
 - [x] Add protocol error mapping
 - [x] Refactor transport into decomposed components + manual DI wiring
 - [x] Add mock dispatch handler for `connection.upsert`
@@ -70,7 +70,7 @@
 - [x] Initial plugin scaffold and engine registration placeholder
 - [ ] Implement real engine adapter integration
 - [ ] Implement `FileSessionHandler` (engineId = `payloadbuilder`) caching parse trees per `fileId`
-- [ ] Wire `query.execute.fileId` to reuse cached parse tree
+- [ ] Wire `queryengine.execute.fileId` to reuse cached parse tree
 
 ## backend-plugin-jdbc
 
@@ -82,7 +82,7 @@
 
 - [x] Add Spotless formatting enforcement in Maven lifecycle
 - [x] Add Checkstyle enforcement in Maven lifecycle
-- [x] Prove first end-to-end desktop mock flow for `query.execute` / `query.cancel`
+- [x] Prove first end-to-end desktop mock flow for `queryengine.execute` / `queryengine.cancel`
 - [x] Surface desktop backend startup diagnostics in renderer (backend log panel)
 - [x] Refactor desktop backend gateway state handling into dedicated helper modules
 - [x] Add contract fixture tests shared with desktop protocol expectations (handshake/ping/execute/cancel/notifications)

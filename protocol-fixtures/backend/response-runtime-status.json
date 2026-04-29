@@ -21,7 +21,7 @@
       "query.jdbc"
     ],
     "providedCapabilities": [
-      "query.execute"
+      "queryengine.execute"
     ]
   }
 }

@@ -152,7 +152,7 @@ class PluginRuntimeArchitectureTest
 
         private RecordingPlugin(String id, String engineId, List<String> dependencies, List<String> requiredCapabilities, boolean failOnActivate)
         {
-            this(id, engineId, dependencies, requiredCapabilities, failOnActivate, List.of("query.execute"));
+            this(id, engineId, dependencies, requiredCapabilities, failOnActivate, List.of("queryengine.execute"));
         }
 
         private RecordingPlugin(String id, String engineId, List<String> dependencies, List<String> requiredCapabilities, boolean failOnActivate, List<String> providedCapabilities)

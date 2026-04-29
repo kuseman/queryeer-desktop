@@ -40,7 +40,7 @@ public final class MockQueryExecutionService
             {
                 return;
             }
-            notificationPublisher.publishForQuery(params.queryExecutionId(), "query.progress", new QueryProgressNotification(params.queryExecutionId(), 20, "Running " + params.engineId()));
+            notificationPublisher.publishForQuery(params.queryExecutionId(), "queryengine.progress", new QueryProgressNotification(params.queryExecutionId(), 20, "Running " + params.engineId()));
         }, 120, TimeUnit.MILLISECONDS);
 
         scheduler.schedule(() ->
@@ -49,9 +49,9 @@ public final class MockQueryExecutionService
             {
                 return;
             }
-            notificationPublisher.publishForQuery(params.queryExecutionId(), "query.chunkStart", new QueryChunkStartNotification(params.queryExecutionId(), 0,
+            notificationPublisher.publishForQuery(params.queryExecutionId(), "queryengine.chunkStart", new QueryChunkStartNotification(params.queryExecutionId(), 0,
                     new ResultSchema(List.of(new ColumnDefinition("id", ColumnTypes.INT), new ColumnDefinition("value", ColumnTypes.STRING)))));
-            notificationPublisher.publishForQuery(params.queryExecutionId(), "query.chunkRows",
+            notificationPublisher.publishForQuery(params.queryExecutionId(), "queryengine.chunkRows",
                     new QueryChunkRowsNotification(params.queryExecutionId(), 0, List.of(List.of(1, "alpha"), List.of(2, "beta"))));
         }, 280, TimeUnit.MILLISECONDS);
 
@@ -61,14 +61,14 @@ public final class MockQueryExecutionService
             {
                 return;
             }
-            notificationPublisher.publishForQuery(params.queryExecutionId(), "query.completed", new QueryCompletedNotification(params.queryExecutionId(), new QueryMetrics(600, 2), null));
+            notificationPublisher.publishForQuery(params.queryExecutionId(), "queryengine.completed", new QueryCompletedNotification(params.queryExecutionId(), new QueryMetrics(600, 2), null));
         }, 460, TimeUnit.MILLISECONDS);
     }
 
     public void cancel(QueryCancelParams params)
     {
         cancelledExecutionIds.add(params.queryExecutionId());
-        notificationPublisher.publishForQuery(params.queryExecutionId(), "query.failed",
+        notificationPublisher.publishForQuery(params.queryExecutionId(), "queryengine.failed",
                 new QueryFailedNotification(params.queryExecutionId(), new BackendError(BackendErrorCode.CANCELLED, "Execution cancelled by client", null)));
     }
 }

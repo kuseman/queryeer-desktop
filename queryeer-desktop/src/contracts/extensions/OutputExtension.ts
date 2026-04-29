@@ -31,7 +31,7 @@ export type ResultSet = {
   rowLimitExceeded: boolean;
   /**
    * Absolute path to the temp file containing all rows (no cap).
-   * Populated after query.completed finalizes the export stream.
+   * Populated after queryengine.completed finalizes the export stream.
    * Undefined while the export stream is still open.
    */
   exportPath?: string;
@@ -42,7 +42,7 @@ export type OutputContext = {
   resultSets: ResultSet[];
   /**
    * null     = features not yet known (query still running)
-   * string[] = resolved from backend on query.completed
+   * string[] = resolved from backend on queryengine.completed
    *
    * OutputPanel uses this to decide which ad-hoc contributors to open alongside
    * the primary contributor.

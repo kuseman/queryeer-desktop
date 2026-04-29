@@ -13,7 +13,7 @@ public final class JdbcBackendPlugin implements BackendPlugin
     @Override
     public PluginDescriptor descriptor()
     {
-        return new PluginDescriptor("query.jdbc", "JDBC Query Engine", "0.1.0", List.of(), List.of("query.execute"), List.of());
+        return new PluginDescriptor("query.jdbc", "JDBC Query Engine", "0.1.0", List.of(), List.of("queryengine.execute"), List.of());
     }
 
     @Override

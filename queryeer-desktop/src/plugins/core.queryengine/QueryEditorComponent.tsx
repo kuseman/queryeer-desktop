@@ -113,13 +113,13 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
         const executionId = await service.execute({ fileId: targetFileId, text });
 
         const unsubscribe = service.subscribe(executionId, (event) => {
-          if (event.method === "query.progress") {
+          if (event.method === "queryengine.progress") {
             const p = event.params as { percent?: number; message?: string };
             updateOutputContextForFile(targetFileId, (prev) => ({
               ...prev,
               progress: { percent: p.percent, message: p.message }
             }));
-          } else if (event.method === "query.chunkStart") {
+          } else if (event.method === "queryengine.chunkStart") {
             const p = event.params as { resultSetIndex: number; schema: { columns: Array<{ name: string; type: ColumnType }> } };
             updateOutputContextForFile(targetFileId, (prev) => {
               if (prev.resultSets.some((rs) => rs.resultSetIndex === p.resultSetIndex)) return prev;
@@ -131,7 +131,7 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
                 ]
               };
             });
-          } else if (event.method === "query.chunkRows") {
+          } else if (event.method === "queryengine.chunkRows") {
             const p = event.params as { resultSetIndex: number; rows: unknown[][] };
             const registry = getOutputRegistry();
 
@@ -166,7 +166,7 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
               });
               return { ...prev, resultSets: sets };
             });
-          } else if (event.method === "query.completed") {
+          } else if (event.method === "queryengine.completed") {
             const p = event.params as { metrics?: { durationMs?: number; rowCount?: number }; features?: string[] };
             activeExecutionByFileIdRef.current.delete(targetFileId);
             updateOutputContextForFile(targetFileId, (prev) => ({
@@ -197,7 +197,7 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
                   });
               }
             }
-          } else if (event.method === "query.failed") {
+          } else if (event.method === "queryengine.failed") {
             const p = event.params as { error?: { code: string; message: string } };
             activeExecutionByFileIdRef.current.delete(targetFileId);
             updateOutputContextForFile(targetFileId, (prev) => ({

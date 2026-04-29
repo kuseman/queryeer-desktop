@@ -71,7 +71,7 @@ class ResponseWriterTest
         ResponseWriter writer = new ResponseWriter(output, codec);
 
         writer.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, "req-1", null, null, null, null, null));
-        writer.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, null, "query.progress", null, null, null));
+        writer.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, null, "queryengine.progress", null, null, null));
 
         FramedReader reader = new FramedReader(new ByteArrayInputStream(output.toByteArray()), l ->
         {
@@ -81,7 +81,7 @@ class ResponseWriterTest
 
         Assertions.assertEquals("req-1", first.id());
         Assertions.assertEquals(EnvelopeType.RESPONSE, first.type());
-        Assertions.assertEquals("query.progress", second.method());
+        Assertions.assertEquals("queryengine.progress", second.method());
         Assertions.assertEquals(EnvelopeType.NOTIFICATION, second.type());
         Assertions.assertNull(reader.readFrame());
     }
@@ -147,7 +147,7 @@ class ResponseWriterTest
         payload.self = payload;
 
         IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
-                () -> writer.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, null, "query.chunkRows", payload, null, null)));
+                () -> writer.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, null, "queryengine.chunkRows", payload, null, null)));
 
         Assertions.assertFalse(listenerInvoked.get());
         Assertions.assertTrue(exception.getMessage()

@@ -86,7 +86,7 @@ public final class StdioTransportServer
         }
         catch (Throwable error)
         {
-            responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, null, "query.failed",
+            responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, null, "queryengine.failed",
                     new QueryFailedNotification("transport", new BackendError(BackendErrorCode.INTERNAL, ErrorMessages.buildFailureMessage(error), null)), null, null));
         }
     }

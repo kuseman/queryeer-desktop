@@ -104,7 +104,7 @@ class ProtocolFixtureCompatibilityTest
         assertEnvelopeBase(response);
         Assertions.assertEquals(EnvelopeType.REQUEST, request.type());
         Assertions.assertEquals(EnvelopeType.RESPONSE, response.type());
-        Assertions.assertEquals("query.execute", request.method());
+        Assertions.assertEquals("queryengine.execute", request.method());
         Assertions.assertEquals(request.id(), response.id());
         Assertions.assertNotNull(response.result());
 
@@ -127,7 +127,7 @@ class ProtocolFixtureCompatibilityTest
         assertEnvelopeBase(response);
         Assertions.assertEquals(EnvelopeType.REQUEST, request.type());
         Assertions.assertEquals(EnvelopeType.RESPONSE, response.type());
-        Assertions.assertEquals("query.cancel", request.method());
+        Assertions.assertEquals("queryengine.cancel", request.method());
         Assertions.assertEquals(request.id(), response.id());
         Assertions.assertNotNull(response.result());
 
@@ -185,7 +185,7 @@ class ProtocolFixtureCompatibilityTest
 
         assertEnvelopeBase(notification);
         Assertions.assertEquals(EnvelopeType.NOTIFICATION, notification.type());
-        Assertions.assertEquals("query.progress", notification.method());
+        Assertions.assertEquals("queryengine.progress", notification.method());
         Assertions.assertNotNull(notification.params());
 
         QueryProgressNotification params = objectMapper.convertValue(notification.params(), QueryProgressNotification.class);
@@ -200,7 +200,7 @@ class ProtocolFixtureCompatibilityTest
 
         assertEnvelopeBase(notification);
         Assertions.assertEquals(EnvelopeType.NOTIFICATION, notification.type());
-        Assertions.assertEquals("query.chunkStart", notification.method());
+        Assertions.assertEquals("queryengine.chunkStart", notification.method());
         Assertions.assertNotNull(notification.params());
 
         QueryChunkStartNotification params = objectMapper.convertValue(notification.params(), QueryChunkStartNotification.class);
@@ -222,7 +222,7 @@ class ProtocolFixtureCompatibilityTest
 
         assertEnvelopeBase(notification);
         Assertions.assertEquals(EnvelopeType.NOTIFICATION, notification.type());
-        Assertions.assertEquals("query.chunkRows", notification.method());
+        Assertions.assertEquals("queryengine.chunkRows", notification.method());
         Assertions.assertNotNull(notification.params());
 
         QueryChunkRowsNotification params = objectMapper.convertValue(notification.params(), QueryChunkRowsNotification.class);
@@ -239,7 +239,7 @@ class ProtocolFixtureCompatibilityTest
 
         assertEnvelopeBase(notification);
         Assertions.assertEquals(EnvelopeType.NOTIFICATION, notification.type());
-        Assertions.assertEquals("query.completed", notification.method());
+        Assertions.assertEquals("queryengine.completed", notification.method());
         Assertions.assertNotNull(notification.params());
 
         QueryCompletedNotification params = objectMapper.convertValue(notification.params(), QueryCompletedNotification.class);
@@ -257,7 +257,7 @@ class ProtocolFixtureCompatibilityTest
 
         assertEnvelopeBase(notification);
         Assertions.assertEquals(EnvelopeType.NOTIFICATION, notification.type());
-        Assertions.assertEquals("query.failed", notification.method());
+        Assertions.assertEquals("queryengine.failed", notification.method());
         Assertions.assertNotNull(notification.params());
 
         QueryFailedNotification params = objectMapper.convertValue(notification.params(), QueryFailedNotification.class);

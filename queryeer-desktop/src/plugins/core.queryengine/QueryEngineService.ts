@@ -65,7 +65,7 @@ export class QueryEngineService {
         listener(event, context);
       }
 
-      if (event.method === "query.completed" || event.method === "query.failed") {
+      if (event.method === "queryengine.completed" || event.method === "queryengine.failed") {
         this.executionContextById.delete(executionId);
       }
     });

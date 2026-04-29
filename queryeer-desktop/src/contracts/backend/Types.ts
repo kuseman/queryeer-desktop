@@ -10,15 +10,15 @@ export type Capability =
   | "security.session.close"
   | "security.vault.changed"
   | "health.ping"
-  | "query.execute"
-  | "query.cancel"
+  | "queryengine.execute"
+  | "queryengine.cancel"
   | "engine.invoke"
   | "connection.upsert"
-  | "query.progress"
-  | "query.chunkStart"
-  | "query.chunkRows"
-  | "query.completed"
-  | "query.failed"
+  | "queryengine.progress"
+  | "queryengine.chunkStart"
+  | "queryengine.chunkRows"
+  | "queryengine.completed"
+  | "queryengine.failed"
   | "file.open"
   | "file.close"
   | "file.bind"
@@ -268,8 +268,8 @@ export type BackendMethodParamsMap = {
   "security.session.close": SecuritySessionCloseParams;
   "security.vault.changed": SecurityVaultChangedParams;
   "health.ping": PingParams;
-  "query.execute": QueryExecuteParams;
-  "query.cancel": QueryCancelParams;
+  "queryengine.execute": QueryExecuteParams;
+  "queryengine.cancel": QueryCancelParams;
   "engine.invoke": EngineInvokeParams;
   "connection.upsert": ConnectionUpsertParams;
   "file.open": FileOpenParams;
@@ -284,8 +284,8 @@ export type BackendMethodResultMap = {
   "security.session.close": SecuritySessionCloseResult;
   "security.vault.changed": SecurityVaultChangedResult;
   "health.ping": PingResult;
-  "query.execute": QueryExecuteResult;
-  "query.cancel": QueryCancelResult;
+  "queryengine.execute": QueryExecuteResult;
+  "queryengine.cancel": QueryCancelResult;
   "engine.invoke": EngineInvokeResult;
   "connection.upsert": ConnectionUpsertResult;
   "file.open": FileOpenResult;
@@ -294,11 +294,11 @@ export type BackendMethodResultMap = {
 };
 
 export type BackendNotificationParamsMap = {
-  "query.progress": QueryProgressNotification;
-  "query.chunkStart": QueryChunkStartNotification;
-  "query.chunkRows": QueryChunkRowsNotification;
-  "query.completed": QueryCompletedNotification;
-  "query.failed": QueryFailedNotification;
+  "queryengine.progress": QueryProgressNotification;
+  "queryengine.chunkStart": QueryChunkStartNotification;
+  "queryengine.chunkRows": QueryChunkRowsNotification;
+  "queryengine.completed": QueryCompletedNotification;
+  "queryengine.failed": QueryFailedNotification;
   "file.change": FileChangeNotification;
 };
 

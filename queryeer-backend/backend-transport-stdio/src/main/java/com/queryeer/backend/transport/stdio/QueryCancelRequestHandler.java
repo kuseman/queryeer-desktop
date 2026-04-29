@@ -22,7 +22,7 @@ public final class QueryCancelRequestHandler implements RequestHandler
     @Override
     public String method()
     {
-        return "query.cancel";
+        return "queryengine.cancel";
     }
 
     @Override
