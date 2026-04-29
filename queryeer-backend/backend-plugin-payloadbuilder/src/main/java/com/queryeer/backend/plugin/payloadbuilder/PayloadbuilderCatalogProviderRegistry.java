@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.queryeer.backend.plugin.payloadbuilder.elasticsearch.ElasticsearchCatalogProvider;
+import com.queryeer.backend.plugin.payloadbuilder.filesystem.FilesystemCatalogProvider;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
 
@@ -32,7 +33,7 @@ final class PayloadbuilderCatalogProviderRegistry
 
     static PayloadbuilderCatalogProviderRegistry defaults()
     {
-        return new PayloadbuilderCatalogProviderRegistry(List.of(new ElasticsearchCatalogProvider()));
+        return new PayloadbuilderCatalogProviderRegistry(List.of(new ElasticsearchCatalogProvider(), new FilesystemCatalogProvider()));
     }
 
     Catalog createCatalog(String catalogId)

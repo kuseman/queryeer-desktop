@@ -285,6 +285,9 @@ app.whenReady().then(() => {
       }
     }
   );
+  backendGateway.setOnTransportDiedHook(() => {
+    void securityService?.invalidateBackendSession();
+  });
   securityService.wireIpc();
   ipcMain.handle("plugins:get-frontend-targets", async () => discoverExternalFrontendPlugins());
   ipcMain.handle("file:read", async (_event, { uri }: { uri: string }) => {

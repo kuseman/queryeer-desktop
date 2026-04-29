@@ -220,6 +220,7 @@ Request params:
   "parameters": [],
   "engineState": {
     "payloadbuilder": {
+      "defaultCatalogAlias": "jdbc1",
       "catalogs": {
         "jdbc1": {
           "catalogId": "Jdbc",
@@ -250,6 +251,7 @@ Behavior:
 
 - Execution updates are sent via notifications (`query.progress`, `query.resultChunk`, `query.completed`, `query.failed`).
 - `engineState` is an engine-owned opaque blob. Core protocol forwards it without interpretation.
+- Payloadbuilder engine state may include `payloadbuilder.defaultCatalogAlias` to request session default catalog alias.
 
 ## 5.4 `query.cancel`
 
@@ -474,7 +476,7 @@ Rules:
   "chunkIndex": 0,
   "schema": {
     "columns": [
-      { "name": "id", "type": "integer" },
+      { "name": "id", "type": "int" },
       { "name": "name", "type": "string" }
     ]
   },
@@ -490,6 +492,8 @@ Rules:
 
 - `schema` SHOULD be present in first chunk and MAY be omitted in subsequent chunks.
 - `chunkIndex` MUST be monotonically increasing per `queryExecutionId`.
+- `schema.columns[*].type` MUST be one of: `string`, `boolean`, `int`, `long`, `decimal`, `float`, `double`, `datetime`, `datetimeoffset`, `object`, `array`, `table`, `any`, `null`.
+- Backends with richer/native type systems MUST map to this canonical set before emitting notifications.
 
 ## 6.3 `query.completed`
 

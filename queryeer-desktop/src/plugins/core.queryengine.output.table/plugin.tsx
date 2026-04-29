@@ -30,22 +30,120 @@ const ACTIVE_RESULT_SET_KEY = defineStateKey<number>("core.queryengine.output.ta
 type SavedSelection = { selection: SelectionModel | null; anchor: SelectionAnchor | null };
 const SELECTION_KEY = defineStateKey<Record<number, SavedSelection>>("core.queryengine.output.table.selection");
 
-function mapRow(row: unknown[], columns: Column[]): Record<string, unknown> {
-  return Object.fromEntries(columns.map((col, i) => [col.name, row[i] ?? null]));
+type GridColumn = {
+  key: string;
+  title: string;
+  type: string;
+};
+
+function toGridColumns(columns: Column[]): GridColumn[] {
+  const used = new Set<string>();
+  return columns.map((col, i) => {
+    const base = col.name && col.name.trim().length > 0 ? col.name : `col_${i + 1}`;
+    let key = base;
+    let suffix = 2;
+    while (used.has(key)) {
+      key = `${base}_${suffix}`;
+      suffix += 1;
+    }
+    used.add(key);
+    return {
+      key,
+      title: col.name && col.name.trim().length > 0 ? col.name : `Column ${i + 1}`,
+      type: col.type
+    };
+  });
+}
+
+type GridRowData = {
+  __values: unknown[];
+};
+
+export function getCellValueForCopy(rowData: GridRowData | undefined, columnIndex: number): unknown {
+  if (!rowData || !Array.isArray(rowData.__values)) {
+    return null;
+  }
+  return rowData.__values[columnIndex] ?? null;
+}
+
+export function buildClipboardGridFromRows(
+  rowsByIndex: Array<GridRowData | undefined>,
+  box: { rowStart: number; rowEnd: number; colIndexStart: number; colIndexEnd: number },
+  isSelected: (row: number, col: number) => boolean
+): { value: unknown; selected: boolean }[][] {
+  const grid: { value: unknown; selected: boolean }[][] = [];
+  for (let r = box.rowStart; r <= box.rowEnd; r++) {
+    const rowData = rowsByIndex[r];
+    const gridRow: { value: unknown; selected: boolean }[] = [];
+    for (let c = box.colIndexStart; c <= box.colIndexEnd; c++) {
+      const selected = isSelected(r, c);
+      const value = selected ? getCellValueForCopy(rowData, c) : null;
+      gridRow.push({ value, selected });
+    }
+    grid.push(gridRow);
+  }
+  return grid;
+}
+
+function mapRow(row: unknown[]): GridRowData {
+  return { __values: row };
 }
 
 const ROW_NUMBER_COL_ID = "__rownum__";
 
-function buildColDefs(columns: Column[]): ColDef[] {
-  return columns.map((col) => ({
-    field: col.name,
-    headerName: col.name,
+function buildColDefs(columns: GridColumn[]): ColDef[] {
+  return columns.map((col, index) => ({
+    colId: col.key,
+    valueGetter: (params) => {
+      const data = params.data as GridRowData | undefined;
+      const values = data?.__values;
+      return Array.isArray(values) ? (values[index] ?? null) : null;
+    },
+    headerName: col.title,
     headerTooltip: col.type,
     resizable: true,
     sortable: true,
-    filter: true,
+    filter: resolveFilterType(col.type),
+    valueFormatter: (params) => resolveCellDisplayValue(col.type, params.value),
     minWidth: 60,
   }));
+}
+
+export function resolveFilterType(type: string): string | boolean {
+  if (type === "boolean") {
+    return "agSetColumnFilter";
+  }
+  if (type === "int" || type === "long" || type === "decimal" || type === "float" || type === "double") {
+    return "agNumberColumnFilter";
+  }
+  if (type === "datetime" || type === "datetimeoffset") {
+    return "agDateColumnFilter";
+  }
+  return "agTextColumnFilter";
+}
+
+export function resolveCellDisplayValue(type: string, value: unknown): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  if (type === "decimal") {
+    return typeof value === "string" ? value : String(value);
+  }
+
+  if (type === "datetime" || type === "datetimeoffset") {
+    return typeof value === "string" ? value : String(value);
+  }
+
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+
+  return String(value);
 }
 
 type TableGridProps = {
@@ -62,6 +160,7 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
   rowsRef.current = rows;
   const appliedCountRef = useRef(0);
   const bindingRef = useRef<string>("");
+  const gridColumns = useMemo(() => toGridColumns(schema.columns), [schema.columns]);
 
   // Custom rectangular cell selection — managed independently of AG Grid's row selection.
   const [selection, setSelection] = useState<SelectionModel | null>(() =>
@@ -120,8 +219,8 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
         <span className="table-row-number">{(params.node.rowIndex ?? 0) + 1}</span>
       ),
     };
-    return [rowNumCol, ...buildColDefs(schema.columns)];
-  }, [schema]);
+    return [rowNumCol, ...buildColDefs(gridColumns)];
+  }, [gridColumns]);
 
   const defaultColDef = useMemo<ColDef>(() => ({
     resizable: true,
@@ -132,22 +231,22 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
       "table-cell-selected": (params: CellClassParams) => {
         const model = selectionRef.current;
         if (model == null || params.rowIndex == null) return false;
-        const colIdx = schema.columns.findIndex((c) => c.name === params.column.getColId());
+        const colIdx = gridColumns.findIndex((c) => c.key === params.column.getColId());
         return colIdx !== -1 && isCellSelected(model, params.rowIndex, colIdx);
       },
     },
-  }), [schema]);
+  }), [gridColumns]);
 
   const onGridReady = useCallback(
     (params: GridReadyEvent) => {
       apiRef.current = params.api;
       params.api.setGridOption(
         "rowData",
-        rowsRef.current.map((r) => mapRow(r, schema.columns))
+        rowsRef.current.map((r) => mapRow(r))
       );
       appliedCountRef.current = rowsRef.current.length;
     },
-    [schema]
+    [gridColumns]
   );
 
   useEffect(() => {
@@ -165,7 +264,7 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
     setSelection(savedSelection.selection);
     anchorRef.current = savedSelection.anchor;
 
-    api.setGridOption("rowData", rows.map((r) => mapRow(r, schema.columns)));
+    api.setGridOption("rowData", rows.map((r) => mapRow(r)));
     appliedCountRef.current = rows.length;
 
     const savedState = fileId ? getFileStateRegistry().get(fileId, GRID_STATE_KEY) : undefined;
@@ -173,7 +272,7 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
       (api as unknown as { setState?: (state: GridState) => void }).setState?.(savedState);
     }
     api.refreshCells({ force: true });
-  }, [fileId, resultSetIndex, rows, schema]);
+  }, [fileId, resultSetIndex, rows, gridColumns]);
 
   // After AG Grid renders its first batch of rows, repaint cells so restored selection is visible.
   const onFirstDataRendered = useCallback((params: FirstDataRenderedEvent) => {
@@ -192,7 +291,7 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
       const me = e.event as MouseEvent | null;
       if (me?.shiftKey || me?.ctrlKey || me?.metaKey) return;
       const colId = e.column.getColId();
-      const colIndex = colId === ROW_NUMBER_COL_ID ? -1 : schema.columns.findIndex((c) => c.name === colId);
+      const colIndex = colId === ROW_NUMBER_COL_ID ? -1 : gridColumns.findIndex((c) => c.key === colId);
       const rowIndex = e.node.rowIndex ?? 0;
       isDraggingRef.current = true;
       didDragMoveRef.current = false;
@@ -202,14 +301,14 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
         e.api
       );
     },
-    [schema]
+    [schema.columns.length, gridColumns, applySelection]
   );
 
   const onCellMouseOver = useCallback(
     (e: CellMouseOverEvent) => {
       if (!isDraggingRef.current || !anchorRef.current) return;
       const colId = e.column.getColId();
-      const colIndex = colId === ROW_NUMBER_COL_ID ? -1 : schema.columns.findIndex((c) => c.name === colId);
+      const colIndex = colId === ROW_NUMBER_COL_ID ? -1 : gridColumns.findIndex((c) => c.key === colId);
       const rowIndex = e.node.rowIndex ?? 0;
       didDragMoveRef.current = true;
       applySelection(
@@ -217,7 +316,7 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
         e.api
       );
     },
-    [schema]
+    [schema.columns.length, gridColumns, applySelection]
   );
 
   const onCellClicked = useCallback(
@@ -228,7 +327,7 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
       }
       const me = e.event as MouseEvent | null;
       const colId = e.column.getColId();
-      const colIndex = colId === ROW_NUMBER_COL_ID ? -1 : schema.columns.findIndex((c) => c.name === colId);
+      const colIndex = colId === ROW_NUMBER_COL_ID ? -1 : gridColumns.findIndex((c) => c.key === colId);
       const rowIndex = e.node.rowIndex ?? 0;
       const totalCols = schema.columns.length;
       const shift = !!me?.shiftKey;
@@ -260,7 +359,7 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
 
       applySelection(newSel, e.api);
     },
-    [schema]
+    [schema, gridColumns, applySelection]
   );
 
   // Apply only newly arrived rows incrementally — no full re-render
@@ -269,9 +368,9 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
     if (!api) return;
     const newRows = rows.slice(appliedCountRef.current);
     if (newRows.length === 0) return;
-    api.applyTransaction({ add: newRows.map((r) => mapRow(r, schema.columns)) });
+    api.applyTransaction({ add: newRows.map((r) => mapRow(r)) });
     appliedCountRef.current = rows.length;
-  }, [rows, schema]);
+  }, [rows, gridColumns]);
 
   useEffect(() => {
     const stop = () => { isDraggingRef.current = false; };
@@ -296,16 +395,11 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
       if (!api || !model) return;
       const box = getBoundingBox(model, schema.columns.length);
       if (!box) return;
-      const grid: { value: unknown; selected: boolean }[][] = [];
+      const rowsByIndex: Array<GridRowData | undefined> = [];
       for (let r = box.rowStart; r <= box.rowEnd; r++) {
-        const rowData = api.getDisplayedRowAtIndex(r)?.data as Record<string, unknown> | undefined;
-        const gridRow: { value: unknown; selected: boolean }[] = [];
-        for (let c = box.colIndexStart; c <= box.colIndexEnd; c++) {
-          const selected = isCellSelected(model, r, c);
-          gridRow.push({ value: selected && rowData ? rowData[schema.columns[c].name] : null, selected });
-        }
-        grid.push(gridRow);
+        rowsByIndex[r] = api.getDisplayedRowAtIndex(r)?.data as GridRowData | undefined;
       }
+      const grid = buildClipboardGridFromRows(rowsByIndex, box, (r, c) => isCellSelected(model, r, c));
       // Drop columns where no row has a selected cell (bounding box may span unselected columns).
       const numCols = box.colIndexEnd - box.colIndexStart + 1;
       const selectedOffsets = Array.from({ length: numCols }, (_, i) => i)

@@ -14,6 +14,7 @@ export abstract class StdioBackendTransportBase implements BackendTransport {
   protected lastErrorLine: string | null = null;
   private stdinBroken = false;
   private stderrReader: ReturnType<typeof createInterface> | null = null;
+  private deadNotified = false;
 
   protected constructor(callbacks: BackendTransportCallbacks) {
     this.callbacks = callbacks;
@@ -30,6 +31,7 @@ export abstract class StdioBackendTransportBase implements BackendTransport {
     const proc = await this.spawnBackendProcess();
     this.process = proc;
     this.stdinBroken = false;
+    this.deadNotified = false;
 
     proc.stdin.on("error", (error) => {
       this.stdinBroken = true;
@@ -74,24 +76,21 @@ export abstract class StdioBackendTransportBase implements BackendTransport {
     });
 
     proc.on("exit", (code, signal) => {
-      this.stdinBroken = true;
-      this.lastErrorLine = redactLogMessage(
-        `Backend process exited (code=${code ?? "null"}, signal=${signal ?? "null"})`
+      this.markDied(
+        redactLogMessage(`Backend process exited (code=${code ?? "null"}, signal=${signal ?? "null"})`)
       );
-      this.callbacks.onDiagnostic({ level: "error", source: "transport", message: this.lastErrorLine });
-      this.process = null;
-      this.callbacks.onDied();
     });
 
     proc.on("error", (error) => {
-      this.lastErrorLine = redactErrorMessage(error);
-      this.callbacks.onDiagnostic({
-        level: "error",
-        source: "transport",
-        message: redactLogMessage(`Backend process spawn error: ${error.message}`)
-      });
-      this.process = null;
-      this.callbacks.onDied();
+      this.markDied(redactLogMessage(`Backend process spawn error: ${redactErrorMessage(error)}`));
+    });
+
+    proc.stdout.on("close", () => {
+      this.markDied("Backend stdout stream closed unexpectedly");
+    });
+
+    proc.stdout.on("end", () => {
+      this.markDied("Backend stdout stream ended unexpectedly");
     });
   }
 
@@ -143,6 +142,33 @@ export abstract class StdioBackendTransportBase implements BackendTransport {
     }
 
     this.process = null;
+  }
+
+  private markDied(message: string): void {
+    const current = this.process;
+    this.stdinBroken = true;
+    this.lastErrorLine = message;
+    this.callbacks.onDiagnostic({ level: "error", source: "transport", message });
+    this.process = null;
+    if (current?.pid) {
+      try {
+        if (process.platform === "win32") {
+          spawn("cmd.exe", ["/c", `taskkill /f /t /pid ${current.pid}`], {
+            stdio: "ignore",
+            windowsHide: true
+          });
+        } else {
+          process.kill(current.pid, "SIGTERM");
+        }
+      } catch {
+        // process already terminated
+      }
+    }
+    if (this.deadNotified) {
+      return;
+    }
+    this.deadNotified = true;
+    this.callbacks.onDied();
   }
 
   public sendEnvelope(envelope: BackendEnvelope): void {

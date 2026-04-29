@@ -60,6 +60,10 @@ describe("payloadbuilder elasticsearch catalog contribution", () => {
     registerPayloadbuilderElasticsearchCatalogContribution();
     const contribution = getPayloadbuilderCatalogContribution("elasticsearch");
     expect(contribution).toBeDefined();
+    const renderPanel = contribution?.renderPanel;
+    if (!renderPanel) {
+      throw new Error("Expected elasticsearch contribution renderPanel");
+    }
 
     invokeMock.mockResolvedValue({ indices: ["logs-2026", "metrics-2026"] });
 
@@ -67,7 +71,7 @@ describe("payloadbuilder elasticsearch catalog contribution", () => {
 
     await act(async () => {
       root.render(
-        contribution!.renderPanel({
+        renderPanel({
           fileId: "file-1",
           alias: "es1",
           catalogId: "elasticsearch",
@@ -115,12 +119,16 @@ describe("payloadbuilder elasticsearch catalog contribution", () => {
     registerPayloadbuilderElasticsearchCatalogContribution();
     const contribution = getPayloadbuilderCatalogContribution("elasticsearch");
     expect(contribution).toBeDefined();
+    const renderPanel = contribution?.renderPanel;
+    if (!renderPanel) {
+      throw new Error("Expected elasticsearch contribution renderPanel");
+    }
 
     const setPropertyMock = vi.fn();
 
     await act(async () => {
       root.render(
-        contribution!.renderPanel({
+        renderPanel({
           fileId: "file-1",
           alias: "es1",
           catalogId: "elasticsearch",

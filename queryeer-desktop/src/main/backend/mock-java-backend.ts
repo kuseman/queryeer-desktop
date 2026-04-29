@@ -233,7 +233,7 @@ export class MockJavaBackend {
             resultSetIndex: 0,
             schema: {
               columns: [
-                { name: "id", type: "integer" },
+                { name: "id", type: "int" },
                 { name: "value", type: "string" }
               ]
             }

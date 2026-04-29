@@ -7,6 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.queryeer.backend.api.ErrorMessages;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.QueryPublisher;
@@ -63,9 +64,7 @@ public final class QueryExecutionService
             }
             catch (Exception e)
             {
-                publisher.failed("INTERNAL", e.getMessage() != null ? e.getMessage()
-                        : e.getClass()
-                                .getSimpleName());
+                publisher.failed("INTERNAL", ErrorMessages.buildFailureMessage(e));
             }
             finally
             {

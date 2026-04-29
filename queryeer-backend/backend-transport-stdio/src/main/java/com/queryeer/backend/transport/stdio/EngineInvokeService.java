@@ -1,5 +1,6 @@
 package com.queryeer.backend.transport.stdio;
 
+import com.queryeer.backend.api.ErrorMessages;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.contract.BackendErrorCode;
@@ -43,9 +44,7 @@ public final class EngineInvokeService
         }
         catch (Exception e)
         {
-            throw new EngineInvokeException(BackendErrorCode.INTERNAL, e.getMessage() != null ? e.getMessage()
-                    : e.getClass()
-                            .getSimpleName());
+            throw new EngineInvokeException(BackendErrorCode.INTERNAL, ErrorMessages.buildFailureMessage(e));
         }
     }
 

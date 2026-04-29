@@ -427,15 +427,16 @@ function ObservabilityEditor({ listFiles }: ObservabilityEditorProps) {
 
             <CollapsibleSection title="Recent executions" defaultCollapsed={true}>
               <div className="recent-executions-list">
-                <div className="manifest-grid-head">
+                <div className="manifest-grid-head recent-executions-grid-head">
                   <span>Execution</span>
                   <span>Engine</span>
                   <span>State</span>
                   <span>Progress</span>
                   <span>Chunks/Rows</span>
+                  <span>Error</span>
                 </div>
                 {(backendStatus?.recentExecutions ?? []).slice().reverse().map((execution) => (
-                  <div className="manifest-grid-row" key={execution.queryExecutionId}>
+                  <div className="manifest-grid-row recent-executions-grid-row" key={execution.queryExecutionId}>
                     <span>{execution.queryExecutionId}</span>
                     <span>{execution.engineId ?? "-"}</span>
                     <span>{execution.state}</span>
@@ -445,6 +446,7 @@ function ObservabilityEditor({ listFiles }: ObservabilityEditorProps) {
                         : "-"}
                     </span>
                     <span>{`${execution.chunks}/${execution.rows}`}</span>
+                    <span>{execution.error ?? "-"}</span>
                   </div>
                 ))}
               </div>

@@ -2,7 +2,23 @@ import type { ReactNode } from "react";
 
 export type ExecutionState = "idle" | "running" | "completed" | "failed" | "cancelled";
 
-export type Column = { name: string; type: string };
+export type ColumnType =
+  | "string"
+  | "boolean"
+  | "int"
+  | "long"
+  | "decimal"
+  | "float"
+  | "double"
+  | "datetime"
+  | "datetimeoffset"
+  | "object"
+  | "array"
+  | "table"
+  | "any"
+  | "null";
+
+export type Column = { name: string; type: ColumnType };
 
 export type ResultSet = {
   resultSetIndex: number;

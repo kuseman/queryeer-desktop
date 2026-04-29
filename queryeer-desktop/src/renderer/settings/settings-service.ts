@@ -45,6 +45,7 @@ export class SettingsService {
   private readonly modulePersistTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private indexPersistTimer: ReturnType<typeof setTimeout> | null = null;
   private modalOpen = false;
+  private requestedSettingId: string | null = null;
 
   public constructor(options: SettingsServiceOptions) {
     this.registry = options.registry;
@@ -198,6 +199,17 @@ export class SettingsService {
   public openModal(): void {
     this.modalOpen = true;
     this.emitModalChanged();
+  }
+
+  public openModalForSetting(settingId: string): void {
+    this.requestedSettingId = settingId;
+    this.openModal();
+  }
+
+  public consumeRequestedSettingId(): string | null {
+    const requested = this.requestedSettingId;
+    this.requestedSettingId = null;
+    return requested;
   }
 
   public closeModal(): void {

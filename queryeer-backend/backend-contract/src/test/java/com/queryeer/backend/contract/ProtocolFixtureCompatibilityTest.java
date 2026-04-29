@@ -209,6 +209,10 @@ class ProtocolFixtureCompatibilityTest
         Assertions.assertEquals(1, params.schema()
                 .columns()
                 .size());
+        Assertions.assertEquals("int", params.schema()
+                .columns()
+                .get(0)
+                .type());
     }
 
     @Test

@@ -19,6 +19,7 @@ export function SettingsModalHost(): JSX.Element | null {
   const [selectedNodeKey, setSelectedNodeKey] = useState<string | null>(null);
   const [expandedNodeKeys, setExpandedNodeKeys] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [requestedSettingId, setRequestedSettingId] = useState<string | null>(null);
   const [, setVersion] = useState(0);
 
   useEffect(() => {
@@ -40,6 +41,7 @@ export function SettingsModalHost(): JSX.Element | null {
       setVersion((version) => version + 1);
       if (service.isModalOpen()) {
         service.refreshSchemaFromRegistry();
+        setRequestedSettingId(service.consumeRequestedSettingId());
       }
     });
     const unsubValues = service.subscribe(() => {
@@ -65,6 +67,16 @@ export function SettingsModalHost(): JSX.Element | null {
     if (!isOpen || !service) {
       return;
     }
+    if (requestedSettingId) {
+      setQueryInput("");
+      setQuery("");
+      const targetNodeKey = findNodeKeyBySettingId(tree, requestedSettingId);
+      if (targetNodeKey) {
+        setSelectedNodeKey(targetNodeKey);
+      }
+      setRequestedSettingId(null);
+      return;
+    }
     if (definitions.length === 0) {
       if (selectedNodeKey !== null) {
         setSelectedNodeKey(null);
@@ -83,7 +95,7 @@ export function SettingsModalHost(): JSX.Element | null {
         setSelectedNodeKey(firstNodeKey);
       }
     }
-  }, [definitions, selectedNodeKey, tree, isOpen, service]);
+  }, [definitions, requestedSettingId, selectedNodeKey, tree, isOpen, service]);
 
   useEffect(() => {
     if (!isOpen || !service) {
@@ -551,6 +563,27 @@ function findTreeNodeByKey(root: TreeNode, key: string): TreeNode | null {
     }
   }
 
+  return null;
+}
+
+function findNodeKeyBySettingId(root: TreeNode, settingId: string): string | null {
+  if (root.settingIds.includes(settingId)) {
+    return root.key;
+  }
+
+  const stack = [...root.children];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node) {
+      continue;
+    }
+    if (node.settingIds.includes(settingId)) {
+      return node.key;
+    }
+    for (const child of node.children) {
+      stack.push(child);
+    }
+  }
   return null;
 }
 

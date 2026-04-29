@@ -27,6 +27,25 @@ describe("text output formatters", () => {
     expect(lines).toContain("Something broke");
   });
 
+  it("shows failed message even when rows were streamed before failure", () => {
+    const formatter = resolveTextOutputFormatter("plain");
+    const lines = formatter.format(
+      makeContext({
+        state: "failed",
+        resultSets: [
+          {
+            resultSetIndex: 0,
+            schema: { columns: [{ name: "id", type: "int" }] },
+            rows: [[1]],
+            rowLimitExceeded: false
+          }
+        ],
+        error: { code: "FAILED", message: "Rich backend failure details" }
+      })
+    );
+    expect(lines).toEqual(["[FAILED]", "Rich backend failure details"]);
+  });
+
   it("formats rows in json formatter", () => {
     const formatter = resolveTextOutputFormatter("json");
     const lines = formatter.format(

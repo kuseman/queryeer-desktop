@@ -23,6 +23,7 @@ type TestTransport = {
   sendEnvelope: Mock<(envelope: BackendEnvelope) => void>;
   mode: "mock-stdio";
   emitEnvelope: (envelope: BackendEnvelope) => void;
+  emitDied: () => void;
 };
 
 type TransportBehavior = {
@@ -34,6 +35,7 @@ type TransportBehavior = {
 
 const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
   let onEnvelope: EnvelopeHandler | null = null;
+  let onDied: (() => void) | null = null;
   let pingCount = 0;
 
   const transport: TestTransport = {
@@ -149,6 +151,9 @@ const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
     }),
     emitEnvelope: (envelope: BackendEnvelope) => {
       onEnvelope?.(envelope);
+    },
+    emitDied: () => {
+      onDied?.();
     }
   };
 
@@ -179,6 +184,7 @@ const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
     mode: "mock-stdio",
     create: (callbacks) => {
       onEnvelope = callbacks.onEnvelope;
+      onDied = callbacks.onDied;
       return transport;
     }
   });
@@ -200,6 +206,37 @@ describe("BackendGateway", () => {
     expect(status.serverName).toBe("queryeer-java-backend");
     expect(status.supportedCapabilities).toContain("query.execute");
 
+    await gateway.stop();
+  });
+
+  it("invokes transport died hook when backend transport dies", async () => {
+    const { gateway, transport } = createGatewayWithTestTransport();
+    const onDiedHook = vi.fn();
+    gateway.setOnTransportDiedHook(onDiedHook);
+
+    await gateway.start();
+    transport.emitDied();
+
+    expect(onDiedHook).toHaveBeenCalledTimes(1);
+    await gateway.stop();
+  });
+
+  it("recovers to healthy after transport death and watchdog restart", async () => {
+    vi.useFakeTimers();
+    const { gateway, transport } = createGatewayWithTestTransport();
+
+    await gateway.start();
+    expect(gateway.getStatus().state).toBe("healthy");
+
+    transport.emitDied();
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(1100);
+    await Promise.resolve();
+
+    expect(transport.start).toHaveBeenCalledTimes(2);
+    expect(gateway.getStatus().state).toBe("healthy");
+
+    vi.useRealTimers();
     await gateway.stop();
   });
 

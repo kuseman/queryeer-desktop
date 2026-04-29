@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 import com.queryeer.backend.contract.BackendError;
 import com.queryeer.backend.contract.BackendErrorCode;
 import com.queryeer.backend.contract.query.ColumnDefinition;
+import com.queryeer.backend.contract.query.ColumnTypes;
 import com.queryeer.backend.contract.query.QueryCancelParams;
 import com.queryeer.backend.contract.query.QueryChunkRowsNotification;
 import com.queryeer.backend.contract.query.QueryChunkStartNotification;
@@ -48,8 +49,8 @@ public final class MockQueryExecutionService
             {
                 return;
             }
-            notificationPublisher.publishForQuery(params.queryExecutionId(), "query.chunkStart",
-                    new QueryChunkStartNotification(params.queryExecutionId(), 0, new ResultSchema(List.of(new ColumnDefinition("id", "integer"), new ColumnDefinition("value", "string")))));
+            notificationPublisher.publishForQuery(params.queryExecutionId(), "query.chunkStart", new QueryChunkStartNotification(params.queryExecutionId(), 0,
+                    new ResultSchema(List.of(new ColumnDefinition("id", ColumnTypes.INT), new ColumnDefinition("value", ColumnTypes.STRING)))));
             notificationPublisher.publishForQuery(params.queryExecutionId(), "query.chunkRows",
                     new QueryChunkRowsNotification(params.queryExecutionId(), 0, List.of(List.of(1, "alpha"), List.of(2, "beta"))));
         }, 280, TimeUnit.MILLISECONDS);

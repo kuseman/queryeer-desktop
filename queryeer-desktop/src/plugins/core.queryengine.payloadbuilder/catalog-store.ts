@@ -89,11 +89,26 @@ export class PayloadbuilderCatalogStore {
     if (Object.keys(catalogs).length === 0) {
       return undefined;
     }
+    const document = this.readDocument(fileId);
+    const defaultCatalogAlias =
+      document.defaultCatalogAlias && catalogs[document.defaultCatalogAlias]
+        ? document.defaultCatalogAlias
+        : undefined;
     return {
       payloadbuilder: {
+        defaultCatalogAlias,
         catalogs
       }
     };
+  }
+
+  setDefaultCatalogAlias(fileId: string, alias: string | undefined): void {
+    const document = this.readDocument(fileId);
+    const next = {
+      ...document,
+      defaultCatalogAlias: alias?.trim() || undefined
+    };
+    this.writeDocument(fileId, next);
   }
 
   setProperty(fileId: string, alias: string, propertyKey: string, value: unknown): void {
@@ -208,6 +223,7 @@ function mergeDocuments(
   }
   return {
     schemaVersion: runtimeDocument.schemaVersion,
+    defaultCatalogAlias: runtimeDocument.defaultCatalogAlias ?? persistedDocument.defaultCatalogAlias,
     instancesByAlias
   };
 }

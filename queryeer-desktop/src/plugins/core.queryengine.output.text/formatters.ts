@@ -87,20 +87,32 @@ export const TEXT_OUTPUT_FORMATTERS: TextOutputFormatter[] = [
   {
     id: "plain",
     label: "Plain",
-    format: (context) =>
-      context.resultSets.length > 0 ? formatRowsPlain(context) : getStatusLines(context)
+    format: (context) => {
+      if (context.state === "failed") {
+        return getStatusLines(context);
+      }
+      return context.resultSets.length > 0 ? formatRowsPlain(context) : getStatusLines(context);
+    }
   },
   {
     id: "json",
     label: "JSON",
-    format: (context) =>
-      context.resultSets.length > 0 ? formatRowsJson(context) : getStatusLines(context)
+    format: (context) => {
+      if (context.state === "failed") {
+        return getStatusLines(context);
+      }
+      return context.resultSets.length > 0 ? formatRowsJson(context) : getStatusLines(context);
+    }
   },
   {
     id: "csv",
     label: "CSV",
-    format: (context) =>
-      context.resultSets.length > 0 ? formatRowsCsv(context) : getStatusLines(context)
+    format: (context) => {
+      if (context.state === "failed") {
+        return getStatusLines(context);
+      }
+      return context.resultSets.length > 0 ? formatRowsCsv(context) : getStatusLines(context);
+    }
   }
 ];
 

@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => {
     properties: Record<string, unknown>;
   }> = [];
   const setPropertyMock = vi.fn();
+  const setDefaultCatalogAliasMock = vi.fn();
+  let defaultCatalogAlias = "";
+  let hasPanel = true;
   const renderPanelMock = vi.fn((params: { alias: string; catalogId: string }) => (
     <div data-testid={`panel-${params.alias}`}>{params.alias + ":" + params.catalogId}</div>
   ));
@@ -35,6 +38,25 @@ const mocks = vi.hoisted(() => {
     ) => {
       instances = value;
     },
+    setDefaultCatalogAlias: (value: string) => {
+      defaultCatalogAlias = value;
+    },
+    setHasPanel: (value: boolean) => {
+      hasPanel = value;
+    },
+    getContribution: () =>
+      hasPanel
+        ? {
+            title: "Catalog Title",
+            defaultAlias: "jdbc",
+            allowMultiple: true,
+            renderPanel: renderPanelMock
+          }
+        : {
+            title: "Catalog Title",
+            defaultAlias: "jdbc",
+            allowMultiple: true
+          },
     queryTextRegistry: {
       getActiveFile: () => activeFile,
       subscribe: (listener: () => void) => {
@@ -54,15 +76,21 @@ const mocks = vi.hoisted(() => {
         };
       },
       listInstances: () => instances,
-      setProperty: setPropertyMock
+      setProperty: setPropertyMock,
+      setDefaultCatalogAlias: setDefaultCatalogAliasMock,
+      buildEngineState: () => ({ payloadbuilder: { defaultCatalogAlias } })
     },
     setPropertyMock,
+    setDefaultCatalogAliasMock,
     renderPanelMock,
     reset: () => {
       activeFile = null;
       instances = [];
       setPropertyMock.mockReset();
+      setDefaultCatalogAliasMock.mockReset();
       renderPanelMock.mockClear();
+      defaultCatalogAlias = "";
+      hasPanel = true;
       registrySubscribers.clear();
       storeSubscribers.clear();
     }
@@ -78,10 +106,7 @@ vi.mock("./catalog-store", () => ({
 }));
 
 vi.mock("./catalog-contributions", () => ({
-  getPayloadbuilderCatalogContribution: () => ({
-    title: "Catalog Title",
-    renderPanel: mocks.renderPanelMock
-  })
+  getPayloadbuilderCatalogContribution: () => mocks.getContribution()
 }));
 
 vi.mock("../core.settings/service", () => ({
@@ -178,5 +203,42 @@ describe("PayloadbuilderCatalogSidebar", () => {
       "database",
       "warehouse"
     );
+  });
+
+  it("sets selected alias as default catalog", async () => {
+    mocks.setActiveFile({ fileId: "file-2" });
+    mocks.setInstances([
+      { alias: "a", catalogId: "Jdbc", enabled: true, properties: {} },
+      { alias: "b", catalogId: "Jdbc", enabled: true, properties: {} }
+    ]);
+
+    await act(async () => {
+      root.render(<PayloadbuilderCatalogSidebar />);
+      await flush();
+    });
+
+    const radios = Array.from(rootElement.querySelectorAll('input[type="radio"]'));
+    expect(radios).toHaveLength(2);
+
+    await act(async () => {
+      radios[1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flush();
+    });
+
+    expect(mocks.setDefaultCatalogAliasMock).toHaveBeenCalledWith("file-2", "b");
+  });
+
+  it("hides aliases without panel contribution", async () => {
+    mocks.setHasPanel(false);
+    mocks.setActiveFile({ fileId: "file-3" });
+    mocks.setInstances([{ alias: "fs", catalogId: "filesystem", enabled: true, properties: {} }]);
+
+    await act(async () => {
+      root.render(<PayloadbuilderCatalogSidebar />);
+      await flush();
+    });
+
+    expect(rootElement.textContent).toContain("No configurable catalog panels for this file.");
+    expect(rootElement.querySelector(".panel-card")).toBeNull();
   });
 });

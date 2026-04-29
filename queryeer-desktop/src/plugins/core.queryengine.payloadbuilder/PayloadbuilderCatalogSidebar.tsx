@@ -44,6 +44,14 @@ export function PayloadbuilderCatalogSidebar(): JSX.Element {
   const instances = activeFile
     ? getPayloadbuilderCatalogStore().listInstances(activeFile.fileId).filter((instance) => instance.enabled)
     : [];
+  const panelInstances = instances.filter((instance) =>
+    Boolean(getPayloadbuilderCatalogContribution(instance.catalogId)?.renderPanel)
+  );
+  const activeDefaultAlias = activeFile
+    ? ((getPayloadbuilderCatalogStore().buildEngineState(activeFile.fileId) as {
+        payloadbuilder?: { defaultCatalogAlias?: string };
+      })?.payloadbuilder?.defaultCatalogAlias ?? "")
+    : "";
 
   if (!activeFile) {
     return <div className="payloadbuilder-catalog-empty">Open a query file to configure catalogs.</div>;
@@ -51,23 +59,34 @@ export function PayloadbuilderCatalogSidebar(): JSX.Element {
 
   return (
     <div className="payloadbuilder-catalog-sidebar" data-context="payloadbuilder-catalogs">
-      {instances.length === 0 && (
-        <div className="payloadbuilder-catalog-empty">No catalog aliases configured for this file.</div>
+      {panelInstances.length === 0 && (
+        <div className="payloadbuilder-catalog-empty">No configurable catalog panels for this file.</div>
       )}
 
-      {instances.map((instance) => {
+      {panelInstances.map((instance) => {
         const contribution = getPayloadbuilderCatalogContribution(instance.catalogId);
         const title = instance.title ?? contribution?.title ?? instance.catalogId;
         return (
           <section className="panel-card" key={instance.alias}>
             <header className="panel-header">
+              <label>
+                <input
+                  type="radio"
+                  name="payloadbuilder-default-catalog-alias"
+                  title="Set as default catalog alias"
+                  aria-label={`Set ${instance.alias} as default catalog alias`}
+                  checked={instance.alias === activeDefaultAlias}
+                  onChange={() =>
+                    getPayloadbuilderCatalogStore().setDefaultCatalogAlias(activeFile.fileId, instance.alias)
+                  }
+                />
+              </label>
               <span className="panel-title">
                 {instance.alias} - {title}
               </span>
             </header>
             <div className="panel-content">
-              {contribution ? (
-                contribution.renderPanel({
+              {contribution?.renderPanel?.({
                   fileId: activeFile.fileId,
                   alias: instance.alias,
                   catalogId: instance.catalogId,
@@ -79,12 +98,7 @@ export function PayloadbuilderCatalogSidebar(): JSX.Element {
                       propertyKey,
                       value
                     )
-                })
-              ) : (
-                <div className="payloadbuilder-catalog-empty">
-                  No UI contribution registered for catalog '{instance.catalogId}'.
-                </div>
-              )}
+                })}
             </div>
           </section>
         );
