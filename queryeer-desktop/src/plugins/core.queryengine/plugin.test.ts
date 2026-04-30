@@ -235,6 +235,32 @@ describe("core.queryengine plugin", () => {
     );
   });
 
+  it("marks tab as failed when execute preflight emits queryengine.failed", () => {
+    const file = makeFile();
+    const context = createContext(file);
+    coreQueryEnginePlugin.activate(context);
+
+    const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+      | ((event: { method: string; params?: { queryExecutionId?: string } }, executeContext?: { fileId?: string }) => void)
+      | undefined;
+    expect(listener).toBeTypeOf("function");
+
+    listener?.(
+      { method: "query.started", params: { queryExecutionId: "q-3" } },
+      { fileId: "file-1" }
+    );
+    listener?.({ method: "queryengine.failed", params: { queryExecutionId: "q-3" } }, {});
+
+    expect(context.files.updateFile).toHaveBeenLastCalledWith(
+      "file-1",
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          "core.queryengine.tabState": "failed"
+        })
+      })
+    );
+  });
+
   it("marks backend-dependent commands with backendHealthy enablement", () => {
     const context = createContext(makeFile());
     coreQueryEnginePlugin.activate(context);

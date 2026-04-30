@@ -109,15 +109,36 @@ export class QueryEngineService {
         decoratedParams
       );
     }
-    await runWithSecretsUnlocked(decoratedParams.engineState, async () => {
-      await window.appShell.executeBackendQuery({
-        queryExecutionId,
-        engineId,
-        fileId: decoratedParams.fileId,
-        text: decoratedParams.text,
-        engineState: decoratedParams.engineState
+    try {
+      await runWithSecretsUnlocked(decoratedParams.engineState, async () => {
+        await window.appShell.executeBackendQuery({
+          queryExecutionId,
+          engineId,
+          fileId: decoratedParams.fileId,
+          text: decoratedParams.text,
+          engineState: decoratedParams.engineState
+        });
       });
-    });
+    } catch (error) {
+      this.executionContextById.delete(queryExecutionId);
+      const message = error instanceof Error ? error.message : String(error);
+      for (const listener of this.globalEventListeners) {
+        listener(
+          {
+            method: "queryengine.failed",
+            params: {
+              queryExecutionId,
+              error: {
+                code: "EXECUTE_ERROR",
+                message
+              }
+            }
+          },
+          decoratedParams
+        );
+      }
+      throw error;
+    }
     return queryExecutionId;
   }
 

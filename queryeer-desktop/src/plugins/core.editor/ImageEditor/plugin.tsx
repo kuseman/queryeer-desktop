@@ -1,4 +1,5 @@
 import type { Plugin } from "../../../contracts/plugin/Plugin";
+import { registerImageEditorMimeTypes } from "./mime-types";
 
 export const coreEditorImagePlugin: Plugin = {
   manifest: {
@@ -10,6 +11,8 @@ export const coreEditorImagePlugin: Plugin = {
     dependencies: ["core.editor"]
   },
   activate: (context) => {
+    registerImageEditorMimeTypes(context.files);
+
     context.layout.registerEditor({
       id: "core.editor.image",
       title: "Image Editor",
