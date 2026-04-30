@@ -27,6 +27,7 @@ export interface ShellApi {
   getBackendStatus: () => Promise<BackendGatewayStatus>;
   toggleBackendTrace: (enabled: boolean) => Promise<void>;
   setLogFlow: (enabled: boolean) => Promise<void>;
+  clearBackendLogs: () => Promise<void>;
   getExternalFrontendPlugins: () => Promise<ExternalFrontendPluginManifest[]>;
   executeBackendQuery: (params: {
     queryExecutionId: string;

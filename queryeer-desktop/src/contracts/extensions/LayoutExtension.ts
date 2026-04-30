@@ -8,7 +8,8 @@ export type LayoutZone =
   | "statusBar"
   | "primarySidebar"
   | "secondarySidebar"
-  | "mainArea";
+  | "mainArea"
+  | "panel";
 
 export type SidebarZone = "primarySidebar" | "secondarySidebar";
 
@@ -141,6 +142,22 @@ export type TabHeaderStyleContribution = {
   render: (context: TabHeaderStyleContext) => TabHeaderStyle | null;
 };
 
+export type LayoutPanelTab = {
+  id: string;
+  title: string;
+  icon?: string;
+  order?: number;
+  render: () => ReactNode;
+};
+
+export type LayoutPanelContribution = {
+  id: string;
+  tabs: LayoutPanelTab[];
+  defaultHeight?: number;
+  minHeight?: number;
+  maxHeight?: number;
+};
+
 export type LayoutShellDefaults = {
   visibleZones: LayoutZone[];
   sidebarWidths?: {
@@ -158,5 +175,6 @@ export type LayoutRegistry = {
   registerWelcome: (contribution: LayoutWelcomeContribution) => void;
   registerTabContextMenu: (contribution: TabContextMenuContribution) => void;
   registerTabHeaderStyle: (contribution: TabHeaderStyleContribution) => void;
+  registerPanel: (contribution: LayoutPanelContribution) => void;
   setShellDefaults: (defaults: LayoutShellDefaults) => void;
 };

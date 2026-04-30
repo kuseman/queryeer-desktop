@@ -7,10 +7,8 @@ import { QueryRunIcon, QueryStopIcon } from "./query-toolbar-icons";
 import { getOutputRegistry } from "./output/OutputRegistry";
 import { getQueryViewStateStore, TEXT_OUTPUT_PRIMARY_ID } from "./QueryViewStateStore";
 import { TEXT_OUTPUT_FORMATTERS } from "../core.queryengine.output.text/formatters";
-import { defineStateKey } from "../../contracts/files/FileStateRegistry";
 
 const QUERY_TAB_STATE_METADATA_KEY = "core.queryengine.tabState";
-const SELECTED_PRIMARY_KEY = defineStateKey<string>("core.queryengine.selectedPrimary");
 
 type QueryTabState = "running" | "failed";
 
@@ -76,7 +74,7 @@ export const coreQueryEnginePlugin: Plugin = {
 
     const resolveSelectedOutput = (fileId: string): string => {
       const outputs = getSelectableOutputs();
-      const selected = getQueryViewStateStore().read(fileId).selectedOutputId;
+      const selected = getQueryViewStateStore().read(fileId).executionTargetOutputId;
       if (selected && outputs.some((output) => output.id === selected)) {
         return selected;
       }
@@ -215,7 +213,6 @@ export const coreQueryEnginePlugin: Plugin = {
         if (!active) {
           return;
         }
-        context.fileState.set(active.fileId, SELECTED_PRIMARY_KEY, value);
         getQueryViewStateStore().setSelectedOutput(active.fileId, value);
       },
       disabled: () => getSelectableOutputs().length === 0

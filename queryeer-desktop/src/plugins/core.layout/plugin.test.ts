@@ -83,6 +83,7 @@ function createContext(file?: FileEntity) {
       registerWelcome: vi.fn(),
       registerTabContextMenu: vi.fn(),
       registerTabHeaderStyle: vi.fn(),
+      registerPanel: vi.fn(),
       setShellDefaults: vi.fn()
     },
     menu: { registerMenuItem: vi.fn(), rebuildMenu: vi.fn(), onRebuild: vi.fn() },

@@ -118,7 +118,9 @@ describe("text output keyboard shortcuts", () => {
       configurable: true
     });
 
-    coreQueryEngineOutputTextPlugin.activate({} as any);
+    coreQueryEngineOutputTextPlugin.activate(
+      {} as unknown as Parameters<typeof coreQueryEngineOutputTextPlugin.activate>[0]
+    );
 
     rootElement = document.createElement("div");
     document.body.appendChild(rootElement);

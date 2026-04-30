@@ -7,7 +7,8 @@ import type {
   TabHeaderStyleContribution,
   LayoutViewContribution,
   LayoutWelcomeContribution,
-  TabContextMenuContribution
+  TabContextMenuContribution,
+  LayoutPanelContribution
 } from "../../contracts/extensions/LayoutExtension";
 import type { MenuItemContribution, MenuRegistry } from "../../contracts/extensions/MenuExtension";
 import type { CommandExtension } from "../../contracts/extensions/CommandExtension";
@@ -51,6 +52,7 @@ export type ExtensionSnapshot = {
     welcomes: LayoutWelcomeContribution[];
     tabContextMenus: TabContextMenuContribution[];
     tabHeaderStyles: TabHeaderStyleContribution[];
+    panels: LayoutPanelContribution[];
     shellDefaults: LayoutShellDefaults;
   };
   tooltip: {
@@ -93,6 +95,7 @@ export class ExtensionRegistry {
   private readonly layoutWelcomes = new Map<string, LayoutWelcomeContribution>();
   private readonly tabContextMenus = new Map<string, TabContextMenuContribution>();
   private readonly tabHeaderStyles = new Map<string, TabHeaderStyleContribution>();
+  private readonly layoutPanels = new Map<string, LayoutPanelContribution>();
   private readonly tooltipSections = new Map<string, TooltipSectionContribution>();
   private readonly settingsContributions = new Map<string, SettingsContribution>();
   private readonly settingsDefinitions = new Map<string, SettingDefinition>();
@@ -227,6 +230,9 @@ export class ExtensionRegistry {
       registerTabHeaderStyle: (contribution) => {
         this.tabHeaderStyles.set(contribution.id, contribution);
       },
+      registerPanel: (contribution) => {
+        this.layoutPanels.set(contribution.id, contribution);
+      },
       setShellDefaults: (defaults) => {
         this.shellDefaults = {
           ...this.shellDefaults,
@@ -325,6 +331,7 @@ menu: {
         welcomes: [...this.layoutWelcomes.values()],
         tabContextMenus: [...this.tabContextMenus.values()],
         tabHeaderStyles: [...this.tabHeaderStyles.values()],
+        panels: [...this.layoutPanels.values()],
         shellDefaults: this.shellDefaults
       },
       tooltip: {

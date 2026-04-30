@@ -1,6 +1,6 @@
 .shell-page {
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-rows: auto auto 1fr auto auto;
   height: 100%;
 }
 
@@ -31,6 +31,49 @@
   width: 100%;
   margin: 0;
   overflow: hidden;
+}
+
+.shell-panel {
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  border-top: 1px solid #3c3c3c;
+  min-height: 100px;
+  overflow: hidden;
+}
+
+.shell-panel-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 8px;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.shell-panel-tab {
+  padding: 6px 16px;
+  background: transparent;
+  border: none;
+  color: #cccccc;
+  cursor: pointer;
+  font-size: 12px;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.shell-panel-tab:hover {
+  color: #ffffff;
+}
+
+.shell-panel-tab.active {
+  color: #ffffff;
+  border-bottom-color: #007acc;
+}
+
+.shell-panel-content {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
 }
 
 body.is-resizing-layout {

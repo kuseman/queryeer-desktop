@@ -1,3 +1,57 @@
+# Queryeer Roadmap
+
+- JDBC SqlWarnings
+    - Print in text output
+- Query shortcuts
+    - CTRL 0-9 / ALT-0
+    - Rule based (query file meta data. Payloadbuilder properties / jdbc properties)
+    - Only active for queryexecutable
+- Quicksearch
+    - Command pallette like VS Code in title bar
+    - Contributed sources
+        - workspace
+        - recentfiles
+        - settings
+        - datasources from core.queryengine.jdbc
+            - Quick switch of current files 
+    - Each contribution is rule based from context (active file etc.)
+    - Disable monaco pallette and instead aggregate items into new one
+- JDBC Tree component and connection selector
+    - Base dialect node supplier for tree. Overriable via dialect
+    - Context menu items default + dialect spcific
+- Schema resolving
+    - H2 storage with reload + decay
+    - Dialect specific
+    - Background reloading
+- Code parsing
+    - Treesitter + dialect
+- Code complete
+    - Treesitter + dialect
+- Link actions in text editor
+    - Queryengine specific
+        - Payloadbuilder
+        - Jdbc
+    - Rule based on token type.
+    - Configurable queries based on token type + current file, properties etc.
+        - TOP 500
+        - Describe (sqlserver SP_HELP)
+        - Count
+        - etc.
+- Hoover table / etc.
+    - Show popup with schema
+- Outline plugin
+    - Sidebar contribution where current editor can provider outline if present
+    - Implement pattern based outline in editor that overrides
+        - Pattern in top 20 rows and then an outline item for each occurence in document
+- Icons on known mimes that show on tabs
+- Save to file output
+    - Should not output anything to table/text only writing status to text
+- Parse errors
+    - Link in text output to editor lines
+- Core.themes
+    - Themes support
+
+
 # Queryeer Backend Roadmap
 
 ## Progress tracker

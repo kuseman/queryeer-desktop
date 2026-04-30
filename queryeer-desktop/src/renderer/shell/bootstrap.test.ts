@@ -35,6 +35,7 @@ describe("bootstrapShell diagnostics wiring", () => {
       }),
       toggleBackendTrace: async () => {},
       setLogFlow: async () => {},
+      clearBackendLogs: async () => {},
       getExternalFrontendPlugins: async () => [
         {
           id: "external.bad.module",

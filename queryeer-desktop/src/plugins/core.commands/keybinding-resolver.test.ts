@@ -41,6 +41,7 @@ function baseExtensions(): ExtensionSnapshot {
       welcomes: [],
       tabContextMenus: [],
       tabHeaderStyles: [],
+      panels: [],
       shellDefaults: {
         visibleZones: ["mainArea", "statusBar"],
         sidebarWidths: { primary: 280, secondary: 320 },

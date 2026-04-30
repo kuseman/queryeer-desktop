@@ -127,6 +127,9 @@ export class BackendGateway {
     ipcMain.handle("backend:set-log-flow", async (_event, enabled: boolean) => {
       this.setLogFlowEnabled(enabled);
     });
+    ipcMain.handle("backend:clear-logs", async () => {
+      this.clearLogs();
+    });
     ipcMain.handle("backend:execute-query", async (_event, params: QueryExecuteParams) => {
       return this.executeQuery(params);
     });
@@ -163,7 +166,6 @@ export class BackendGateway {
     this.tracePayloads = enabled;
     this.statusStore.setTracePayloads(enabled);
     this.syncLogSnapshot();
-    this.appendLog("info", "gateway", `Trace payloads ${enabled ? "enabled" : "disabled"}`);
   }
 
   public setLogFlowEnabled(enabled: boolean): void {
@@ -172,7 +174,11 @@ export class BackendGateway {
       this.logBuffer.clear();
       this.syncLogSnapshot();
     }
-    this.appendLog("info", "gateway", `Log flow ${enabled ? "enabled" : "disabled"}`);
+  }
+
+  public clearLogs(): void {
+    this.logBuffer.clear();
+    this.syncLogSnapshot();
   }
 
   public async stop(): Promise<void> {

@@ -55,6 +55,12 @@ export const coreLayoutPlugin: Plugin = {
       }
     });
 
+    context.commands.registerCommand({
+      id: "core.layout.togglePanel",
+      title: "Toggle Panel",
+      handler: async () => {}
+    });
+
     context.keybindings.registerKeybinding({
       id: "core.layout.keybinding.closeActive",
       commandId: "core.closeActive",
@@ -70,7 +76,8 @@ export const coreLayoutPlugin: Plugin = {
         "toolBar",
         "statusBar",
         "primarySidebar",
-        "mainArea"
+        "mainArea",
+        "panel"
       ],
       sidebarWidths: {
         primary: 280,
@@ -102,11 +109,12 @@ export const coreLayoutPlugin: Plugin = {
       icon: "sidebar-secondary"
     });
 
-    context.layout.registerStatusItem({
-      id: "core.layout.status.runtime",
-      alignment: "left",
-      order: 10,
-      render: () => <span>Layout: ready</span>
+    context.layout.registerToolbarAction({
+      id: "core.layout.toolbar.togglePanel",
+      order: 50,
+      alignment: "east",
+      commandId: "core.layout.togglePanel",
+      icon: "panel"
     });
 
     context.layout.registerView({
