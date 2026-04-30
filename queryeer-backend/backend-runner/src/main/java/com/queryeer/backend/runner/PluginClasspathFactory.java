@@ -11,6 +11,8 @@ import java.util.List;
 
 final class PluginClasspathFactory
 {
+    private static final List<String> PARENT_FIRST_PREFIXES = List.of("java.", "javax.", "jdk.", "sun.", "com.queryeer.backend.api.", "com.queryeer.backend.contract.");
+
     URLClassLoader createClassLoader(Path source, ClassLoader parent)
     {
         List<URL> urls = new ArrayList<>();
@@ -45,6 +47,55 @@ final class PluginClasspathFactory
             throw new PluginDiscoveryException("Failed to build classpath for plugin source: " + source, e);
         }
 
-        return new URLClassLoader(urls.toArray(URL[]::new), parent);
+        return new ParentAwarePluginClassLoader(urls.toArray(URL[]::new), parent);
+    }
+
+    private static final class ParentAwarePluginClassLoader extends URLClassLoader
+    {
+        ParentAwarePluginClassLoader(URL[] urls, ClassLoader parent)
+        {
+            super(urls, parent);
+        }
+
+        @Override
+        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException
+        {
+            synchronized (getClassLoadingLock(name))
+            {
+                Class<?> loaded = findLoadedClass(name);
+                if (loaded == null)
+                {
+                    loaded = loadClassInternal(name);
+                }
+                if (resolve)
+                {
+                    resolveClass(loaded);
+                }
+                return loaded;
+            }
+        }
+
+        private Class<?> loadClassInternal(String name) throws ClassNotFoundException
+        {
+            if (isParentFirst(name))
+            {
+                return super.loadClass(name, false);
+            }
+
+            try
+            {
+                return findClass(name);
+            }
+            catch (ClassNotFoundException ignored)
+            {
+                return super.loadClass(name, false);
+            }
+        }
+
+        private boolean isParentFirst(String name)
+        {
+            return PARENT_FIRST_PREFIXES.stream()
+                    .anyMatch(name::startsWith);
+        }
     }
 }
