@@ -20,8 +20,6 @@ import com.queryeer.backend.contract.runtime.RuntimeStatusResult;
 import com.queryeer.backend.core.BackendPlatformServices;
 import com.queryeer.backend.core.PluginRuntime;
 import com.queryeer.backend.core.PluginRuntimeStatus;
-import com.queryeer.backend.plugin.jdbc.JdbcBackendPlugin;
-import com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderBackendPlugin;
 import com.queryeer.backend.transport.stdio.StdioTransportModule;
 
 public final class BackendRunnerModule
@@ -41,7 +39,7 @@ public final class BackendRunnerModule
         PluginDiscoveryService discoveryService = new PluginDiscoveryService(objectMapper, services);
 
         PluginRuntime runtime = new PluginRuntime();
-        List<DiscoveredPlugin> discoveredPlugins = discoverPlugins(discoveryService);
+        List<DiscoveredPlugin> discoveredPlugins = discoverPlugins(discoveryService, services);
         for (DiscoveredPlugin discovered : discoveredPlugins)
         {
             runtime.register(discovered.plugin());
@@ -96,7 +94,7 @@ public final class BackendRunnerModule
         return exitCode;
     }
 
-    private List<DiscoveredPlugin> discoverPlugins(PluginDiscoveryService discoveryService)
+    private List<DiscoveredPlugin> discoverPlugins(PluginDiscoveryService discoveryService, BackendPlatformServices services)
     {
         Optional<String> explicitPath = resolvePluginPath();
         if (explicitPath.isPresent())
@@ -105,14 +103,7 @@ public final class BackendRunnerModule
             return discovered.backendPlugins();
         }
 
-        List<DiscoveredPlugin> builtins = new ArrayList<>();
-        builtins.add(new DiscoveredPlugin(new PluginManifest(1, "query.payloadbuilder", "Payloadbuilder Query Engine", "0.1.0",
-                new PluginManifest.BackendTarget("com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderBackendPlugin", null, null, "17"), null, List.of(),
-                List.of("queryengine.execute", "engine.invoke"), List.of(), null, null), new PayloadbuilderBackendPlugin(), null, false, null));
-        builtins.add(new DiscoveredPlugin(new PluginManifest(1, "query.jdbc", "JDBC Query Engine", "0.1.0",
-                new PluginManifest.BackendTarget("com.queryeer.backend.plugin.jdbc.JdbcBackendPlugin", null, null, "17"), null, List.of(), List.of("queryengine.execute"), List.of(), null, null),
-                new JdbcBackendPlugin(), null, false, null));
-        return builtins;
+        return new BuiltinPluginDiscovery(new PluginFactory(), services).discover();
     }
 
     private Optional<String> resolvePluginPath()

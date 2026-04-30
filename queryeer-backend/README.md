@@ -11,6 +11,7 @@ Standalone Java backend reactor for Queryeer Desktop.
 - `backend-runner`: executable bootstrap/wiring
 - `backend-plugin-payloadbuilder`: payloadbuilder plugin scaffold
 - `backend-plugin-jdbc`: jdbc plugin scaffold
+- `backend-plugin-queryengine-payloadbuilder-jdbc`: payloadbuilder jdbc bridge plugin scaffold
 - `backend-plugin-devprobe`: external dev probe backend companion plugin
 
 ## Build
