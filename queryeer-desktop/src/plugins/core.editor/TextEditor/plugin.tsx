@@ -4,6 +4,7 @@ import { registerTextEditorCommands } from "./commands";
 import { registerTextEditorKeybindings } from "./keybindings";
 import { TextEditorComponent } from "./TextEditorComponent";
 import { preloadMonaco } from "./MonacoTextEditorApi";
+import { registerTextEditorMimeTypes } from "./mime-types";
 
 export { getTextEditorRegistry } from "./TextEditorRegistry";
 
@@ -19,6 +20,7 @@ export const coreEditorTextPlugin: Plugin = {
   activate: (context) => {
     const textRegistry = getTextEditorRegistry();
     textRegistry.setFilesRegistry(context.files);
+    registerTextEditorMimeTypes(context.files);
 
     registerTextEditorCommands(context, textRegistry);
     registerTextEditorKeybindings(context);

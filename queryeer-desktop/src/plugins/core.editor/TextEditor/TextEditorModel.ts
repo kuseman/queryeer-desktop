@@ -1,21 +1,8 @@
 import type { TextDocument, TextLine, TextRange } from "./types";
-
-const MIME_TO_LANGUAGE: Record<string, string> = {
-  "text/plain": "plaintext",
-  "text/markdown": "markdown",
-  "application/json": "json",
-  "application/xml": "xml",
-  "application/sql": "sql",
-  "application/plbsql": "sql",
-  "application/yaml": "yaml",
-  "text/html": "html",
-  "text/css": "css",
-  "text/javascript": "javascript",
-  "text/typescript": "typescript"
-};
+import { resolveMonacoLanguageId } from "./mime-types";
 
 export function mimeToLanguage(mimeType: string): string {
-  return MIME_TO_LANGUAGE[mimeType] ?? "plaintext";
+  return resolveMonacoLanguageId(mimeType);
 }
 
 export class TextEditorModel {

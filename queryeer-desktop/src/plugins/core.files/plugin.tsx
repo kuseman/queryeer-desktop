@@ -5,25 +5,6 @@ import { fileUriToPath } from "../../contracts/files/Resolvers";
 import { getTextEditorRegistry } from "../core.editor/TextEditor/TextEditorRegistry";
 import { getCoreSettingsService } from "../core.settings/service";
 
-const EXTENSION_MIME_MAP: Record<string, string> = {
-  txt: "text/plain",
-  md: "text/markdown",
-  json: "application/json",
-  yaml: "application/yaml",
-  yml: "application/yaml",
-  xml: "application/xml",
-  csv: "text/csv",
-  log: "text/plain",
-  sql: "application/sql",
-  plbsql: "application/plbsql"
-};
-
-const DEFAULT_CAPABILITIES: MimeCapability[] = [
-  "backupable",
-  "editable",
-  "viewable"
-];
-
 const ALL_MIME_CAPABILITIES: MimeCapability[] = [
   "backupable",
   "editable",
@@ -385,19 +366,6 @@ export const coreFilesPlugin: Plugin = {
       parentId: "core.menu.file",
       commandId: "core.files.saveAs"
     });
-
-    context.files.registerMimeResolver((_uri, hint) => {
-      const extension = hint?.extension;
-      if (!extension) {
-        return undefined;
-      }
-      return EXTENSION_MIME_MAP[extension];
-    });
-
-    for (const mimeType of new Set(Object.values(EXTENSION_MIME_MAP))) {
-      context.files.capabilities.registerCapabilities(mimeType, DEFAULT_CAPABILITIES);
-      context.files.capabilities.registerContentCategory(mimeType, "text");
-    }
 
     context.tooltip.registerTooltipSection({
       id: "core.files.tooltip.fileStatus",
