@@ -13,7 +13,7 @@ import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.query.QueryFailedNotification;
 
-public final class StdioTransportServer
+final class StdioTransportServer
 {
     private final InputStream input;
     private final FramedReader framedReader;

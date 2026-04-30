@@ -7,7 +7,7 @@ import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.file.FileCloseParams;
 import com.queryeer.backend.contract.file.FileCloseResult;
 
-public final class FileCloseRequestHandler implements RequestHandler
+final class FileCloseRequestHandler implements RequestHandler
 {
     private final ResponseWriter responseWriter;
     private final EnvelopeCodec codec;

@@ -16,7 +16,7 @@ import javax.crypto.spec.SecretKeySpec;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-public final class SecretRefPayloadResolver
+final class SecretRefPayloadResolver
 {
     private static final String SECRET_REF_FIELD = "secretRef";
     private static final String CIPHER = "AES/GCM/NoPadding";

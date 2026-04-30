@@ -4,7 +4,7 @@ import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
 
-public final class NotificationPublisher
+final class NotificationPublisher
 {
     private final ResponseWriter responseWriter;
 

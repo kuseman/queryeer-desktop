@@ -6,7 +6,7 @@ import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.handshake.HandshakeResult;
 import com.queryeer.backend.contract.handshake.ServerIdentity;
 
-public final class HandshakeRequestHandler implements RequestHandler
+final class HandshakeRequestHandler implements RequestHandler
 {
     private final ResponseWriter responseWriter;
 

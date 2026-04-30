@@ -8,11 +8,12 @@ import com.queryeer.backend.api.EventBus;
 import com.queryeer.backend.api.FileSessionHandlerRegistry;
 import com.queryeer.backend.api.LoggerService;
 import com.queryeer.backend.api.MetadataRegistry;
+import com.queryeer.backend.api.PluginHostServices;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.SchedulerService;
 import com.queryeer.backend.api.SecretService;
 
-public final class BackendPlatformServices
+public final class BackendPlatformServices implements PluginHostServices
 {
     private final DefaultLoggerService logger;
     private final InMemoryConfigService config;

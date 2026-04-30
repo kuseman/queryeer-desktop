@@ -4,6 +4,6 @@ import java.nio.file.Path;
 
 import com.queryeer.backend.api.BackendPlugin;
 
-record DiscoveredPlugin(PluginManifest manifest, BackendPlugin plugin, Path source, boolean isolatedClassLoader)
+record DiscoveredPlugin(PluginManifest manifest, BackendPlugin plugin, Path source, boolean isolatedClassLoader, AutoCloseable classLoaderResource)
 {
 }

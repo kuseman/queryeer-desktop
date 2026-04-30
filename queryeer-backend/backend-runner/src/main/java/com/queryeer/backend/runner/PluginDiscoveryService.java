@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Set;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.queryeer.backend.api.PluginHostServices;
 
 final class PluginDiscoveryService
 {
@@ -16,11 +17,11 @@ final class PluginDiscoveryService
     private final BackendPluginResolver backendResolver;
     private final FrontendPluginResolver frontendResolver;
 
-    PluginDiscoveryService(ObjectMapper objectMapper)
+    PluginDiscoveryService(ObjectMapper objectMapper, PluginHostServices hostServices)
     {
         this.sourceExplorer = new PluginSourceExplorer();
         this.manifestLoader = new PluginManifestLoader(objectMapper);
-        this.backendResolver = new ManifestBackendPluginResolver(new PluginClasspathFactory(), new PluginFactory());
+        this.backendResolver = new ManifestBackendPluginResolver(new PluginClasspathFactory(), new PluginFactory(), hostServices);
         this.frontendResolver = new ManifestFrontendPluginResolver();
     }
 
@@ -42,7 +43,7 @@ final class PluginDiscoveryService
             seenPluginIds.add(manifest.id());
 
             backendResolver.resolve(manifest, source)
-                    .ifPresent(plugin -> backendPlugins.add(new DiscoveredPlugin(manifest, plugin, source, true)));
+                    .ifPresent(backendPlugins::add);
 
             frontendResolver.resolve(manifest, source)
                     .ifPresent(frontendPlugins::add);

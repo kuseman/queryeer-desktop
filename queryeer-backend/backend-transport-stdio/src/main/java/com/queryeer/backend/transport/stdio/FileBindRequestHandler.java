@@ -12,7 +12,7 @@ import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.file.FileBindParams;
 import com.queryeer.backend.contract.file.FileBindResult;
 
-public final class FileBindRequestHandler implements RequestHandler
+final class FileBindRequestHandler implements RequestHandler
 {
     private final ResponseWriter responseWriter;
     private final EnvelopeCodec codec;

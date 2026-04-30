@@ -8,7 +8,7 @@ import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.runtime.RuntimeStatusParams;
 import com.queryeer.backend.contract.runtime.RuntimeStatusResult;
 
-public final class RuntimeStatusRequestHandler implements RequestHandler
+final class RuntimeStatusRequestHandler implements RequestHandler
 {
     private final ResponseWriter responseWriter;
     private final EnvelopeCodec codec;

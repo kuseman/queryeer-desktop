@@ -6,7 +6,7 @@ import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.contract.BackendErrorCode;
 import com.queryeer.backend.contract.engine.EngineInvokeParams;
 
-public final class EngineInvokeService
+final class EngineInvokeService
 {
     private final QueryEngineRegistry engineRegistry;
     private final SecretRefPayloadResolver secretResolver;

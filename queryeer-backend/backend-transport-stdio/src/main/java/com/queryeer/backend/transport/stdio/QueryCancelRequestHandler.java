@@ -6,7 +6,7 @@ import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.query.QueryCancelParams;
 import com.queryeer.backend.contract.query.QueryCancelResult;
 
-public final class QueryCancelRequestHandler implements RequestHandler
+final class QueryCancelRequestHandler implements RequestHandler
 {
     private final ResponseWriter responseWriter;
     private final EnvelopeCodec codec;

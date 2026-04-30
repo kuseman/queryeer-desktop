@@ -38,3 +38,19 @@ Run backend runner with external plugins path:
 - Runner uses manifest-first discovery (`plugin.json`) from plugin folders and `.zip` sources.
 - Backend and frontend targets can be declared under one plugin identity in a single manifest.
 - For local dev probe package, staged backend jars should exist in `plugins/dev-query-probe/lib`.
+
+## Backend plugin factory injection
+
+- Backend plugins can be loaded through either `backend.entrypointClass` (legacy path) or `backend.factoryClass` (recommended for plugin-local IoC).
+- `backend.factoryClass` must implement `com.queryeer.backend.api.BackendPluginFactory` and receives `PluginHostServices` from `backend-api`.
+- Only `backend-api` interfaces are passed across the host/plugin classloader boundary.
+
+Example `plugin.json` backend section:
+
+```json
+{
+  "backend": {
+    "factoryClass": "com.example.plugin.ExampleBackendPluginFactory"
+  }
+}
+```
