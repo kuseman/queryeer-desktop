@@ -107,20 +107,15 @@ public final class BackendRunnerModule
 
     private List<DiscoveredPlugin> discoverPlugins(PluginDiscoveryService discoveryService, BackendPlatformServices services)
     {
-        PluginDiscoveryMode mode = resolveDiscoveryMode();
-        Optional<String> explicitPath = resolvePluginPath();
+        PluginDiscoveryPlan discoveryPlan = PluginDiscoveryPlan.of(resolveDiscoveryMode(), resolvePluginPath());
+        PluginDiscoveryMode mode = discoveryPlan.effectiveMode();
         services.logger()
-                .info(withCorrelation("Plugin discovery mode resolved to " + mode + " (pluginPathPresent=" + explicitPath.isPresent() + ")", null));
-
-        if (mode == PluginDiscoveryMode.AUTO)
-        {
-            if (explicitPath.isPresent())
-            {
-                return discoveryService.discoverFromPath(explicitPath.get())
-                        .backendPlugins();
-            }
-            return new BuiltinPluginDiscovery(new PluginFactory(), services).discover();
-        }
+                .info(withCorrelation("Plugin discovery mode resolved to " + mode
+                                      + " (pluginPathPresent="
+                                      + discoveryPlan.pluginPath()
+                                              .isPresent()
+                                      + ")",
+                        null));
 
         if (mode == PluginDiscoveryMode.BUILTIN)
         {
@@ -129,12 +124,12 @@ public final class BackendRunnerModule
 
         if (mode == PluginDiscoveryMode.EXTERNAL)
         {
-            String path = explicitPath.orElseThrow(() -> new PluginDiscoveryException("Plugin discovery mode external requires queryeer.plugins.path or QUERYEER_PLUGINS_PATH"));
+            String path = discoveryPlan.requiredPathFor(PluginDiscoveryMode.EXTERNAL);
             return discoveryService.discoverFromPath(path)
                     .backendPlugins();
         }
 
-        String path = explicitPath.orElseThrow(() -> new PluginDiscoveryException("Plugin discovery mode mixed requires queryeer.plugins.path or QUERYEER_PLUGINS_PATH"));
+        String path = discoveryPlan.requiredPathFor(PluginDiscoveryMode.MIXED);
         List<DiscoveredPlugin> builtin = new BuiltinPluginDiscovery(new PluginFactory(), services).discover();
         List<DiscoveredPlugin> external = discoveryService.discoverFromPath(path)
                 .backendPlugins();

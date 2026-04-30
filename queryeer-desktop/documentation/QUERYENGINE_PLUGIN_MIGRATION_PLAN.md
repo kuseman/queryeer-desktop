@@ -118,7 +118,7 @@ Implementation status: a repository probe plugin exists under `plugins/dev-class
 
 ## Phase 2 formalization: mixed discovery mode
 
-Status: planned (next execution phase)
+Status: completed (mode plumbing + validation guardrails in place)
 
 ### Decision
 
@@ -147,6 +147,7 @@ Status: planned (next execution phase)
 - Runtime status output includes per-plugin source metadata (`builtin` vs `external`) for troubleshooting.
 
 Implementation status: discovery mode plumbing is implemented in backend runner with modes `auto`, `builtin`, `external`, `mixed` and strict duplicate-id failure in mixed mode.
+Implementation status: backend-runner tests now cover mode parsing, mode planning (`auto` effective behavior), and mixed-mode duplicate-id merge failure.
 
 ### Configuration keys and defaults
 
