@@ -7,13 +7,21 @@ describe("filterToolbarActions", () => {
     const actions: LayoutToolbarContribution[] = [
       { id: "b", type: "action", order: 20, commandId: "cmd.b", when: "hasActiveFile" },
       { id: "sep", type: "separator", order: 15 },
+      {
+        id: "select",
+        type: "select",
+        order: 12,
+        getOptions: () => [{ value: "x", label: "X" }],
+        getValue: () => "x",
+        onChange: () => {}
+      },
       { id: "a", type: "action", order: 10, commandId: "cmd.a" }
     ];
 
     const withoutFile = filterToolbarActions(actions, { hasActiveFile: false }).map((action) => action.id);
-    expect(withoutFile).toEqual(["a", "sep"]);
+    expect(withoutFile).toEqual(["a", "select", "sep"]);
 
     const withFile = filterToolbarActions(actions, { hasActiveFile: true }).map((action) => action.id);
-    expect(withFile).toEqual(["a", "sep", "b"]);
+    expect(withFile).toEqual(["a", "select", "sep", "b"]);
   });
 });

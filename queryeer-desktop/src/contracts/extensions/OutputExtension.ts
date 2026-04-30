@@ -51,6 +51,10 @@ export type OutputContext = {
   metrics: { durationMs?: number; rowCount?: number } | null;
   error: { code: string; message: string } | null;
   progress: { percent?: number; message?: string } | null;
+  fetchedRowCount: number;
+  executionStartedAtMs: number | null;
+  textOutputFormat: string;
+  rowsTargetPrimaryId: string | null;
   /** Identity of the file this context belongs to. Used by contributors for per-file state persistence. */
   fileId?: string;
 };
@@ -75,6 +79,8 @@ export type OutputContributor = {
   /** The feature this contributor handles, e.g. "rows", "plan", "text". */
   capability: string;
   mode: "primary" | "adhoc";
+  /** Only selectable primary contributors are shown in query output selector. Defaults to true for primary. */
+  selectable?: boolean;
   title: string;
   /** Optional icon URL used in output tabs. */
   icon?: string;
@@ -100,4 +106,8 @@ export const IDLE_OUTPUT_CONTEXT: OutputContext = {
   metrics: null,
   error: null,
   progress: null,
+  fetchedRowCount: 0,
+  executionStartedAtMs: null,
+  textOutputFormat: "plain",
+  rowsTargetPrimaryId: null,
 };

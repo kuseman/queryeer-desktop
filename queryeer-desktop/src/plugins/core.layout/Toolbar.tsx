@@ -1,4 +1,9 @@
-import type { LayoutActionIconRenderer, LayoutToolbarContribution, LayoutZone } from "../../contracts/extensions/LayoutExtension";
+import type {
+  LayoutActionIconRenderer,
+  LayoutToolbarContribution,
+  LayoutToolbarSelectContribution,
+  LayoutZone
+} from "../../contracts/extensions/LayoutExtension";
 import { GenericActionIcon, layoutToolbarIconMap } from "../../renderer/icons/LayoutIcons";
 import type { CommandExecutionResult } from "../../contracts/plugin/Plugin";
 
@@ -45,9 +50,44 @@ export function Toolbar({
     return <IconComponent className="shell-toolbar-icon" />;
   };
 
+  const renderSelect = (contribution: LayoutToolbarSelectContribution) => {
+    if (contribution.isVisible && !contribution.isVisible()) {
+      return null;
+    }
+    const options = contribution.getOptions();
+    const value = contribution.getValue();
+    const disabled = typeof contribution.disabled === "function"
+      ? contribution.disabled()
+      : (contribution.disabled ?? false);
+
+    return (
+      <label key={contribution.id} className="shell-toolbar-select-wrap" title={contribution.title}>
+        {contribution.title ? <span className="shell-toolbar-select-label">{contribution.title}</span> : null}
+        <select
+          className="shell-toolbar-select"
+          value={value}
+          disabled={disabled || options.length === 0}
+          onChange={(event) => {
+            contribution.onChange(event.target.value);
+          }}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  };
+
   const renderAction = (action: LayoutToolbarContribution) => {
     if (action.type === "separator") {
       return <span key={action.id} className="shell-toolbar-separator" role="separator" aria-hidden="true" />;
+    }
+
+    if (action.type === "select") {
+      return renderSelect(action);
     }
 
     const zoneToggle = zoneToggleByCommand[action.commandId];

@@ -4,8 +4,13 @@ import { getQueryEngineService } from "./QueryEngineService";
 import { queryTextRegistry } from "./QueryTextEditorRegistry";
 import { QueryEditorComponent } from "./QueryEditorComponent";
 import { QueryRunIcon, QueryStopIcon } from "./query-toolbar-icons";
+import { getOutputRegistry } from "./output/OutputRegistry";
+import { getQueryViewStateStore, TEXT_OUTPUT_PRIMARY_ID } from "./QueryViewStateStore";
+import { TEXT_OUTPUT_FORMATTERS } from "../core.queryengine.output.text/formatters";
+import { defineStateKey } from "../../contracts/files/FileStateRegistry";
 
 const QUERY_TAB_STATE_METADATA_KEY = "core.queryengine.tabState";
+const SELECTED_PRIMARY_KEY = defineStateKey<string>("core.queryengine.selectedPrimary");
 
 type QueryTabState = "running" | "failed";
 
@@ -50,6 +55,33 @@ export const coreQueryEnginePlugin: Plugin = {
     const queryEngineService = getQueryEngineService();
     queryEngineService.initialize();
     queryTextRegistry.setFilesRegistry(context.files);
+    getQueryViewStateStore().initialize(context.files);
+
+    const getActiveQueryFile = () => {
+      const fileId = context.fileMediator.getActiveFileId();
+      if (!fileId) {
+        return undefined;
+      }
+      const file = context.files.getFile(fileId);
+      if (!file) {
+        return undefined;
+      }
+      if (!context.files.capabilities.hasCapability(file.mimeType, "queryexecutable")) {
+        return undefined;
+      }
+      return file;
+    };
+
+    const getSelectableOutputs = () => getOutputRegistry().getSelectablePrimaryContributors();
+
+    const resolveSelectedOutput = (fileId: string): string => {
+      const outputs = getSelectableOutputs();
+      const selected = getQueryViewStateStore().read(fileId).selectedOutputId;
+      if (selected && outputs.some((output) => output.id === selected)) {
+        return selected;
+      }
+      return outputs[0]?.id ?? TEXT_OUTPUT_PRIMARY_ID;
+    };
 
     queryEngineService.registerEngineResolver(
       ({ fileId }) => {
@@ -163,12 +195,69 @@ export const coreQueryEnginePlugin: Plugin = {
       when: "hasActiveQueryExecutableFile"
     });
 
+    context.layout.registerToolbarAction({
+      id: "core.queryengine.toolbar.output.select",
+      type: "select",
+      title: "Output",
+      order: 42,
+      alignment: "west",
+      when: "hasActiveQueryExecutableFile",
+      getOptions: () => getSelectableOutputs().map((output) => ({ value: output.id, label: output.title })),
+      getValue: () => {
+        const active = getActiveQueryFile();
+        if (!active) {
+          return getSelectableOutputs()[0]?.id ?? TEXT_OUTPUT_PRIMARY_ID;
+        }
+        return resolveSelectedOutput(active.fileId);
+      },
+      onChange: (value) => {
+        const active = getActiveQueryFile();
+        if (!active) {
+          return;
+        }
+        context.fileState.set(active.fileId, SELECTED_PRIMARY_KEY, value);
+        getQueryViewStateStore().setSelectedOutput(active.fileId, value);
+      },
+      disabled: () => getSelectableOutputs().length === 0
+    });
+
+    context.layout.registerToolbarAction({
+      id: "core.queryengine.toolbar.output.text.format",
+      type: "select",
+      title: "Format",
+      order: 43,
+      alignment: "west",
+      when: "hasActiveQueryExecutableFile",
+      getOptions: () => TEXT_OUTPUT_FORMATTERS.map((formatter) => ({ value: formatter.id, label: formatter.label })),
+      getValue: () => {
+        const active = getActiveQueryFile();
+        if (!active) {
+          return TEXT_OUTPUT_FORMATTERS[0]!.id;
+        }
+        return getQueryViewStateStore().read(active.fileId).textOutputFormat ?? TEXT_OUTPUT_FORMATTERS[0]!.id;
+      },
+      onChange: (value) => {
+        const active = getActiveQueryFile();
+        if (!active) {
+          return;
+        }
+        getQueryViewStateStore().setTextOutputFormat(active.fileId, value);
+      },
+      disabled: () => {
+        const active = getActiveQueryFile();
+        if (!active) {
+          return true;
+        }
+        return resolveSelectedOutput(active.fileId) !== TEXT_OUTPUT_PRIMARY_ID;
+      }
+    });
+
     context.keybindings.registerKeybinding({
       id: "core.queryengine.keybinding.execute",
       commandId: "core.queryengine.execute",
       key: "F5",
-      when: "editorFocus",
-      scope: "editor",
+      when: "global",
+      scope: "global",
       order: 500
     });
   }

@@ -9,6 +9,8 @@ import { queryTextRegistry } from "./QueryTextEditorRegistry";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistryImpl";
 import { defineStateKey } from "../../contracts/files/FileStateRegistry";
+import { getQueryViewStateStore, TEXT_OUTPUT_PRIMARY_ID } from "./QueryViewStateStore";
+import { TEXT_OUTPUT_FORMATTERS } from "../core.queryengine.output.text/formatters";
 
 type Props = {
   file?: FileEntity;
@@ -21,7 +23,6 @@ type ActiveExecution = {
 
 const OUTPUT_CONTEXT_KEY = defineStateKey<OutputContext>("core.queryengine.outputContext");
 const SELECTED_PRIMARY_KEY = defineStateKey<string>("core.queryengine.selectedPrimary");
-const TEXT_OUTPUT_PRIMARY_ID = "core.queryengine.output.text";
 
 export function QueryEditorComponent({ file }: Props): JSX.Element {
   const [outputContext, setOutputContext] = useState<OutputContext>(IDLE_OUTPUT_CONTEXT);
@@ -46,9 +47,53 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
       return;
     }
     const reg = getFileStateRegistry();
-    setOutputContext(reg.get(fileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT);
+    const restoredContext = reg.get(fileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT;
+    const queryViewState = getQueryViewStateStore().read(fileId);
+    setOutputContext({
+      ...restoredContext,
+      fileId,
+      textOutputFormat: queryViewState.textOutputFormat ?? restoredContext.textOutputFormat ?? "plain"
+    });
     const override = executionPrimaryOverrideByFileIdRef.current.get(fileId);
-    setSelectedPrimaryId(override ?? reg.get(fileId, SELECTED_PRIMARY_KEY) ?? null);
+    setSelectedPrimaryId(
+      queryViewState.panelSelectedOutputId
+      ?? queryViewState.selectedOutputId
+      ?? override
+      ?? reg.get(fileId, SELECTED_PRIMARY_KEY)
+      ?? null
+    );
+  }, [file?.fileId]);
+
+  useEffect(() => {
+    if (!file?.fileId) {
+      return;
+    }
+
+    const raf = requestAnimationFrame(() => {
+      queryTextRegistry.getActiveEditor()?.focus();
+    });
+
+    return () => {
+      cancelAnimationFrame(raf);
+    };
+  }, [file?.fileId]);
+
+  useEffect(() => {
+    const fileId = file?.fileId;
+    if (!fileId) {
+      return;
+    }
+    return getQueryViewStateStore().subscribe(fileId, (state) => {
+      const override = executionPrimaryOverrideByFileIdRef.current.get(fileId);
+      const validFormatIds = new Set<string>(TEXT_OUTPUT_FORMATTERS.map((formatter) => formatter.id));
+      setSelectedPrimaryId((previous) => state.panelSelectedOutputId ?? previous ?? override ?? null);
+      setOutputContext((prev) => ({
+        ...prev,
+        textOutputFormat: state.textOutputFormat && validFormatIds.has(state.textOutputFormat)
+          ? state.textOutputFormat
+          : prev.textOutputFormat
+      }));
+    });
   }, [file?.fileId]);
 
   const updateOutputContextForFile = useCallback(
@@ -71,18 +116,13 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
       executionPrimaryOverrideByFileIdRef.current.set(targetFileId, outputId);
     }
     if (fileIdRef.current === targetFileId) {
+      const persisted =
+        getQueryViewStateStore().read(targetFileId).panelSelectedOutputId
+        ?? getQueryViewStateStore().read(targetFileId).selectedOutputId
+        ?? null;
       const manual = getFileStateRegistry().get(targetFileId, SELECTED_PRIMARY_KEY) ?? null;
-      setSelectedPrimaryId(outputId ?? manual);
+      setSelectedPrimaryId(outputId ?? persisted ?? manual);
     }
-  }, []);
-
-  const handleSelectPrimary = useCallback((id: string) => {
-    const fileId = fileIdRef.current;
-    if (fileId) {
-      getFileStateRegistry().set(fileId, SELECTED_PRIMARY_KEY, id);
-    }
-    setSelectedPrimaryId(id);
-    getOutputRegistry().setSelectedPrimary(id);
   }, []);
 
   const handleExecute = useCallback(() => {
@@ -104,9 +144,25 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
       const text = editor.getSelectedText() ?? editor.getContent();
       if (!text.trim()) return;
 
-      setExecutionPrimaryOverride(targetFileId, null);
+      const selectedFromToolbar = getQueryViewStateStore().read(targetFileId).selectedOutputId;
+      const selectedFromRuntime = getFileStateRegistry().get(targetFileId, SELECTED_PRIMARY_KEY) ?? null;
+      const outputRegistry = getOutputRegistry();
+      const selectedFromRegistry = outputRegistry.getSelectedPrimaryId();
+      const fallbackPrimaryId = outputRegistry.getSelectablePrimaryContributors()[0]?.id ?? null;
+      const targetPrimaryId = selectedFromToolbar ?? selectedFromRuntime ?? selectedFromRegistry ?? fallbackPrimaryId;
 
-      updateOutputContextForFile(targetFileId, () => ({ ...IDLE_OUTPUT_CONTEXT, fileId: targetFileId, state: "running" }));
+      setExecutionPrimaryOverride(targetFileId, targetPrimaryId ?? null);
+
+      const persistedFormat = getQueryViewStateStore().read(targetFileId).textOutputFormat;
+      updateOutputContextForFile(targetFileId, (prev) => ({
+        ...IDLE_OUTPUT_CONTEXT,
+        fileId: targetFileId,
+        state: "running",
+        textOutputFormat: persistedFormat ?? prev.textOutputFormat,
+        rowsTargetPrimaryId: targetPrimaryId,
+        fetchedRowCount: 0,
+        executionStartedAtMs: Date.now()
+      }));
 
       try {
         const service = getQueryEngineService();
@@ -135,12 +191,19 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
             const p = event.params as { resultSetIndex: number; rows: unknown[][] };
             const registry = getOutputRegistry();
 
+            const currentCtx = getFileStateRegistry().get(targetFileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT;
+            const rowsTargetPrimaryId = currentCtx.rowsTargetPrimaryId;
+
+            updateOutputContextForFile(targetFileId, (prev) => ({
+              ...prev,
+              fetchedRowCount: prev.fetchedRowCount + p.rows.length
+            }));
+
             // Notify the primary contributor before updating state so Ag-Grid can
             // call applyTransaction() incrementally rather than diffing the full rows array.
-            registry.notifyChunkRows({ resultSetIndex: p.resultSetIndex, rows: p.rows });
+            registry.notifyChunkRows({ resultSetIndex: p.resultSetIndex, rows: p.rows }, rowsTargetPrimaryId);
 
             // Check if this result set is already over the limit
-            const currentCtx = getFileStateRegistry().get(targetFileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT;
             const currentSet = currentCtx.resultSets.find((rs) => rs.resultSetIndex === p.resultSetIndex);
 
             if (currentSet?.rowLimitExceeded) {
@@ -164,7 +227,10 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
                 }
                 return { ...rs, rows: combined };
               });
-              return { ...prev, resultSets: sets };
+              return {
+                ...prev,
+                resultSets: sets
+              };
             });
           } else if (event.method === "queryengine.completed") {
             const p = event.params as { metrics?: { durationMs?: number; rowCount?: number }; features?: string[] };
@@ -174,12 +240,16 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
               state: "completed",
               metrics: p.metrics ?? null,
               features: p.features ?? ["rows"],
-              progress: null
+              progress: null,
+              executionStartedAtMs: null
             }));
 
             const ctxAfterComplete = getFileStateRegistry().get(targetFileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT;
             const hasRows = ctxAfterComplete.resultSets.some((rs) => rs.rows.length > 0);
-            setExecutionPrimaryOverride(targetFileId, hasRows ? null : TEXT_OUTPUT_PRIMARY_ID);
+            setExecutionPrimaryOverride(
+              targetFileId,
+              hasRows ? (ctxAfterComplete.rowsTargetPrimaryId ?? null) : TEXT_OUTPUT_PRIMARY_ID
+            );
 
             // Finalize any open export streams and patch exportPath back into the result set
             const ctx = getFileStateRegistry().get(targetFileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT;
@@ -204,7 +274,8 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
               ...prev,
               state: "failed",
               error: p.error ?? { code: "UNKNOWN", message: "Query failed" },
-              progress: null
+              progress: null,
+              executionStartedAtMs: null
             }));
             setExecutionPrimaryOverride(targetFileId, TEXT_OUTPUT_PRIMARY_ID);
           }
@@ -219,7 +290,8 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
           error: {
             code: "EXECUTE_ERROR",
             message: error instanceof Error ? error.message : String(error)
-          }
+          },
+          executionStartedAtMs: null
         }));
         setExecutionPrimaryOverride(targetFileId, TEXT_OUTPUT_PRIMARY_ID);
       }
@@ -240,7 +312,12 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
       .cancel(execution.executionId)
       .catch(() => {});
     activeExecutionByFileIdRef.current.delete(targetFileId);
-    updateOutputContextForFile(targetFileId, (prev) => ({ ...prev, state: "cancelled", progress: null }));
+    updateOutputContextForFile(targetFileId, (prev) => ({
+      ...prev,
+      state: "cancelled",
+      progress: null,
+      executionStartedAtMs: null
+    }));
   }, [file?.fileId, updateOutputContextForFile]);
 
   useEffect(() => {
@@ -304,7 +381,16 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
           <OutputPanel
             context={outputContext}
             selectedPrimaryId={selectedPrimaryId}
-            onSelectPrimary={handleSelectPrimary}
+            onSelectPrimary={(id) => {
+              const fileId = file?.fileId;
+              if (fileId) {
+                executionPrimaryOverrideByFileIdRef.current.delete(fileId);
+                getFileStateRegistry().set(fileId, SELECTED_PRIMARY_KEY, id);
+                getQueryViewStateStore().setPanelSelectedOutput(fileId, id);
+              }
+              setSelectedPrimaryId(id);
+              getOutputRegistry().setSelectedPrimary(id);
+            }}
             onExportOpen={(path) => void window.appShell.openPath(path)}
           />
         </div>

@@ -278,5 +278,37 @@ describe("core.queryengine plugin", () => {
         enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFileMetadata.core.queryengine.tabState == 'running'"
       })
     );
+
+    const registerKeybindingMock = context.keybindings.registerKeybinding as ReturnType<typeof vi.fn>;
+    expect(registerKeybindingMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "core.queryengine.keybinding.execute",
+        key: "F5",
+        when: "global",
+        scope: "global"
+      })
+    );
+  });
+
+  it("registers output and text format toolbar select contributions", () => {
+    const context = createContext(makeFile());
+
+    coreQueryEnginePlugin.activate(context);
+
+    const registerToolbarActionMock = context.layout.registerToolbarAction as ReturnType<typeof vi.fn>;
+    expect(registerToolbarActionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "core.queryengine.toolbar.output.select",
+        type: "select",
+        when: "hasActiveQueryExecutableFile"
+      })
+    );
+    expect(registerToolbarActionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "core.queryengine.toolbar.output.text.format",
+        type: "select",
+        when: "hasActiveQueryExecutableFile"
+      })
+    );
   });
 });
