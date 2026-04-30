@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "id": "dev.classpath.probe",
+  "name": "Dev Classpath Probe",
+  "version": "0.1.0",
+  "description": "Dev-only plugin to validate backend.classpath classes + deps-list loading",
+  "dependencies": [],
+  "providesCapabilities": [
+    "dev.classpath.probe"
+  ],
+  "requiredCapabilities": [],
+  "backend": {
+    "entrypointClass": "com.queryeer.backend.plugin.devprobe.DevProbeBackendPlugin",
+    "classpath": {
+      "root": ".",
+      "include": [
+        "classes",
+        "@deps-list.txt"
+      ]
+    },
+    "minJavaVersion": "17"
+  },
+  "frontend": {
+    "entryModule": "frontend/module.mjs",
+    "moduleFormat": "esm",
+    "apiVersion": "0.1"
+  },
+  "packaging": {
+    "layout": {
+      "jarsDir": "lib",
+      "typescriptDir": "frontend"
+    }
+  }
+}

@@ -19,6 +19,7 @@ class ResponseWriterTest
 {
     private static final class CyclicPayload
     {
+        @SuppressWarnings("unused")
         private CyclicPayload self;
     }
 

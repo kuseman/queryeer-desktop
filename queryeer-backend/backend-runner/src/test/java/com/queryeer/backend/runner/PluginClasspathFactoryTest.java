@@ -24,8 +24,9 @@ class PluginClasspathFactoryTest
     void resolvesBackendApiTypesFromParentClassLoader() throws Exception
     {
         PluginClasspathFactory factory = new PluginClasspathFactory();
+        PluginManifest manifest = pluginManifest(null);
 
-        try (var classLoader = factory.createClassLoader(tempDir, getClass().getClassLoader()))
+        try (var classLoader = factory.createClassLoader(tempDir, manifest, getClass().getClassLoader()))
         {
             Class<?> loaded = classLoader.loadClass(BackendPlugin.class.getName());
 
@@ -40,7 +41,8 @@ class PluginClasspathFactoryTest
         compilePluginClass(classesRoot, "com.queryeer.backend.runner.testsupport.ShadowedType", "plugin");
 
         PluginClasspathFactory factory = new PluginClasspathFactory();
-        try (var classLoader = factory.createClassLoader(classesRoot, getClass().getClassLoader()))
+        PluginManifest manifest = pluginManifest(new PluginManifest.Classpath(".", List.of(".")));
+        try (var classLoader = factory.createClassLoader(classesRoot, manifest, getClass().getClassLoader()))
         {
             Class<?> loaded = classLoader.loadClass("com.queryeer.backend.runner.testsupport.ShadowedType");
             Object instance = loaded.getDeclaredConstructor()
@@ -51,6 +53,65 @@ class PluginClasspathFactoryTest
             Assertions.assertEquals("plugin", source);
             Assertions.assertSame(classLoader, loaded.getClassLoader());
         }
+    }
+
+    @Test
+    void resolvesClasspathEntriesFromDepsList() throws Exception
+    {
+        Path sourceDir = tempDir.resolve("plugin");
+        Files.createDirectories(sourceDir);
+        Path classesDir = sourceDir.resolve("classes");
+        Path depJar = sourceDir.resolve("dep.jar");
+        compilePluginClass(classesDir, "dev.sample.PluginType", "plugin");
+        Files.writeString(depJar, "not-a-real-jar", StandardCharsets.UTF_8);
+        Files.writeString(sourceDir.resolve("deps-list.txt"), depJar.toString(), StandardCharsets.UTF_8);
+
+        PluginManifest manifest = pluginManifest(new PluginManifest.Classpath(".", List.of("classes", "@deps-list.txt")));
+        PluginClasspathFactory factory = new PluginClasspathFactory();
+        try (var classLoader = factory.createClassLoader(sourceDir, manifest, getClass().getClassLoader()))
+        {
+            Class<?> loaded = classLoader.loadClass("dev.sample.PluginType");
+            Assertions.assertSame(classLoader, loaded.getClassLoader());
+        }
+    }
+
+    @Test
+    void failsWhenDepsListEntryIsMissing() throws Exception
+    {
+        Path sourceDir = tempDir.resolve("plugin");
+        Files.createDirectories(sourceDir);
+        Path missingJar = sourceDir.resolve("missing.jar");
+        Files.writeString(sourceDir.resolve("deps-list.txt"), missingJar.toString(), StandardCharsets.UTF_8);
+
+        PluginManifest manifest = pluginManifest(new PluginManifest.Classpath(".", List.of("@deps-list.txt")));
+        PluginClasspathFactory factory = new PluginClasspathFactory();
+
+        PluginDiscoveryException error = Assertions.assertThrows(PluginDiscoveryException.class, () -> factory.createClassLoader(sourceDir, manifest, getClass().getClassLoader()));
+        Assertions.assertTrue(error.getMessage()
+                .contains("Classpath entry not found"));
+    }
+
+    @Test
+    void resolvesGlobClasspathEntries() throws Exception
+    {
+        Path sourceDir = tempDir.resolve("plugin");
+        Path libDir = sourceDir.resolve("lib");
+        Files.createDirectories(libDir);
+        Files.writeString(libDir.resolve("dep-a.jar"), "a", StandardCharsets.UTF_8);
+        Files.writeString(libDir.resolve("dep-b.jar"), "b", StandardCharsets.UTF_8);
+
+        PluginManifest manifest = pluginManifest(new PluginManifest.Classpath("lib", List.of("*.jar")));
+        PluginClasspathFactory factory = new PluginClasspathFactory();
+        try (var classLoader = factory.createClassLoader(sourceDir, manifest, getClass().getClassLoader()))
+        {
+            Assertions.assertNotNull(classLoader);
+        }
+    }
+
+    private PluginManifest pluginManifest(PluginManifest.Classpath classpath)
+    {
+        return new PluginManifest(1, "dev.plugin", "Dev Plugin", "0.1.0", new PluginManifest.BackendTarget("dev.sample.Plugin", null, classpath, "17"), null, List.of(), List.of(), List.of(), null,
+                null);
     }
 
     private void compilePluginClass(Path classesRoot, String fqcn, String sourceValue) throws IOException
