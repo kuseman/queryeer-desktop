@@ -381,6 +381,15 @@ function ObservabilityEditor({ listFiles }: ObservabilityEditorProps) {
               </span>
             </div>
 
+            {backendStatus?.mode === "dev-maven" && (
+              <div style={{ marginTop: "8px" }}>
+                <span className="label" style={{ marginRight: "8px" }}>
+                  Java debug port
+                </span>
+                <span className="value">{backendStatus.javaDebugPort ?? "not detected"}</span>
+              </div>
+            )}
+
             <div style={{ marginTop: "8px", marginBottom: "12px" }}>
               <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
                 <input

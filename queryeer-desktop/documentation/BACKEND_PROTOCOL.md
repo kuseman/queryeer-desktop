@@ -187,6 +187,8 @@ Notes:
 
 Purpose: liveness check and latency baseline.
 
+When available, backend may include `javaDebugPort` (notably in dev mode with JDWP enabled).
+
 Request params:
 
 ```json
@@ -200,7 +202,8 @@ Success result:
 ```json
 {
   "timestamp": "2026-04-19T12:00:00.000Z",
-  "uptimeMs": 15320
+  "uptimeMs": 15320,
+  "javaDebugPort": 53721
 }
 ```
 
@@ -208,13 +211,14 @@ Success result:
 
 Purpose: start query execution asynchronously.
 
+`fileId` is required and identifies the file-scoped backend session used for execution.
+
 Request params:
 
 ```json
 {
   "queryExecutionId": "qx-001",
   "engineId": "payloadbuilder",
-  "connectionId": "local-dev",
   "fileId": "file-001",
   "text": "select * from foo",
   "parameters": [],
@@ -277,7 +281,7 @@ Success result:
 
 ## 5.5 `connection.upsert`
 
-Purpose: create/update non-secret connection metadata (no raw password/token fields).
+Purpose: create/update engine-owned connection payload. Transport treats `connection` as opaque.
 
 Request params:
 
@@ -286,12 +290,13 @@ Request params:
   "connectionId": "conn-001",
   "engineId": "jdbc",
   "name": "Local Postgres",
-  "host": "localhost",
-  "port": 5432,
-  "database": "appdb",
-  "username": "app_user",
-  "options": {
-    "ssl": false
+  "connection": {
+    "dialectId": "postgres",
+    "url": "jdbc:postgresql://localhost:5432/appdb",
+    "username": "app_user",
+    "password": {
+      "secretRef": "sec_abc123"
+    }
   }
 }
 ```
@@ -450,11 +455,12 @@ Success result:
 Rules:
 
 - If the file was previously unbound, backend creates the engine session on bind.
-- If the file was already bound, backend rebinds (may invalidate caches).
+- If the file was already bound and engine/connection changed, backend closes old engine-scoped file resources and opens a new session for the updated binding.
+- JDBC file-scoped SQL sessions are released on rebind, on `file.close`, or by idle timeout reaper.
 
-## 5.6d `queryengine.execute` fileId extension
+## 5.6d `queryengine.execute` fileId session binding
 
-`queryengine.execute` params accept an optional `fileId`. When present and the backend has a matching open file session, the backend SHOULD reuse the cached parse tree rather than re-parsing `text`. `text` remains accepted for stateless callers.
+`queryengine.execute` params require `fileId`. Backends use `fileId` to bind execution to the open file session and reuse file-scoped state where available.
 
 ## 6. Notifications (v1)
 
@@ -672,12 +678,17 @@ Current Java stdio scaffold implementation status:
 
 - `backend.handshake` implemented
 - `health.ping` implemented
-- `queryengine.execute` implemented (mocked progressive notifications); `fileId` field accepted but not yet consumed
+- `queryengine.execute` implemented (mocked progressive notifications); `fileId` is required and validated
 - `queryengine.cancel` implemented (mocked cancellation notification)
 - `backend.runtimeStatus` implemented
 - `connection.upsert` request handling scaffolded
-- `file.open` / `file.close` / `file.bind` request handlers implemented against `DefaultFileRegistry`; no engine-specific `FileSessionHandler` yet
+- `file.open` / `file.close` / `file.bind` request handlers implemented against `DefaultFileRegistry`; JDBC provider registers `FileSessionHandler` for file-scoped connection lifecycle and rebind cleanup
 - `file.change` notification handler implemented
+
+JDBC file-session cleanup configuration:
+
+- `queryeer.jdbc.fileSession.idleTimeoutMs` (default: `1800000`) controls idle lifetime before a file-scoped JDBC session is evicted.
+- `queryeer.jdbc.fileSession.reaperIntervalMs` (default: min(idleTimeoutMs, 300000)) controls how often idle sessions are scanned.
 
 Current integration notes:
 

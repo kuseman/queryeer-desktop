@@ -19,6 +19,8 @@ Move query engine concerns out of core host wiring and into explicit plugin and 
 - Planned next modules:
   - `backend-lib-queryengine-jdbc-foundation` (shared library, not runtime plugin)
 
+Implementation status: `backend-lib-queryengine-jdbc-foundation` is now present with dialect registry, connection setup contracts, and execution/schema abstraction interfaces.
+
 ## Architecture rules
 
 - One plugin = one classloader.

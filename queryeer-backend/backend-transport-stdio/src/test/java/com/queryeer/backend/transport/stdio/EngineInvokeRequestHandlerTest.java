@@ -38,7 +38,7 @@ class EngineInvokeRequestHandlerTest
             }
 
             @Override
-            public void execute(String queryExecutionId, String text, Object engineState, com.queryeer.backend.api.QueryPublisher publisher)
+            public void execute(String queryExecutionId, String fileId, String text, Object engineState, com.queryeer.backend.api.QueryPublisher publisher)
             {
             }
 

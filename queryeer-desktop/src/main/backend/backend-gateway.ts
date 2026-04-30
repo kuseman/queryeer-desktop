@@ -72,9 +72,20 @@ export class BackendGateway {
       source: "transport" | "backend" | "backend-console";
       message: string;
     }): void => {
+      if (
+        (source === "backend" || source === "backend-console") &&
+        this.transport.mode === "dev-maven"
+      ) {
+        const debugPort = extractJavaDebugPort(message);
+        if (debugPort !== undefined) {
+          this.statusStore.setJavaDebugPort(debugPort);
+        }
+      }
+
       if (source === "backend-console") {
         return;
       }
+
       this.appendLog(level, source, message);
 
       if (level !== "error") {
@@ -451,6 +462,9 @@ export class BackendGateway {
       timestamp: result.timestamp,
       rttMs: Date.now() - startedAt
     });
+    if (typeof result.javaDebugPort === "number" && result.javaDebugPort > 0) {
+      this.statusStore.setJavaDebugPort(result.javaDebugPort);
+    }
 
     if (this.statusStore.get().supportedCapabilities.includes("backend.runtimeStatus")) {
       void this.performRuntimeStatusSync().catch((error) => {
@@ -655,4 +669,18 @@ export class BackendGateway {
       `Backend missing required security capabilities: ${missing.join(", ")}`
     );
   }
+}
+
+function extractJavaDebugPort(message: string): number | undefined {
+  const classicMatch = /listening\s+for\s+transport\s+dt_socket\s+at\s+address:\s*(\d+)/i.exec(message);
+  if (classicMatch) {
+    return Number.parseInt(classicMatch[1], 10);
+  }
+
+  const genericAddressMatch = /\baddress:\s*(?:[^\s:]+:)?(\d+)\s*$/i.exec(message);
+  if (genericAddressMatch) {
+    return Number.parseInt(genericAddressMatch[1], 10);
+  }
+
+  return undefined;
 }

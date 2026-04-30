@@ -6,12 +6,13 @@
   "params": {
     "engineId": "jdbc",
     "name": "Local Postgres",
-    "host": "localhost",
-    "port": 5432,
-    "database": "appdb",
-    "username": "app_user",
-    "options": {
-      "ssl": false
+    "connection": {
+      "dialectId": "postgres",
+      "url": "jdbc:postgresql://localhost:5432/appdb",
+      "username": "app_user",
+      "password": {
+        "secretRef": "sec_fixture_1"
+      }
     }
   }
 }

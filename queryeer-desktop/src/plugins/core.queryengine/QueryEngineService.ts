@@ -14,7 +14,7 @@ type EngineResolverEntry = {
 type ExecuteParams = {
   engineId?: string;
   text: string;
-  fileId?: string;
+  fileId: string;
   engineState?: unknown;
 };
 

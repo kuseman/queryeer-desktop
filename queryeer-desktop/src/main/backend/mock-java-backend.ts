@@ -184,7 +184,21 @@ export class MockJavaBackend {
     const params = request.params as {
       queryExecutionId: string;
       engineId?: string;
+      fileId?: string;
     };
+
+    if (!params.fileId || params.fileId.trim().length === 0) {
+      this.sink({
+        protocolVersion: BACKEND_PROTOCOL_VERSION,
+        type: "response",
+        id: request.id,
+        error: {
+          code: "VALIDATION",
+          message: "fileId is required for queryengine.execute"
+        }
+      });
+      return;
+    }
 
     const result: QueryExecuteResult = {
       accepted: true,

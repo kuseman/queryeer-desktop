@@ -4,6 +4,7 @@
   "id": "req-fixture-ping-1",
   "result": {
     "timestamp": "2026-01-01T00:00:00.000Z",
-    "uptimeMs": 1234
+    "uptimeMs": 1234,
+    "javaDebugPort": 53721
   }
 }

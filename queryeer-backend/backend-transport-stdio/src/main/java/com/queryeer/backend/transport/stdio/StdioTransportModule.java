@@ -27,7 +27,7 @@ public final class StdioTransportModule
                 new SecuritySessionOpenRequestHandler(responseWriter, codec, securitySessionBridge), new SecuritySessionCloseRequestHandler(responseWriter, securitySessionBridge),
                 new SecurityVaultChangedRequestHandler(responseWriter, codec, securitySessionBridge), new HealthPingRequestHandler(startedAt, responseWriter, codec),
                 new QueryExecuteRequestHandler(responseWriter, codec, queryExecutionService), new QueryCancelRequestHandler(responseWriter, codec, queryExecutionService),
-                new EngineInvokeRequestHandler(responseWriter, codec, engineInvokeService), new ConnectionUpsertRequestHandler(responseWriter, codec),
+                new EngineInvokeRequestHandler(responseWriter, codec, engineInvokeService), new ConnectionUpsertRequestHandler(responseWriter, codec, queryEngines),
                 new FileOpenRequestHandler(responseWriter, codec, fileRegistry), new FileCloseRequestHandler(responseWriter, codec, fileRegistry),
                 new FileBindRequestHandler(responseWriter, codec, fileRegistry));
 

@@ -20,6 +20,6 @@ public interface QueryPublisher
         completed(durationMs, rowCount);
     }
 
-    /** @param errorCode should match a {@code BackendErrorCode} name, falls back to INTERNAL */
+    /** errorCode should match a {@code BackendErrorCode} name, falls back to INTERNAL */
     void failed(String errorCode, String errorMessage);
 }

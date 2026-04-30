@@ -31,7 +31,7 @@ export interface ShellApi {
   executeBackendQuery: (params: {
     queryExecutionId: string;
     engineId: string;
-    fileId?: string;
+    fileId: string;
     text: string;
     engineState?: unknown;
   }) => Promise<{ accepted: boolean; queryExecutionId: string }>;

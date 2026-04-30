@@ -24,6 +24,7 @@ type TestTransport = {
   mode: "mock-stdio";
   emitEnvelope: (envelope: BackendEnvelope) => void;
   emitDied: () => void;
+  emitDiagnostic: (event: { level: "debug" | "info" | "warn" | "error"; source: "transport" | "backend" | "backend-console"; message: string }) => void;
 };
 
 type TransportBehavior = {
@@ -36,6 +37,7 @@ type TransportBehavior = {
 const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
   let onEnvelope: EnvelopeHandler | null = null;
   let onDied: (() => void) | null = null;
+  let onDiagnostic: ((event: { level: "debug" | "info" | "warn" | "error"; source: "transport" | "backend" | "backend-console"; message: string }) => void) | null = null;
   let pingCount = 0;
 
   const transport: TestTransport = {
@@ -154,6 +156,9 @@ const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
     },
     emitDied: () => {
       onDied?.();
+    },
+    emitDiagnostic: (event) => {
+      onDiagnostic?.(event);
     }
   };
 
@@ -185,6 +190,7 @@ const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
     create: (callbacks) => {
       onEnvelope = callbacks.onEnvelope;
       onDied = callbacks.onDied;
+      onDiagnostic = callbacks.onDiagnostic;
       return transport;
     }
   });
@@ -221,6 +227,97 @@ describe("BackendGateway", () => {
     await gateway.stop();
   });
 
+  it("captures java debug port in dev-maven mode from backend diagnostics", async () => {
+    let onEnvelope: EnvelopeHandler | null = null;
+    let onDied: (() => void) | null = null;
+    let onDiagnostic:
+      | ((event: {
+          level: "debug" | "info" | "warn" | "error";
+          source: "transport" | "backend" | "backend-console";
+          message: string;
+        }) => void)
+      | null = null;
+
+    const transport: TestTransport = {
+      mode: "mock-stdio",
+      start: vi.fn(async () => {}),
+      stop: vi.fn(async () => {}),
+      sendEnvelope: vi.fn((envelope: BackendEnvelope) => {
+        if (envelope.type !== "request") {
+          return;
+        }
+        if (envelope.method === "backend.handshake") {
+          const response: BackendResponseEnvelope = {
+            protocolVersion: BACKEND_PROTOCOL_VERSION,
+            type: "response",
+            id: envelope.id,
+            result: {
+              server: { name: "queryeer-java-backend", version: "0.1.0" },
+              selectedProtocolVersion: BACKEND_PROTOCOL_VERSION,
+              supportedCapabilities: ["health.ping", "backend.runtimeStatus"]
+            } satisfies HandshakeResult
+          };
+          onEnvelope?.(response);
+          return;
+        }
+        if (envelope.method === "health.ping") {
+          const response: BackendResponseEnvelope = {
+            protocolVersion: BACKEND_PROTOCOL_VERSION,
+            type: "response",
+            id: envelope.id,
+            result: { timestamp: "2026-01-01T00:00:00.000Z", uptimeMs: 1 } satisfies PingResult
+          };
+          onEnvelope?.(response);
+          return;
+        }
+        if (envelope.method === "backend.runtimeStatus") {
+          const response: BackendResponseEnvelope = {
+            protocolVersion: BACKEND_PROTOCOL_VERSION,
+            type: "response",
+            id: envelope.id,
+            result: {
+              startedAt: "2026-01-01T00:00:00.000Z",
+              pluginStatuses: [],
+              activatedPluginIds: [],
+              providedCapabilities: []
+            } satisfies RuntimeStatusResult
+          };
+          onEnvelope?.(response);
+        }
+      }),
+      emitEnvelope: (envelope: BackendEnvelope) => {
+        onEnvelope?.(envelope);
+      },
+      emitDied: () => {
+        onDied?.();
+      },
+      emitDiagnostic: (event) => {
+        onDiagnostic?.(event);
+      }
+    };
+
+    const gateway = new BackendGateway({
+      mode: "dev-maven",
+      create: (callbacks) => {
+        onEnvelope = callbacks.onEnvelope;
+        onDied = callbacks.onDied;
+        onDiagnostic = callbacks.onDiagnostic;
+        return transport;
+      }
+    });
+
+    await gateway.start();
+
+    transport.emitDiagnostic({
+      level: "info",
+      source: "backend-console",
+      message: "Listening for transport dt_socket at address: 53721"
+    });
+
+    expect(gateway.getStatus().javaDebugPort).toBe(53721);
+    await gateway.stop();
+  });
+
   it("recovers to healthy after transport death and watchdog restart", async () => {
     vi.useFakeTimers();
     const { gateway, transport } = createGatewayWithTestTransport();
@@ -247,6 +344,7 @@ describe("BackendGateway", () => {
     const result = await gateway.executeQuery({
       queryExecutionId: "exec-1",
       engineId: "payloadbuilder",
+      fileId: "file-1",
       text: "select 1"
     });
 
@@ -275,6 +373,7 @@ describe("BackendGateway", () => {
     await gateway.executeQuery({
       queryExecutionId: "exec-engine-state",
       engineId: "payloadbuilder",
+      fileId: "file-1",
       text: "select 1",
       engineState: {
         payloadbuilder: {
@@ -323,6 +422,7 @@ describe("BackendGateway", () => {
     await gateway.executeQuery({
       queryExecutionId: "exec-secret-ref",
       engineId: "payloadbuilder",
+      fileId: "file-1",
       text: "select 1",
       engineState: {
         payloadbuilder: {
@@ -352,6 +452,7 @@ describe("BackendGateway", () => {
     expect(executeRequest?.params).toEqual({
       queryExecutionId: "exec-secret-ref",
       engineId: "payloadbuilder",
+      fileId: "file-1",
       text: "select 1",
       engineState: {
         payloadbuilder: {
@@ -500,6 +601,7 @@ describe("BackendGateway", () => {
       gateway.executeQuery({
         queryExecutionId: "exec-2",
         engineId: "payloadbuilder",
+        fileId: "file-1",
         text: "select 1"
       })
     ).rejects.toThrow("Simulated execute send failure");
@@ -518,6 +620,7 @@ describe("BackendGateway", () => {
     const executePromise = gateway.executeQuery({
       queryExecutionId: "exec-3",
       engineId: "payloadbuilder",
+      fileId: "file-1",
       text: "select 1"
     });
 

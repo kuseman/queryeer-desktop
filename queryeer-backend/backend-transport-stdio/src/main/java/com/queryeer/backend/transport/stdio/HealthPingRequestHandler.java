@@ -13,12 +13,14 @@ final class HealthPingRequestHandler implements RequestHandler
     private final long startedAt;
     private final ResponseWriter responseWriter;
     private final EnvelopeCodec codec;
+    private final JavaDebugPortDetector debugPortDetector;
 
     public HealthPingRequestHandler(long startedAt, ResponseWriter responseWriter, EnvelopeCodec codec)
     {
         this.startedAt = startedAt;
         this.responseWriter = responseWriter;
         this.codec = codec;
+        this.debugPortDetector = new JavaDebugPortDetector();
     }
 
     @Override
@@ -35,7 +37,7 @@ final class HealthPingRequestHandler implements RequestHandler
 
         PingResult result = new PingResult(params.timestamp() == null ? Instant.now()
                 .toString()
-                : params.timestamp(), System.currentTimeMillis() - startedAt);
+                : params.timestamp(), System.currentTimeMillis() - startedAt, debugPortDetector.detect());
 
         responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, result, null));
     }

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Map;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -115,6 +116,9 @@ class ProtocolFixtureCompatibilityTest
         QueryExecuteResult result = objectMapper.convertValue(response.result(), QueryExecuteResult.class);
         Assertions.assertTrue(result.accepted());
         Assertions.assertEquals("exec-fixture-1", result.queryExecutionId());
+
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> objectMapper.convertValue(Map.of("queryExecutionId", "exec-missing-file", "engineId", "payloadbuilder", "text", "select 1"), QueryExecuteParams.class));
     }
 
     @Test

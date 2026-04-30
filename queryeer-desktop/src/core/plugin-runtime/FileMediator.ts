@@ -8,6 +8,7 @@ import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 export type BackendQueryExecutor = (params: {
   queryExecutionId: string;
   engineId: string;
+  fileId: string;
   text: string;
 }) => Promise<{ accepted: boolean; queryExecutionId: string }>;
 
@@ -255,6 +256,7 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
         result = await executeBackendQuery({
           queryExecutionId,
           engineId: file.engineBinding.engineId,
+          fileId,
           text
         });
       } catch {

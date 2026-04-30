@@ -379,7 +379,7 @@ describe("FileMediator.executeFile", () => {
     );
   });
 
-  it("forwards engineId and text to the backend executor", async () => {
+  it("forwards engineId, fileId and text to the backend executor", async () => {
     const { mediator, execute } = setupHarness();
     const file = await mediator.openFile("untitled:e2", {
       mimeType: "text/plain",
@@ -391,6 +391,7 @@ describe("FileMediator.executeFile", () => {
     expect(execute).toHaveBeenCalledWith({
       queryExecutionId: "qx-test",
       engineId: "jdbc",
+      fileId: file.fileId,
       text: "select 1"
     });
     expect(result.accepted).toBe(true);
