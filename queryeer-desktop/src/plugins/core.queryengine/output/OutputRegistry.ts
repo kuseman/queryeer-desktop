@@ -26,6 +26,12 @@ export class OutputRegistry {
     return [...this.contributors].sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100));
   }
 
+  getSelectablePrimaryContributors(): OutputContributor[] {
+    return this.getContributors().filter((contributor) =>
+      contributor.mode === "primary" && contributor.selectable !== false
+    );
+  }
+
   setSelectedPrimary(id: string | null): void {
     this.selectedPrimaryId = id;
   }
@@ -39,8 +45,9 @@ export class OutputRegistry {
    * Forwards the chunk to the currently selected primary contributor's onChunkRows
    * hook, allowing Ag-Grid to call applyTransaction() without a full re-render.
    */
-  notifyChunkRows(chunk: RowChunk): void {
-    const primary = this.contributors.find((c) => c.id === this.selectedPrimaryId);
+  notifyChunkRows(chunk: RowChunk, targetPrimaryId?: string | null): void {
+    const effectivePrimaryId = targetPrimaryId ?? this.selectedPrimaryId;
+    const primary = this.contributors.find((c) => c.id === effectivePrimaryId);
     primary?.onChunkRows?.(chunk);
   }
 

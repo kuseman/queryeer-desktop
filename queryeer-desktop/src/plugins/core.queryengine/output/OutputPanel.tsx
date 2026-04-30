@@ -34,10 +34,6 @@ function eligiblePrimaries(
   return features === null ? primaries : primaries.filter((c) => features.includes(c.capability));
 }
 
-function hasAnyRows(context: OutputContext): boolean {
-  return context.resultSets.some((rs) => rs.rows.length > 0);
-}
-
 export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExportOpen }: Props): JSX.Element {
   const [contributors, setContributors] = useState<OutputContributor[]>(() =>
     getOutputRegistry().getContributors()
@@ -55,18 +51,13 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
 
   const primaryContributor = resolvePrimary(contributors, context.features, selectedPrimaryId);
   const primaries = eligiblePrimaries(contributors, context.features);
-  const highestByCapability = new Map<string, OutputContributor>();
-  for (const contributor of primaries) {
-    if (!highestByCapability.has(contributor.capability)) {
-      highestByCapability.set(contributor.capability, contributor);
-    }
-  }
 
   const contextForPrimary = (contributor: OutputContributor): OutputContext => {
+    const rowsTargetPrimaryId = context.rowsTargetPrimaryId ?? primaryContributor?.id ?? null;
     if (
-      context.state === "completed"
-      && hasAnyRows(context)
-      && highestByCapability.get(contributor.capability)?.id !== contributor.id
+      rowsTargetPrimaryId
+      && contributor.id !== rowsTargetPrimaryId
+      && contributor.capability === "rows"
     ) {
       return { ...context, resultSets: [] };
     }
@@ -88,6 +79,10 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
     target?.focus({ preventScroll: true });
   }, [primaryContributor?.id]);
 
+  useEffect(() => {
+    pendingFocusPrimaryIdRef.current = null;
+  }, [context.fileId]);
+
   const adhocContributors =
     context.features !== null
       ? contributors.filter(
@@ -98,6 +93,24 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
   const limitedSets = context.resultSets.filter((rs) => rs.rowLimitExceeded);
   const exportPaths = limitedSets.map((rs) => rs.exportPath).filter(Boolean) as string[];
   const isExportPending = limitedSets.length > 0 && exportPaths.length < limitedSets.length;
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (context.state !== "running" || context.executionStartedAtMs == null) {
+      return;
+    }
+    const timer = setInterval(() => {
+      setNowMs(Date.now());
+    }, 500);
+    return () => clearInterval(timer);
+  }, [context.state, context.executionStartedAtMs]);
+
+  const elapsedMs = context.state === "running" && context.executionStartedAtMs != null
+    ? Math.max(0, nowMs - context.executionStartedAtMs)
+    : (context.metrics?.durationMs ?? null);
+  const rowCount = context.state === "completed"
+    ? (context.metrics?.rowCount ?? context.fetchedRowCount)
+    : context.fetchedRowCount;
 
   if (contributors.length === 0) {
     return <div className="query-output-panel query-output-empty">No output views registered.</div>;
@@ -152,6 +165,14 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
           <div className="query-output-adhoc-content">{c.render(context)}</div>
         </div>
       ))}
+
+      <div className="query-output-status-bar">
+        <span>State: {context.state}</span>
+        <span>Rows fetched: {Math.max(0, rowCount).toLocaleString()}</span>
+        <span>Elapsed: {elapsedMs != null ? `${elapsedMs}ms` : "-"}</span>
+        {context.progress?.message && <span>{context.progress.message}</span>}
+        {context.state === "failed" && context.error && <span>[{context.error.code}] {context.error.message}</span>}
+      </div>
     </div>
   );
 }

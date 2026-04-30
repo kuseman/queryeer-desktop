@@ -10,6 +10,10 @@ function makeContext(overrides: Partial<OutputContext>): OutputContext {
     metrics: null,
     error: null,
     progress: null,
+    fetchedRowCount: 0,
+    executionStartedAtMs: null,
+    textOutputFormat: "plain",
+    rowsTargetPrimaryId: null,
     ...overrides
   };
 }
@@ -57,7 +61,8 @@ describe("text output formatters", () => {
             rows: [[1]],
             rowLimitExceeded: false
           }
-        ]
+        ],
+        rowsTargetPrimaryId: "core.queryengine.output.text"
       })
     );
     expect(lines.join("\n")).toContain('"id": 1');
@@ -74,7 +79,8 @@ describe("text output formatters", () => {
             rows: [["alice"]],
             rowLimitExceeded: false
           }
-        ]
+        ],
+        rowsTargetPrimaryId: "core.queryengine.output.text"
       })
     );
     expect(lines).toContain('"name"');
@@ -90,6 +96,63 @@ describe("text output formatters", () => {
         metrics: { rowCount: 3 }
       })
     );
+    expect(lines).toContain("Rows fetched: 3");
+  });
+
+  it("keeps status text plain while formatting only row payload", () => {
+    const formatter = resolveTextOutputFormatter("json");
+    const lines = formatter.format(
+      makeContext({
+        state: "running",
+        progress: { message: "Running query..." },
+        fetchedRowCount: 2,
+        rowsTargetPrimaryId: "core.queryengine.output.text",
+        resultSets: [
+          {
+            resultSetIndex: 0,
+            schema: { columns: [{ name: "id", type: "int" }] },
+            rows: [[1], [2]],
+            rowLimitExceeded: false
+          }
+        ]
+      })
+    );
+
+    expect(lines[0]).toBe("Running query...");
+    expect(lines[1]).toBe("Rows fetched: 2");
+    expect(lines.join("\n")).toContain('"id": 1');
+  });
+
+  it("does not prepend idle hint when rows already exist", () => {
+    const formatter = resolveTextOutputFormatter("plain");
+    const lines = formatter.format(
+      makeContext({
+        state: "idle",
+        rowsTargetPrimaryId: "core.queryengine.output.text",
+        resultSets: [
+          {
+            resultSetIndex: 0,
+            schema: { columns: [{ name: "id", type: "int" }] },
+            rows: [[1]],
+            rowLimitExceeded: false
+          }
+        ]
+      })
+    );
+
+    expect(lines[0]).toBe("Result set 1");
+    expect(lines).not.toContain("Press F5 or click Run to execute a query.");
+  });
+
+  it("does not show idle hint when no rows exist", () => {
+    const formatter = resolveTextOutputFormatter("plain");
+    const lines = formatter.format(
+      makeContext({
+        state: "idle",
+        resultSets: []
+      })
+    );
+
     expect(lines).toEqual([]);
   });
 });

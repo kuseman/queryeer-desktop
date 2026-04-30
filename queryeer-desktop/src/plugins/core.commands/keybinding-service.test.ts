@@ -66,4 +66,30 @@ describe("createKeybindingService", () => {
     expect(executeCommand).toHaveBeenCalledWith("core.commands.about");
     service.dispose();
   });
+
+  it("executes function keybinding even when input is focused", async () => {
+    const executeCommand = vi.fn(async () => ({ commandId: "core.commands.about", executed: true }));
+    const service = createKeybindingService({
+      executeCommand,
+      getUserKeybindings: async () => ({
+        version: KEYBINDINGS_SCHEMA_VERSION,
+        bindings: [],
+        unbound: []
+      })
+    });
+
+    await service.initialize(makeExtensions());
+
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    input.focus();
+
+    const event = new KeyboardEvent("keydown", { key: "F1", bubbles: true });
+    input.dispatchEvent(event);
+
+    expect(executeCommand).toHaveBeenCalledWith("core.commands.about");
+
+    document.body.removeChild(input);
+    service.dispose();
+  });
 });

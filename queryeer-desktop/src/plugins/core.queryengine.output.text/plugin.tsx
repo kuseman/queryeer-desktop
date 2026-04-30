@@ -9,14 +9,12 @@ import { getOutputRegistry } from "../core.queryengine/output/OutputRegistry";
 import { defineStateKey } from "../../contracts/files/FileStateRegistry";
 import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistryImpl";
 import {
-  TEXT_OUTPUT_FORMATTERS,
   resolveTextOutputFormatter,
   type TextOutputFormatId
 } from "./formatters";
 import outputTextIconUrl from "./output-text.svg";
 
 type TextOutputViewState = {
-  formatter: TextOutputFormatId;
   lines: string[];
   scrollLine: number;
 };
@@ -67,16 +65,17 @@ function TextOutputView({ context }: { context: OutputContext }): JSX.Element {
   const fitAddonRef = useRef<FitAddon | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const [formatter, setFormatter] = useState<TextOutputFormatId>("plain");
   const [scrollLine, setScrollLine] = useState(0);
   const [searchText, setSearchText] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
   const [searchRegex, setSearchRegex] = useState(false);
   const [searchWholeWord, setSearchWholeWord] = useState(false);
+  const prevSearchOpenRef = useRef(false);
   const scrollLineRef = useRef(0);
   const renderRevisionRef = useRef(0);
 
+  const formatter = context.textOutputFormat as TextOutputFormatId;
   const activeFormatter = useMemo(() => resolveTextOutputFormatter(formatter), [formatter]);
   const formattedLines = useMemo(() => capLines(activeFormatter.format(context)), [activeFormatter, context]);
 
@@ -84,7 +83,6 @@ function TextOutputView({ context }: { context: OutputContext }): JSX.Element {
     if (!context.fileId) return;
     const saved = getFileStateRegistry().get(context.fileId, VIEW_STATE_KEY);
     if (!saved) return;
-    setFormatter(saved.formatter);
     setScrollLine(saved.scrollLine);
     scrollLineRef.current = saved.scrollLine;
   }, [context.fileId]);
@@ -142,7 +140,25 @@ function TextOutputView({ context }: { context: OutputContext }): JSX.Element {
     const root = rootRef.current;
     if (!root) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && (e.key.toLowerCase() === "f" || e.key.toLowerCase() === "x")) {
+      const primaryModifier = e.ctrlKey || e.metaKey;
+
+      if (primaryModifier && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        terminalRef.current?.selectAll();
+        return;
+      }
+
+      if (primaryModifier && e.key.toLowerCase() === "c") {
+        const selectedText = terminalRef.current?.getSelection() ?? "";
+        if (!selectedText) {
+          return;
+        }
+        e.preventDefault();
+        void navigator.clipboard.writeText(selectedText);
+        return;
+      }
+
+      if (primaryModifier && (e.key.toLowerCase() === "f" || e.key.toLowerCase() === "x")) {
         e.preventDefault();
         if (searchOpen) {
           searchInputRef.current?.focus();
@@ -170,7 +186,9 @@ function TextOutputView({ context }: { context: OutputContext }): JSX.Element {
   }, [searchOpen]);
 
   useEffect(() => {
-    if (searchOpen) return;
+    const wasOpen = prevSearchOpenRef.current;
+    prevSearchOpenRef.current = searchOpen;
+    if (searchOpen || !wasOpen) return;
     const timer = setTimeout(() => {
       terminalRef.current?.focus();
     }, 0);
@@ -207,11 +225,10 @@ function TextOutputView({ context }: { context: OutputContext }): JSX.Element {
   useEffect(() => {
     if (!context.fileId) return;
     getFileStateRegistry().set(context.fileId, VIEW_STATE_KEY, {
-      formatter,
       lines: formattedLines,
       scrollLine
     });
-  }, [context.fileId, formatter, formattedLines, scrollLine]);
+  }, [context.fileId, formattedLines, scrollLine]);
 
   useEffect(() => {
     const terminal = terminalRef.current;
@@ -220,13 +237,12 @@ function TextOutputView({ context }: { context: OutputContext }): JSX.Element {
       scrollLineRef.current = line;
       setScrollLine(line);
       getFileStateRegistry().set(context.fileId!, VIEW_STATE_KEY, {
-        formatter,
         lines: formattedLines,
         scrollLine: line
       });
     });
     return () => disposable.dispose();
-  }, [context.fileId, formatter, formattedLines]);
+  }, [context.fileId, formattedLines]);
 
   return (
     <div
@@ -242,18 +258,6 @@ function TextOutputView({ context }: { context: OutputContext }): JSX.Element {
       }}
     >
       <div className="query-output-text-toolbar">
-        <label htmlFor="query-output-text-format">Format</label>
-        <select
-          id="query-output-text-format"
-          value={formatter}
-          onChange={(e) => setFormatter(e.target.value as TextOutputFormatId)}
-        >
-          {TEXT_OUTPUT_FORMATTERS.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.label}
-            </option>
-          ))}
-        </select>
         <button type="button" onClick={() => setSearchOpen((open) => !open)}>Find</button>
       </div>
       {searchOpen && (
@@ -330,6 +334,7 @@ export const coreQueryEngineOutputTextPlugin: Plugin = {
       id: "core.queryengine.output.text",
       capability: "rows",
       mode: "primary",
+      selectable: true,
       title: "Text",
       icon: outputTextIconUrl,
       priority: 200,

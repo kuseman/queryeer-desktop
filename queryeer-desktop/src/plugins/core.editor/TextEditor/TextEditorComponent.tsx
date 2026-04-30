@@ -130,6 +130,7 @@ export function TextEditorComponent({ file, registry }: TextEditorComponentProps
     if (fileForInitialLoad) {
       pendingFileRef.current = fileForInitialLoad;
       await registry.openFileAsync(fileForInitialLoad);
+      api.focus();
       pendingFileRef.current = null;
     }
 
@@ -141,7 +142,9 @@ export function TextEditorComponent({ file, registry }: TextEditorComponentProps
     if (editorRef.current) {
       if (file === pendingFileRef.current) return;
       pendingFileRef.current = file;
-      registry.openFileAsync(file);
+      void registry.openFileAsync(file).then(() => {
+        apiRef.current?.focus();
+      });
       return;
     }
     pendingFileRef.current = file;

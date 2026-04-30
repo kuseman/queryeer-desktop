@@ -104,6 +104,75 @@ describe("Toolbar", () => {
     expect(dispatched).toBe(false);
     expect(event.defaultPrevented).toBe(true);
   });
+
+  it("renders select contribution and calls onChange", () => {
+    const onChange = vi.fn();
+
+    act(() => {
+      root.render(
+        <Toolbar
+          toolbarActions={[
+            {
+              id: "output-select",
+              type: "select",
+              title: "Output",
+              getOptions: () => [
+                { value: "table", label: "Table" },
+                { value: "text", label: "Text" }
+              ],
+              getValue: () => "table",
+              onChange
+            }
+          ]}
+          visibleZones={new Set(["mainArea"])}
+          onToggleZone={vi.fn()}
+          canExecuteCommand={() => true}
+          executeCommand={vi.fn(async () => ({ commandId: "noop", executed: true }))}
+          getCommandTitle={() => undefined}
+          getCommandAccelerator={() => undefined}
+        />
+      );
+    });
+
+    const select = rootElement.querySelector("select.shell-toolbar-select") as HTMLSelectElement;
+    expect(select).toBeTruthy();
+    expect(select.value).toBe("table");
+
+    act(() => {
+      select.value = "text";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    expect(onChange).toHaveBeenCalledWith("text");
+  });
+
+  it("hides select when isVisible returns false", () => {
+    act(() => {
+      root.render(
+        <Toolbar
+          toolbarActions={[
+            {
+              id: "hidden-select",
+              type: "select",
+              title: "Hidden",
+              getOptions: () => [{ value: "a", label: "A" }],
+              getValue: () => "a",
+              onChange: vi.fn(),
+              isVisible: () => false
+            }
+          ]}
+          visibleZones={new Set(["mainArea"])}
+          onToggleZone={vi.fn()}
+          canExecuteCommand={() => true}
+          executeCommand={vi.fn(async () => ({ commandId: "noop", executed: true }))}
+          getCommandTitle={() => undefined}
+          getCommandAccelerator={() => undefined}
+        />
+      );
+    });
+
+    expect(rootElement.querySelector("select.shell-toolbar-select")).toBeNull();
+  });
 });
 
 void React;

@@ -23,8 +23,15 @@ export type KeybindingServiceOptions = {
   getUserKeybindings: () => Promise<UserKeybindingsDocument>;
 };
 
-function shouldSkipForInput(when: string | undefined, contextInputFocus: boolean): boolean {
+function isFunctionKeybinding(key: string): boolean {
+  return /(^|\+)(F([1-9]|1[0-9]|2[0-4]))$/i.test(key);
+}
+
+function shouldSkipForInput(when: string | undefined, contextInputFocus: boolean, key: string): boolean {
   if (!contextInputFocus) {
+    return false;
+  }
+  if (isFunctionKeybinding(key)) {
     return false;
   }
   const expr = (when ?? "global").toLowerCase();
@@ -54,7 +61,7 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
         if (normalizeKeybindingKey(binding.key) !== normalized) {
           return false;
         }
-        if (shouldSkipForInput(binding.when, inputFocus)) {
+        if (shouldSkipForInput(binding.when, inputFocus, binding.key)) {
           return false;
         }
         return evaluateWhenExpression(binding.when, contextSnapshot);
@@ -68,7 +75,7 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
     void options.executeCommand(matched.commandId);
   };
 
-  document.addEventListener("keydown", onKeyDown);
+  document.addEventListener("keydown", onKeyDown, true);
 
   return {
     initialize: async (extensions) => {
@@ -85,7 +92,7 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
     },
     diagnostics: () => diagnostics,
     dispose: () => {
-      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keydown", onKeyDown, true);
       contextKeys.dispose();
     }
   };

@@ -35,7 +35,29 @@ export type LayoutToolbarSeparatorContribution = {
   when?: string;
 };
 
-export type LayoutToolbarContribution = LayoutToolbarActionContribution | LayoutToolbarSeparatorContribution;
+export type LayoutToolbarSelectOption = {
+  value: string;
+  label: string;
+};
+
+export type LayoutToolbarSelectContribution = {
+  id: string;
+  type: "select";
+  title?: string;
+  order?: number;
+  alignment?: "west" | "east";
+  when?: string;
+  getOptions: () => LayoutToolbarSelectOption[];
+  getValue: () => string;
+  onChange: (value: string) => void;
+  disabled?: boolean | (() => boolean);
+  isVisible?: () => boolean;
+};
+
+export type LayoutToolbarContribution =
+  | LayoutToolbarActionContribution
+  | LayoutToolbarSeparatorContribution
+  | LayoutToolbarSelectContribution;
 
 export type LayoutPanelAction = {
   id: string;

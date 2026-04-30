@@ -27,6 +27,9 @@ function escapeCsv(value: string): string {
 }
 
 function formatRowsPlain(context: OutputContext): string[] {
+  if (context.rowsTargetPrimaryId !== "core.queryengine.output.text") {
+    return [];
+  }
   const lines: string[] = [];
   for (const set of context.resultSets) {
     lines.push(`Result set ${set.resultSetIndex + 1}`);
@@ -39,7 +42,28 @@ function formatRowsPlain(context: OutputContext): string[] {
   return lines;
 }
 
+function formatRowSets(context: OutputContext, rowsFormatter: (context: OutputContext) => string[]): string[] {
+  const statusLines = getStatusLines(context);
+  if (context.state === "failed") {
+    return statusLines;
+  }
+  const rowLines = rowsFormatter(context);
+  if (context.state === "idle" && rowLines.length > 0) {
+    return rowLines;
+  }
+  if (statusLines.length === 0) {
+    return rowLines;
+  }
+  if (rowLines.length === 0) {
+    return statusLines;
+  }
+  return [...statusLines, "", ...rowLines];
+}
+
 function formatRowsJson(context: OutputContext): string[] {
+  if (context.rowsTargetPrimaryId !== "core.queryengine.output.text") {
+    return [];
+  }
   const sets = context.resultSets.map((set) => ({
     resultSetIndex: set.resultSetIndex,
     rows: set.rows.map((row) =>
@@ -50,6 +74,9 @@ function formatRowsJson(context: OutputContext): string[] {
 }
 
 function formatRowsCsv(context: OutputContext): string[] {
+  if (context.rowsTargetPrimaryId !== "core.queryengine.output.text") {
+    return [];
+  }
   const lines: string[] = [];
   for (const set of context.resultSets) {
     lines.push(`# Result set ${set.resultSetIndex + 1}`);
@@ -63,12 +90,19 @@ function formatRowsCsv(context: OutputContext): string[] {
 }
 
 function getStatusLines(context: OutputContext): string[] {
+  const lines: string[] = [];
   if (context.state === "failed" && context.error) {
-    return [`[${context.error.code}]`, context.error.message];
+    lines.push(`[${context.error.code}]`, context.error.message);
+    return lines;
   }
   if (context.state === "completed") {
-    if ((context.metrics?.rowCount ?? 0) > 0) {
-      return [];
+    const rows = context.metrics?.rowCount ?? context.fetchedRowCount;
+    if (rows > 0) {
+      lines.push(`Rows fetched: ${rows}`);
+      if (context.metrics?.durationMs !== undefined) {
+        lines.push(`Duration: ${context.metrics.durationMs}ms`);
+      }
+      return lines;
     }
     return [
       "No rows returned.",
@@ -76,9 +110,11 @@ function getStatusLines(context: OutputContext): string[] {
     ].filter(Boolean);
   }
   if (context.state === "cancelled") return ["Query cancelled."];
-  if (context.state === "idle") return ["Press F5 or click Run to execute a query."];
+  if (context.state === "idle") return [];
   if (context.state === "running") {
-    return [context.progress?.message ?? "Running query..."];
+    lines.push(context.progress?.message ?? "Running query...");
+    lines.push(`Rows fetched: ${context.fetchedRowCount}`);
+    return lines;
   }
   return [];
 }
@@ -87,32 +123,17 @@ export const TEXT_OUTPUT_FORMATTERS: TextOutputFormatter[] = [
   {
     id: "plain",
     label: "Plain",
-    format: (context) => {
-      if (context.state === "failed") {
-        return getStatusLines(context);
-      }
-      return context.resultSets.length > 0 ? formatRowsPlain(context) : getStatusLines(context);
-    }
+    format: (context) => formatRowSets(context, formatRowsPlain)
   },
   {
     id: "json",
     label: "JSON",
-    format: (context) => {
-      if (context.state === "failed") {
-        return getStatusLines(context);
-      }
-      return context.resultSets.length > 0 ? formatRowsJson(context) : getStatusLines(context);
-    }
+    format: (context) => formatRowSets(context, formatRowsJson)
   },
   {
     id: "csv",
     label: "CSV",
-    format: (context) => {
-      if (context.state === "failed") {
-        return getStatusLines(context);
-      }
-      return context.resultSets.length > 0 ? formatRowsCsv(context) : getStatusLines(context);
-    }
+    format: (context) => formatRowSets(context, formatRowsCsv)
   }
 ];
 
