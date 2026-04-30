@@ -45,7 +45,7 @@ export class DevBackendTransport extends StdioBackendTransportBase {
     }
 
     const args = [
-      "-q",
+      "-e",
       "-f",
       "queryeer-backend/backend-runner/pom.xml",
       "-Dexec.mainClass=com.queryeer.backend.runner.BackendRunnerApp",
