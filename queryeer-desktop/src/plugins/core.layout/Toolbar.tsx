@@ -17,14 +17,11 @@ type ToolbarProps = {
   getCommandAccelerator: (commandId: string) => string | undefined;
 };
 
-const zoneToggleByCommand: Record<string, "primarySidebar" | "secondarySidebar" | undefined> = {
+const zoneToggleByCommand: Record<string, LayoutZone | undefined> = {
   "core.layout.togglePrimarySidebar": "primarySidebar",
-  "core.layout.toggleSecondarySidebar": "secondarySidebar"
+  "core.layout.toggleSecondarySidebar": "secondarySidebar",
+  "core.layout.togglePanel": "panel"
 };
-
-function isSidebarZone(zone: LayoutZone): zone is "primarySidebar" | "secondarySidebar" {
-  return zone === "primarySidebar" || zone === "secondarySidebar";
-}
 
 export function Toolbar({
   toolbarActions,
@@ -115,7 +112,7 @@ export function Toolbar({
             return;
           }
           const zoneToggle = zoneToggleByCommand[action.commandId];
-          if (zoneToggle && isSidebarZone(zoneToggle)) {
+          if (zoneToggle) {
             onToggleZone(zoneToggle);
             return;
           }

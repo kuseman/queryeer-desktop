@@ -72,6 +72,7 @@ type AppShellApi = {
   getBackendStatus: () => Promise<BackendGatewayStatus>;
   toggleBackendTrace: (enabled: boolean) => Promise<void>;
   setLogFlow: (enabled: boolean) => Promise<void>;
+  clearBackendLogs: () => Promise<void>;
   getExternalFrontendPlugins: () => Promise<ExternalFrontendPluginManifest[]>;
   executeBackendQuery: (params: QueryExecuteParams) => Promise<QueryExecuteResult>;
   cancelBackendQuery: (params: QueryCancelParams) => Promise<QueryCancelResult>;
@@ -197,6 +198,9 @@ const appShellApi: AppShellApi = {
   },
   setLogFlow: async (enabled: boolean) => {
     return ipcRenderer.invoke("backend:set-log-flow", enabled);
+  },
+  clearBackendLogs: async () => {
+    return ipcRenderer.invoke("backend:clear-logs");
   },
   getExternalFrontendPlugins: async () => {
     return ipcRenderer.invoke("plugins:get-frontend-targets");

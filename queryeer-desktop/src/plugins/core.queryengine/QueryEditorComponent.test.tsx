@@ -2,6 +2,8 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileEntity } from "../../contracts/files/FileEntity";
+import type { ContentCategory } from "../../contracts/files/FilesRegistry";
+import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistryImpl";
 import { getQueryViewStateStore } from "./QueryViewStateStore";
 
@@ -137,8 +139,13 @@ describe("QueryEditorComponent execution state across tab switches", () => {
     getFileStateRegistry().evict("file-2");
     mocks.executeMock.mockResolvedValue("exec-1");
 
-    getQueryViewStateStore().initialize({
-      capabilities: {} as any,
+    const filesRegistry = {
+      capabilities: {
+        registerCapabilities: vi.fn(),
+        hasCapability: vi.fn(() => true),
+        registerContentCategory: vi.fn(),
+        getContentCategory: vi.fn(() => "text" as ContentCategory)
+      },
       openFile: vi.fn(),
       closeFile: vi.fn(),
       getFile: (fileId: string) => queryFilesById.get(fileId),
@@ -160,7 +167,9 @@ describe("QueryEditorComponent execution state across tab switches", () => {
       getEditorState: vi.fn(),
       setEditorState: vi.fn(),
       markDirty: vi.fn()
-    } as any);
+    } satisfies FilesRegistry;
+
+    getQueryViewStateStore().initialize(filesRegistry);
 
     rootElement = document.createElement("div");
     document.body.appendChild(rootElement);
@@ -340,10 +349,31 @@ describe("QueryEditorComponent execution state across tab switches", () => {
       await Promise.resolve();
     });
 
-    let output = rootElement.querySelector('[data-testid="mock-output"]');
+    const output = rootElement.querySelector('[data-testid="mock-output"]');
     expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.text");
 
     expect(getQueryViewStateStore().read("file-1").selectedOutputId).toBe("core.queryengine.output.table");
+  });
+
+  it("does not switch panel tab when toolbar output selection changes", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+
+    getQueryViewStateStore().setPanelSelectedOutput("file-1", "core.queryengine.output.table");
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} />);
+    });
+
+    let output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.table");
+
+    await act(async () => {
+      getQueryViewStateStore().setSelectedOutput("file-1", "core.queryengine.output.text");
+      await Promise.resolve();
+    });
+
+    output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.table");
   });
 
   it("keeps toolbar-selected text format when executing", async () => {
@@ -370,7 +400,7 @@ describe("QueryEditorComponent execution state across tab switches", () => {
     expect(output?.getAttribute("data-text-format")).toBe("json");
   });
 
-  it("keeps text output selected after execute when rows are returned", async () => {
+  it("uses toolbar-selected output when executing rows", async () => {
     const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
 
     await act(async () => {
@@ -378,6 +408,7 @@ describe("QueryEditorComponent execution state across tab switches", () => {
     });
 
     await act(async () => {
+      getQueryViewStateStore().setPanelSelectedOutput("file-1", "core.queryengine.output.table");
       getQueryViewStateStore().setSelectedOutput("file-1", "core.queryengine.output.text");
       await Promise.resolve();
     });

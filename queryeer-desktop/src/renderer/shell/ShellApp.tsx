@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useCallback, useRef, useState } from "react";
 import type { ExtensionSnapshot } from "../../core/plugin-runtime/ExtensionRegistry";
-import type { LayoutZone, LayoutEditorContribution } from "../../contracts/extensions/LayoutExtension";
+import type {
+  LayoutZone,
+  LayoutEditorContribution
+} from "../../contracts/extensions/LayoutExtension";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { FileMediator } from "../../contracts/files/FileMediator";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
@@ -17,6 +20,7 @@ import { confirmCloseDirtyFile } from "./close-file-guard";
 import { filterSidebarViews } from "./sidebar-view-filter";
 import { filterToolbarActions } from "./toolbar-action-filter";
 import { resolveFirstAcceleratorsByCommand } from "./accelerator-utils";
+import { subscribeOpenPanelRequests } from "./layout-panel-events";
 import "./shell-app.css";
 
 type ShellAppProps = {
@@ -58,6 +62,9 @@ export function ShellApp({
     if (extensions.layout.views.some((view) => view.defaultZone === "primarySidebar")) {
       set.add("primarySidebar");
     }
+    if (extensions.layout.panels.length > 0) {
+      set.add("panel");
+    }
     set.add("mainArea");
     set.add("statusBar");
     return set;
@@ -84,6 +91,8 @@ export function ShellApp({
       workspaceService.restoredLayout()?.sidebarPanelHeights ??
       {}
   );
+  const [panelHeight, setPanelHeight] = useState<number>(200);
+  const [activePanelTab, setActivePanelTab] = useState<string | null>(null);
   const [files, setFiles] = useState<FileEntity[]>(() => filesRegistry.listFiles());
   const [openFileIds, setOpenFileIds] = useState<string[]>(() =>
     filesRegistry.listFiles().map((file) => file.fileId)
@@ -95,10 +104,20 @@ export function ShellApp({
   const [, setCommandContextVersion] = useState(0);
   const layoutRef = useRef<HTMLElement | null>(null);
   const tabsRef = useRef<HTMLDivElement | null>(null);
+  const visibleZonesRef = useRef(visibleZones);
+  const activePanelTabRef = useRef(activePanelTab);
 
   useEffect(() => {
     activeFileIdRef.current = activeFileId;
   }, [activeFileId]);
+
+  useEffect(() => {
+    visibleZonesRef.current = visibleZones;
+  }, [visibleZones]);
+
+  useEffect(() => {
+    activePanelTabRef.current = activePanelTab;
+  }, [activePanelTab]);
 
   useEffect(() => {
     workspaceService.setActiveFileSnapshotProvider(() => activeFileIdRef.current);
@@ -240,6 +259,65 @@ export function ShellApp({
     () => [...extensions.layout.tabHeaderStyles],
     [extensions.layout.tabHeaderStyles]
   );
+
+  const panels = useMemo(
+    () => [...extensions.layout.panels].sort((a, b) => a.id.localeCompare(b.id)),
+    [extensions.layout.panels]
+  );
+
+  const panelTabs = useMemo(() => {
+    return panels
+      .flatMap((panel) => panel.tabs)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  }, [panels]);
+
+  useEffect(() => {
+    if (panels.length === 0) {
+      return;
+    }
+    const candidate = panels[0]?.defaultHeight ?? 200;
+    setPanelHeight(candidate);
+  }, [panels]);
+
+  useEffect(() => {
+    if (panelTabs.length === 0) {
+      setActivePanelTab(null);
+      return;
+    }
+    setActivePanelTab((previous) => {
+      if (previous && panelTabs.some((tab) => tab.id === previous)) {
+        return previous;
+      }
+      return panelTabs[0]?.id ?? null;
+    });
+  }, [panelTabs]);
+
+  useEffect(() => {
+    return subscribeOpenPanelRequests((request) => {
+      const isPanelVisible = visibleZonesRef.current.has("panel");
+      const isSameTab = request.tabId ? activePanelTabRef.current === request.tabId : false;
+      if (request.toggle && isPanelVisible && isSameTab) {
+        setVisibleZones((previous) => {
+          const next = new Set(previous);
+          next.delete("panel");
+          next.add("mainArea");
+          next.add("statusBar");
+          return next;
+        });
+        return;
+      }
+      setVisibleZones((previous) => {
+        const next = new Set(previous);
+        next.add("panel");
+        next.add("mainArea");
+        next.add("statusBar");
+        return next;
+      });
+      if (request.tabId) {
+        setActivePanelTab(request.tabId);
+      }
+    });
+  }, []);
 
   const handleTabContextMenuAction = useCallback(
     (actionId: string, _file: FileEntity) => {
@@ -481,6 +559,28 @@ export function ShellApp({
           />
         )}
       </main>
+
+      {visibleZones.has("panel") && panelTabs.length > 0 && (
+        <section className="shell-panel" style={{ height: panelHeight }}>
+          <div className="shell-panel-tabs">
+            {panelTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={`shell-panel-tab ${activePanelTab === tab.id ? "active" : ""}`}
+                onClick={() => setActivePanelTab(tab.id)}
+              >
+                {tab.title}
+              </button>
+            ))}
+          </div>
+          <div className="shell-panel-content">
+            {activePanelTab
+              ? panelTabs.find((tab) => tab.id === activePanelTab)?.render()
+              : panelTabs[0]?.render()}
+          </div>
+        </section>
+      )}
 
       {visibleZones.has("statusBar") && (
         <StatusBar

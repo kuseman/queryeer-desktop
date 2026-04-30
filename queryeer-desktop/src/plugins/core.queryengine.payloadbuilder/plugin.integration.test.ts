@@ -101,6 +101,7 @@ function createContext(): PluginContext {
       registerWelcome: vi.fn(),
       registerTabContextMenu: vi.fn(),
       registerTabHeaderStyle: vi.fn(),
+      registerPanel: vi.fn(),
       setShellDefaults: vi.fn()
     },
     menu: {

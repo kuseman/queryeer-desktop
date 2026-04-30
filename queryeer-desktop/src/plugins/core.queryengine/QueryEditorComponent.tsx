@@ -22,7 +22,6 @@ type ActiveExecution = {
 };
 
 const OUTPUT_CONTEXT_KEY = defineStateKey<OutputContext>("core.queryengine.outputContext");
-const SELECTED_PRIMARY_KEY = defineStateKey<string>("core.queryengine.selectedPrimary");
 
 export function QueryEditorComponent({ file }: Props): JSX.Element {
   const [outputContext, setOutputContext] = useState<OutputContext>(IDLE_OUTPUT_CONTEXT);
@@ -56,10 +55,8 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
     });
     const override = executionPrimaryOverrideByFileIdRef.current.get(fileId);
     setSelectedPrimaryId(
-      queryViewState.panelSelectedOutputId
-      ?? queryViewState.selectedOutputId
+      queryViewState.panelActiveOutputId
       ?? override
-      ?? reg.get(fileId, SELECTED_PRIMARY_KEY)
       ?? null
     );
   }, [file?.fileId]);
@@ -86,7 +83,11 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
     return getQueryViewStateStore().subscribe(fileId, (state) => {
       const override = executionPrimaryOverrideByFileIdRef.current.get(fileId);
       const validFormatIds = new Set<string>(TEXT_OUTPUT_FORMATTERS.map((formatter) => formatter.id));
-      setSelectedPrimaryId((previous) => state.panelSelectedOutputId ?? previous ?? override ?? null);
+      if (state.panelActiveOutputId !== undefined) {
+        setSelectedPrimaryId(state.panelActiveOutputId);
+      } else if (override !== undefined) {
+        setSelectedPrimaryId(override);
+      }
       setOutputContext((prev) => ({
         ...prev,
         textOutputFormat: state.textOutputFormat && validFormatIds.has(state.textOutputFormat)
@@ -117,11 +118,9 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
     }
     if (fileIdRef.current === targetFileId) {
       const persisted =
-        getQueryViewStateStore().read(targetFileId).panelSelectedOutputId
-        ?? getQueryViewStateStore().read(targetFileId).selectedOutputId
+        getQueryViewStateStore().read(targetFileId).panelActiveOutputId
         ?? null;
-      const manual = getFileStateRegistry().get(targetFileId, SELECTED_PRIMARY_KEY) ?? null;
-      setSelectedPrimaryId(outputId ?? persisted ?? manual);
+      setSelectedPrimaryId(outputId ?? persisted);
     }
   }, []);
 
@@ -144,13 +143,14 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
       const text = editor.getSelectedText() ?? editor.getContent();
       if (!text.trim()) return;
 
-      const selectedFromToolbar = getQueryViewStateStore().read(targetFileId).selectedOutputId;
-      const selectedFromRuntime = getFileStateRegistry().get(targetFileId, SELECTED_PRIMARY_KEY) ?? null;
-      const outputRegistry = getOutputRegistry();
-      const selectedFromRegistry = outputRegistry.getSelectedPrimaryId();
-      const fallbackPrimaryId = outputRegistry.getSelectablePrimaryContributors()[0]?.id ?? null;
-      const targetPrimaryId = selectedFromToolbar ?? selectedFromRuntime ?? selectedFromRegistry ?? fallbackPrimaryId;
+      const panelState = getQueryViewStateStore().read(targetFileId);
+      const selectedFromToolbar = panelState.executionTargetOutputId;
+      const fallbackPrimaryId = TEXT_OUTPUT_PRIMARY_ID;
+      const targetPrimaryId = selectedFromToolbar
+        ?? panelState.panelActiveOutputId
+        ?? fallbackPrimaryId;
 
+      getQueryViewStateStore().setPanelSelectedOutput(targetFileId, targetPrimaryId);
       setExecutionPrimaryOverride(targetFileId, targetPrimaryId ?? null);
 
       const persistedFormat = getQueryViewStateStore().read(targetFileId).textOutputFormat;
@@ -244,12 +244,7 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
               executionStartedAtMs: null
             }));
 
-            const ctxAfterComplete = getFileStateRegistry().get(targetFileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT;
-            const hasRows = ctxAfterComplete.resultSets.some((rs) => rs.rows.length > 0);
-            setExecutionPrimaryOverride(
-              targetFileId,
-              hasRows ? (ctxAfterComplete.rowsTargetPrimaryId ?? null) : TEXT_OUTPUT_PRIMARY_ID
-            );
+            setExecutionPrimaryOverride(targetFileId, null);
 
             // Finalize any open export streams and patch exportPath back into the result set
             const ctx = getFileStateRegistry().get(targetFileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT;
@@ -277,7 +272,8 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
               progress: null,
               executionStartedAtMs: null
             }));
-            setExecutionPrimaryOverride(targetFileId, TEXT_OUTPUT_PRIMARY_ID);
+            getQueryViewStateStore().setPanelSelectedOutput(targetFileId, TEXT_OUTPUT_PRIMARY_ID);
+            setExecutionPrimaryOverride(targetFileId, null);
           }
         });
 
@@ -293,7 +289,8 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
           },
           executionStartedAtMs: null
         }));
-        setExecutionPrimaryOverride(targetFileId, TEXT_OUTPUT_PRIMARY_ID);
+        getQueryViewStateStore().setPanelSelectedOutput(targetFileId, TEXT_OUTPUT_PRIMARY_ID);
+        setExecutionPrimaryOverride(targetFileId, null);
       }
     };
 
@@ -318,6 +315,7 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
       progress: null,
       executionStartedAtMs: null
     }));
+    setExecutionPrimaryOverride(targetFileId, null);
   }, [file?.fileId, updateOutputContextForFile]);
 
   useEffect(() => {
@@ -385,11 +383,9 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
               const fileId = file?.fileId;
               if (fileId) {
                 executionPrimaryOverrideByFileIdRef.current.delete(fileId);
-                getFileStateRegistry().set(fileId, SELECTED_PRIMARY_KEY, id);
                 getQueryViewStateStore().setPanelSelectedOutput(fileId, id);
               }
               setSelectedPrimaryId(id);
-              getOutputRegistry().setSelectedPrimary(id);
             }}
             onExportOpen={(path) => void window.appShell.openPath(path)}
           />

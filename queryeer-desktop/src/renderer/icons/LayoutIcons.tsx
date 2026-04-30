@@ -40,6 +40,24 @@ export function SecondarySidebarIcon({ className }: IconProps): JSX.Element {
   );
 }
 
+export function PanelIcon({ className }: IconProps): JSX.Element {
+  return (
+    <svg className={className} viewBox="0 0 16 16" aria-hidden="true">
+      <rect
+        x="1.5"
+        y="3"
+        width="13"
+        height="10"
+        rx="1.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1"
+      />
+      <line x1="3" y1="7" x2="13" y2="7" stroke="currentColor" strokeWidth="1" />
+    </svg>
+  );
+}
+
 export function GenericActionIcon({ className }: IconProps): JSX.Element {
   return (
     <svg className={className} viewBox="0 0 16 16" aria-hidden="true">
@@ -100,6 +118,7 @@ export function FileSaveIcon({ className }: IconProps): JSX.Element {
 export const layoutToolbarIconMap: Record<string, (props: IconProps) => JSX.Element> = {
   "sidebar-primary": PrimarySidebarIcon,
   "sidebar-secondary": SecondarySidebarIcon,
+  panel: PanelIcon,
   "file-open": FileOpenIcon,
   "file-new": FileNewIcon,
   "file-save": FileSaveIcon

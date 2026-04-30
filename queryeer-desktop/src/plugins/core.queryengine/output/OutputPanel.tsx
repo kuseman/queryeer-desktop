@@ -40,6 +40,7 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
   );
   const primaryHostRef = useRef<HTMLDivElement | null>(null);
   const pendingFocusPrimaryIdRef = useRef<string | null>(null);
+  const lastSelectedPrimaryIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const registry = getOutputRegistry();
@@ -49,8 +50,15 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
     });
   }, []);
 
-  const primaryContributor = resolvePrimary(contributors, context.features, selectedPrimaryId);
+  const effectiveSelectedPrimaryId = selectedPrimaryId ?? lastSelectedPrimaryIdRef.current;
+  const primaryContributor = resolvePrimary(contributors, context.features, effectiveSelectedPrimaryId);
   const primaries = eligiblePrimaries(contributors, context.features);
+
+  useEffect(() => {
+    if (primaryContributor?.id) {
+      lastSelectedPrimaryIdRef.current = primaryContributor.id;
+    }
+  }, [primaryContributor?.id]);
 
   const contextForPrimary = (contributor: OutputContributor): OutputContext => {
     const rowsTargetPrimaryId = context.rowsTargetPrimaryId ?? primaryContributor?.id ?? null;
@@ -65,10 +73,6 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
   };
 
   useEffect(() => {
-    getOutputRegistry().setSelectedPrimary(primaryContributor?.id ?? null);
-  }, [primaryContributor?.id]);
-
-  useEffect(() => {
     if (!primaryContributor?.id) return;
     if (pendingFocusPrimaryIdRef.current !== primaryContributor.id) return;
     pendingFocusPrimaryIdRef.current = null;
@@ -81,6 +85,7 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
 
   useEffect(() => {
     pendingFocusPrimaryIdRef.current = null;
+    lastSelectedPrimaryIdRef.current = null;
   }, [context.fileId]);
 
   const adhocContributors =

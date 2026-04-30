@@ -15,7 +15,7 @@ export const coreObservabilityPlugin: Plugin = {
     name: "Core Observability",
     version: "0.1.0",
     kind: "core",
-    description: "System observability: runtime diagnostics, plugin status, backend status, and logs"
+    description: "System observability: runtime diagnostics, plugin status, and backend status"
   },
   activate: (context) => {
     context.layout.registerEditor({
@@ -124,20 +124,8 @@ type ObservabilityEditorProps = {
 
 function ObservabilityEditor({ listFiles }: ObservabilityEditorProps) {
   const [backendStatus, setBackendStatus] = useState<BackendGatewayStatus | null>(null);
-  const [logFlowEnabled, setLogFlowEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
-    window.appShell.isDev().then(async (isDev) => {
-      const initialFlow = isDev;
-      await window.appShell.setLogFlow(initialFlow);
-      setLogFlowEnabled(initialFlow);
-    });
-  }, []);
-
-  useEffect(() => {
-    if (logFlowEnabled === null || !logFlowEnabled) {
-      return;
-    }
     let active = true;
     const refresh = async () => {
       const s = await window.appShell.getBackendStatus();
@@ -153,7 +141,7 @@ function ObservabilityEditor({ listFiles }: ObservabilityEditorProps) {
       active = false;
       window.clearInterval(interval);
     };
-  }, [logFlowEnabled]);
+  }, []);
 
   const runtime = getRuntimeData();
   if (!runtime) {
@@ -190,6 +178,14 @@ function ObservabilityEditor({ listFiles }: ObservabilityEditorProps) {
         <div>
           <span className="label">Backend state</span>
           <span className="value">{backendStatus?.state ?? "loading"}</span>
+        </div>
+        <div>
+          <span className="label">JVM debug port</span>
+          <span className="value">
+            {backendStatus?.mode === "dev-maven"
+              ? (backendStatus.javaDebugPort ?? "not detected")
+              : "n/a"}
+          </span>
         </div>
       </section>
 
@@ -381,124 +377,37 @@ function ObservabilityEditor({ listFiles }: ObservabilityEditorProps) {
               </span>
             </div>
 
-            {backendStatus?.mode === "dev-maven" && (
-              <div style={{ marginTop: "8px" }}>
-                <span className="label" style={{ marginRight: "8px" }}>
-                  Java debug port
-                </span>
-                <span className="value">{backendStatus.javaDebugPort ?? "not detected"}</span>
-              </div>
-            )}
-
-            <div style={{ marginTop: "8px", marginBottom: "12px" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={backendStatus?.tracePayloads ?? false}
-                  onChange={async (e) => {
-                    await window.appShell.toggleBackendTrace(e.target.checked);
-                    const s = await window.appShell.getBackendStatus();
-                    setBackendStatus(s);
-                  }}
-                />
-                <span>Trace payloads (log full message content)</span>
-              </label>
-            </div>
-
-            <h3>Capabilities</h3>
-            <ul>
-              {(backendStatus?.supportedCapabilities ?? []).map((capability) => (
-                <li key={capability}>{capability}</li>
-              ))}
-            </ul>
-
-            <h3>Runtime plugin status</h3>
-            <div className="manifest-grid-head">
-              <span>Plugin</span>
-              <span>State</span>
-              <span>Reason</span>
-              <span>Runtime started</span>
-              <span>Activated IDs</span>
-            </div>
-            {(backendStatus?.runtimeStatus?.pluginStatuses ?? []).map((pluginStatus, index) => (
-              <div className="manifest-grid-row" key={`${pluginStatus.pluginId}-${index}`}>
-                <span>{pluginStatus.pluginId}</span>
-                <span>{pluginStatus.state}</span>
-                <span>{pluginStatus.reason ?? "-"}</span>
-                <span>{index === 0 ? backendStatus?.runtimeStatus?.startedAt ?? "-" : ""}</span>
-                <span>
-                  {index === 0
-                    ? (backendStatus?.runtimeStatus?.activatedPluginIds ?? []).join(", ") || "-"
-                    : ""}
-                </span>
-              </div>
-            ))}
-
-            <CollapsibleSection title="Recent executions" defaultCollapsed={true}>
-              <div className="recent-executions-list">
-                <div className="manifest-grid-head recent-executions-grid-head">
-                  <span>Execution</span>
-                  <span>Engine</span>
-                  <span>State</span>
-                  <span>Progress</span>
-                  <span>Chunks/Rows</span>
-                  <span>Error</span>
-                </div>
-                {(backendStatus?.recentExecutions ?? []).slice().reverse().map((execution) => (
-                  <div className="manifest-grid-row recent-executions-grid-row" key={execution.queryExecutionId}>
-                    <span>{execution.queryExecutionId}</span>
-                    <span>{execution.engineId ?? "-"}</span>
-                    <span>{execution.state}</span>
-                    <span>
-                      {execution.progressPercent !== undefined
-                        ? `${execution.progressPercent}% ${execution.progressMessage ?? ""}`
-                        : "-"}
-                    </span>
-                    <span>{`${execution.chunks}/${execution.rows}`}</span>
-                    <span>{execution.error ?? "-"}</span>
-                  </div>
+            <CollapsibleSection title="Capabilities" defaultCollapsed={true}>
+              <ul>
+                {(backendStatus?.supportedCapabilities ?? []).map((capability) => (
+                  <li key={capability}>{capability}</li>
                 ))}
-              </div>
+              </ul>
             </CollapsibleSection>
 
-            <h3>Error</h3>
-            <p>{backendStatus?.error ?? "none"}</p>
+            <CollapsibleSection title="Runtime plugin status" defaultCollapsed={true}>
+              <div className="manifest-grid-head">
+                <span>Plugin</span>
+                <span>State</span>
+                <span>Reason</span>
+                <span>Runtime started</span>
+                <span>Activated IDs</span>
+              </div>
+              {(backendStatus?.runtimeStatus?.pluginStatuses ?? []).map((pluginStatus, index) => (
+                <div className="manifest-grid-row" key={`${pluginStatus.pluginId}-${index}`}>
+                  <span>{pluginStatus.pluginId}</span>
+                  <span>{pluginStatus.state}</span>
+                  <span>{pluginStatus.reason ?? "-"}</span>
+                  <span>{index === 0 ? backendStatus?.runtimeStatus?.startedAt ?? "-" : ""}</span>
+                  <span>
+                    {index === 0
+                      ? (backendStatus?.runtimeStatus?.activatedPluginIds ?? []).join(", ") || "-"
+                      : ""}
+                  </span>
+                </div>
+              ))}
+            </CollapsibleSection>
 
-            <h3>Backend log panel</h3>
-            <div style={{ marginBottom: "8px" }}>
-              <button
-                className="backend-log-toggle"
-                disabled={logFlowEnabled === null}
-                onClick={async () => {
-                  const newValue = !logFlowEnabled;
-                  await window.appShell.setLogFlow(newValue);
-                  setLogFlowEnabled(newValue);
-                }}
-              >
-                {logFlowEnabled ? "⏸ Pause" : "▶ Resume"}
-              </button>
-            </div>
-            <div className="backend-log-panel">
-              {(backendStatus?.backendLogs ?? []).length === 0 ? (
-                <p className="backend-log-empty">No backend logs yet.</p>
-              ) : (
-                <ul className="backend-log-list">
-                  {(backendStatus?.backendLogs ?? []).slice().reverse().map((entry, index) => (
-                    <li
-                      key={`${entry.timestamp}-${index}`}
-                      className={`backend-log-${entry.level}`}
-                    >
-                      <span className="backend-log-time">
-                        {new Date(entry.timestamp).toLocaleTimeString()}
-                      </span>
-                      <span className="backend-log-level">{entry.level}</span>
-                      <span className="backend-log-source">{entry.source}</span>
-                      <span className="backend-log-message">{entry.message}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
           </article>
         </CollapsibleSection>
       </section>
