@@ -2,7 +2,7 @@ package com.queryeer.backend.transport.stdio;
 
 import com.queryeer.backend.contract.BackendEnvelope;
 
-public interface NotificationHandler
+interface NotificationHandler
 {
     String method();
 

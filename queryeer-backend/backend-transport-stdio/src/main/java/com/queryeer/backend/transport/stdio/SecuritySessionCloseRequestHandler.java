@@ -5,7 +5,7 @@ import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.security.SecuritySessionCloseResult;
 
-public final class SecuritySessionCloseRequestHandler implements RequestHandler
+final class SecuritySessionCloseRequestHandler implements RequestHandler
 {
     private final ResponseWriter responseWriter;
     private final SecuritySessionBridge securityBridge;

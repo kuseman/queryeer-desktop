@@ -7,7 +7,7 @@ import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.engine.EngineInvokeParams;
 import com.queryeer.backend.contract.engine.EngineInvokeResult;
 
-public final class EngineInvokeRequestHandler implements RequestHandler
+final class EngineInvokeRequestHandler implements RequestHandler
 {
     private final ResponseWriter responseWriter;
     private final EnvelopeCodec codec;

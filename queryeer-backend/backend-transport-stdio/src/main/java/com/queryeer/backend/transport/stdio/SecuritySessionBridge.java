@@ -3,7 +3,7 @@ package com.queryeer.backend.transport.stdio;
 import java.util.Arrays;
 import java.util.Base64;
 
-public final class SecuritySessionBridge
+final class SecuritySessionBridge
 {
     private volatile String sessionId;
     private volatile String vaultPath;

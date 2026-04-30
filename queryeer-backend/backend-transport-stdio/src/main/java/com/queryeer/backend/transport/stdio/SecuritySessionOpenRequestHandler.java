@@ -6,7 +6,7 @@ import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.security.SecuritySessionOpenParams;
 import com.queryeer.backend.contract.security.SecuritySessionOpenResult;
 
-public final class SecuritySessionOpenRequestHandler implements RequestHandler
+final class SecuritySessionOpenRequestHandler implements RequestHandler
 {
     private final ResponseWriter responseWriter;
     private final EnvelopeCodec codec;

@@ -10,7 +10,7 @@ import com.queryeer.backend.contract.BackendErrorCode;
 import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
 
-public final class RequestDispatcher
+final class RequestDispatcher
 {
     private final ResponseWriter responseWriter;
     private final Map<String, RequestHandler> handlersByMethod;

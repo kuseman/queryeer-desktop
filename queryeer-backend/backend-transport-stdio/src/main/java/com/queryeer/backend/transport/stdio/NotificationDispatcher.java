@@ -7,7 +7,7 @@ import java.util.Map;
 import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.EnvelopeType;
 
-public final class NotificationDispatcher
+final class NotificationDispatcher
 {
     private final Map<String, NotificationHandler> handlersByMethod;
 

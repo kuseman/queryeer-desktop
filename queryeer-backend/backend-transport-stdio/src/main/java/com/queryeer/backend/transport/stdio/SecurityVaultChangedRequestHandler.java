@@ -6,7 +6,7 @@ import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.security.SecurityVaultChangedParams;
 import com.queryeer.backend.contract.security.SecurityVaultChangedResult;
 
-public final class SecurityVaultChangedRequestHandler implements RequestHandler
+final class SecurityVaultChangedRequestHandler implements RequestHandler
 {
     private final ResponseWriter responseWriter;
     private final EnvelopeCodec codec;

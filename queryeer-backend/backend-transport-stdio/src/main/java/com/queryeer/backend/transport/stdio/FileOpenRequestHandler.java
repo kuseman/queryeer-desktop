@@ -14,7 +14,7 @@ import com.queryeer.backend.contract.file.FileEngineBindingParams;
 import com.queryeer.backend.contract.file.FileOpenParams;
 import com.queryeer.backend.contract.file.FileOpenResult;
 
-public final class FileOpenRequestHandler implements RequestHandler
+final class FileOpenRequestHandler implements RequestHandler
 {
     private final ResponseWriter responseWriter;
     private final EnvelopeCodec codec;

@@ -21,7 +21,7 @@ import com.queryeer.backend.contract.query.QueryMetrics;
 import com.queryeer.backend.contract.query.QueryProgressNotification;
 import com.queryeer.backend.contract.query.ResultSchema;
 
-public final class MockQueryExecutionService
+final class MockQueryExecutionService
 {
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
     private final Set<String> cancelledExecutionIds = ConcurrentHashMap.newKeySet();

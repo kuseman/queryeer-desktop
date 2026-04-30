@@ -24,7 +24,7 @@ import com.queryeer.backend.contract.query.QueryMetrics;
 import com.queryeer.backend.contract.query.QueryProgressNotification;
 import com.queryeer.backend.contract.query.ResultSchema;
 
-public final class QueryExecutionService
+final class QueryExecutionService
 {
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private final Map<String, QueryEngineProvider> activeExecutions = new ConcurrentHashMap<>();

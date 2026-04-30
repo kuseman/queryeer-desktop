@@ -4,21 +4,23 @@ import java.net.URLClassLoader;
 import java.nio.file.Path;
 import java.util.Optional;
 
-import com.queryeer.backend.api.BackendPlugin;
+import com.queryeer.backend.api.PluginHostServices;
 
 final class ManifestBackendPluginResolver implements BackendPluginResolver
 {
     private final PluginClasspathFactory classpathFactory;
     private final PluginFactory pluginFactory;
+    private final PluginHostServices hostServices;
 
-    ManifestBackendPluginResolver(PluginClasspathFactory classpathFactory, PluginFactory pluginFactory)
+    ManifestBackendPluginResolver(PluginClasspathFactory classpathFactory, PluginFactory pluginFactory, PluginHostServices hostServices)
     {
         this.classpathFactory = classpathFactory;
         this.pluginFactory = pluginFactory;
+        this.hostServices = hostServices;
     }
 
     @Override
-    public Optional<BackendPlugin> resolve(PluginManifest manifest, Path source)
+    public Optional<DiscoveredPlugin> resolve(PluginManifest manifest, Path source)
     {
         if (manifest.backend() == null)
         {
@@ -26,7 +28,6 @@ final class ManifestBackendPluginResolver implements BackendPluginResolver
         }
 
         URLClassLoader classLoader = classpathFactory.createClassLoader(source, BackendRunnerApp.class.getClassLoader());
-        BackendPlugin plugin = pluginFactory.instantiate(manifest, classLoader, source);
-        return Optional.of(new PluginManifestBackedPlugin(manifest, plugin));
+        return Optional.of(new DiscoveredPlugin(manifest, new PluginManifestBackedPlugin(manifest, pluginFactory.instantiate(manifest, classLoader, source, hostServices)), source, true, classLoader));
     }
 }

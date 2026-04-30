@@ -5,7 +5,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.function.Consumer;
 
-public final class FramedReader
+final class FramedReader
 {
     private final InputStream input;
     private final Consumer<String> consoleSink;

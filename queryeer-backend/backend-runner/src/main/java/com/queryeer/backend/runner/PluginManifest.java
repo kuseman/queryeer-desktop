@@ -24,7 +24,7 @@ record PluginManifest(int schemaVersion, String id, String name, String version,
                 : requiredCapabilities;
     }
 
-    record BackendTarget(String entrypointClass, Classpath classpath, String minJavaVersion)
+    record BackendTarget(String entrypointClass, String factoryClass, Classpath classpath, String minJavaVersion)
     {
     }
 

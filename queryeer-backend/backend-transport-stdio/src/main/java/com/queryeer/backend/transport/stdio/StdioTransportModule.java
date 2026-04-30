@@ -1,0 +1,63 @@
+package com.queryeer.backend.transport.stdio;
+
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.List;
+import java.util.function.Supplier;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.queryeer.backend.api.FileRegistry;
+import com.queryeer.backend.api.QueryEngineRegistry;
+import com.queryeer.backend.contract.runtime.RuntimeStatusResult;
+
+public final class StdioTransportModule
+{
+    public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry,
+            Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt)
+    {
+        EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
+        ResponseWriter responseWriter = new ResponseWriter(output, codec);
+        NotificationPublisher notificationPublisher = new NotificationPublisher(responseWriter);
+        SecuritySessionBridge securitySessionBridge = new SecuritySessionBridge();
+        SecretRefPayloadResolver secretResolver = new SecretRefPayloadResolver(securitySessionBridge, codec.objectMapper());
+        QueryExecutionService queryExecutionService = new QueryExecutionService(queryEngines, notificationPublisher, secretResolver);
+        EngineInvokeService engineInvokeService = new EngineInvokeService(queryEngines, secretResolver);
+
+        List<RequestHandler> handlers = List.of(new HandshakeRequestHandler(responseWriter), new RuntimeStatusRequestHandler(responseWriter, codec, runtimeStatusSupplier),
+                new SecuritySessionOpenRequestHandler(responseWriter, codec, securitySessionBridge), new SecuritySessionCloseRequestHandler(responseWriter, securitySessionBridge),
+                new SecurityVaultChangedRequestHandler(responseWriter, codec, securitySessionBridge), new HealthPingRequestHandler(startedAt, responseWriter, codec),
+                new QueryExecuteRequestHandler(responseWriter, codec, queryExecutionService), new QueryCancelRequestHandler(responseWriter, codec, queryExecutionService),
+                new EngineInvokeRequestHandler(responseWriter, codec, engineInvokeService), new ConnectionUpsertRequestHandler(responseWriter, codec),
+                new FileOpenRequestHandler(responseWriter, codec, fileRegistry), new FileCloseRequestHandler(responseWriter, codec, fileRegistry),
+                new FileBindRequestHandler(responseWriter, codec, fileRegistry));
+
+        RequestDispatcher requestDispatcher = new RequestDispatcher(responseWriter, handlers);
+
+        List<NotificationHandler> notificationHandlers = List.of(new FileChangeNotificationHandler(codec, fileRegistry));
+        NotificationDispatcher notificationDispatcher = new NotificationDispatcher(notificationHandlers);
+
+        StdioTransportServer transportServer = new StdioTransportServer(input, codec, responseWriter, requestDispatcher, notificationDispatcher);
+        responseWriter.onBrokenPipe(transportServer::stop);
+        return new RunningTransport(transportServer);
+    }
+
+    public static final class RunningTransport
+    {
+        private final StdioTransportServer transportServer;
+
+        RunningTransport(StdioTransportServer transportServer)
+        {
+            this.transportServer = transportServer;
+        }
+
+        public void start() throws java.io.IOException
+        {
+            transportServer.start();
+        }
+
+        public boolean isStopped()
+        {
+            return transportServer.isStopped();
+        }
+    }
+}

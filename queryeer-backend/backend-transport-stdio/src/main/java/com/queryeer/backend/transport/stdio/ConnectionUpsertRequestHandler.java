@@ -6,7 +6,7 @@ import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.connection.ConnectionUpsertParams;
 import com.queryeer.backend.contract.connection.ConnectionUpsertResult;
 
-public final class ConnectionUpsertRequestHandler implements RequestHandler
+final class ConnectionUpsertRequestHandler implements RequestHandler
 {
     private final ResponseWriter responseWriter;
     private final EnvelopeCodec codec;

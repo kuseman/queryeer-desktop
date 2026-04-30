@@ -4,7 +4,7 @@ import com.queryeer.backend.api.FileRegistry;
 import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.file.FileChangeNotification;
 
-public final class FileChangeNotificationHandler implements NotificationHandler
+final class FileChangeNotificationHandler implements NotificationHandler
 {
     private final EnvelopeCodec codec;
     private final FileRegistry fileRegistry;

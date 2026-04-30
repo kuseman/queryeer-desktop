@@ -8,7 +8,7 @@ import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.health.PingParams;
 import com.queryeer.backend.contract.health.PingResult;
 
-public final class HealthPingRequestHandler implements RequestHandler
+final class HealthPingRequestHandler implements RequestHandler
 {
     private final long startedAt;
     private final ResponseWriter responseWriter;

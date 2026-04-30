@@ -8,7 +8,7 @@ import java.util.Objects;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.queryeer.backend.contract.BackendEnvelope;
 
-public final class ResponseWriter
+final class ResponseWriter
 {
     private final OutputStream output;
     private final EnvelopeCodec codec;

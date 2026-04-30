@@ -32,9 +32,11 @@ final class PluginManifestValidation
 
         if (manifest.backend() != null
                 && isBlank(manifest.backend()
-                        .entrypointClass()))
+                        .entrypointClass())
+                && isBlank(manifest.backend()
+                        .factoryClass()))
         {
-            throw new PluginDiscoveryException("Backend entrypointClass is required for plugin " + manifest.id() + " in " + sourceDescription);
+            throw new PluginDiscoveryException("Backend entrypointClass or factoryClass is required for plugin " + manifest.id() + " in " + sourceDescription);
         }
 
         if (manifest.frontend() != null

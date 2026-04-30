@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.queryeer.backend.core.BackendPlatformServices;
 
 class PluginManifestDiscoveryTest
 {
@@ -101,7 +102,7 @@ class PluginManifestDiscoveryTest
         Files.writeString(pluginFolderA.resolve("plugin.json"), duplicateManifestA, StandardCharsets.UTF_8);
         Files.writeString(pluginFolderB.resolve("plugin.json"), duplicateManifestB, StandardCharsets.UTF_8);
 
-        PluginDiscoveryService service = new PluginDiscoveryService(new ObjectMapper());
+        PluginDiscoveryService service = new PluginDiscoveryService(new ObjectMapper(), BackendPlatformServices.defaultServices());
         PluginDiscoveryException error = Assertions.assertThrows(PluginDiscoveryException.class, () -> service.discoverFromPath(pluginsDir.toString()));
 
         Assertions.assertTrue(error.getMessage()
