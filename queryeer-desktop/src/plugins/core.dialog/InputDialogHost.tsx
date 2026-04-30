@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import * as React from "react";
 import {
   getActiveInputDialogRequest,
   resolveActiveInputDialog,
@@ -7,10 +7,12 @@ import {
 import "./input-dialog.css";
 
 export function InputDialogHost(): JSX.Element | null {
-  const [version, setVersion] = useState(0);
-  const [value, setValue] = useState("");
+  const [version, setVersion] = React.useState(0);
+  const [value, setValue] = React.useState("");
+  const previousFocusedElementRef = React.useRef<HTMLElement | null>(null);
+  const hadActiveRequestRef = React.useRef(false);
 
-  useEffect(() => {
+  React.useEffect(() => {
     return subscribeInputDialog(() => {
       setVersion((previous) => previous + 1);
     });
@@ -18,7 +20,24 @@ export function InputDialogHost(): JSX.Element | null {
 
   const request = getActiveInputDialogRequest();
 
-  useEffect(() => {
+  if (request && !hadActiveRequestRef.current) {
+    const active = document.activeElement;
+    previousFocusedElementRef.current = active instanceof HTMLElement ? active : null;
+    hadActiveRequestRef.current = true;
+  }
+
+  React.useEffect(() => {
+    if (!request && hadActiveRequestRef.current) {
+      hadActiveRequestRef.current = false;
+      const previous = previousFocusedElementRef.current;
+      previousFocusedElementRef.current = null;
+      if (previous && previous.isConnected) {
+        previous.focus();
+      }
+    }
+  }, [request]);
+
+  React.useEffect(() => {
     if (!request) {
       setValue("");
       return;
@@ -46,9 +65,13 @@ export function InputDialogHost(): JSX.Element | null {
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
+              event.preventDefault();
+              event.stopPropagation();
               resolveActiveInputDialog({ canceled: false, value });
             }
             if (event.key === "Escape") {
+              event.preventDefault();
+              event.stopPropagation();
               resolveActiveInputDialog({ canceled: true, value: undefined });
             }
           }}
