@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -39,10 +40,20 @@ public final class BackendRunnerModule
         PluginDiscoveryService discoveryService = new PluginDiscoveryService(objectMapper, services);
 
         PluginRuntime runtime = new PluginRuntime();
-        List<DiscoveredPlugin> discoveredPlugins = discoverPlugins(discoveryService, services);
-        for (DiscoveredPlugin discovered : discoveredPlugins)
+        List<DiscoveredPlugin> discoveredPlugins;
+        try
         {
-            runtime.register(discovered.plugin());
+            discoveredPlugins = discoverPlugins(discoveryService, services);
+            for (DiscoveredPlugin discovered : discoveredPlugins)
+            {
+                runtime.register(discovered.plugin());
+            }
+        }
+        catch (Exception e)
+        {
+            services.logger()
+                    .error(withCorrelation("Failed to discover/register backend plugins", null), e);
+            throw e;
         }
 
         try
@@ -96,14 +107,65 @@ public final class BackendRunnerModule
 
     private List<DiscoveredPlugin> discoverPlugins(PluginDiscoveryService discoveryService, BackendPlatformServices services)
     {
+        PluginDiscoveryMode mode = resolveDiscoveryMode();
         Optional<String> explicitPath = resolvePluginPath();
-        if (explicitPath.isPresent())
+        services.logger()
+                .info(withCorrelation("Plugin discovery mode resolved to " + mode + " (pluginPathPresent=" + explicitPath.isPresent() + ")", null));
+
+        if (mode == PluginDiscoveryMode.AUTO)
         {
-            PluginDiscoveryService.DiscoveryResult discovered = discoveryService.discoverFromPath(explicitPath.get());
-            return discovered.backendPlugins();
+            if (explicitPath.isPresent())
+            {
+                return discoveryService.discoverFromPath(explicitPath.get())
+                        .backendPlugins();
+            }
+            return new BuiltinPluginDiscovery(new PluginFactory(), services).discover();
         }
 
-        return new BuiltinPluginDiscovery(new PluginFactory(), services).discover();
+        if (mode == PluginDiscoveryMode.BUILTIN)
+        {
+            return new BuiltinPluginDiscovery(new PluginFactory(), services).discover();
+        }
+
+        if (mode == PluginDiscoveryMode.EXTERNAL)
+        {
+            String path = explicitPath.orElseThrow(() -> new PluginDiscoveryException("Plugin discovery mode external requires queryeer.plugins.path or QUERYEER_PLUGINS_PATH"));
+            return discoveryService.discoverFromPath(path)
+                    .backendPlugins();
+        }
+
+        String path = explicitPath.orElseThrow(() -> new PluginDiscoveryException("Plugin discovery mode mixed requires queryeer.plugins.path or QUERYEER_PLUGINS_PATH"));
+        List<DiscoveredPlugin> builtin = new BuiltinPluginDiscovery(new PluginFactory(), services).discover();
+        List<DiscoveredPlugin> external = discoveryService.discoverFromPath(path)
+                .backendPlugins();
+        return mergeDiscoveredPlugins(builtin, external);
+    }
+
+    static List<DiscoveredPlugin> mergeDiscoveredPlugins(List<DiscoveredPlugin> primary, List<DiscoveredPlugin> secondary)
+    {
+        List<DiscoveredPlugin> merged = new ArrayList<>(primary);
+        Set<String> seen = new HashSet<>();
+        for (DiscoveredPlugin plugin : primary)
+        {
+            seen.add(plugin.manifest()
+                    .id());
+        }
+
+        for (DiscoveredPlugin plugin : secondary)
+        {
+            String pluginId = plugin.manifest()
+                    .id();
+            if (!seen.add(pluginId))
+            {
+                String source = plugin.source() == null ? "builtin"
+                        : plugin.source()
+                                .toString();
+                throw new PluginDiscoveryException("Duplicate plugin id discovered in mixed mode: " + pluginId + " (source: " + source + ")");
+            }
+            merged.add(plugin);
+        }
+
+        return merged;
     }
 
     private Optional<String> resolvePluginPath()
@@ -123,6 +185,19 @@ public final class BackendRunnerModule
         }
 
         return Optional.empty();
+    }
+
+    private PluginDiscoveryMode resolveDiscoveryMode()
+    {
+        String fromProperty = System.getProperty("queryeer.plugins.mode");
+        if (fromProperty != null
+                && !fromProperty.isBlank())
+        {
+            return PluginDiscoveryMode.parse(fromProperty);
+        }
+
+        String fromEnv = System.getenv("QUERYEER_PLUGINS_MODE");
+        return PluginDiscoveryMode.parse(fromEnv);
     }
 
     private RuntimeStatusResult runtimeStatusSnapshot(PluginRuntime runtime)

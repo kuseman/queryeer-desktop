@@ -7,7 +7,6 @@ import { fileUriToPath } from "../contracts/files/Resolvers.js";
 import { BackendGateway } from "./backend/backend-gateway.js";
 import { DevBackendTransport } from "./backend/backend-transport-dev.js";
 import { ProdBackendTransport } from "./backend/backend-transport-prod.js";
-import { MockBackendTransport } from "./backend/backend-transport.js";
 import type { BackendTransportFactory } from "./backend/backend-transport.js";
 import { chokidarWatcherFactory } from "./file-watcher/chokidar-watcher-factory.js";
 import { FileWatcherMainService } from "./file-watcher/file-watcher-service.js";
@@ -38,16 +37,10 @@ function createBackendFactory(): BackendTransportFactory {
       create: (callbacks) => new ProdBackendTransport(callbacks)
     };
   }
-  if (process.env.QUERYEER_BACKEND_STDIO === "1") {
-    const devState = { dependenciesPrepared: false };
-    return {
-      mode: "dev-maven",
-      create: (callbacks) => new DevBackendTransport(callbacks, devState)
-    };
-  }
+  const devState = { dependenciesPrepared: false };
   return {
-    mode: "mock-stdio",
-    create: (callbacks) => new MockBackendTransport(callbacks.onEnvelope)
+    mode: "dev-maven",
+    create: (callbacks) => new DevBackendTransport(callbacks, devState)
   };
 }
 

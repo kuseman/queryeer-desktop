@@ -115,3 +115,83 @@ Implementation status: a repository probe plugin exists under `plugins/dev-class
 - Enables running plugin modules directly from compiled classes without building full distribution bundles.
 - Keeps plugin boundary/classloader behavior identical to production logic.
 - Reduces migration friction while still enforcing manifest-driven loading.
+
+## Phase 2 formalization: mixed discovery mode
+
+Status: planned (next execution phase)
+
+### Decision
+
+- Use a transition mode where runner discovery includes both builtin manifests and external plugin folders.
+- Keep external-only as the end-state target after packaging/bootstrap is complete and proven in CI.
+
+### Objective
+
+- Stabilize the migration by preserving runtime continuity while enforcing explicit plugin identity, source visibility, and conflict rules.
+
+### Scope
+
+- Introduce explicit discovery mode semantics in runner startup:
+  - `builtin`: builtin manifests only.
+  - `external`: external plugin path only.
+  - `mixed`: builtin + external together.
+  - `auto`: current compatibility behavior, mapped to deterministic mode selection.
+- Define deterministic plugin conflict policy for mixed mode.
+- Add diagnostics so runtime status and logs expose plugin source and resolution decisions.
+
+### Required behavior
+
+- Discovery mode is configurable and logged at startup.
+- In mixed mode, duplicate plugin ids across sources fail fast by default with actionable error messages.
+- Optional override policy can be introduced later; default remains strict-fail to avoid accidental shadowing.
+- Runtime status output includes per-plugin source metadata (`builtin` vs `external`) for troubleshooting.
+
+Implementation status: discovery mode plumbing is implemented in backend runner with modes `auto`, `builtin`, `external`, `mixed` and strict duplicate-id failure in mixed mode.
+
+### Configuration keys and defaults
+
+- Discovery mode selectors (property takes precedence over env):
+  - system property: `queryeer.plugins.mode`
+  - environment variable: `QUERYEER_PLUGINS_MODE`
+- Supported mode values (case-insensitive):
+  - `auto`
+  - `builtin`
+  - `external`
+  - `mixed`
+- Plugin path selectors (property takes precedence over env):
+  - system property: `queryeer.plugins.path`
+  - environment variable: `QUERYEER_PLUGINS_PATH`
+- Default behavior when mode is unset:
+  - mode defaults to `auto`
+  - `auto` resolves to:
+    - external discovery if plugin path is provided
+    - builtin discovery if plugin path is not provided
+- Mode/path constraints:
+  - `external` requires plugin path
+  - `mixed` requires plugin path
+  - `builtin` ignores plugin path
+
+### Testing and validation
+
+- Unit tests:
+  - mode selection and fallback behavior (`auto`, `builtin`, `external`, `mixed`).
+  - duplicate-id detection across sources.
+  - source metadata propagation into runtime status model.
+- Integration tests:
+  - mixed mode startup with both builtin and external probe plugins.
+  - expected startup failure on deliberate duplicate-id fixture.
+- CI:
+  - keep `npm run dev:classpath:probe:smoke` in pipeline.
+  - ensure existing integration suite still passes under default mode.
+
+### Exit criteria for moving to external-only
+
+- All current builtin plugins are packaged and loadable as external plugins.
+- Release packaging reliably includes required plugin bundles.
+- CI green for at least two consecutive runs with external-first validation.
+- No unresolved plugin source conflict issues in mixed mode telemetry/logs.
+
+### Non-goals in Phase 2
+
+- No immediate removal of builtin plugin definitions.
+- No broad plugin packaging redesign beyond what is needed for mode clarity and conflict safety.
