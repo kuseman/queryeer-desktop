@@ -98,11 +98,17 @@ The `@` prefix means "expand entries from this list file".
 - Add `classes/` directory URL first, then jars from list files.
 - Keep current parent-first policy for API/contracts and child-first for plugin-private classes.
 
+Implementation status: implemented in backend runner classpath resolution (`PluginClasspathFactory`) with list-file expansion support.
+
 ### Validation rules
 
 - Fail fast with explicit errors when `deps-list.txt` is missing.
 - Fail fast when listed jar paths do not exist.
 - Restrict to dev mode only; distribution packaging continues to use plugin-local `lib/*.jar`.
+
+Implementation status: manifest/classpath validation and missing-entry errors are now enforced in backend runner (`PluginManifestValidation`, `PluginClasspathFactory`).
+
+Implementation status: a repository probe plugin exists under `plugins/dev-classpath-probe` with staging script `queryeer-desktop/scripts/dev-classpath-probe-stage.mjs`.
 
 ### Why this baseline
 

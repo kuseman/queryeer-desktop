@@ -16,6 +16,8 @@
     "test:protocol-fixtures": "node scripts/backend-protocol-fixtures-check.mjs",
     "test:integration": "vitest run --project integration",
     "dev:plugin:stage": "node scripts/dev-plugin-stage.mjs",
+    "dev:classpath:probe:stage": "node scripts/dev-classpath-probe-stage.mjs",
+    "dev:classpath:probe:smoke": "node scripts/dev-classpath-probe-smoke.mjs",
     "dev:plugin:watch": "node scripts/dev-plugin-watch.mjs",
     "dev:with-plugins": "node scripts/dev-with-plugins.mjs",
     "assets:icons": "node scripts/generate-icons.mjs",

@@ -108,4 +108,34 @@ class PluginManifestDiscoveryTest
         Assertions.assertTrue(error.getMessage()
                 .contains("Duplicate plugin id discovered: duplicate.plugin"));
     }
+
+    @Test
+    void throwsForBackendClasspathWithoutIncludeEntries() throws IOException
+    {
+        Path pluginsDir = tempDir.resolve("plugins");
+        Path pluginFolder = pluginsDir.resolve("broken-classpath");
+        Files.createDirectories(pluginFolder);
+
+        String json = """
+                {
+                  "schemaVersion": 1,
+                  "id": "broken.classpath",
+                  "name": "Broken Classpath",
+                  "version": "1.0.0",
+                  "backend": {
+                    "entrypointClass": "com.example.DoesNotMatter",
+                    "classpath": {
+                      "root": ".",
+                      "include": []
+                    }
+                  }
+                }
+                """;
+        Files.writeString(pluginFolder.resolve("plugin.json"), json, StandardCharsets.UTF_8);
+
+        PluginManifestLoader loader = new PluginManifestLoader(new ObjectMapper());
+        PluginDiscoveryException error = Assertions.assertThrows(PluginDiscoveryException.class, () -> loader.load(pluginFolder));
+        Assertions.assertTrue(error.getMessage()
+                .contains("backend.classpath.include"));
+    }
 }

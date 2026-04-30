@@ -39,6 +39,24 @@ final class PluginManifestValidation
             throw new PluginDiscoveryException("Backend entrypointClass or factoryClass is required for plugin " + manifest.id() + " in " + sourceDescription);
         }
 
+        if (manifest.backend() != null
+                && manifest.backend()
+                        .classpath() != null)
+        {
+            PluginManifest.Classpath classpath = manifest.backend()
+                    .classpath();
+            if (isBlank(classpath.root()))
+            {
+                throw new PluginDiscoveryException("backend.classpath.root is required for plugin " + manifest.id() + " in " + sourceDescription);
+            }
+            if (classpath.include() == null
+                    || classpath.include()
+                            .isEmpty())
+            {
+                throw new PluginDiscoveryException("backend.classpath.include must contain at least one entry for plugin " + manifest.id() + " in " + sourceDescription);
+            }
+        }
+
         if (manifest.frontend() != null
                 && isBlank(manifest.frontend()
                         .entryModule()))

@@ -9,6 +9,9 @@ queryeer-desktop/coverage/
 
 # Dev plugin staged backend jars (external dual-target package)
 plugins/dev-query-probe/lib/
+plugins/dev-classpath-probe/deps-list.txt
+plugins/dev-classpath-probe/classes/*
+!plugins/dev-classpath-probe/classes/.gitkeep
 
 # Logs and local env files
 *.log

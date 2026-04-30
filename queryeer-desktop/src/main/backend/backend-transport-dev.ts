@@ -52,8 +52,12 @@ export class DevBackendTransport extends StdioBackendTransportBase {
       "exec:java"
     ];
 
-    const debugArgs = "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:5005";
-    const spawnEnv = { ...process.env, MAVEN_OPTS: debugArgs };
+    const debugArgs = process.env.QUERYEER_BACKEND_JDWP?.trim();
+    const existingMavenOpts = process.env.MAVEN_OPTS?.trim();
+    const spawnEnv = {
+      ...process.env,
+      MAVEN_OPTS: [existingMavenOpts, debugArgs].filter((value) => Boolean(value)).join(" ") || undefined
+    };
 
     return process.platform === "win32"
       ? spawn(
