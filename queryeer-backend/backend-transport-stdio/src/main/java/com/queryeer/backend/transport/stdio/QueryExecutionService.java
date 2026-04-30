@@ -48,6 +48,14 @@ final class QueryExecutionService
                     new QueryFailedNotification(params.queryExecutionId(), new BackendError(BackendErrorCode.ENGINE_NOT_FOUND, "No engine registered for id: " + params.engineId(), null)));
             return;
         }
+        if (params.fileId() == null
+                || params.fileId()
+                        .isBlank())
+        {
+            notificationPublisher.publishForQuery(params.queryExecutionId(), "queryengine.failed",
+                    new QueryFailedNotification(params.queryExecutionId(), new BackendError(BackendErrorCode.VALIDATION, "fileId is required for queryengine.execute", null)));
+            return;
+        }
 
         QueryPublisher publisher = new TransportQueryPublisher(params.queryExecutionId(), notificationPublisher);
         activeExecutions.put(params.queryExecutionId(), provider);
@@ -56,13 +64,13 @@ final class QueryExecutionService
             try
             {
                 Object resolvedEngineState = secretResolver.materialize(params.engineState());
-                provider.execute(params.queryExecutionId(), params.text(), resolvedEngineState, publisher);
+                provider.execute(params.queryExecutionId(), params.fileId(), params.text(), resolvedEngineState, publisher);
             }
             catch (SecretRefPayloadResolver.SecretResolutionException e)
             {
                 publisher.failed(BackendErrorCode.VALIDATION.name(), e.getMessage());
             }
-            catch (Exception e)
+            catch (Throwable e)
             {
                 publisher.failed("INTERNAL", ErrorMessages.buildFailureMessage(e));
             }

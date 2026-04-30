@@ -17,6 +17,7 @@ export type BackendGatewayStatus = {
   activeExecutionIds: string[];
   recentExecutions: QueryExecutionStatus[];
   runtimeStatus?: RuntimeStatusResult;
+  javaDebugPort?: number;
   backendLogs: BackendLogEntry[];
   error?: string;
   tracePayloads?: boolean;

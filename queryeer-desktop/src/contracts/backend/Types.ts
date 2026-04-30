@@ -53,6 +53,7 @@ export type PingParams = {
 export type PingResult = {
   timestamp: string;
   uptimeMs: number;
+  javaDebugPort?: number;
 };
 
 export type SecuritySessionOpenParams = {
@@ -111,8 +112,7 @@ export type RuntimeStatusResult = {
 export type QueryExecuteParams = {
   queryExecutionId: string;
   engineId: string;
-  connectionId?: string;
-  fileId?: string;
+  fileId: string;
   text: string;
   parameters?: unknown[];
   engineState?: unknown;
@@ -152,11 +152,7 @@ export type ConnectionUpsertParams = {
   connectionId?: string;
   engineId: string;
   name: string;
-  host: string;
-  port?: number;
-  database?: string;
-  username?: string;
-  options?: Record<string, unknown>;
+  connection?: unknown;
 };
 
 export type ConnectionUpsertResult = {

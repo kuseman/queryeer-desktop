@@ -1,6 +1,12 @@
 package com.queryeer.backend.transport.stdio;
 
+import java.util.Map;
+
+import com.queryeer.backend.api.QueryEngineProvider;
+import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.contract.BackendEnvelope;
+import com.queryeer.backend.contract.BackendError;
+import com.queryeer.backend.contract.BackendErrorCode;
 import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.connection.ConnectionUpsertParams;
@@ -10,11 +16,13 @@ final class ConnectionUpsertRequestHandler implements RequestHandler
 {
     private final ResponseWriter responseWriter;
     private final EnvelopeCodec codec;
+    private final QueryEngineRegistry queryEngines;
 
-    public ConnectionUpsertRequestHandler(ResponseWriter responseWriter, EnvelopeCodec codec)
+    public ConnectionUpsertRequestHandler(ResponseWriter responseWriter, EnvelopeCodec codec, QueryEngineRegistry queryEngines)
     {
         this.responseWriter = responseWriter;
         this.codec = codec;
+        this.queryEngines = queryEngines;
     }
 
     @Override
@@ -34,6 +42,26 @@ final class ConnectionUpsertRequestHandler implements RequestHandler
                         .isBlank() ? "conn-" + envelope.id()
                                 : params.connectionId();
 
-        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, new ConnectionUpsertResult(connectionId, 1L), null));
+        QueryEngineProvider provider = queryEngines.getProvider(params.engineId());
+        if (provider == null)
+        {
+            responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, null,
+                    new BackendError(BackendErrorCode.ENGINE_NOT_FOUND, "No engine registered for id: " + params.engineId(), null)));
+            return;
+        }
+
+        ConnectionUpsertParams paramsWithConnectionId = new ConnectionUpsertParams(connectionId, params.engineId(), params.name(), params.connection());
+        Object upsertPayload = codec.objectMapper()
+                .convertValue(paramsWithConnectionId, Map.class);
+        Object result = provider.invoke(null, "connection.upsert", upsertPayload);
+
+        long version = 1L;
+        if (result instanceof Map<?, ?> map
+                && map.get("version") instanceof Number number)
+        {
+            version = number.longValue();
+        }
+
+        responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, new ConnectionUpsertResult(connectionId, version), null));
     }
 }

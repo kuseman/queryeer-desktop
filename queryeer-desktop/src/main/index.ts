@@ -18,6 +18,7 @@ import {
   KeybindingsStore
 } from "./commands/keybindings-store.js";
 import { BackupStore, defaultBackupsDir } from "./workspace/backup-store.js";
+import { defaultExportsDir, QueryExportStore } from "./workspace/query-export-store.js";
 import {
   defaultWorkspaceFilePath,
   WorkspaceStore
@@ -58,6 +59,7 @@ let workspaceStore: WorkspaceStore | null = null;
 let keybindingsStore: KeybindingsStore | null = null;
 let settingsStore: SettingsStore | null = null;
 let backupStore: BackupStore | null = null;
+let queryExportStore: QueryExportStore | null = null;
 let recentFilesStore: RecentFilesStore | null = null;
 let securityService: SecurityService | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -258,6 +260,8 @@ app.whenReady().then(() => {
     backupsDir: defaultBackupsDir(app.getPath("userData"))
   });
   backupStore.wireIpc();
+  queryExportStore = new QueryExportStore(defaultExportsDir(app.getPath("userData")));
+  queryExportStore.wireIpc();
   recentFilesStore = new RecentFilesStore({
     recentFilesPath: defaultRecentFilesPath(app.getPath("userData"))
   });

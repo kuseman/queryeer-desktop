@@ -12,14 +12,14 @@ final class SecuritySessionBridge
 
     public void openSession(String sessionId, String vaultPath, String sessionKeyBase64, String vaultUpdatedAt)
     {
-        byte[] nextKey = sessionKeyBase64 == null ? null
-                : Base64.getDecoder()
-                        .decode(sessionKeyBase64);
         byte[] currentKey = this.sessionKey;
         if (currentKey != null)
         {
             Arrays.fill(currentKey, (byte) 0);
         }
+        byte[] nextKey = sessionKeyBase64 == null ? null
+                : Base64.getDecoder()
+                        .decode(sessionKeyBase64);
 
         this.sessionId = sessionId;
         this.vaultPath = vaultPath;

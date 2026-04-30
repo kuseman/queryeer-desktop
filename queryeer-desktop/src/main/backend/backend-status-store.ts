@@ -33,7 +33,8 @@ export class BackendStatusStore {
     this.status = {
       ...this.status,
       state,
-      error
+      error,
+      javaDebugPort: state === "starting" ? undefined : this.status.javaDebugPort
     };
   }
 
@@ -93,6 +94,13 @@ export class BackendStatusStore {
     this.status = {
       ...this.status,
       runtimeStatus
+    };
+  }
+
+  public setJavaDebugPort(port: number): void {
+    this.status = {
+      ...this.status,
+      javaDebugPort: port
     };
   }
 

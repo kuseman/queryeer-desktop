@@ -20,7 +20,22 @@
         <surefire.plugin.version>3.2.5</surefire.plugin.version>
         <jackson.version>2.18.2</jackson.version>
         <junit.jupiter.version>5.11.0</junit.jupiter.version>
+        <queryeer.config.root>${project.basedir}</queryeer.config.root>
     </properties>
+
+    <profiles>
+        <profile>
+            <id>config-root-in-parent-of-module</id>
+            <activation>
+                <file>
+                    <exists>${project.basedir}/../eclipse-importorder.cfg</exists>
+                </file>
+            </activation>
+            <properties>
+                <queryeer.config.root>${project.basedir}/..</queryeer.config.root>
+            </properties>
+        </profile>
+    </profiles>
 
     <dependencyManagement>
         <dependencies>
@@ -46,6 +61,7 @@
         <module>backend-api</module>
         <module>backend-contract</module>
         <module>backend-core</module>
+        <module>backend-lib-queryengine-jdbc-foundation</module>
         <module>backend-transport-stdio</module>
         <module>backend-runner</module>
         <module>backend-plugin-payloadbuilder</module>
@@ -99,7 +115,7 @@
                                 </sourceDirectories>
                                 <includeResources>true</includeResources>
                                 <includeTestResources>false</includeTestResources>
-                                <configLocation>${maven.multiModuleProjectDirectory}/queryeer-backend/checkstyle.xml</configLocation>
+                                <configLocation>${queryeer.config.root}/checkstyle.xml</configLocation>
                             </configuration>
                         </execution>
                         <execution>
@@ -114,7 +130,7 @@
                                 </sourceDirectories>
                                 <includeResources>true</includeResources>
                                 <includeTestResources>true</includeTestResources>
-                                <configLocation>${maven.multiModuleProjectDirectory}/queryeer-backend/checkstyle-test.xml</configLocation>
+                                <configLocation>${queryeer.config.root}/checkstyle-test.xml</configLocation>
                             </configuration>
                         </execution>
                     </executions>
@@ -127,10 +143,10 @@
                         <java>
                             <removeUnusedImports/>
                             <importOrder>
-                                <file>${maven.multiModuleProjectDirectory}/queryeer-backend/eclipse-importorder.cfg</file>
+                                <file>${queryeer.config.root}/eclipse-importorder.cfg</file>
                             </importOrder>
                             <eclipse>
-                                <file>${maven.multiModuleProjectDirectory}/queryeer-backend/eclipse-code-formatter.xml</file>
+                                <file>${queryeer.config.root}/eclipse-code-formatter.xml</file>
                             </eclipse>
                         </java>
                     </configuration>

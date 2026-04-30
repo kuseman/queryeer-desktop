@@ -46,10 +46,21 @@ public final class DefaultFileRegistry implements FileRegistry, FileSessionHandl
             return Optional.empty();
         }
         boolean wasBound = existing.engineId() != null;
+        boolean bindingChanged = !Objects.equals(existing.engineId(), engineId)
+                || !Objects.equals(existing.connectionId(), connectionId);
         FileSession next = new FileSession(existing.fileId(), existing.uri(), existing.mimeType(), engineId, connectionId, existing.backendVersion() + 1L);
         sessionsById.put(fileId, next);
         if (!wasBound)
         {
+            dispatchOpen(next, null);
+        }
+        else if (bindingChanged)
+        {
+            FileSessionHandler handler = handlerFor(existing);
+            if (handler != null)
+            {
+                handler.onClose(existing);
+            }
             dispatchOpen(next, null);
         }
         return Optional.of(next);

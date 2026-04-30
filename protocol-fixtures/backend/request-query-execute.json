@@ -6,7 +6,6 @@
   "params": {
     "queryExecutionId": "exec-fixture-1",
     "engineId": "payloadbuilder",
-    "connectionId": "connection-1",
     "fileId": "file-fixture-1",
     "text": "select 1",
     "parameters": [1, "two"],

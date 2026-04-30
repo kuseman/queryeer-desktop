@@ -95,6 +95,7 @@ describe("Backend E2E Integration", () => {
     const result = await gateway.executeQuery({
       queryExecutionId: "e2e-test-exec-1",
       engineId: "payloadbuilder",
+      fileId: "e2e-file-1",
       text: "SELECT 1 AS col"
     } satisfies QueryExecuteParams);
 
@@ -109,6 +110,7 @@ describe("Backend E2E Integration", () => {
     const execResult = await gateway.executeQuery({
       queryExecutionId: "e2e-test-cancel-target",
       engineId: "payloadbuilder",
+      fileId: "e2e-file-1",
       text: "SELECT 1"
     } satisfies QueryExecuteParams);
     expect(execResult.accepted).toBe(true);
@@ -129,6 +131,7 @@ describe("Backend E2E Integration", () => {
     const result = await gateway.executeQuery({
       queryExecutionId: "e2e-test-unknown-engine",
       engineId: "unknown-engine",
+      fileId: "e2e-file-1",
       text: "SELECT 1"
     } satisfies QueryExecuteParams);
     expect(result.accepted).toBe(true);
@@ -139,6 +142,7 @@ describe("Backend E2E Integration", () => {
       const result = await gateway.executeQuery({
         queryExecutionId: `e2e-test-seq-${i}`,
         engineId: "payloadbuilder",
+        fileId: "e2e-file-1",
         text: "SELECT 1"
       } satisfies QueryExecuteParams);
       expect(result.accepted).toBe(true);

@@ -78,7 +78,7 @@ class PayloadbuilderQueryEngineProviderTest
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider();
         RecordingPublisher publisher = new RecordingPublisher();
 
-        provider.execute("exec-2", "select 1", null, publisher);
+        provider.execute("exec-2", "file-1", "select 1", null, publisher);
 
         Assertions.assertTrue(publisher.completedWithPatchCalled);
         Assertions.assertNull(publisher.completedEngineStatePatch);
@@ -92,7 +92,7 @@ class PayloadbuilderQueryEngineProviderTest
         RecordingPublisher publisher = new RecordingPublisher();
         Map<String, Object> malformed = Map.of("payloadbuilder", Map.of("catalogs", Map.of("jdbc1", "bad")));
 
-        provider.execute("exec-1", "select 1", malformed, publisher);
+        provider.execute("exec-1", "file-1", "select 1", malformed, publisher);
 
         Assertions.assertEquals("VALIDATION", publisher.errorCode);
         Assertions.assertEquals("Catalog instance for alias 'jdbc1' must be an object", publisher.errorMessage);
@@ -105,7 +105,7 @@ class PayloadbuilderQueryEngineProviderTest
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider();
         RecordingPublisher publisher = new RecordingPublisher();
 
-        provider.execute("exec-3", "select from", null, publisher);
+        provider.execute("exec-3", "file-1", "select from", null, publisher);
 
         Assertions.assertEquals("INTERNAL", publisher.errorCode);
         Assertions.assertNotNull(publisher.errorMessage);

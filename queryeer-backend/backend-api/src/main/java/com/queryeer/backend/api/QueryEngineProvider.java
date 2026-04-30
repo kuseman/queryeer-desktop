@@ -4,7 +4,7 @@ public interface QueryEngineProvider
 {
     String engineId();
 
-    void execute(String queryExecutionId, String text, Object engineState, QueryPublisher publisher);
+    void execute(String queryExecutionId, String fileId, String text, Object engineState, QueryPublisher publisher);
 
     default Object invoke(String fileId, String action, Object payload)
     {

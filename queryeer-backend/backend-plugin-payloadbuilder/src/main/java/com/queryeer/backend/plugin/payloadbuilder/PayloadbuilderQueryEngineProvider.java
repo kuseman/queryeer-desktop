@@ -54,7 +54,7 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
     }
 
     @Override
-    public void execute(String queryExecutionId, String text, Object engineState, QueryPublisher publisher)
+    public void execute(String queryExecutionId, String fileId, String text, Object engineState, QueryPublisher publisher)
     {
         long startMs = System.currentTimeMillis();
         QuerySession session = null;

@@ -168,6 +168,16 @@ type AppShellApi = {
   addRecentFile: (uri: string, maxCount?: number) => Promise<{ accepted: boolean }>;
   removeRecentFile: (uri: string) => Promise<{ removed: boolean }>;
   clearRecentFiles: () => Promise<{ cleared: boolean }>;
+  openExportStream: (params: { executionId: string; resultSetIndex: number }) => Promise<void>;
+  appendExportChunk: (params: {
+    executionId: string;
+    resultSetIndex: number;
+    rows: unknown[][];
+  }) => Promise<void>;
+  finalizeExportStream: (params: {
+    executionId: string;
+    resultSetIndex: number;
+  }) => Promise<{ exportPath: string }>;
 };
 
 const appShellApi: AppShellApi = {
@@ -403,6 +413,15 @@ const appShellApi: AppShellApi = {
   },
   clearRecentFiles: async () => {
     return ipcRenderer.invoke("recent:clear");
+  },
+  openExportStream: async (params) => {
+    return ipcRenderer.invoke("workspace:export-open", params);
+  },
+  appendExportChunk: async (params) => {
+    return ipcRenderer.invoke("workspace:export-append", params);
+  },
+  finalizeExportStream: async (params) => {
+    return ipcRenderer.invoke("workspace:export-finalize", params);
   },
   onWindowStateChanged: (listener) => {
     const channel = "window:state-changed";
