@@ -130,7 +130,7 @@ export const coreQueryEnginePlugin: Plugin = {
       id: "core.queryengine.execute",
       title: "Execute Query",
       category: "Query",
-      enablement: "backendHealthy && editorFocus && hasActiveQueryExecutableFile && activeFileMetadata.core.queryengine.tabState != 'running'",
+      enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFileMetadata.core.queryengine.tabState != 'running'",
       handler: async () => {
         queryEngineService.requestExecute();
       }
@@ -140,7 +140,7 @@ export const coreQueryEnginePlugin: Plugin = {
       id: "core.queryengine.cancel",
       title: "Cancel Query",
       category: "Query",
-      enablement: "backendHealthy && editorFocus && hasActiveQueryExecutableFile && activeFileMetadata.core.queryengine.tabState == 'running'",
+      enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFileMetadata.core.queryengine.tabState == 'running'",
       handler: async () => {
         queryEngineService.requestCancel();
       }
