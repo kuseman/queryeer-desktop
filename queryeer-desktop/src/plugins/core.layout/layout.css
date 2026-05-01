@@ -194,6 +194,13 @@
   white-space: nowrap;
 }
 
+.shell-editor-tab-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--text-1);
+}
+
 .shell-editor-tab-title.is-modified {
   color: #e6c200;
 }

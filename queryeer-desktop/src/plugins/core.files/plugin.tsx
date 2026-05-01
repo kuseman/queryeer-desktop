@@ -4,6 +4,7 @@ import type { FileEntity } from "../../contracts/files/FileEntity";
 import { fileUriToPath } from "../../contracts/files/Resolvers";
 import { getTextEditorRegistry } from "../core.editor/TextEditor/TextEditorRegistry";
 import { getCoreSettingsService } from "../core.settings/service";
+import { DocumentIcon } from "./DocumentIcon";
 
 const ALL_MIME_CAPABILITIES: MimeCapability[] = [
   "backupable",
@@ -103,6 +104,12 @@ export const coreFilesPlugin: Plugin = {
     description: "Owns the frontend file registry and file entity lifecycle"
   },
   activate: (context) => {
+    context.files.mimeIcons.registerMimeIcon({
+      moduleId: "core.files",
+      mimeType: "application/octet-stream",
+      icon: DocumentIcon
+    });
+
     context.settings.registerSettings({
       moduleId: "core.files",
       title: "Files",

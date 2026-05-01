@@ -526,6 +526,7 @@ export function ShellApp({
               hasMimeCapability={(mimeType, capability) =>
                 filesRegistry.capabilities.hasCapability(mimeType, capability)
               }
+              getMimeIcon={filesRegistry.mimeIcons.getMimeIcon}
               onTabContextMenuAction={handleTabContextMenuAction}
               onTabContextMenuOpen={handleTabContextMenuOpen}
             />

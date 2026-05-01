@@ -5,6 +5,7 @@ import { registerTextEditorKeybindings } from "./keybindings";
 import { TextEditorComponent } from "./TextEditorComponent";
 import { preloadMonaco } from "./MonacoTextEditorApi";
 import { registerTextEditorMimeTypes } from "./mime-types";
+import { TextIcon } from "./TextIcon";
 
 export { getTextEditorRegistry } from "./TextEditorRegistry";
 
@@ -21,6 +22,12 @@ export const coreEditorTextPlugin: Plugin = {
     const textRegistry = getTextEditorRegistry();
     textRegistry.setFilesRegistry(context.files);
     registerTextEditorMimeTypes(context.files);
+
+    context.files.mimeIcons.registerMimeIcon({
+      moduleId: "core.editor.text",
+      mimeType: "text/plain",
+      icon: TextIcon
+    });
 
     registerTextEditorCommands(context, textRegistry);
     registerTextEditorKeybindings(context);

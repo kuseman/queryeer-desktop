@@ -195,6 +195,11 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
         registerContentCategory: vi.fn(),
         getContentCategory: vi.fn()
       },
+      mimeIcons: {
+        registerMimeIcon: vi.fn(),
+        getMimeIcon: vi.fn(),
+        listMimeIcons: vi.fn(() => [])
+      },
       openFile: vi.fn(),
       closeFile: vi.fn(),
       getFile: (fileId: string) => filesById.get(fileId) ?? undefined,

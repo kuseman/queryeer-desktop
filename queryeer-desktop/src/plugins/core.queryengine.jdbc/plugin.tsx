@@ -8,6 +8,7 @@ import {
   JDBC_CONNECTIONS_SETTING_ID,
   parseJdbcConnectionDefinitions
 } from "./jdbc-settings";
+import { DatabaseIcon } from "./DatabaseIcon";
 
 export const coreQueryEngineJdbcPlugin: Plugin = {
   manifest: {
@@ -24,6 +25,12 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
     registerQueryExecutableEngine(context, {
       engineId: "jdbc",
       mimeTypes: ["application/sql"]
+    });
+
+    context.files.mimeIcons.registerMimeIcon({
+      moduleId: "core.queryengine.jdbc",
+      mimeType: "application/sql",
+      icon: DatabaseIcon
     });
 
     context.settings.registerAdvancedValidator({
