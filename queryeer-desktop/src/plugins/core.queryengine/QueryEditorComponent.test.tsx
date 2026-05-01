@@ -139,12 +139,17 @@ describe("QueryEditorComponent execution state across tab switches", () => {
     getFileStateRegistry().evict("file-2");
     mocks.executeMock.mockResolvedValue("exec-1");
 
-    const filesRegistry = {
+const filesRegistry = {
       capabilities: {
         registerCapabilities: vi.fn(),
         hasCapability: vi.fn(() => true),
         registerContentCategory: vi.fn(),
         getContentCategory: vi.fn(() => "text" as ContentCategory)
+      },
+      mimeIcons: {
+        registerMimeIcon: vi.fn(),
+        getMimeIcon: vi.fn(),
+        listMimeIcons: vi.fn(() => [])
       },
       openFile: vi.fn(),
       closeFile: vi.fn(),

@@ -1,5 +1,6 @@
 import type { FileEntity, FileEntityUpdate, FileOpenInput } from "./FileEntity.js";
 import type { EditorResolver, MimeHint, MimeResolver } from "./Resolvers.js";
+import type { JSX } from "react";
 
 export type FilesSubscriber = (files: FileEntity[]) => void;
 
@@ -16,6 +17,17 @@ export type EditorResolutionContext = {
   contentCategory?: ContentCategory;
 };
 
+export type MimeIconProps = {
+  className?: string;
+  style?: React.CSSProperties;
+};
+
+export type MimeIconContribution = {
+  readonly moduleId: string;
+  readonly mimeType: string;
+  readonly icon: (props: MimeIconProps) => JSX.Element;
+};
+
 export type MimeCapabilityRegistry = {
   registerCapabilities: (mimeType: string, capabilities: MimeCapability[]) => void;
   hasCapability: (mimeType: string, capability: MimeCapability) => boolean;
@@ -23,8 +35,15 @@ export type MimeCapabilityRegistry = {
   getContentCategory: (mimeType: string) => ContentCategory | undefined;
 };
 
+export type MimeIconRegistry = {
+  registerMimeIcon: (contribution: MimeIconContribution) => void;
+  getMimeIcon: (mimeType: string) => ((props: MimeIconProps) => JSX.Element) | undefined;
+  listMimeIcons: () => MimeIconContribution[];
+};
+
 export type FilesRegistry = {
   capabilities: MimeCapabilityRegistry;
+  mimeIcons: MimeIconRegistry;
   openFile: (input: FileOpenInput) => FileEntity;
   closeFile: (fileId: string) => void;
   getFile: (fileId: string) => FileEntity | undefined;

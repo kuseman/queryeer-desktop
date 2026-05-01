@@ -7,8 +7,9 @@ import type {
   TabHeaderStyleContribution
 } from "../../contracts/extensions/LayoutExtension";
 import type { TooltipSectionContribution } from "../../contracts/extensions/TooltipExtension";
-import type { MimeCapability } from "../../contracts/files/FilesRegistry";
+import type { MimeCapability, MimeIconProps } from "../../contracts/files/FilesRegistry";
 import { TabTooltip, buildTabTooltip } from "./TabTooltip";
+import { DocumentIcon } from "../../renderer/icons/DocumentIcon";
 
 type HoveredTab = {
   fileId: string;
@@ -26,6 +27,7 @@ type EditorTabsProps = {
   tabContextMenus?: TabContextMenuContribution[];
   tabHeaderStyleContributions?: TabHeaderStyleContribution[];
   hasMimeCapability?: (mimeType: string, capability: MimeCapability) => boolean;
+  getMimeIcon?: (mimeType: string) => ((props: MimeIconProps) => JSX.Element) | undefined;
   onTabContextMenuAction?: (actionId: string, file: FileEntity) => void;
   onTabContextMenuOpen?: (file: FileEntity | null) => void;
 };
@@ -41,6 +43,7 @@ export function EditorTabs({
   tabContextMenus = [],
   tabHeaderStyleContributions = [],
   hasMimeCapability,
+  getMimeIcon,
   onTabContextMenuAction,
   onTabContextMenuOpen
 }: EditorTabsProps) {
@@ -162,6 +165,11 @@ export function EditorTabs({
               className="shell-editor-tab-button"
               onClick={() => onSelectFile(file.fileId)}
             >
+              {(() => {
+                const icon = getMimeIcon ? getMimeIcon(file.mimeType) : undefined;
+                const IconComponent = icon ?? DocumentIcon;
+                return <IconComponent className="shell-editor-tab-icon" />;
+              })()}
               <span className={titleClassName}>{`${title}${dirtyMark}`}</span>
             </div>
             <span

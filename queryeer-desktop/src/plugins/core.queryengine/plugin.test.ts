@@ -61,6 +61,11 @@ function createContext(file: FileEntity): PluginContext {
         registerContentCategory: vi.fn(),
         getContentCategory: vi.fn(() => "text" as const)
       },
+      mimeIcons: {
+        registerMimeIcon: vi.fn(),
+        getMimeIcon: vi.fn(),
+        listMimeIcons: vi.fn(() => [])
+      },
       openFile: vi.fn(),
       closeFile: vi.fn(),
       getFile: vi.fn((fileId: string) => filesById.get(fileId)),

@@ -64,6 +64,11 @@ describe("ViewStateStore", () => {
         registerContentCategory: vi.fn(),
         getContentCategory: vi.fn()
       },
+      mimeIcons: {
+        registerMimeIcon: vi.fn(),
+        getMimeIcon: vi.fn(),
+        listMimeIcons: vi.fn(() => [])
+      },
       openFile: vi.fn(),
       closeFile: vi.fn(),
       getFile: vi.fn(),

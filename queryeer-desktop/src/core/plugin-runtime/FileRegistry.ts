@@ -12,7 +12,8 @@ import type {
   FilesRegistry,
   FilesSubscriber,
   MimeCapability,
-  MimeCapabilityRegistry
+  MimeCapabilityRegistry,
+  MimeIconContribution
 } from "../../contracts/files/FilesRegistry";
 import {
   DEFAULT_MIME_TYPE,
@@ -40,6 +41,7 @@ export class FileRegistry {
   private readonly editorResolvers: EditorResolver[] = [];
   private readonly mimeCapabilities = new Map<string, Set<MimeCapability>>();
   private readonly mimeContentCategories = new Map<string, ContentCategory>();
+  private readonly mimeIcons = new Map<string, MimeIconContribution>();
   private readonly getEditors: () => LayoutEditorContribution[];
 
   constructor(options: FileRegistryOptions = {}) {
@@ -76,6 +78,7 @@ export class FileRegistry {
   public createFilesRegistry(): FilesRegistry {
     return {
       capabilities: this.createMimeCapabilityRegistry(),
+      mimeIcons: this.createMimeIconRegistry(),
       openFile: (input) => this.openFile(input),
       closeFile: (fileId) => this.closeFile(fileId),
       getFile: (fileId) => this.files.get(fileId),
@@ -117,6 +120,21 @@ export class FileRegistry {
       },
       getContentCategory: (mimeType) => {
         return this.mimeContentCategories.get(mimeType);
+      }
+    };
+  }
+
+  private createMimeIconRegistry() {
+    return {
+      registerMimeIcon: (contribution: MimeIconContribution) => {
+        this.mimeIcons.set(contribution.mimeType, contribution);
+      },
+      getMimeIcon: (mimeType: string) => {
+        const contribution = this.mimeIcons.get(mimeType);
+        return contribution?.icon;
+      },
+      listMimeIcons: () => {
+        return [...this.mimeIcons.values()];
       }
     };
   }

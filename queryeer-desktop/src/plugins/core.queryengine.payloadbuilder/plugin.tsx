@@ -13,6 +13,7 @@ import {
   listPayloadbuilderCatalogContributions,
   subscribePayloadbuilderCatalogContributions
 } from "./catalog-contributions";
+import { LetterPIcon } from "./LetterPIcon";
 
 export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
   manifest: {
@@ -30,6 +31,12 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
     registerQueryExecutableEngine(context, {
       engineId: "payloadbuilder",
       mimeTypes: ["application/plbsql"]
+    });
+
+    context.files.mimeIcons.registerMimeIcon({
+      moduleId: "core.queryengine.payloadbuilder",
+      mimeType: "application/plbsql",
+      icon: LetterPIcon
     });
 
     context.settings.registerAdvancedValidator({
