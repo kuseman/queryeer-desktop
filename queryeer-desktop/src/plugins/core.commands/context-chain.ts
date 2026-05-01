@@ -1,0 +1,86 @@
+import type { ContextValues } from "./when-evaluator";
+
+export type ContextScope = {
+  readonly id: string;
+  readonly priority: number;
+  context: ContextValues;
+};
+
+export type ContextChain = {
+  /** Register a scope; returns an unregister disposable. */
+  register(scope: ContextScope): () => void;
+  /** Replace the context values for an already-registered scope. */
+  update(id: string, context: ContextValues): void;
+  /** Record the scope as the most-recently focused at its priority level. */
+  activate(id: string): void;
+  /** All registered scopes sorted root→leaf (ascending priority). */
+  getActiveChain(): readonly ContextScope[];
+  /** Flattened merge of all scopes; higher priority wins on key conflicts. */
+  getEffectiveContext(): ContextValues;
+  /** Id of the most recently activated scope at the given priority, or null. */
+  getLastFocusedScopeId(priority: number): string | null;
+  /** Subscribe to any change in registered scopes or their context values. */
+  onDidChange(listener: () => void): () => void;
+};
+
+export function createContextChain(): ContextChain {
+  const scopes = new Map<string, ContextScope>();
+  const lastActiveByPriority = new Map<number, string>();
+  const listeners = new Set<() => void>();
+
+  const notify = (): void => {
+    for (const listener of listeners) {
+      listener();
+    }
+  };
+
+  const sorted = (): ContextScope[] =>
+    [...scopes.values()].sort((a, b) => a.priority - b.priority);
+
+  return {
+    register(scope) {
+      scopes.set(scope.id, { ...scope, context: { ...scope.context } });
+      notify();
+      return () => {
+        scopes.delete(scope.id);
+        if (lastActiveByPriority.get(scope.priority) === scope.id) {
+          lastActiveByPriority.delete(scope.priority);
+        }
+        notify();
+      };
+    },
+
+    update(id, context) {
+      const scope = scopes.get(id);
+      if (!scope) {
+        return;
+      }
+      scope.context = context;
+      notify();
+    },
+
+    activate(id) {
+      const scope = scopes.get(id);
+      if (scope) {
+        lastActiveByPriority.set(scope.priority, id);
+      }
+    },
+
+    getActiveChain() {
+      return sorted();
+    },
+
+    getEffectiveContext() {
+      return Object.assign({}, ...sorted().map((s) => s.context)) as ContextValues;
+    },
+
+    getLastFocusedScopeId(priority) {
+      return lastActiveByPriority.get(priority) ?? null;
+    },
+
+    onDidChange(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}

@@ -18,6 +18,7 @@ import { MessageDialogHost } from "../../plugins/core.dialog/MessageDialogHost";
 import { QuickCommandHost } from "../../plugins/core.quickcommand/QuickCommandHost";
 import { filterMenuItemsByWhen } from "../../plugins/core.menu/menu-item-filter";
 import { confirmCloseDirtyFile } from "./close-file-guard";
+import { requestMessageDialog } from "../../plugins/core.dialog/message-dialog-service";
 import { filterSidebarViews } from "./sidebar-view-filter";
 import { filterToolbarActions } from "./toolbar-action-filter";
 import { resolveFirstAcceleratorsByCommand } from "./accelerator-utils";
@@ -351,9 +352,7 @@ export function ShellApp({
       return;
     }
     void (async () => {
-      const shouldClose = await confirmCloseDirtyFile(file, (options) =>
-        window.appShell.showDialogMessage(options)
-      );
+      const shouldClose = await confirmCloseDirtyFile(file, requestMessageDialog);
       if (!shouldClose) {
         return;
       }
@@ -371,6 +370,13 @@ export function ShellApp({
     workspaceService.setActiveFileId(activeFileId);
     fileMediator.setActiveFileId(activeFileId);
   }, [activeFileId, fileMediator, workspaceService]);
+
+  useEffect(() => {
+    return fileMediator.onActiveFileChanged((fileId) => {
+      setActiveFileId(fileId);
+      workspaceService.setActiveFileId(fileId);
+    });
+  }, [fileMediator, workspaceService]);
 
   useEffect(() => {
     if (!activeFileId || !tabsRef.current) return;

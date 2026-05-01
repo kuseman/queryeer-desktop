@@ -143,6 +143,47 @@ describe("QuickCommandService.resolveItems — ranking", () => {
   });
 });
 
+describe("QuickCommandService.resolveItems — when filtering", () => {
+  it("includes provider when when-expression is true", async () => {
+    const providers: QuickCommandProvider[] = [
+      makeProvider({ label: "A", when: "hasActiveTextEditor", getItems: () => [makeItem("a1", "Alpha")] })
+    ];
+    const svc = new QuickCommandService(providers, () => ({ hasActiveTextEditor: true }));
+    const items = await svc.resolveItems("", makeCtx());
+    expect(items.map((i) => i.id)).toContain("a1");
+  });
+
+  it("excludes provider when when-expression is false", async () => {
+    const providers: QuickCommandProvider[] = [
+      makeProvider({ label: "A", when: "hasActiveTextEditor", getItems: () => [makeItem("a1", "Alpha")] })
+    ];
+    const svc = new QuickCommandService(providers, () => ({ hasActiveTextEditor: false }));
+    const items = await svc.resolveItems("", makeCtx());
+    expect(items.map((i) => i.id)).not.toContain("a1");
+  });
+
+  it("includes all providers when no getContextValues supplied", async () => {
+    const providers: QuickCommandProvider[] = [
+      makeProvider({ label: "A", when: "hasActiveTextEditor", getItems: () => [makeItem("a1", "Alpha")] })
+    ];
+    const svc = new QuickCommandService(providers);
+    const items = await svc.resolveItems("", makeCtx());
+    expect(items.map((i) => i.id)).toContain("a1");
+  });
+
+  it("when filtering respects prefix routing", async () => {
+    const providers: QuickCommandProvider[] = [
+      makeProvider({ label: "A", prefix: ">", when: "hasActiveTextEditor", getItems: () => [makeItem("a1", "Alpha")] }),
+      makeProvider({ label: "B", prefix: ">", getItems: () => [makeItem("b1", "Beta")] })
+    ];
+    const svc = new QuickCommandService(providers, () => ({ hasActiveTextEditor: false }));
+    const items = await svc.resolveItems("> ", makeCtx());
+    const ids = items.map((i) => i.id);
+    expect(ids).not.toContain("a1");
+    expect(ids).toContain("b1");
+  });
+});
+
 describe("QuickCommandService.execute", () => {
   it("calls item.action", async () => {
     const svc = new QuickCommandService([]);

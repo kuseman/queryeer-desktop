@@ -61,6 +61,13 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
 
   let activeFileId: string | null = null;
   let contextFileId: string | null = null;
+  const activeFileListeners: Array<(fileId: string | null) => void> = [];
+
+  function notifyActiveFileChanged(fileId: string | null): void {
+    for (const listener of activeFileListeners) {
+      listener(fileId);
+    }
+  }
 
   return {
     async openFile(uri, hint) {
@@ -68,6 +75,10 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
         .listFiles()
         .find((file) => file.uri === uri);
       if (existing) {
+        if (activeFileId !== existing.fileId) {
+          activeFileId = existing.fileId;
+          notifyActiveFileChanged(existing.fileId);
+        }
         return existing;
       }
 
@@ -197,11 +208,22 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
     },
 
     setActiveFileId(fileId) {
-      activeFileId = fileId;
+      if (activeFileId !== fileId) {
+        activeFileId = fileId;
+        notifyActiveFileChanged(fileId);
+      }
     },
 
     getActiveFileId() {
       return activeFileId;
+    },
+
+    onActiveFileChanged(listener) {
+      activeFileListeners.push(listener);
+      return () => {
+        const idx = activeFileListeners.indexOf(listener);
+        if (idx !== -1) activeFileListeners.splice(idx, 1);
+      };
     },
 
     setContextFileId(fileId) {

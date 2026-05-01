@@ -8,36 +8,18 @@ Quick fixes
     - Should not output anything to table/text only writing status to text
 
 Large features in prio
-- Quicksearch
-    - Command pallette like VS Code in title bar
-    - Contributed sources
-        - workspace
-        - recentfiles
-        - settings
-        - datasources from core.queryengine.jdbc
-            - Quick switch of current files 
-            - If locked => action kicks of vault
-    - Each contribution is rule based from context (active file etc.)
-    - Disable monaco pallette and instead aggregate items into new one
-- Query shortcuts
+- [ ] Query shortcuts
     - CTRL 0-9 / ALT-0
     - Rule based (query file meta data. Payloadbuilder properties / jdbc properties)
     - Only active for queryexecutable
-- Schema resolving
-    - H2 storage with reload + decay
-        - Depending on how often a connection is used we decay the background refresh
-    - Dialect specific
-    - Background reloading
-    - Status in UI and force refresh etc. (Low prio, might be better in tree later on)
-    - Invoke support to fetch meta data by connectionId
-- JDBC Tree component and connection selector
+- [ ] JDBC Tree component and connection selector
     - Base dialect node supplier for tree. Overriable via dialect
     - Context menu items default + dialect spcific
-- Code parsing
+- [ ] Code parsing
     - Treesitter + dialect
-- Code complete
+- [ ] Code complete
     - Treesitter + dialect
-- Link actions in text editor
+- [ ] Link actions in text editor
     - Queryengine specific
         - Payloadbuilder
         - Jdbc
@@ -47,29 +29,47 @@ Large features in prio
         - Describe (sqlserver SP_HELP)
         - Count
         - etc.
-- Hoover table / etc.
+- [ ] Hoover table / etc.
     - Show popup with schema
-- Outline plugin
+- [ ] Outline plugin
     - Sidebar contribution where current editor can provider outline if present
     - Implement pattern based outline in editor that overrides
         - Pattern in top 20 rows and then an outline item for each occurence in document
-- Parse errors
+- [ ] Parse errors
     - Link in text output to editor lines
-- Core.themes
+- [ ] Core.themes
     - Themes support
-- Payloadbuilder
+- [ ] Payloadbuilder
     - JDBC Catalog
     - Kafka catalog
-- About dialog
+- [ ] About dialog
     - Queryeer
     - Modules (Payloadbuilder)
-- Status update from plugins via health / ping
+- [ ] Status update from plugins via health / ping
     - Jdbc can return status on files to property update ui for dead connections etc.
     - Render a panel contribution with jdbc connections and their state
-- Graph visualization framework
+- [ ] Graph visualization framework
     - Query plan
     - Procedure call tree
     - Schema
+- [x] Quicksearch
+    - Command pallette like VS Code in title bar
+    - Contributed sources
+        - workspace
+        - recentfiles
+        - settings
+        - datasources from core.queryengine.jdbc
+            - Quick switch of current files
+            - If locked => action kicks of vault
+    - Each contribution is rule based from context (active file etc.)
+    - Disable monaco pallette and instead aggregate items into new one
+- [x] Schema resolving
+    - H2 storage with reload + decay
+        - Depending on how often a connection is used we decay the background refresh
+    - Dialect specific
+    - Background reloading
+    - Status in UI and force refresh etc. (Low prio, might be better in tree later on)
+    - Invoke support to fetch meta data by connectionId
 
 # Queryeer Backend Roadmap
 

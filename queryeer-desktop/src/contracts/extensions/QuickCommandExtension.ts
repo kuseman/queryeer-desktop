@@ -18,6 +18,8 @@ export type QuickCommandProvider = {
   prefix?: string;
   label: string;
   order?: number;
+  /** When expression evaluated against the effective context chain. Provider is skipped when false. */
+  when?: string;
   getItems: (
     query: string,
     ctx: QuickCommandContext

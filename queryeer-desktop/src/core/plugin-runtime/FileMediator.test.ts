@@ -218,6 +218,79 @@ describe("FileMediator active file", () => {
   });
 });
 
+describe("FileMediator.onActiveFileChanged", () => {
+  it("notifies when setActiveFileId changes the value", () => {
+    const { mediator } = setupHarness();
+    const listener = vi.fn();
+    mediator.onActiveFileChanged(listener);
+
+    mediator.setActiveFileId("file-a");
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith("file-a");
+
+    mediator.setActiveFileId(null);
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenCalledWith(null);
+  });
+
+  it("does not notify when setActiveFileId is called with the same value", () => {
+    const { mediator } = setupHarness();
+    const listener = vi.fn();
+    mediator.onActiveFileChanged(listener);
+
+    mediator.setActiveFileId("file-a");
+    mediator.setActiveFileId("file-a");
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("notifies when openFile returns an already-open file and updates activeFileId", async () => {
+    const editors = [makeEditor("editor.any", ["text/plain"])];
+    const { mediator } = setupHarness({ editors });
+    const listener = vi.fn();
+
+    const first = await mediator.openFile("untitled:x", { mimeType: "text/plain" });
+    mediator.onActiveFileChanged(listener);
+
+    // Switch away so the file is no longer active
+    mediator.setActiveFileId("other-id");
+    listener.mockClear();
+
+    // Re-opening the same URI should make it active again
+    const second = await mediator.openFile("untitled:x", { mimeType: "text/plain" });
+
+    expect(second.fileId).toBe(first.fileId);
+    expect(mediator.getActiveFileId()).toBe(first.fileId);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith(first.fileId);
+  });
+
+  it("does not notify when openFile returns an already-open file that is already active", async () => {
+    const editors = [makeEditor("editor.any", ["text/plain"])];
+    const { mediator } = setupHarness({ editors });
+
+    await mediator.openFile("untitled:x", { mimeType: "text/plain" });
+
+    const listener = vi.fn();
+    mediator.onActiveFileChanged(listener);
+
+    await mediator.openFile("untitled:x", { mimeType: "text/plain" });
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("unsubscribe stops future notifications", () => {
+    const { mediator } = setupHarness();
+    const listener = vi.fn();
+    const unsub = mediator.onActiveFileChanged(listener);
+
+    unsub();
+    mediator.setActiveFileId("file-a");
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+});
+
 describe("FileMediator.saveFile", () => {
   it("writes content via resolveFileContent for file:// uris", async () => {
     const { mediator, registry, resolveFileContent, writeFile } = setupHarness();

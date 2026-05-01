@@ -1,6 +1,8 @@
 import type { FileEntity } from "../../../contracts/files/FileEntity";
 import type { Disposable } from "./types";
 import type { FilesRegistry } from "../../../contracts/files/FilesRegistry";
+import type { ContextChain } from "../../core.commands/context-chain";
+import { ContextPriority } from "../../core.commands/context-priority";
 import { TextEditorModel } from "./TextEditorModel";
 import { TextEditorApi } from "./TextEditorApi";
 import { ViewStateStore } from "./ViewStateStore";
@@ -16,8 +18,19 @@ export function getTextEditorRegistry(): TextEditorRegistry {
   return registry;
 }
 
+/** Module-level chain shared across all TextEditorRegistry instances. */
+let globalContextChain: ContextChain | null = null;
+
+/** Map from scope id → editor api, shared across all instances for cross-registry lookup. */
+const globalEditorByScopeId = new Map<string, TextEditorApi>();
+
+let nextScopeIndex = 0;
+
+export function setTextEditorContextChain(chain: ContextChain): void {
+  globalContextChain = chain;
+}
+
 export class TextEditorRegistry {
-  private static lastCommandEditor: TextEditorApi | null = null;
   private readonly modelsByFileId = new Map<string, TextEditorModel>();
   private readonly modelsByUri = new Map<string, TextEditorModel>();
   private readonly pendingRecoveredContentByFileId = new Map<string, string>();
@@ -30,18 +43,21 @@ export class TextEditorRegistry {
   private filesRegistry: FilesRegistry | null = null;
   private pendingFileForEditor: FileEntity | null = null;
   private editorFocusDisposables: Disposable[] = [];
-
-  static getLastCommandEditor(): TextEditorApi | null {
-    return TextEditorRegistry.lastCommandEditor;
-  }
+  private scopeId: string | null = null;
+  private scopeUnregister: (() => void) | null = null;
 
   getCommandTargetEditor(): TextEditorApi | null {
     if (this.editorApi?.getModel()) {
       return this.editorApi;
     }
-    const fallback = TextEditorRegistry.lastCommandEditor;
-    if (fallback?.getModel()) {
-      return fallback;
+    const lastFocusedId = globalContextChain?.getLastFocusedScopeId(
+      ContextPriority.EDITOR_INSTANCE
+    );
+    if (lastFocusedId) {
+      const editor = globalEditorByScopeId.get(lastFocusedId);
+      if (editor?.getModel()) {
+        return editor;
+      }
     }
     return null;
   }
@@ -52,26 +68,48 @@ export class TextEditorRegistry {
     }
 
     const focusDisposables: Disposable[] = [];
+
+    const onFocus = (): void => {
+      if (this.scopeId && globalContextChain) {
+        globalContextChain.activate(this.scopeId);
+        globalContextChain.update(this.scopeId, {
+          hasActiveTextEditor: true,
+          editorTextFocus: true,
+          languageId: api.getModel()?.languageId
+        });
+      }
+    };
+
+    const onBlur = (): void => {
+      if (this.scopeId && globalContextChain) {
+        globalContextChain.update(this.scopeId, { hasActiveTextEditor: true, editorTextFocus: false });
+      }
+    };
+
     const focusText = (api as unknown as {
       onDidFocusEditorText?: (callback: () => void) => Disposable;
     }).onDidFocusEditorText;
+    const blurText = (api as unknown as {
+      onDidBlurEditorText?: (callback: () => void) => Disposable;
+    }).onDidBlurEditorText;
     const focusWidget = (api as unknown as {
       onDidFocusEditorWidget?: (callback: () => void) => Disposable;
     }).onDidFocusEditorWidget;
+    const blurWidget = (api as unknown as {
+      onDidBlurEditorWidget?: (callback: () => void) => Disposable;
+    }).onDidBlurEditorWidget;
 
     if (typeof focusText === "function") {
-      focusDisposables.push(
-        focusText.call(api, () => {
-          TextEditorRegistry.lastCommandEditor = api;
-        })
-      );
+      focusDisposables.push(focusText.call(api, onFocus));
+    }
+    if (typeof blurText === "function") {
+      focusDisposables.push(blurText.call(api, onBlur));
     }
     if (typeof focusWidget === "function") {
-      focusDisposables.push(
-        focusWidget.call(api, () => {
-          TextEditorRegistry.lastCommandEditor = api;
-        })
-      );
+      focusDisposables.push(focusWidget.call(api, onFocus));
+    }
+    if (typeof blurWidget === "function") {
+      focusDisposables.push(blurWidget.call(api, onBlur));
     }
 
     this.editorFocusDisposables = focusDisposables;
@@ -84,6 +122,23 @@ export class TextEditorRegistry {
 
   onEditorReady(api: TextEditorApi): void {
     this.editorApi = api;
+
+    // Register a context scope for this editor instance.
+    if (this.scopeId) {
+      globalEditorByScopeId.delete(this.scopeId);
+      this.scopeUnregister?.();
+    }
+    const scopeId = `core.editor.monaco.${nextScopeIndex++}`;
+    this.scopeId = scopeId;
+    globalEditorByScopeId.set(scopeId, api);
+    if (globalContextChain) {
+      this.scopeUnregister = globalContextChain.register({
+        id: scopeId,
+        priority: ContextPriority.EDITOR_INSTANCE,
+        context: { hasActiveTextEditor: true, editorTextFocus: false }
+      });
+    }
+
     this.wireEditorFocusTracking(api);
 
     if (this.activeFileId) {
@@ -178,8 +233,11 @@ export class TextEditorRegistry {
       disposable.dispose();
     }
     this.editorFocusDisposables = [];
-    if (this.editorApi && TextEditorRegistry.lastCommandEditor === this.editorApi) {
-      TextEditorRegistry.lastCommandEditor = null;
+    this.scopeUnregister?.();
+    this.scopeUnregister = null;
+    if (this.scopeId) {
+      globalEditorByScopeId.delete(this.scopeId);
+      this.scopeId = null;
     }
     this.editorApi = null;
     this.pendingFileForEditor = null;
