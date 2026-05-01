@@ -114,7 +114,8 @@ export class PluginHost {
       keybindings: this.extensionRegistry.createKeybindingRegistry(),
       dialog: this.extensionRegistry.createDialogRegistry(),
       tooltip: this.extensionRegistry.createTooltipRegistry(),
-      settings: this.extensionRegistry.createSettingsRegistry()
+      settings: this.extensionRegistry.createSettingsRegistry(),
+      quickcommand: this.extensionRegistry.createQuickCommandRegistry()
     };
 
     for (const plugin of orderedPlugins) {
@@ -176,6 +177,10 @@ export class PluginHost {
 
   public subscribeToFiles(subscriber: (files: FileEntity[]) => void): () => void {
     return this.extensionRegistry.subscribeToFiles(subscriber);
+  }
+
+  public getQuickCommandProviders() {
+    return this.extensionRegistry.getQuickCommandProviders();
   }
 
   public async executeCommand(commandId: string) {

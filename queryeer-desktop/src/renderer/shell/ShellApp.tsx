@@ -15,6 +15,7 @@ import { Toolbar, StatusBar, Sidebar, SidebarDivider, EditorTabs, EditorPane } f
 import { SettingsModalHost } from "../../plugins/core.settings/SettingsModalHost";
 import { InputDialogHost } from "../../plugins/core.dialog/InputDialogHost";
 import { MessageDialogHost } from "../../plugins/core.dialog/MessageDialogHost";
+import { QuickCommandHost } from "../../plugins/core.quickcommand/QuickCommandHost";
 import { filterMenuItemsByWhen } from "../../plugins/core.menu/menu-item-filter";
 import { confirmCloseDirtyFile } from "./close-file-guard";
 import { filterSidebarViews } from "./sidebar-view-filter";
@@ -594,6 +595,7 @@ export function ShellApp({
       <SettingsModalHost />
       <MessageDialogHost />
       <InputDialogHost />
+      <QuickCommandHost filesRegistry={filesRegistry} fileMediator={fileMediator} />
     </div>
   );
 }

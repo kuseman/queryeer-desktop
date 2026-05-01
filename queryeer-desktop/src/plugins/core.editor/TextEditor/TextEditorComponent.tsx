@@ -98,6 +98,33 @@ export function TextEditorComponent({ file, registry }: TextEditorComponentProps
 
     applyEditorSettings();
 
+    // Suppress Monaco's built-in panels and redirect to the application quick command.
+    // Wrapped in try/catch: Vitest mocks throw on unknown property access so this degrades
+    // gracefully in test environments without monaco.KeyCode / monaco.KeyMod.
+    try {
+      const kC = (monaco as unknown as Record<string, unknown>)["KeyCode"] as
+        | { F1: number; KeyP: number; KeyO: number }
+        | undefined;
+      const kM = (monaco as unknown as Record<string, unknown>)["KeyMod"] as
+        | { CtrlCmd: number; Shift: number }
+        | undefined;
+
+      if (kC && kM && typeof editor.addCommand === "function") {
+        const openQuickCommand = (prefill?: string): void => {
+          import("../../../plugins/core.quickcommand/service")
+            .then(({ getQuickCommandService }) => {
+              getQuickCommandService()?.open(prefill ?? "");
+            })
+            .catch(() => {/* service not available */});
+        };
+        editor.addCommand(kC.F1, () => openQuickCommand("#"));
+        editor.addCommand(kM.CtrlCmd | kC.KeyP, () => openQuickCommand());
+        editor.addCommand(kM.CtrlCmd | kM.Shift | kC.KeyO, () => openQuickCommand("@"));
+      }
+    } catch {
+      // Not available in test environment
+    }
+
     disposablesRef.current.push(
       editor.onDidDispose(() => {
         api.dispose();

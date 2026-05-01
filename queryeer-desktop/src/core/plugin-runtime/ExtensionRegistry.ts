@@ -32,6 +32,10 @@ import type {
   DialogRegistry,
   FileSystemRegistry
 } from "../../contracts/plugin/Plugin";
+import type {
+  QuickCommandProvider,
+  QuickCommandRegistry
+} from "../../contracts/extensions/QuickCommandExtension";
 import type { ContextValues } from "../../plugins/core.commands/when-evaluator";
 import { CommandBus } from "./CommandBus";
 import { FileRegistry } from "./FileRegistry";
@@ -105,6 +109,7 @@ export class ExtensionRegistry {
   private readonly fileRegistry = new FileRegistry({
     getEditors: () => [...this.layoutEditors.values()]
   });
+  private readonly quickCommandProviders: QuickCommandProvider[] = [];
 
   public constructor(getCommandContextValues?: () => ContextValues) {
     this.commandBus = new CommandBus(() => getCommandContextValues?.() ?? {});
@@ -244,6 +249,18 @@ export class ExtensionRegistry {
         };
       }
     };
+  }
+
+  public createQuickCommandRegistry(): QuickCommandRegistry {
+    return {
+      registerProvider: (provider) => {
+        this.quickCommandProviders.push(provider);
+      }
+    };
+  }
+
+  public getQuickCommandProviders(): QuickCommandProvider[] {
+    return this.quickCommandProviders;
   }
 
   public createDialogRegistry(): DialogRegistry {

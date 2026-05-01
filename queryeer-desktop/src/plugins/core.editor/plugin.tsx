@@ -153,5 +153,45 @@ export const coreEditorPlugin: Plugin = {
 
     coreEditorTextPlugin.activate(context);
     coreEditorImagePlugin.activate(context);
+
+    context.quickcommand.registerProvider({
+      prefix: ">",
+      label: "Editor",
+      order: 10,
+      getItems: (_query, ctx) => {
+        const isEditorActive = ctx.activeFile?.editorId === "core.editor.text"
+          || ctx.activeFile?.editorId === "core.queryengine.editor";
+
+        type EditorAction = {
+          id: string;
+          title: string;
+          description: string;
+          commandId: string;
+          requiresEditor?: boolean;
+        };
+
+        const actions: EditorAction[] = [
+          { id: "editor.format", title: "Format Document", description: "Format the active file", commandId: "core.editor.text.format", requiresEditor: true },
+          { id: "editor.formatSelection", title: "Format Selection", description: "Format the selected text", commandId: "core.editor.text.formatSelection", requiresEditor: true },
+          { id: "editor.find", title: "Find", description: "Open find widget", commandId: "core.editor.text.find", requiresEditor: true },
+          { id: "editor.toggleComment", title: "Toggle Line Comment", description: "Comment or uncomment lines", commandId: "core.editor.text.toggleCommentLine", requiresEditor: true },
+          { id: "editor.goToDefinition", title: "Go to Definition", description: "Navigate to the symbol definition", commandId: "core.editor.text.goToDefinition", requiresEditor: true },
+          { id: "editor.findReferences", title: "Find References", description: "Find all references to the symbol", commandId: "core.editor.text.findReferences", requiresEditor: true },
+          { id: "editor.trimWhitespace", title: "Trim Trailing Whitespace", description: "Remove trailing whitespace from all lines", commandId: "core.editor.text.trimTrailingWhitespace", requiresEditor: true },
+          { id: "editor.selectAll", title: "Select All", description: "Select all content in the editor", commandId: "core.editor.text.selectAll" }
+        ];
+
+        return actions
+          .filter((a) => !a.requiresEditor || isEditorActive)
+          .map((a) => ({
+            id: a.id,
+            title: a.title,
+            description: a.description,
+            action: () => {
+              void context.commands.executeCommand(a.commandId);
+            }
+          }));
+      }
+    });
   }
 };

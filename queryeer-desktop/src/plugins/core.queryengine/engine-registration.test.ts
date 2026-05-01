@@ -109,7 +109,8 @@ function createContext(file: FileEntity): PluginContext {
       listSettingsDefinitions: vi.fn(() => []),
       getAdvancedRenderer: vi.fn(),
       getAdvancedValidator: vi.fn()
-    }
+    },
+    quickcommand: { registerProvider: vi.fn() }
   };
 }
 
