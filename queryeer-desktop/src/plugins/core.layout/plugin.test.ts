@@ -69,7 +69,8 @@ function createContext(file?: FileEntity) {
       executeFile: vi.fn(),
       reloadFile: vi.fn(),
       acceptExternalChange: vi.fn(),
-      discardExternalChange: vi.fn()
+      discardExternalChange: vi.fn(),
+      onActiveFileChanged: vi.fn(() => () => {})
     },
     fileWatcher: {
       watch: vi.fn(),

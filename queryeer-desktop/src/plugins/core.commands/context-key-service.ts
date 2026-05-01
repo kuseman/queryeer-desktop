@@ -1,4 +1,6 @@
 import type { ContextValues } from "./when-evaluator";
+import type { ContextChain } from "./context-chain";
+import { ContextPriority } from "./context-priority";
 
 export type ContextKeyService = {
   get: (key: string) => string | number | boolean | undefined;
@@ -24,6 +26,60 @@ function hasClosest(element: HTMLElement | null, selectors: string[]): boolean {
     return false;
   }
   return selectors.some((selector) => Boolean(element.closest(selector)));
+}
+
+/**
+ * Registers a ZONE-priority context scope into the chain and keeps it updated
+ * via document focus events. Returns a dispose handle to remove DOM listeners
+ * and unregister the scope.
+ */
+export function createZoneFocusScope(
+  chain: ContextChain,
+  documentRef: Document = document
+): { dispose: () => void } {
+  const SCOPE_ID = "core.commands.zone";
+
+  const buildContext = (): ContextValues => {
+    const active =
+      documentRef.activeElement instanceof HTMLElement ? documentRef.activeElement : null;
+    return {
+      global: true,
+      inputFocus: isInputLike(active),
+      editorFocus: hasClosest(active, [
+        "[data-context='editor']",
+        ".shell-editor-pane",
+        ".shell-editor-content"
+      ]),
+      terminalFocus: hasClosest(active, ["[data-context='terminal']", ".terminal", ".xterm"]),
+      explorerFocus: hasClosest(active, [
+        "[data-context='explorer']",
+        ".shell-sidebar-primary"
+      ])
+    };
+  };
+
+  const unregister = chain.register({
+    id: SCOPE_ID,
+    priority: ContextPriority.ZONE,
+    context: buildContext()
+  });
+
+  const refresh = (): void => chain.update(SCOPE_ID, buildContext());
+  const onFocusIn = (): void => refresh();
+  const onFocusOut = (): void => {
+    window.setTimeout(refresh, 0);
+  };
+
+  documentRef.addEventListener("focusin", onFocusIn);
+  documentRef.addEventListener("focusout", onFocusOut);
+
+  return {
+    dispose: () => {
+      documentRef.removeEventListener("focusin", onFocusIn);
+      documentRef.removeEventListener("focusout", onFocusOut);
+      unregister();
+    }
+  };
 }
 
 export function createContextKeyService(documentRef: Document = document): ContextKeyService {

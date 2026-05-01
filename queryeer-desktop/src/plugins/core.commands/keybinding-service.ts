@@ -2,6 +2,7 @@ import type { ExtensionSnapshot } from "../../core/plugin-runtime/ExtensionRegis
 import type { UserKeybindingsDocument } from "../../contracts/commands/Keybindings";
 import type { CommandExecutionResult } from "../../contracts/plugin/Plugin";
 import { createContextKeyService } from "./context-key-service";
+import type { ContextChain } from "./context-chain";
 import {
   eventToNormalizedKey,
   normalizeKeybindingKey,
@@ -21,6 +22,8 @@ export type KeybindingService = {
 export type KeybindingServiceOptions = {
   executeCommand: (commandId: string) => Promise<CommandExecutionResult>;
   getUserKeybindings: () => Promise<UserKeybindingsDocument>;
+  /** When provided, context snapshots come from the shared chain instead of an isolated DOM tracker. */
+  contextChain?: ContextChain;
 };
 
 function isFunctionKeybinding(key: string): boolean {
@@ -39,7 +42,7 @@ function shouldSkipForInput(when: string | undefined, contextInputFocus: boolean
 }
 
 export function createKeybindingService(options: KeybindingServiceOptions): KeybindingService {
-  const contextKeys = createContextKeyService();
+  const contextKeys = options.contextChain ? null : createContextKeyService();
   let resolved: ResolvedKeybinding[] = [];
   let diagnostics: KeybindingDiagnostics = {
     invalidUserBindings: [],
@@ -52,7 +55,7 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
       return;
     }
 
-    const contextSnapshot = contextKeys.snapshot();
+    const contextSnapshot = options.contextChain?.getEffectiveContext() ?? contextKeys!.snapshot();
     const inputFocus = Boolean(contextSnapshot.inputFocus);
 
     const matched = [...resolved]
@@ -93,7 +96,7 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
     diagnostics: () => diagnostics,
     dispose: () => {
       document.removeEventListener("keydown", onKeyDown, true);
-      contextKeys.dispose();
+      contextKeys?.dispose();
     }
   };
 }

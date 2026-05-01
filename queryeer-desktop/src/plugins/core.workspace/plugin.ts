@@ -7,7 +7,15 @@ function getFileName(uri: string): string {
 }
 
 function getDisplayPath(uri: string): string {
-  return uri.replace(/^file:\/\//, "").replace(/\\/g, "/");
+  if (!uri.startsWith("file://")) {
+    return uri;
+  }
+  const path = decodeURIComponent(uri.slice("file://".length));
+  // Windows drive path: /C:/… → C:\…
+  if (/^\/[A-Za-z]:\//.test(path)) {
+    return path.slice(1).replace(/\//g, "\\");
+  }
+  return path;
 }
 
 export const coreWorkspacePlugin: Plugin = {

@@ -12,18 +12,33 @@ import {
   resolveKeybindingState
 } from "../../plugins/core.commands/keybinding-resolver";
 import { getTextEditorModelRepositories, getTextEditorRepositoryStates } from "../../plugins/core.editor/TextEditor/TextEditorModelRepository";
+import { setTextEditorContextChain } from "../../plugins/core.editor/TextEditor/TextEditorRegistry";
 import { createBackendCommandContext } from "./backend-command-context";
 import { filterMenuItemsByWhen } from "../../plugins/core.menu/menu-item-filter";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import type { FileMediator } from "../../contracts/files/FileMediator";
 import { flattenContextObject } from "./context-value-flatten";
-import { createContextKeyService } from "../../plugins/core.commands/context-key-service";
+import { createContextChain } from "../../plugins/core.commands/context-chain";
+import { ContextPriority } from "../../plugins/core.commands/context-priority";
+import { createZoneFocusScope } from "../../plugins/core.commands/context-key-service";
 import { initializeQuickCommandService } from "../../plugins/core.quickcommand/service";
+import { requestMessageDialog } from "../../plugins/core.dialog/message-dialog-service";
 
 export async function bootstrapShell() {
+  const chain = createContextChain();
+
+  // Backend health context as the base workbench scope.
   const commandContext = createBackendCommandContext();
-  const uiContext = createContextKeyService();
+  chain.register({ id: "backend", priority: ContextPriority.WORKBENCH, context: {} });
   await commandContext.initialize();
+  chain.update("backend", commandContext.snapshot());
+  commandContext.onDidChange(() => chain.update("backend", commandContext.snapshot()));
+
+  // UI zone focus tracking (editorFocus, terminalFocus, inputFocus, …).
+  createZoneFocusScope(chain);
+
+  // Wire all TextEditorRegistry instances so they can register EDITOR_INSTANCE scopes.
+  setTextEditorContextChain(chain);
 
   const backendSync: FileBackendSync = {
     openFile: async (file, initialText) => {
@@ -99,7 +114,6 @@ export async function bootstrapShell() {
     resolveFileContent,
     showSaveDialog: (options) => window.appShell.showDialogSave(options),
     getCommandContextValues: () => {
-      const snapshot = commandContext.snapshot();
       const activeFileId = fileMediator?.getActiveFileId() ?? null;
       const activeFile = activeFileId ? filesRegistry?.getFile(activeFileId) : undefined;
       const isQueryExecutable = activeFile
@@ -107,8 +121,7 @@ export async function bootstrapShell() {
         : false;
       const metadataContext = flattenContextObject("activeFileMetadata", activeFile?.metadata);
       return {
-        ...snapshot,
-        ...uiContext.snapshot(),
+        ...chain.getEffectiveContext(),
         hasActiveQueryExecutableFile: isQueryExecutable,
         ...metadataContext
       };
@@ -129,7 +142,7 @@ export async function bootstrapShell() {
   await host.start(discovery.manifests);
   host.setExternalLoadErrors(discovery.loadErrors);
 
-  initializeQuickCommandService(host.getQuickCommandProviders());
+  initializeQuickCommandService(host.getQuickCommandProviders(), () => chain.getEffectiveContext());
 
   const rebuildNativeMenu = async (): Promise<void> => {
     const extensions = host.getExtensions();
@@ -180,7 +193,7 @@ export async function bootstrapShell() {
       return result;
     }
     if (result.reason === "disabled-by-enablement") {
-      await window.appShell.showDialogMessage({
+      await requestMessageDialog({
         title: "Backend not ready",
         message: "Backend is not up and running yet. Please wait a moment and try again.",
         severity: "warning"
@@ -193,7 +206,8 @@ export async function bootstrapShell() {
     executeCommand: async (commandId): Promise<CommandExecutionResult> => {
       return executeCommand(commandId);
     },
-    getUserKeybindings: () => window.appShell.getUserKeybindings()
+    getUserKeybindings: () => window.appShell.getUserKeybindings(),
+    contextChain: chain
   });
   await keybindingService.initialize(host.getExtensions());
 
@@ -270,14 +284,7 @@ export async function bootstrapShell() {
     commandExecution,
     executeCommand,
     canExecuteCommand: (commandId: string) => host.canExecuteCommand(commandId),
-    onCommandContextChanged: (listener: () => void) => {
-      const offBackend = commandContext.onDidChange(listener);
-      const offUi = uiContext.onDidChange(listener);
-      return () => {
-        offBackend();
-        offUi();
-      };
-    },
+    onCommandContextChanged: (listener: () => void) => chain.onDidChange(listener),
     diagnostics: host.getDiagnostics()
   };
 }

@@ -4,6 +4,7 @@ import type {
   QuickCommandProvider,
   QuickCommandRegistry
 } from "../../contracts/extensions/QuickCommandExtension";
+import { evaluateWhenExpression, type ContextValues } from "../core.commands/when-evaluator";
 import { fuzzyScore } from "./fuzzy-match";
 import { RecentlyUsedStore } from "./recently-used-store";
 
@@ -13,12 +14,14 @@ type Listener = (state: PanelState) => void;
 
 export class QuickCommandService {
   private readonly providers: QuickCommandProvider[];
+  private readonly getContextValues: (() => ContextValues) | undefined;
   private readonly recentlyUsed = new RecentlyUsedStore();
   private state: PanelState = { open: false, query: "" };
   private readonly listeners: Listener[] = [];
 
-  public constructor(providers: QuickCommandProvider[]) {
+  public constructor(providers: QuickCommandProvider[], getContextValues?: () => ContextValues) {
     this.providers = providers;
+    this.getContextValues = getContextValues;
   }
 
   public open(prefillQuery = ""): void {
@@ -63,6 +66,13 @@ export class QuickCommandService {
         activeProviders = prefixProviders;
         searchQuery = trimmed.slice(1).trimStart();
       }
+    }
+
+    if (this.getContextValues) {
+      const ctx = this.getContextValues();
+      activeProviders = activeProviders.filter(
+        (p) => !p.when || evaluateWhenExpression(p.when, ctx)
+      );
     }
 
     const sorted = [...activeProviders].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -118,8 +128,11 @@ export class QuickCommandService {
 
 let serviceInstance: QuickCommandService | null = null;
 
-export function initializeQuickCommandService(providers: QuickCommandProvider[]): QuickCommandService {
-  serviceInstance = new QuickCommandService(providers);
+export function initializeQuickCommandService(
+  providers: QuickCommandProvider[],
+  getContextValues?: () => ContextValues
+): QuickCommandService {
+  serviceInstance = new QuickCommandService(providers, getContextValues);
   return serviceInstance;
 }
 
