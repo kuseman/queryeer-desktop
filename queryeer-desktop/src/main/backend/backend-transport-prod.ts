@@ -4,10 +4,18 @@ import { join } from "node:path";
 import { StdioBackendTransportBase } from "./backend-transport-stdio-base.js";
 import type { BackendTransportCallbacks } from "./backend-transport.js";
 
+type BackendLaunchContext = {
+  appDir: string;
+  settingsDirPath: string;
+};
+
 export class ProdBackendTransport extends StdioBackendTransportBase {
   public readonly mode = "prod-jar" as const;
 
-  public constructor(callbacks: BackendTransportCallbacks) {
+  public constructor(
+    callbacks: BackendTransportCallbacks,
+    private readonly launchContext?: BackendLaunchContext
+  ) {
     super(callbacks);
   }
 
@@ -20,7 +28,13 @@ export class ProdBackendTransport extends StdioBackendTransportBase {
     return spawn("java", ["-jar", jarPath], {
       cwd: join(jarPath, ".."),
       stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true
+      windowsHide: true,
+      env: {
+        ...process.env,
+        QUERYEER_APP_DIR: this.launchContext?.appDir ?? process.env.QUERYEER_APP_DIR,
+        QUERYEER_SETTINGS_DIR:
+          this.launchContext?.settingsDirPath ?? process.env.QUERYEER_SETTINGS_DIR
+      }
     });
   }
 

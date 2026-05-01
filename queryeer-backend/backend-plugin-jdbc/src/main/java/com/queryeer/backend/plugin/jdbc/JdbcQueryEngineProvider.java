@@ -33,19 +33,28 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private static final String ACTION_CONNECTION_SETUP = "jdbc.connection.setup";
     private static final String ACTION_CONNECTION_DIALECTS = "jdbc.connection.dialects";
     private static final String ACTION_CONNECTION_TEST = "jdbc.connection.test";
+    private static final String ACTION_SCHEMA_SNAPSHOT = "jdbc.schema.snapshot";
+    private static final String ACTION_SCHEMA_REFRESH = "jdbc.schema.refresh";
     private final JdbcDialectRegistry registry;
     private final JdbcConnectionRegistry connections;
     private final SecretService secrets;
     private final JdbcFileConnectionManager fileConnections;
+    private final JdbcConnectionUsageListener usageListener;
+    private final JdbcSchemaStore schemaStore;
+    private final JdbcSchemaCrawlCoordinator crawlCoordinator;
     private final Map<String, CancellableJdbcQueryExecutor> activeExecutors = new ConcurrentHashMap<>();
     private final Set<String> cancelledExecutionIds = ConcurrentHashMap.newKeySet();
 
-    JdbcQueryEngineProvider(JdbcDialectRegistry registry, JdbcConnectionRegistry connections, SecretService secrets, JdbcFileConnectionManager fileConnections)
+    JdbcQueryEngineProvider(JdbcDialectRegistry registry, JdbcConnectionRegistry connections, SecretService secrets, JdbcFileConnectionManager fileConnections,
+            JdbcConnectionUsageListener usageListener, JdbcSchemaStore schemaStore, JdbcSchemaCrawlCoordinator crawlCoordinator)
     {
         this.registry = registry;
         this.connections = connections;
         this.secrets = secrets;
         this.fileConnections = fileConnections;
+        this.usageListener = usageListener;
+        this.schemaStore = schemaStore;
+        this.crawlCoordinator = crawlCoordinator;
     }
 
     @Override
@@ -92,6 +101,8 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             rowCount = dialect.queryExecutor()
                     .execute(request, new TransportJdbcQueryEventListener(publisher))
                     .rowCount();
+
+            usageListener.onUsage(state.connectionId());
 
             publisher.completed(System.currentTimeMillis() - startedAt, rowCount);
         }
@@ -141,6 +152,8 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             case ACTION_CONNECTION_SETUP -> connectionSetup();
             case ACTION_CONNECTION_DIALECTS -> registry.all();
             case ACTION_CONNECTION_TEST -> connectionTest(payload);
+            case ACTION_SCHEMA_SNAPSHOT -> schemaSnapshot(payload);
+            case ACTION_SCHEMA_REFRESH -> schemaRefresh(payload);
             case ACTION_CONNECTION_UPSERT -> connectionUpsert(payload);
             case ACTION_ENGINE_CAPABILITIES -> engineCapabilities();
             default -> QueryEngineProvider.super.invoke(fileId, action, payload);
@@ -193,13 +206,66 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
 
         Map<String, Object> connection = asMap(value.get("connection"));
         JdbcConnectionRegistry.JdbcStoredConnection stored = connections.upsert(connectionId, stringValue(value.get("name")), connection);
+        crawlCoordinator.onConnectionUpsert(connectionId);
         return Map.of("connectionId", stored.connectionId(), "version", stored.version()
                 .get());
     }
 
     private Object engineCapabilities()
     {
-        return Map.of("actions", List.of(ACTION_ENGINE_CAPABILITIES, ACTION_CONNECTION_UPSERT, ACTION_CONNECTION_SETUP, ACTION_CONNECTION_DIALECTS, ACTION_CONNECTION_TEST));
+        return Map.of("actions", List.of(ACTION_ENGINE_CAPABILITIES, ACTION_CONNECTION_UPSERT, ACTION_CONNECTION_SETUP, ACTION_CONNECTION_DIALECTS, ACTION_CONNECTION_TEST, ACTION_SCHEMA_SNAPSHOT,
+                ACTION_SCHEMA_REFRESH));
+    }
+
+    private Object schemaSnapshot(Object payload)
+    {
+        Map<String, Object> value = asMap(payload);
+        String connectionId = stringValue(value.get("connectionId"));
+        if (connectionId == null)
+        {
+            throw new IllegalArgumentException("connectionId is required");
+        }
+        String scope = stringValue(value.get("scope"));
+        JdbcSchemaCrawlScope crawlScope = "deep".equalsIgnoreCase(scope) ? JdbcSchemaCrawlScope.DEEP
+                : JdbcSchemaCrawlScope.TOP;
+        return schemaStore.latestSnapshot(connectionId, crawlScope);
+    }
+
+    private Object schemaRefresh(Object payload)
+    {
+        Map<String, Object> value = asMap(payload);
+        String connectionId = stringValue(value.get("connectionId"));
+        if (connectionId == null)
+        {
+            throw new IllegalArgumentException("connectionId is required");
+        }
+        String scope = stringValue(value.get("scope"));
+        JdbcSchemaCrawlScope crawlScope;
+        if (scope == null
+                || "top".equalsIgnoreCase(scope))
+        {
+            crawlScope = JdbcSchemaCrawlScope.TOP;
+        }
+        else if ("deep".equalsIgnoreCase(scope))
+        {
+            crawlScope = JdbcSchemaCrawlScope.DEEP;
+        }
+        else
+        {
+            throw new IllegalArgumentException("scope must be one of: top, deep");
+        }
+        JdbcSchemaTarget target = null;
+        if (crawlScope == JdbcSchemaCrawlScope.DEEP)
+        {
+            Map<String, Object> targetMap = asMap(value.get("target"));
+            String schema = stringValue(targetMap.get("schema"));
+            if (schema == null)
+            {
+                throw new IllegalArgumentException("target.schema is required for scope=deep");
+            }
+            target = new JdbcSchemaTarget(stringValue(targetMap.get("database")), schema);
+        }
+        return crawlCoordinator.refreshNow(connectionId, crawlScope, target);
     }
 
     private JdbcExecutionState resolveExecutionState(Object engineState)

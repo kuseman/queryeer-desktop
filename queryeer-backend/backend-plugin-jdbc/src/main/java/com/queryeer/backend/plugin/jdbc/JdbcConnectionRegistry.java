@@ -1,6 +1,7 @@
 package com.queryeer.backend.plugin.jdbc;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,6 +33,14 @@ final class JdbcConnectionRegistry
         JdbcStoredConnection value = byId.get(connectionId);
         return value == null ? Optional.empty()
                 : Optional.of(value.snapshot());
+    }
+
+    List<JdbcStoredConnection> all()
+    {
+        return byId.values()
+                .stream()
+                .map(JdbcStoredConnection::snapshot)
+                .toList();
     }
 
     record JdbcStoredConnection(String connectionId, AtomicLong version, String name, Map<String, Object> connection)

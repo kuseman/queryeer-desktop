@@ -2,12 +2,39 @@ package com.queryeer.backend.runner;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 class BackendRunnerModuleTest
 {
+    @Test
+    void resolveConfigValuesReadsSystemProperties()
+    {
+        String previousAppDir = System.getProperty("queryeer.app.dir");
+        String previousSettingsDir = System.getProperty("queryeer.settings.dir");
+        String previousSettingsPath = System.getProperty("queryeer.settings.path");
+        try
+        {
+            System.setProperty("queryeer.app.dir", " C:/appdata ");
+            System.setProperty("queryeer.settings.dir", " C:/appdata/settings ");
+            System.setProperty("queryeer.settings.path", " C:/appdata/settings/core.queryengine.jdbc.json ");
+
+            Map<String, String> values = BackendRunnerModule.resolveConfigValues();
+
+            Assertions.assertEquals("C:/appdata", values.get("queryeer.app.dir"));
+            Assertions.assertEquals("C:/appdata/settings", values.get("queryeer.settings.dir"));
+            Assertions.assertEquals("C:/appdata/settings/core.queryengine.jdbc.json", values.get("queryeer.settings.path"));
+        }
+        finally
+        {
+            restoreProperty("queryeer.app.dir", previousAppDir);
+            restoreProperty("queryeer.settings.dir", previousSettingsDir);
+            restoreProperty("queryeer.settings.path", previousSettingsPath);
+        }
+    }
+
     @Test
     void mergeDiscoveredPluginsThrowsOnDuplicateIds()
     {
@@ -38,5 +65,17 @@ class BackendRunnerModuleTest
         PluginManifest manifest = new PluginManifest(1, pluginId, pluginId, "0.1.0", new PluginManifest.BackendTarget("com.example.Plugin", null, null, "17"), null, List.of(), List.of(), List.of(),
                 null, null);
         return new DiscoveredPlugin(manifest, null, source, false, null);
+    }
+
+    private static void restoreProperty(String key, String previous)
+    {
+        if (previous == null)
+        {
+            System.clearProperty(key);
+        }
+        else
+        {
+            System.setProperty(key, previous);
+        }
     }
 }

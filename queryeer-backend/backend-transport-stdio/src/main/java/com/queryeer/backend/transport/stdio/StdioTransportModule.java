@@ -6,13 +6,14 @@ import java.util.List;
 import java.util.function.Supplier;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.queryeer.backend.api.EventBus;
 import com.queryeer.backend.api.FileRegistry;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.contract.runtime.RuntimeStatusResult;
 
 public final class StdioTransportModule
 {
-    public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry,
+    public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry, EventBus events,
             Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt)
     {
         EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
@@ -24,7 +25,7 @@ public final class StdioTransportModule
         EngineInvokeService engineInvokeService = new EngineInvokeService(queryEngines, secretResolver);
 
         List<RequestHandler> handlers = List.of(new HandshakeRequestHandler(responseWriter), new RuntimeStatusRequestHandler(responseWriter, codec, runtimeStatusSupplier),
-                new SecuritySessionOpenRequestHandler(responseWriter, codec, securitySessionBridge), new SecuritySessionCloseRequestHandler(responseWriter, securitySessionBridge),
+                new SecuritySessionOpenRequestHandler(responseWriter, codec, securitySessionBridge, events), new SecuritySessionCloseRequestHandler(responseWriter, securitySessionBridge, events),
                 new SecurityVaultChangedRequestHandler(responseWriter, codec, securitySessionBridge), new HealthPingRequestHandler(startedAt, responseWriter, codec),
                 new QueryExecuteRequestHandler(responseWriter, codec, queryExecutionService), new QueryCancelRequestHandler(responseWriter, codec, queryExecutionService),
                 new EngineInvokeRequestHandler(responseWriter, codec, engineInvokeService), new ConnectionUpsertRequestHandler(responseWriter, codec, queryEngines),

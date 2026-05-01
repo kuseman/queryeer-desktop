@@ -12,6 +12,7 @@ import com.queryeer.backend.queryengine.jdbc.JdbcSchemaResolver;
 final class BasicJdbcDialect implements JdbcDialect
 {
     private final JdbcQueryExecutor queryExecutor = new DriverManagerJdbcQueryExecutor();
+    private final JdbcSchemaResolver schemaResolver = new InformationSchemaJdbcSchemaResolver();
 
     @Override
     public JdbcDialectMetadata metadata()
@@ -34,6 +35,6 @@ final class BasicJdbcDialect implements JdbcDialect
     @Override
     public JdbcSchemaResolver schemaResolver()
     {
-        throw new UnsupportedOperationException("Not implemented");
+        return schemaResolver;
     }
 }

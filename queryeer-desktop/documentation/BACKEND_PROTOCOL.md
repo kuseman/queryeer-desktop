@@ -682,6 +682,7 @@ Current Java stdio scaffold implementation status:
 - `queryengine.cancel` implemented (mocked cancellation notification)
 - `backend.runtimeStatus` implemented
 - `connection.upsert` request handling scaffolded
+- JDBC provider actions include `jdbc.schema.snapshot` (latest cached snapshot by `connectionId` and optional `scope`) and `jdbc.schema.refresh` (synchronous refresh + cache persist with scope-aware behavior)
 - `file.open` / `file.close` / `file.bind` request handlers implemented against `DefaultFileRegistry`; JDBC provider registers `FileSessionHandler` for file-scoped connection lifecycle and rebind cleanup
 - `file.change` notification handler implemented
 
@@ -689,6 +690,23 @@ JDBC file-session cleanup configuration:
 
 - `queryeer.jdbc.fileSession.idleTimeoutMs` (default: `1800000`) controls idle lifetime before a file-scoped JDBC session is evicted.
 - `queryeer.jdbc.fileSession.reaperIntervalMs` (default: min(idleTimeoutMs, 300000)) controls how often idle sessions are scanned.
+- `queryeer.jdbc.schemaCrawl.intervalMs` (default: `300000`) controls periodic schema crawl loop interval when security session is open.
+
+Backend bootstrap configuration (desktop -> backend process env -> backend config service):
+
+- `QUERYEER_APP_DIR` maps to `queryeer.app.dir`.
+- `QUERYEER_SETTINGS_DIR` maps to `queryeer.settings.dir`.
+- `QUERYEER_SETTINGS_PATH` maps to `queryeer.settings.path`.
+
+JDBC startup preload behavior:
+
+- On plugin activation, backend JDBC reads module settings from `queryeer.settings.path` (if present) or `${queryeer.settings.dir}/core.queryengine.jdbc.json`.
+- Backend loads `values["core.queryengine.jdbc.connections"]`, applies the same normalization rules as desktop (required `connectionId`/`url`, default `dialectId="jdbc"`, default `enabled=true`, duplicate IDs dropped), and preloads enabled connections into backend runtime registry.
+- JDBC crawl subsystem starts at plugin activation, but crawl execution is gated until backend receives `security.session.open` from desktop main.
+- On `security.session.close`, schema crawl loop pauses until a new `security.session.open` arrives.
+- `jdbc.schema.refresh` requires an open security session; otherwise backend returns a validation error.
+- `jdbc.schema.refresh` supports `scope=top|deep` (`top` default). `scope=deep` requires `target.schema` (`target.database` optional).
+- Active connections are background-crawled on `top` scope (databases/schemas) while `deep` scope (tables/columns) is refreshed only on explicit triggers.
 
 Current integration notes:
 
