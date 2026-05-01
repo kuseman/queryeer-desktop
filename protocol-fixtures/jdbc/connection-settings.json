@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "moduleId": "core.queryengine.jdbc",
+  "updatedAt": "2026-05-01T00:00:00.000Z",
+  "values": {
+    "core.queryengine.jdbc.connections": [
+      {
+        "connectionId": "pg1",
+        "title": "Local Postgres",
+        "dialectId": "postgres",
+        "url": "jdbc:postgresql://localhost:5432/app",
+        "username": "app",
+        "password": {
+          "secretRef": "sec-1"
+        },
+        "enabled": true
+      },
+      {
+        "connectionId": "",
+        "url": "jdbc:ignore"
+      },
+      {
+        "connectionId": "dup",
+        "url": "jdbc:first"
+      },
+      {
+        "connectionId": "dup",
+        "url": "jdbc:second"
+      },
+      {
+        "connectionId": "defaulted",
+        "url": "jdbc:h2:mem:def"
+      },
+      {
+        "connectionId": "disabled",
+        "dialectId": "mysql",
+        "url": "jdbc:mysql://localhost:3306/app",
+        "enabled": false
+      }
+    ]
+  }
+}

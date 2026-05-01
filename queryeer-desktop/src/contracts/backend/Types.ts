@@ -148,6 +148,15 @@ export type EngineInvokeResult = {
   result?: unknown;
 };
 
+export type JdbcSchemaRefreshPayload = {
+  connectionId: string;
+  scope?: "top" | "deep";
+  target?: {
+    database?: string;
+    schema?: string;
+  };
+};
+
 export type ConnectionUpsertParams = {
   connectionId?: string;
   engineId: string;

@@ -6,8 +6,10 @@ import java.io.OutputStream;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -33,7 +35,7 @@ public final class BackendRunnerModule
     public int run(InputStream input, OutputStream output)
     {
         int exitCode = 0;
-        BackendPlatformServices services = BackendPlatformServices.defaultServices();
+        BackendPlatformServices services = BackendPlatformServices.defaultServices(resolveConfigValues());
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
         objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -67,7 +69,7 @@ public final class BackendRunnerModule
         }
 
         long startedAt = System.currentTimeMillis();
-        StdioTransportModule.RunningTransport transportServer = new StdioTransportModule().create(input, output, objectMapper, services.queryEngines(), services.fileRegistryView(),
+        StdioTransportModule.RunningTransport transportServer = new StdioTransportModule().create(input, output, objectMapper, services.queryEngines(), services.fileRegistryView(), services.events(),
                 () -> runtimeStatusSnapshot(runtime), startedAt);
         System.err.println(withCorrelation("Queryeer backend runner started (stdio mode).", null));
         try
@@ -103,6 +105,34 @@ public final class BackendRunnerModule
             PluginResourceCloser.closeClassLoaders(discoveredPlugins, services.logger());
         }
         return exitCode;
+    }
+
+    static Map<String, String> resolveConfigValues()
+    {
+        Map<String, String> values = new LinkedHashMap<>();
+        putIfPresent(values, "queryeer.app.dir", firstNonBlank(System.getProperty("queryeer.app.dir"), System.getenv("QUERYEER_APP_DIR")));
+        putIfPresent(values, "queryeer.settings.dir", firstNonBlank(System.getProperty("queryeer.settings.dir"), System.getenv("QUERYEER_SETTINGS_DIR")));
+        putIfPresent(values, "queryeer.settings.path", firstNonBlank(System.getProperty("queryeer.settings.path"), System.getenv("QUERYEER_SETTINGS_PATH")));
+        return Map.copyOf(values);
+    }
+
+    private static void putIfPresent(Map<String, String> values, String key, String value)
+    {
+        if (value != null
+                && !value.isBlank())
+        {
+            values.put(key, value.trim());
+        }
+    }
+
+    private static String firstNonBlank(String first, String second)
+    {
+        if (first != null
+                && !first.isBlank())
+        {
+            return first;
+        }
+        return second;
     }
 
     private List<DiscoveredPlugin> discoverPlugins(PluginDiscoveryService discoveryService, BackendPlatformServices services)

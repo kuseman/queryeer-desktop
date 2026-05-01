@@ -10,12 +10,18 @@ export type DevTransportState = {
   dependenciesPrepared: boolean;
 };
 
+type BackendLaunchContext = {
+  appDir: string;
+  settingsDirPath: string;
+};
+
 export class DevBackendTransport extends StdioBackendTransportBase {
   public readonly mode = "dev-maven" as const;
 
   public constructor(
     callbacks: BackendTransportCallbacks,
-    private readonly state: DevTransportState = { dependenciesPrepared: false }
+    private readonly state: DevTransportState = { dependenciesPrepared: false },
+    private readonly launchContext?: BackendLaunchContext
   ) {
     super(callbacks);
   }
@@ -58,7 +64,10 @@ export class DevBackendTransport extends StdioBackendTransportBase {
     const existingMavenOpts = process.env.MAVEN_OPTS?.trim();
     const spawnEnv = {
       ...process.env,
-      MAVEN_OPTS: [existingMavenOpts, debugArgs].filter((value) => Boolean(value)).join(" ") || undefined
+      MAVEN_OPTS: [existingMavenOpts, debugArgs].filter((value) => Boolean(value)).join(" ") || undefined,
+      QUERYEER_APP_DIR: this.launchContext?.appDir ?? process.env.QUERYEER_APP_DIR,
+      QUERYEER_SETTINGS_DIR:
+        this.launchContext?.settingsDirPath ?? process.env.QUERYEER_SETTINGS_DIR
     };
 
     return process.platform === "win32"

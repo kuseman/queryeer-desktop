@@ -32,16 +32,18 @@ import { createBeforeQuitHandler } from "./app-shutdown.js";
 const isDev = !app.isPackaged;
 
 function createBackendFactory(): BackendTransportFactory {
+  const appDir = app.getPath("userData");
+  const settingsDirPath = defaultSettingsDirPath(appDir);
   if (app.isPackaged) {
     return {
       mode: "prod-jar",
-      create: (callbacks) => new ProdBackendTransport(callbacks)
+      create: (callbacks) => new ProdBackendTransport(callbacks, { appDir, settingsDirPath })
     };
   }
   const devState = { dependenciesPrepared: false };
   return {
     mode: "dev-maven",
-    create: (callbacks) => new DevBackendTransport(callbacks, devState)
+    create: (callbacks) => new DevBackendTransport(callbacks, devState, { appDir, settingsDirPath })
   };
 }
 

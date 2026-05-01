@@ -1,5 +1,9 @@
 package com.queryeer.backend.transport.stdio;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import com.queryeer.backend.api.EventBus;
 import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
@@ -11,12 +15,14 @@ final class SecuritySessionOpenRequestHandler implements RequestHandler
     private final ResponseWriter responseWriter;
     private final EnvelopeCodec codec;
     private final SecuritySessionBridge securityBridge;
+    private final EventBus events;
 
-    public SecuritySessionOpenRequestHandler(ResponseWriter responseWriter, EnvelopeCodec codec, SecuritySessionBridge securityBridge)
+    public SecuritySessionOpenRequestHandler(ResponseWriter responseWriter, EnvelopeCodec codec, SecuritySessionBridge securityBridge, EventBus events)
     {
         this.responseWriter = responseWriter;
         this.codec = codec;
         this.securityBridge = securityBridge;
+        this.events = events;
     }
 
     @Override
@@ -34,6 +40,11 @@ final class SecuritySessionOpenRequestHandler implements RequestHandler
         if (params != null)
         {
             securityBridge.openSession(params.sessionId(), params.vaultPath(), params.sessionKeyBase64(), params.vaultUpdatedAt());
+            Map<String, Object> event = new LinkedHashMap<>();
+            event.put("sessionId", params.sessionId());
+            event.put("vaultPath", params.vaultPath());
+            event.put("vaultUpdatedAt", params.vaultUpdatedAt());
+            events.publish("security.session.opened", event);
         }
 
         responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, new SecuritySessionOpenResult(true), null));
