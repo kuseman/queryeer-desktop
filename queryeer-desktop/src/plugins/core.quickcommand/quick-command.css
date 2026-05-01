@@ -1,0 +1,132 @@
+/* Title bar pill button */
+.quick-command-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  height: calc(100% - 8px);
+  min-width: 160px;
+  background: var(--bg-1, rgba(0, 0, 0, 0.15));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border-radius: 6px;
+  color: var(--text-2, rgba(255, 255, 255, 0.45));
+  font-size: var(--ui-font-size-xs, 11px);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  white-space: nowrap;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.quick-command-button:hover {
+  background: var(--titlebar-hover, rgba(255, 255, 255, 0.08));
+  border-color: var(--border-active, rgba(255, 255, 255, 0.2));
+  color: var(--text-1, rgba(255, 255, 255, 0.7));
+}
+
+.quick-command-button-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.quick-command-button-label {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quick-command-button-hint {
+  font-size: 10px;
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+
+/* Overlay backdrop */
+.quick-command-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* Floating panel */
+.quick-command-panel {
+  position: absolute;
+  top: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(600px, calc(100vw - 48px));
+  background: var(--bg-2, #1e1e2e);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.quick-command-input-row {
+  padding: 8px;
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+}
+
+.quick-command-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-1, rgba(0, 0, 0, 0.2));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border-radius: 5px;
+  color: var(--text-0, #e0e0e0);
+  font-size: var(--ui-font-size-sm, 13px);
+  padding: 6px 10px;
+  outline: none;
+}
+
+.quick-command-input:focus {
+  border-color: var(--accent, #5b9bd5);
+}
+
+.quick-command-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 340px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.quick-command-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: var(--ui-font-size-sm, 13px);
+  color: var(--text-0, #e0e0e0);
+}
+
+.quick-command-item.is-selected,
+.quick-command-item:hover {
+  background: var(--titlebar-hover, rgba(255, 255, 255, 0.08));
+}
+
+.quick-command-item-title {
+  flex-shrink: 0;
+}
+
+.quick-command-item-description {
+  color: var(--text-2, rgba(255, 255, 255, 0.45));
+  font-size: var(--ui-font-size-xs, 11px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.quick-command-empty {
+  padding: 12px 10px;
+  color: var(--text-2, rgba(255, 255, 255, 0.45));
+  font-size: var(--ui-font-size-sm, 13px);
+  font-style: italic;
+}

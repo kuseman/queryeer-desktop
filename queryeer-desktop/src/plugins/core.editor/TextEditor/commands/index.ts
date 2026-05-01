@@ -158,7 +158,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.find",
     title: "Find",
     handler: async () => {
-      registry.getActiveEditor()?.find("");
+      registry.getCommandTargetEditor()?.find("");
     }
   });
 

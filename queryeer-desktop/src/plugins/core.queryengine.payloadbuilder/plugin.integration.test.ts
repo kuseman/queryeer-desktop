@@ -126,7 +126,8 @@ function createContext(): PluginContext {
       listSettingsDefinitions: vi.fn(() => []),
       getAdvancedRenderer: vi.fn(),
       getAdvancedValidator: vi.fn()
-    }
+    },
+    quickcommand: { registerProvider: vi.fn() }
   };
 }
 

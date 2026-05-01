@@ -354,7 +354,8 @@ export class MonacoTextEditorApi extends TextEditorApi {
 
   find(_searchString: string): void {
     if (!this.editor) return;
-    this.editor.getAction("actions.find")?.run();
+    this.editor.focus();
+    this.editor.trigger("keyboard", "actions.find", null);
   }
 
   findNext(_searchString: string): void {

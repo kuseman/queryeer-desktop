@@ -18,6 +18,7 @@ import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import type { FileMediator } from "../../contracts/files/FileMediator";
 import { flattenContextObject } from "./context-value-flatten";
 import { createContextKeyService } from "../../plugins/core.commands/context-key-service";
+import { initializeQuickCommandService } from "../../plugins/core.quickcommand/service";
 
 export async function bootstrapShell() {
   const commandContext = createBackendCommandContext();
@@ -127,6 +128,8 @@ export async function bootstrapShell() {
 
   await host.start(discovery.manifests);
   host.setExternalLoadErrors(discovery.loadErrors);
+
+  initializeQuickCommandService(host.getQuickCommandProviders());
 
   const rebuildNativeMenu = async (): Promise<void> => {
     const extensions = host.getExtensions();

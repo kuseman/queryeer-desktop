@@ -7,6 +7,7 @@ import {
   normalizeAcceleratorForPlatform,
   resolveGlobalAcceleratorsByCommand
 } from "../../renderer/shell/accelerator-utils";
+import { QuickCommandButton } from "../core.quickcommand/QuickCommandButton";
 
 type CoreMenuBarProps = {
   menuItems: MenuItemContribution[];
@@ -439,6 +440,10 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand, canExecute
           );
         })}
       </nav>
+
+      <div className="shell-titlebar-drag" />
+
+      <QuickCommandButton />
 
       <div className="shell-titlebar-drag" />
 

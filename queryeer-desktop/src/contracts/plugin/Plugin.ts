@@ -8,6 +8,7 @@ import type { KeybindingRegistry } from "../extensions/KeybindingExtension.js";
 import type { DialogExtension } from "../extensions/DialogExtension.js";
 import type { TooltipRegistry } from "../extensions/TooltipExtension.js";
 import type { SettingsRegistry } from "../extensions/SettingsExtension.js";
+import type { QuickCommandRegistry } from "../extensions/QuickCommandExtension.js";
 import type { PluginManifest } from "./PluginManifest.js";
 
 export type Plugin = {
@@ -31,6 +32,7 @@ export type PluginContext = {
   dialog: DialogRegistry;
   tooltip: TooltipRegistry;
   settings: SettingsRegistry;
+  quickcommand: QuickCommandRegistry;
 };
 
 export type CommandExecutionResult = {

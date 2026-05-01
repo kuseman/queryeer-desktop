@@ -10,16 +10,6 @@ export const coreMenuPlugin: Plugin = {
     description: "Handles native menu bar and menu item registration"
   },
   activate: (context) => {
-    const registerStub = (id: string, title: string) => {
-      context.commands.registerCommand({
-        id,
-        title,
-        handler: async () => {
-          console.log(`${title} command executed`);
-        }
-      });
-    };
-
     const registerShortcut = (id: string, commandId: string, key: string, order: number) => {
       context.keybindings.registerKeybinding({
         id,
@@ -97,13 +87,6 @@ export const coreMenuPlugin: Plugin = {
       accelerator: "CmdOrCtrl+A"
     });
 
-    registerStub("core.menu.view.commandPalette", "Command Palette");
-    registerShortcut(
-      "core.menu.view.commandPalette.shortcut",
-      "core.menu.view.commandPalette",
-      "CmdOrCtrl+Shift+P",
-      410
-    );
     context.commands.registerCommand({
       id: "core.commands.reloadWindow",
       title: "Reload Window",
@@ -147,19 +130,6 @@ export const coreMenuPlugin: Plugin = {
       }
     });
 
-    context.menu.registerMenuItem({
-      id: "core.menu.view.commandPalette.item",
-      label: "Command Palette",
-      order: 10,
-      parentId: "core.menu.view",
-      commandId: "core.menu.view.commandPalette"
-    });
-    context.menu.registerMenuItem({
-      id: "core.menu.view.separator1",
-      type: "separator",
-      order: 15,
-      parentId: "core.menu.view"
-    });
     context.menu.registerMenuItem({
       id: "core.menu.tools.dev.reload",
       label: "Reload",
