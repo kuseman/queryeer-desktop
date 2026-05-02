@@ -1,7 +1,12 @@
 package com.queryeer.backend.plugin.jdbc;
 
-record JdbcSchemaTarget(String database, String schema)
+record JdbcSchemaTarget(String database, String schema, String table)
 {
+    JdbcSchemaTarget(String database, String schema)
+    {
+        this(database, schema, null);
+    }
+
     boolean matches(String candidateDatabase, String candidateSchema)
     {
         if (schema == null

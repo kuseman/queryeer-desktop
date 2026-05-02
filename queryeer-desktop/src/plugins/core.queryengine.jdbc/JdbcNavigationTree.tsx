@@ -1,0 +1,126 @@
+import { useEffect, useState } from "react";
+import type { JdbcNavigationStore } from "./jdbc-navigation-store";
+import { getNodeIcon } from "./jdbc-tree-contribution";
+
+type Props = {
+  store: JdbcNavigationStore;
+  activeFileConnectionId: string | undefined;
+  activeFileDatabase: string | undefined;
+};
+
+export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDatabase }: Props) {
+  const [, setRevision] = useState(0);
+
+  useEffect(() => {
+    return store.subscribe(() => setRevision((r) => r + 1));
+  }, [store]);
+
+  // Auto-expand to active file connection when linkToActiveFile is on
+  useEffect(() => {
+    if (!store.getState().linkToActiveFile || !activeFileConnectionId) return;
+    const rootNodeId = `${activeFileConnectionId}::__root__`;
+    void store.expandNode(rootNodeId);
+  }, [store, activeFileConnectionId]);
+
+  // Auto-expand to active file database when linkToActiveFile is on
+  useEffect(() => {
+    if (!store.getState().linkToActiveFile || !activeFileConnectionId || !activeFileDatabase) return;
+    const rootNode = store.getNode(`${activeFileConnectionId}::__root__`);
+    if (!rootNode?.isLoaded) return;
+    for (const dbNodeId of rootNode.childIds) {
+      const dbNode = store.getNode(dbNodeId);
+      if (dbNode?.name === activeFileDatabase) {
+        void store.expandNode(dbNodeId);
+        break;
+      }
+    }
+  }, [store, activeFileConnectionId, activeFileDatabase]);
+
+  const state = store.getState();
+
+  const handleNodeClick = (nodeId: string) => {
+    const node = store.getNode(nodeId);
+    if (!node) return;
+    if (node.isExpanded) {
+      store.collapseNode(nodeId);
+    } else {
+      void store.expandNode(nodeId);
+    }
+  };
+
+  return (
+    <div className="jdbc-nav-tree">
+      <div className="jdbc-nav-tree-header">
+        <button
+          className="jdbc-nav-link-toggle"
+          title={state.linkToActiveFile ? "Unlink from active file" : "Link to active file"}
+          onClick={() => store.toggleLinkToActiveFile()}
+        >
+          {state.linkToActiveFile ? "⊟" : "⊞"}
+        </button>
+      </div>
+      <div className="jdbc-nav-tree-body">
+        {state.connectionEntries.map((entry) => (
+          <TreeNodeRow
+            key={entry.rootNodeId}
+            nodeId={entry.rootNodeId}
+            store={store}
+            depth={0}
+            dialectId={entry.dialectId}
+            onNodeClick={handleNodeClick}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type NodeRowProps = {
+  nodeId: string;
+  store: JdbcNavigationStore;
+  depth: number;
+  dialectId: string;
+  onNodeClick: (nodeId: string) => void;
+};
+
+function TreeNodeRow({ nodeId, store, depth, dialectId, onNodeClick }: NodeRowProps) {
+  const node = store.getNode(nodeId);
+  if (!node) return null;
+
+  const hasChildren = node.childIds.length > 0 || (!node.isLoaded && node.kind !== "column" && node.kind !== "primary_key" && node.kind !== "foreign_key" && node.kind !== "index");
+  const chevron = hasChildren ? (node.isExpanded ? "▼" : "▶") : "  ";
+  const icon = getNodeIcon(node.kind, node.attributes, dialectId);
+
+  return (
+    <>
+      <div
+        data-testid="jdbc-tree-node"
+        className={`jdbc-nav-node${node.isLoading ? " is-loading" : ""}${node.loadError ? " has-error" : ""}`}
+        style={{ paddingLeft: `${depth * 16 + 4}px` }}
+        onClick={() => onNodeClick(nodeId)}
+        role="treeitem"
+        aria-expanded={node.isExpanded}
+      >
+        <span className="jdbc-nav-node-chevron">{chevron}</span>
+        <span className="jdbc-nav-node-icon">{icon}</span>
+        <span className="jdbc-nav-node-name">{node.name}</span>
+        {node.isLoading && (
+          <span data-testid="jdbc-tree-loading" className="jdbc-nav-node-loading">…</span>
+        )}
+        {node.loadError && (
+          <span className="jdbc-nav-node-error" title={node.loadError}>⚠</span>
+        )}
+      </div>
+      {node.isExpanded && node.childIds.map((childId) => (
+        <TreeNodeRow
+          key={childId}
+          nodeId={childId}
+          store={store}
+          depth={depth + 1}
+          dialectId={dialectId}
+          onNodeClick={onNodeClick}
+        />
+      ))}
+    </>
+  );
+}

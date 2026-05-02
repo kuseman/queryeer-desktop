@@ -35,6 +35,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private static final String ACTION_CONNECTION_TEST = "jdbc.connection.test";
     private static final String ACTION_SCHEMA_SNAPSHOT = "jdbc.schema.snapshot";
     private static final String ACTION_SCHEMA_REFRESH = "jdbc.schema.refresh";
+    private static final String ACTION_SCHEMA_FETCH = "jdbc.schema.fetch";
     private final JdbcDialectRegistry registry;
     private final JdbcConnectionRegistry connections;
     private final SecretService secrets;
@@ -154,6 +155,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             case ACTION_CONNECTION_TEST -> connectionTest(payload);
             case ACTION_SCHEMA_SNAPSHOT -> schemaSnapshot(payload);
             case ACTION_SCHEMA_REFRESH -> schemaRefresh(payload);
+            case ACTION_SCHEMA_FETCH -> schemaFetch(payload);
             case ACTION_CONNECTION_UPSERT -> connectionUpsert(payload);
             case ACTION_ENGINE_CAPABILITIES -> engineCapabilities();
             default -> QueryEngineProvider.super.invoke(fileId, action, payload);
@@ -214,7 +216,52 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private Object engineCapabilities()
     {
         return Map.of("actions", List.of(ACTION_ENGINE_CAPABILITIES, ACTION_CONNECTION_UPSERT, ACTION_CONNECTION_SETUP, ACTION_CONNECTION_DIALECTS, ACTION_CONNECTION_TEST, ACTION_SCHEMA_SNAPSHOT,
-                ACTION_SCHEMA_REFRESH));
+                ACTION_SCHEMA_REFRESH, ACTION_SCHEMA_FETCH));
+    }
+
+    private Object schemaFetch(Object payload)
+    {
+        Map<String, Object> value = asMap(payload);
+        String connectionId = stringValue(value.get("connectionId"));
+        if (connectionId == null)
+        {
+            throw new IllegalArgumentException("connectionId is required");
+        }
+        JdbcConnectionRegistry.JdbcStoredConnection stored = connections.get(connectionId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown connectionId: " + connectionId));
+        String rawDialectId = stringValue(stored.connection()
+                .get("dialectId"));
+        String dialectId = rawDialectId != null ? rawDialectId
+                : ENGINE_ID;
+        String url = stringValue(stored.connection()
+                .get("url"));
+        String username = stringValue(stored.connection()
+                .get("username"));
+        String password = secretValue(stored.connection()
+                .get("password"));
+        if (url == null)
+        {
+            throw new IllegalArgumentException("Connection has no url configured: " + connectionId);
+        }
+        JdbcDialect dialect = registry.find(dialectId)
+                .orElseThrow(() -> new IllegalArgumentException("Unsupported JDBC dialect: " + dialectId));
+        JdbcConnectionProfile profile = new JdbcConnectionProfile(connectionId, stored.name(), dialectId, Map.of("url", url, "username", username == null ? ""
+                : username, "password",
+                password == null ? ""
+                        : password));
+        String scope = stringValue(value.get("scope"));
+        Map<String, Object> targetMap = asMap(value.get("target"));
+        Map<String, Object> options = new java.util.HashMap<>();
+        if (scope != null)
+        {
+            options.put("scope", scope);
+        }
+        if (!targetMap.isEmpty())
+        {
+            options.put("target", targetMap);
+        }
+        return dialect.schemaResolver()
+                .resolveSchema(profile, options);
     }
 
     private Object schemaSnapshot(Object payload)

@@ -1,0 +1,142 @@
+.jdbc-nav-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.jdbc-nav-selector {
+  padding: 8px;
+  border-bottom: 1px solid var(--border, #3c3c3c);
+  flex-shrink: 0;
+}
+
+.jdbc-nav-selector-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.jdbc-nav-selector-row:last-child {
+  margin-bottom: 0;
+}
+
+.jdbc-nav-selector-label {
+  font-size: 11px;
+  color: var(--text-muted, #888);
+  flex-shrink: 0;
+  width: 66px;
+}
+
+.jdbc-nav-selector-select {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  background: var(--input-bg, #3c3c3c);
+  color: var(--text, #ccc);
+  border: 1px solid var(--border, #555);
+  border-radius: 3px;
+  padding: 2px 4px;
+  height: 22px;
+}
+
+.jdbc-nav-selector-loading {
+  font-size: 11px;
+  color: var(--text-muted, #888);
+  font-style: italic;
+}
+
+.jdbc-nav-empty {
+  padding: 8px;
+  font-size: 12px;
+  color: var(--text-muted, #888);
+}
+
+.jdbc-nav-tree {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.jdbc-nav-tree-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--border, #3c3c3c);
+}
+
+.jdbc-nav-link-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted, #888);
+  font-size: 14px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  line-height: 1;
+}
+
+.jdbc-nav-link-toggle:hover {
+  background: var(--titlebar-hover, rgba(255, 255, 255, 0.07));
+  color: var(--text, #ccc);
+}
+
+.jdbc-nav-tree-body {
+  padding: 2px 0;
+}
+
+.jdbc-nav-node {
+  display: flex;
+  align-items: center;
+  padding: 2px 4px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text, #ccc);
+}
+
+.jdbc-nav-node:hover {
+  background: var(--titlebar-hover, rgba(255, 255, 255, 0.07));
+}
+
+.jdbc-nav-node.is-loading {
+  opacity: 0.6;
+}
+
+.jdbc-nav-node.has-error {
+  color: #e57373;
+}
+
+.jdbc-nav-node-chevron {
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-muted, #888);
+}
+
+.jdbc-nav-node-icon {
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+.jdbc-nav-node-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jdbc-nav-node-loading {
+  color: var(--text-muted, #888);
+  margin-left: 4px;
+  font-style: italic;
+}
+
+.jdbc-nav-node-error {
+  margin-left: 4px;
+}

@@ -53,9 +53,8 @@ class JdbcBackendPluginTest
         Object result = provider.invoke("file-1", "engine.capabilities", null);
 
         Map<String, Object> map = (Map<String, Object>) result;
-        Assertions.assertEquals(
-                List.of("engine.capabilities", "connection.upsert", "jdbc.connection.setup", "jdbc.connection.dialects", "jdbc.connection.test", "jdbc.schema.snapshot", "jdbc.schema.refresh"),
-                map.get("actions"));
+        Assertions.assertEquals(List.of("engine.capabilities", "connection.upsert", "jdbc.connection.setup", "jdbc.connection.dialects", "jdbc.connection.test", "jdbc.schema.snapshot",
+                "jdbc.schema.refresh", "jdbc.schema.fetch"), map.get("actions"));
     }
 
     @Test

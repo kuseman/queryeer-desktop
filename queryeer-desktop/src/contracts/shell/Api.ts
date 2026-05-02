@@ -45,7 +45,7 @@ export interface ShellApi {
     fileId?: string;
     action: string;
     payload?: unknown;
-  }) => Promise<{ result?: unknown }>;
+  }) => Promise<{ result?: unknown; error?: { code: string; message: string } }>;
   getWorkspace: () => Promise<WorkspaceSnapshot>;
   saveWorkspace: (snapshot: WorkspaceSnapshot) => Promise<{ accepted: boolean }>;
   getUserKeybindings: () => Promise<UserKeybindingsDocument>;

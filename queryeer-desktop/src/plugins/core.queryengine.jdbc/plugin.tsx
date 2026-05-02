@@ -9,6 +9,8 @@ import {
   parseJdbcConnectionDefinitions
 } from "./jdbc-settings";
 import { DatabaseIcon } from "./DatabaseIcon";
+import { getJdbcNavigationStore } from "./jdbc-navigation-store";
+import { JdbcNavigationView } from "./JdbcNavigationView";
 
 export const coreQueryEngineJdbcPlugin: Plugin = {
   manifest: {
@@ -86,6 +88,37 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       settingsService.refreshSchemaFromRegistry();
       void settingsService.syncRegistryModules();
     }
+
+    getJdbcNavigationStore().loadConnectionRoots();
+
+    context.commands.registerCommand({
+      id: "core.queryengine.jdbc.navigation.refresh",
+      title: "Refresh JDBC Tree",
+      handler: () => {
+        getJdbcNavigationStore().loadConnectionRoots();
+      }
+    });
+
+    context.layout.registerView({
+      id: "core.queryengine.jdbc.navigation",
+      title: "JDBC",
+      defaultZone: "primarySidebar",
+      order: 30,
+      canMoveZones: true,
+      canCollapse: true,
+      flex: 1,
+      minHeight: 120,
+      panelActions: [
+        {
+          id: "core.queryengine.jdbc.navigation.refresh",
+          icon: "↺",
+          title: "Refresh",
+          commandId: "core.queryengine.jdbc.navigation.refresh"
+        }
+      ],
+      when: "activeFileMimeType == 'application/sql'",
+      render: () => <JdbcNavigationView context={context} />
+    });
 
     getQueryEngineService().registerExecutionContextProvider((params) => {
       if (params.engineId !== "jdbc" || !params.fileId) {

@@ -8,6 +8,8 @@ const state: ConsoleNotificationState = {
   unseenErrorCount: 0
 };
 
+let consolePanelVisible = false;
+
 const listeners = new Set<Listener>();
 
 function emit(): void {
@@ -25,6 +27,19 @@ export function subscribeConsoleNotification(listener: Listener): () => void {
 
 export function getConsoleNotificationState(): ConsoleNotificationState {
   return { ...state };
+}
+
+export function getConsolePanelVisible(): boolean {
+  return consolePanelVisible;
+}
+
+export function setConsolePanelVisible(visible: boolean): void {
+  consolePanelVisible = visible;
+  if (visible) {
+    resetConsoleNotifications();
+  } else {
+    emit();
+  }
 }
 
 export function notifyConsoleErrorAppended(): void {

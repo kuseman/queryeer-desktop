@@ -12,13 +12,16 @@ Large features in prio
     - CTRL 0-9 / ALT-0
     - Rule based (query file meta data. Payloadbuilder properties / jdbc properties)
     - Only active for queryexecutable
-- [ ] JDBC Tree component and connection selector
-    - Base dialect node supplier for tree. Overriable via dialect
+- [ ] JDBC Tree component Context menu
     - Context menu items default + dialect spcific
 - [ ] Code parsing
     - Treesitter + dialect
 - [ ] Code complete
     - Treesitter + dialect
+- [ ] Action in JDBC navigation
+    - Rulebased actions based on node type etc
+        - SQLServer + Procedure => sp_helptext
+        - etc.
 - [ ] Link actions in text editor
     - Queryengine specific
         - Payloadbuilder
@@ -43,8 +46,13 @@ Large features in prio
     - JDBC Catalog
     - Kafka catalog
 - [ ] About dialog
-    - Queryeer
-    - Modules (Payloadbuilder)
+    - Queryeer changelog
+    - Modules changelog (Payloadbuilder)
+- [ ] Panel contribution for JDBC connections
+    - See connection details, last used, which file is connected, force close action etc.
+    - Schema crawl status. Force re-crawl actions etc.
+- [ ] Tab file contribution for JDBC to show current session id (dialect specific)
+    - See status update from health /ping (this should be erased if session / connection was ended)
 - [ ] Status update from plugins via health / ping
     - Jdbc can return status on files to property update ui for dead connections etc.
     - Render a panel contribution with jdbc connections and their state
