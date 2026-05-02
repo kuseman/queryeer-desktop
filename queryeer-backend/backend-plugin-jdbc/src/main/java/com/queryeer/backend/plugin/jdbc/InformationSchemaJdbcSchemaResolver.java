@@ -58,6 +58,14 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
                 return readTopLevelObjects(jdbc);
             }
             JdbcSchemaTarget target = targetFrom(options.get("target"));
+            if ("tables".equalsIgnoreCase(scope))
+            {
+                return readTableNames(jdbc, target);
+            }
+            if ("columns".equalsIgnoreCase(scope))
+            {
+                return readTableDetail(jdbc, target);
+            }
             return readObjects(jdbc, target);
         }
         catch (SQLException e)
@@ -139,6 +147,91 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
         return databases;
     }
 
+    private List<JdbcSchemaObject> readTableNames(Connection jdbc, JdbcSchemaTarget target) throws SQLException
+    {
+        String sql = """
+                select table_catalog, table_schema, table_name, table_type
+                from information_schema.tables
+                where table_schema is not null
+                and table_type in ('BASE TABLE', 'VIEW')
+                order by table_catalog, table_schema, table_name
+                """;
+        List<JdbcSchemaObject> result = new ArrayList<>();
+        try (PreparedStatement statement = jdbc.prepareStatement(sql); ResultSet resultSet = statement.executeQuery())
+        {
+            while (resultSet.next())
+            {
+                String tableCatalog = resultSet.getString(1);
+                String tableSchema = resultSet.getString(2);
+                String tableName = resultSet.getString(3);
+                String tableType = resultSet.getString(4);
+                if (target != null
+                        && !target.matches(tableCatalog, tableSchema))
+                {
+                    continue;
+                }
+                String schemaKey = key(tableCatalog, tableSchema);
+                String kind = "VIEW".equalsIgnoreCase(tableType) ? "view"
+                        : "table";
+                result.add(new JdbcSchemaObject("table:" + schemaKey + ":" + tableName, tableName, kind, List.of(), Map.of("catalog", nullToEmpty(tableCatalog), "schema", nullToEmpty(tableSchema))));
+            }
+        }
+        return result;
+    }
+
+    private List<JdbcSchemaObject> readTableDetail(Connection jdbc, JdbcSchemaTarget target) throws SQLException
+    {
+        if (target == null
+                || target.table() == null
+                || target.table()
+                        .isBlank())
+        {
+            return List.of();
+        }
+        String tableName = target.table();
+        String tableSchema = target.schema();
+        String tableCatalog = target.database();
+        String schemaKey = key(tableCatalog, tableSchema);
+        DatabaseMetaData metadata = jdbc.getMetaData();
+
+        List<JdbcSchemaObject> children = new ArrayList<>();
+
+        // columns
+        String sql = """
+                select column_name, data_type, is_nullable, ordinal_position
+                from information_schema.columns
+                where table_name = ?
+                and (table_schema = ? or ? is null)
+                order by ordinal_position
+                """;
+        try (PreparedStatement statement = jdbc.prepareStatement(sql))
+        {
+            statement.setString(1, tableName);
+            statement.setString(2, tableSchema == null ? ""
+                    : tableSchema);
+            statement.setString(3, tableSchema);
+            try (ResultSet resultSet = statement.executeQuery())
+            {
+                while (resultSet.next())
+                {
+                    String colName = resultSet.getString(1);
+                    String dataType = resultSet.getString(2);
+                    String nullable = resultSet.getString(3);
+                    int ordinal = resultSet.getInt(4);
+                    children.add(new JdbcSchemaObject("column:" + schemaKey + ":" + tableName + ":" + colName, colName, "column", List.of(),
+                            Map.of("type", nullToEmpty(dataType), "nullable", nullToEmpty(nullable), "ordinal", ordinal)));
+                }
+            }
+        }
+
+        TableRow tableRow = new TableRow(tableCatalog, tableSchema, tableName, "BASE TABLE");
+        children.addAll(readPrimaryKeyObjects(metadata, tableRow));
+        children.addAll(readForeignKeyObjects(metadata, tableRow));
+        children.addAll(readIndexObjects(metadata, tableRow));
+
+        return children;
+    }
+
     @SuppressWarnings("unchecked")
     private static JdbcSchemaTarget targetFrom(Object value)
     {
@@ -146,7 +239,8 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
         {
             return null;
         }
-        return new JdbcSchemaTarget(text(((Map<String, Object>) map).get("database")), text(((Map<String, Object>) map).get("schema")));
+        Map<String, Object> m = (Map<String, Object>) map;
+        return new JdbcSchemaTarget(text(m.get("database")), text(m.get("schema")), text(m.get("table")));
     }
 
     private List<JdbcSchemaObject> readPrimaryKeyObjects(DatabaseMetaData metadata, TableRow table)

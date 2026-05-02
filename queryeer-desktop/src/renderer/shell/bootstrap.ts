@@ -192,7 +192,7 @@ export async function bootstrapShell() {
     if (result.executed) {
       return result;
     }
-    if (result.reason === "disabled-by-enablement") {
+    if (result.reason === "disabled-by-enablement" && !commandContext.snapshot().backendHealthy) {
       await requestMessageDialog({
         title: "Backend not ready",
         message: "Backend is not up and running yet. Please wait a moment and try again.",

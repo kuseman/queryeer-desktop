@@ -137,7 +137,12 @@ export class BackendGateway {
       return this.cancelQuery(params);
     });
     ipcMain.handle("backend:engine-invoke", async (_event, params: EngineInvokeParams) => {
-      return this.invokeEngine(params);
+      try {
+        return await this.invokeEngine(params);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        return { error: { code: "INVOKE_ERROR", message } };
+      }
     });
     ipcMain.handle("backend:file-open", async (_event, params: FileOpenParams) => {
       return this.openFile(params);
@@ -538,10 +543,13 @@ export class BackendGateway {
       this.pending.register(envelope.id, timeout, {
         onResolve: (response) => {
           if (response.error) {
+            const errorDetail = response.error.message
+              ? `${response.error.code}: ${redactLogMessage(response.error.message)}`
+              : response.error.code;
             this.appendLog(
               "error",
               "gateway",
-              `Request failed ${envelope.id} ${envelope.method}: ${response.error.code}`
+              `Request failed ${envelope.id} ${envelope.method}: ${errorDetail}`
             );
             reject(new Error(`${response.error.code}: ${response.error.message}`));
             return;

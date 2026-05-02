@@ -152,6 +152,9 @@ export class QueryEngineService {
     const response = await runWithSecretsUnlocked(params.payload, async () => {
       return window.appShell.invokeBackendEngine(params);
     });
+    if (response.error) {
+      throw new Error(response.error.message);
+    }
     return response.result;
   }
 

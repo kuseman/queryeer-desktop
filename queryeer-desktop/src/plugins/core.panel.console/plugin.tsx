@@ -4,8 +4,11 @@ import type { Plugin } from "../../contracts/plugin/Plugin";
 import { requestOpenPanel } from "../../renderer/shell/layout-panel-events";
 import { XtermTextConsole } from "../../renderer/components/XtermTextConsole";
 import {
+  getConsolePanelVisible,
+  getConsoleNotificationState,
   notifyConsoleErrorAppended,
-  resetConsoleNotifications
+  setConsolePanelVisible,
+  subscribeConsoleNotification
 } from "./console-state";
 
 export const CONSOLE_PANEL_TAB_ID = "core.panel.console.tab";
@@ -17,6 +20,16 @@ const LOG_LEVEL_ORDER: Record<BackendLogLevel, number> = {
   warn: 40,
   error: 50
 };
+
+const LOG_LEVEL_COLOR: Record<BackendLogLevel, string> = {
+  trace: "\x1b[2m",    // dim — least prominent
+  debug: "\x1b[36m",   // cyan — clearly above trace, below info
+  info:  "",           // terminal default
+  warn:  "\x1b[33m",   // yellow
+  error: "\x1b[91m"    // bright red
+};
+
+const ANSI_RESET = "\x1b[0m";
 
 const LOG_LEVEL_OPTIONS: { value: BackendLogLevel; label: string }[] = [
   { value: "trace", label: "TRACE" },
@@ -109,19 +122,66 @@ export const corePanelConsolePlugin: Plugin = {
     context.commands.registerCommand({
       id: "core.panel.console.open",
       title: "Open Console Panel",
-      handler: async () => {
+      handler: () => {
         requestOpenPanel({ tabId: CONSOLE_PANEL_TAB_ID, toggle: true });
-        resetConsoleNotifications();
       }
     });
+
+    const logSeenKeys = new Set<string>();
+    const pollForErrors = async () => {
+      try {
+        const status = await window.appShell.getBackendStatus();
+        for (const entry of status.backendLogs) {
+          const key = `${entry.timestamp}-${entry.level}-${entry.source}-${entry.message}`;
+          if (logSeenKeys.has(key)) {
+            continue;
+          }
+          logSeenKeys.add(key);
+          if (entry.level === "error" && !getConsolePanelVisible()) {
+            notifyConsoleErrorAppended();
+          }
+        }
+      } catch {
+        // ignore transient polling errors
+      }
+      window.setTimeout(() => {
+        void pollForErrors();
+      }, 3000);
+    };
+    void pollForErrors();
   }
 };
 
 function ConsoleStatusItem() {
-  return <span>Console</span>;
+  const [unseenCount, setUnseenCount] = useState(() => getConsoleNotificationState().unseenErrorCount);
+  const [panelVisible, setPanelVisible] = useState(() => getConsolePanelVisible());
+
+  useEffect(() => {
+    return subscribeConsoleNotification(() => {
+      setUnseenCount(getConsoleNotificationState().unseenErrorCount);
+      setPanelVisible(getConsolePanelVisible());
+    });
+  }, []);
+
+  const showBadge = !panelVisible && unseenCount > 0;
+  return (
+    <span>
+      Console
+      {showBadge && (
+        <span className="console-status-error-badge">{unseenCount > 99 ? "99+" : unseenCount}</span>
+      )}
+    </span>
+  );
 }
 
 function ConsolePanel() {
+  useEffect(() => {
+    setConsolePanelVisible(true);
+    return () => {
+      setConsolePanelVisible(false);
+    };
+  }, []);
+
   const renderedKeysRef = useRef<Set<string>>(new Set());
   const clearCutoffMsRef = useRef<number>(0);
   const traceEnabledRef = useRef<boolean | null>(null);
@@ -176,29 +236,17 @@ function ConsolePanel() {
 
   useEffect(() => {
     let active = true;
-    const seen = new Set<string>();
 
     const refresh = async () => {
       const status = await window.appShell.getBackendStatus();
       if (!active) {
         return;
       }
-
       const cutoff = clearCutoffMsRef.current;
       const nextEntries = status.backendLogs.filter((entry) => {
         const timestamp = Date.parse(entry.timestamp);
         return Number.isFinite(timestamp) ? timestamp >= cutoff : true;
       });
-      for (const entry of nextEntries) {
-        const key = `${entry.timestamp}-${entry.level}-${entry.source}-${entry.message}`;
-        if (seen.has(key)) {
-          continue;
-        }
-        seen.add(key);
-        if (entry.level === "error") {
-          notifyConsoleErrorAppended();
-        }
-      }
       setEntries(nextEntries);
     };
 
@@ -228,7 +276,9 @@ function ConsolePanel() {
         continue;
       }
       const time = formatLocalIsoDateTime(entry.timestamp);
-      nextLines.push(`[${time}] [${entry.level.toUpperCase()}] [${entry.source}] ${entry.message}`);
+      const color = LOG_LEVEL_COLOR[entry.level];
+      const line = `[${time}] [${entry.level.toUpperCase()}] [${entry.source}] ${entry.message}`;
+      nextLines.push(color ? `${color}${line}${ANSI_RESET}` : line);
     }
     if (nextLines.length > 0) {
       setDisplayedLines((previous) => [...previous, ...nextLines]);
