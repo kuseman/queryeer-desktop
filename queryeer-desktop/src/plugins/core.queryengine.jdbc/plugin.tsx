@@ -46,7 +46,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
         if (parsed.length !== value.length) {
           return {
             ok: false,
-            message: "Each item must be unique and include non-empty connectionId and url"
+            message: "Each item must be unique and include a non-empty connectionId with either a url or dialect-specific connection properties"
           };
         }
         return { ok: true };
@@ -79,7 +79,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
             rendererId: "core.queryengine.jdbc.connections.renderer",
             validatorId: "core.queryengine.jdbc.connections.validator"
           }
-        }
+        },
       ]
     });
 
@@ -146,7 +146,8 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
               dialectId: connection.dialectId,
               url: connection.url,
               username: connection.username,
-              password: connection.password
+              password: connection.password,
+              ...(connection.properties ? { properties: connection.properties } : {})
             }
           }
         }

@@ -65,13 +65,13 @@ class DefaultJdbcDialectRegistryTest
             @Override
             public JdbcDialectMetadata metadata()
             {
-                return new JdbcDialectMetadata(id, name, 5432, "jdbc:demo://${host}:${port}/${database}");
+                return new JdbcDialectMetadata(id, name, 5432, "jdbc:demo://${host}:${port}/${database}", null);
             }
 
             @Override
             public JdbcConnectionSetupDefinition connectionSetup()
             {
-                return new JdbcConnectionSetupDefinition(List.of(new JdbcConnectionFieldDefinition("host", "Host", JdbcConnectionFieldType.TEXT, true, null, List.of(), "localhost")));
+                return new JdbcConnectionSetupDefinition(List.of(new JdbcConnectionFieldDefinition("host", "Host", JdbcConnectionFieldType.TEXT, true, null, List.of(), "localhost", null)));
             }
 
             @Override

@@ -3,6 +3,8 @@ package com.queryeer.backend.runner;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URL;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -13,6 +15,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -23,6 +26,7 @@ import com.queryeer.backend.contract.runtime.RuntimeStatusResult;
 import com.queryeer.backend.core.BackendPlatformServices;
 import com.queryeer.backend.core.PluginRuntime;
 import com.queryeer.backend.core.PluginRuntimeStatus;
+import com.queryeer.backend.core.security.SecuritySession;
 import com.queryeer.backend.transport.stdio.StdioTransportModule;
 
 public final class BackendRunnerModule
@@ -35,17 +39,27 @@ public final class BackendRunnerModule
     public int run(InputStream input, OutputStream output)
     {
         int exitCode = 0;
-        BackendPlatformServices services = BackendPlatformServices.defaultServices(resolveConfigValues());
+        Map<String, String> config = resolveConfigValues();
+
+        ClassLoader appClassLoader = BackendRunnerModule.class.getClassLoader();
+        List<URL> sharedLibUrls = SharedLibraryLoader.collect(config.get("queryeer.app.dir"));
+
+        String appDir = config.getOrDefault("queryeer.app.dir", ".");
+        SharedClassLoader sharedLoader = new SharedClassLoader(sharedLibUrls, appClassLoader);
+        PluginClassLoaderFactory classLoaderFactory = new PluginClassLoaderFactory(sharedLoader);
+        Path builtinsDir = Path.of(appDir, "plugins", "builtin");
+
+        BackendPlatformServices services = BackendPlatformServices.defaultServices(config);
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
         objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        PluginDiscoveryService discoveryService = new PluginDiscoveryService(objectMapper, services);
+        PluginDiscoveryService discoveryService = new PluginDiscoveryService(objectMapper, services, classLoaderFactory);
 
         PluginRuntime runtime = new PluginRuntime();
         List<DiscoveredPlugin> discoveredPlugins;
         try
         {
-            discoveredPlugins = discoverPlugins(discoveryService, services);
+            discoveredPlugins = discoverPlugins(discoveryService, services, classLoaderFactory, builtinsDir, sharedLibUrls, appClassLoader);
             for (DiscoveredPlugin discovered : discoveredPlugins)
             {
                 runtime.register(discovered.plugin());
@@ -58,6 +72,7 @@ public final class BackendRunnerModule
             throw e;
         }
 
+        SecuritySession securitySession = new SecuritySession();
         try
         {
             runtime.activateAll(services.pluginContext());
@@ -70,8 +85,39 @@ public final class BackendRunnerModule
 
         long startedAt = System.currentTimeMillis();
         StdioTransportModule.RunningTransport transportServer = new StdioTransportModule().create(input, output, objectMapper, services.queryEngines(), services.fileRegistryView(), services.events(),
-                () -> runtimeStatusSnapshot(runtime), startedAt);
+                () -> runtimeStatusSnapshot(runtime), startedAt, securitySession);
         System.err.println(withCorrelation("Queryeer backend runner started (stdio mode).", null));
+
+        Thread selfDestruct = new Thread(() ->
+        {
+            try
+            {
+                long minIntervalMs = TimeUnit.SECONDS.toMillis(5);
+                while (true)
+                {
+                    Thread.sleep(minIntervalMs);
+                    if (transportServer.isStopped())
+                    {
+                        return;
+                    }
+                    long idleNanos = System.nanoTime() - transportServer.lastFrameAtNanos();
+                    if (idleNanos > TimeUnit.SECONDS.toNanos(60))
+                    {
+                        break;
+                    }
+                }
+            }
+            catch (InterruptedException e)
+            {
+                return;
+            }
+            System.err.println("[SELFDESTRUCT] stdio transport hung with no frames for >60s — exiting JVM");
+            Runtime.getRuntime()
+                    .halt(1);
+        }, "stdio-selfdestruct");
+        selfDestruct.setDaemon(true);
+        selfDestruct.start();
+
         try
         {
             transportServer.start();
@@ -92,6 +138,7 @@ public final class BackendRunnerModule
         }
         finally
         {
+            selfDestruct.interrupt();
             try
             {
                 runtime.deactivateAll();
@@ -102,7 +149,7 @@ public final class BackendRunnerModule
                 services.logger()
                         .error(withCorrelation("Failed to deactivate backend plugins", null), e);
             }
-            PluginResourceCloser.closeClassLoaders(discoveredPlugins, services.logger());
+            PluginResourceCloser.closeAll(discoveredPlugins, sharedLoader, services.logger());
         }
         return exitCode;
     }
@@ -135,7 +182,8 @@ public final class BackendRunnerModule
         return second;
     }
 
-    private List<DiscoveredPlugin> discoverPlugins(PluginDiscoveryService discoveryService, BackendPlatformServices services)
+    private List<DiscoveredPlugin> discoverPlugins(PluginDiscoveryService discoveryService, BackendPlatformServices services, PluginClassLoaderFactory classLoaderFactory, Path builtinsDir,
+            List<URL> sharedLibUrls, ClassLoader appClassLoader)
     {
         PluginDiscoveryPlan discoveryPlan = PluginDiscoveryPlan.of(resolveDiscoveryMode(), resolvePluginPath());
         PluginDiscoveryMode mode = discoveryPlan.effectiveMode();
@@ -149,7 +197,7 @@ public final class BackendRunnerModule
 
         if (mode == PluginDiscoveryMode.BUILTIN)
         {
-            return new BuiltinPluginDiscovery(new PluginFactory(), services).discover();
+            return new BuiltinPluginDiscovery(new PluginFactory(), services, classLoaderFactory, builtinsDir, sharedLibUrls, appClassLoader).discover();
         }
 
         if (mode == PluginDiscoveryMode.EXTERNAL)
@@ -160,7 +208,7 @@ public final class BackendRunnerModule
         }
 
         String path = discoveryPlan.requiredPathFor(PluginDiscoveryMode.MIXED);
-        List<DiscoveredPlugin> builtin = new BuiltinPluginDiscovery(new PluginFactory(), services).discover();
+        List<DiscoveredPlugin> builtin = new BuiltinPluginDiscovery(new PluginFactory(), services, classLoaderFactory, builtinsDir, sharedLibUrls, appClassLoader).discover();
         List<DiscoveredPlugin> external = discoveryService.discoverFromPath(path)
                 .backendPlugins();
         return mergeDiscoveredPlugins(builtin, external);
@@ -282,9 +330,11 @@ public final class BackendRunnerModule
             String source = discovered.source() == null ? "builtin"
                     : discovered.source()
                             .toString();
+            String resolution = discovered.isolatedClassLoader() ? "PluginCL→SharedCL→AppCL"
+                    : "AppCL";
             services.logger()
                     .info(withCorrelation("Discovered plugin " + discovered.manifest()
-                            .id() + " from " + source + ", isolatedClassLoader=" + discovered.isolatedClassLoader(), null));
+                            .id() + " from " + source + " (resolution: " + resolution + ")", null));
         }
 
         for (PluginRuntimeStatus status : statuses)

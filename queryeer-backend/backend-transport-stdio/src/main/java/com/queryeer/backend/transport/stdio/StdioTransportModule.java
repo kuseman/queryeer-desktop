@@ -20,10 +20,15 @@ public final class StdioTransportModule
     public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry, EventBus events,
             Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt)
     {
+        return create(input, output, objectMapper, queryEngines, fileRegistry, events, runtimeStatusSupplier, startedAt, new SecuritySession());
+    }
+
+    public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry, EventBus events,
+            Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt, SecuritySession securitySession)
+    {
         EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
         ResponseWriter responseWriter = new ResponseWriter(output, codec);
         NotificationPublisher notificationPublisher = new NotificationPublisher(responseWriter);
-        SecuritySession securitySession = new SecuritySession();
         SecretRefPayloadResolver secretResolver = new SecretRefPayloadResolver(securitySession, codec.objectMapper());
         QueryExecutionService queryExecutionService = new QueryExecutionService(queryEngines, secretResolver);
         EngineInvokeService engineInvokeService = new EngineInvokeService(queryEngines, secretResolver);
@@ -63,6 +68,11 @@ public final class StdioTransportModule
         public boolean isStopped()
         {
             return transportServer.isStopped();
+        }
+
+        public long lastFrameAtNanos()
+        {
+            return transportServer.lastFrameAtNanos();
         }
     }
 }

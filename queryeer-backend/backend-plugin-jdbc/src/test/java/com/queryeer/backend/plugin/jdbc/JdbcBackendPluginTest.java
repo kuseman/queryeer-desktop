@@ -394,7 +394,7 @@ class JdbcBackendPluginTest
                     }
                 }
             }
-            Thread.sleep(100L);
+            Thread.sleep(500L);
         }
 
         Assertions.assertTrue(created, "Expected schema cache to be created only after security.session.opened");

@@ -1,6 +1,6 @@
 import { app, BrowserWindow, webContents, nativeImage, shell } from "electron";
 import { join } from "node:path";
-import { readFile, writeFile, readdir, stat } from "node:fs/promises";
+import { readFile, writeFile, readdir, stat, mkdir } from "node:fs/promises";
 import { ipcMain } from "electron";
 import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
 import { fileUriToPath } from "../contracts/files/Resolvers.js";
@@ -116,6 +116,10 @@ function createMainWindow(): void {
 app.disableHardwareAcceleration();
 
 app.whenReady().then(() => {
+  const appDataDir = app.getPath("userData");
+  void mkdir(join(appDataDir, "libShared"), { recursive: true }).catch(() => {});
+  void mkdir(join(appDataDir, "libNative"), { recursive: true }).catch(() => {});
+
   backendGateway.wireIpc();
   dialogService.wireIpc();
   menuService.wireIpc();
@@ -228,6 +232,10 @@ app.whenReady().then(() => {
     } catch (err) {
       return { success: false, error: String(err) };
     }
+  });
+  ipcMain.handle("app:get-dir", () => app.getPath("userData"));
+  ipcMain.handle("shell:open-external", async (_event, { url }: { url: string }) => {
+    await shell.openExternal(url);
   });
 
   const sendWindowState = () => {

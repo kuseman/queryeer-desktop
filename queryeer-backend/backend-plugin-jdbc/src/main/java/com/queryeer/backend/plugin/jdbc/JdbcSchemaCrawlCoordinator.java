@@ -13,16 +13,18 @@ final class JdbcSchemaCrawlCoordinator
     private final JdbcSchemaStore store;
     private final JdbcSchemaCrawlPolicy policy;
     private final JdbcSecuritySessionState securitySessionState;
+    private final JdbcSettingsWatcher settingsWatcher;
     private final LoggerService logger;
 
     JdbcSchemaCrawlCoordinator(JdbcConnectionRegistry connections, JdbcSchemaCrawler crawler, JdbcSchemaStore store, JdbcSchemaCrawlPolicy policy, JdbcSecuritySessionState securitySessionState,
-            LoggerService logger)
+            JdbcSettingsWatcher settingsWatcher, LoggerService logger)
     {
         this.connections = connections;
         this.crawler = crawler;
         this.store = store;
         this.policy = policy;
         this.securitySessionState = securitySessionState;
+        this.settingsWatcher = settingsWatcher;
         this.logger = logger;
     }
 
@@ -85,19 +87,17 @@ final class JdbcSchemaCrawlCoordinator
         while (!Thread.currentThread()
                 .isInterrupted())
         {
+            settingsWatcher.checkAndReload(connections);
+
             if (!securitySessionState.isOpen())
             {
-                sleepQuietly(500L);
+                sleepQuietly(1_000L);
                 continue;
             }
 
             List<JdbcConnectionRegistry.JdbcStoredConnection> current = connections.all();
             for (JdbcConnectionRegistry.JdbcStoredConnection connection : current)
             {
-                if (!securitySessionState.isOpen())
-                {
-                    break;
-                }
                 crawlOne(connection, JdbcSchemaCrawlScope.TOP, false, null, Instant.now());
             }
             sleepQuietly(Math.max(500L, intervalMs));
@@ -107,13 +107,13 @@ final class JdbcSchemaCrawlCoordinator
     private void crawlOne(JdbcConnectionRegistry.JdbcStoredConnection connection, JdbcSchemaCrawlScope scope, boolean force, JdbcSchemaTarget target, Instant now)
     {
         String connectionId = connection.connectionId();
-        JdbcSchemaStore.CrawlState state = store.readState(connectionId, scope);
         if (!force
                 && !store.isDue(connectionId, scope, now))
         {
             return;
         }
 
+        JdbcSchemaStore.CrawlState state = store.readState(connectionId, scope);
         boolean success = false;
         try
         {
@@ -135,10 +135,7 @@ final class JdbcSchemaCrawlCoordinator
 
     private Optional<JdbcConnectionRegistry.JdbcStoredConnection> findConnection(String connectionId)
     {
-        return connections.all()
-                .stream()
-                .filter(c -> connectionId.equals(c.connectionId()))
-                .findFirst();
+        return connections.get(connectionId);
     }
 
     private static void sleepQuietly(long millis)

@@ -10,6 +10,8 @@ import {
   parseJdbcConnectionDefinitions,
   type JdbcConnectionDefinition
 } from "./jdbc-settings";
+import { SqlServerConnectionForm, type SqlServerProperties } from "./SqlServerConnectionForm";
+import "./jdbc-settings.css";
 
 type JdbcDialectOption = {
   id: string;
@@ -24,6 +26,7 @@ type Row = {
   url: string;
   username: string;
   password?: SecretRefValue;
+  properties?: Record<string, unknown>;
   enabled: boolean;
 };
 
@@ -32,6 +35,8 @@ type Props = {
   readonly: boolean;
   setValue: (next: unknown) => void;
 };
+
+const SQLSERVER_DIALECT_ID = "sqlserver";
 
 export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Props): JSX.Element {
   const [rows, setRows] = useState<Row[]>(() => toRows(parseJdbcConnectionDefinitions(value)));
@@ -83,17 +88,7 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
 
   const { persistNow, persistDebounced } = useCollectionSettingsPersistence<Row>({
     persist: (nextRows) => {
-      setValue(
-        nextRows.map((row) => ({
-          connectionId: row.connectionId,
-          title: row.title || undefined,
-          dialectId: row.dialectId,
-          url: row.url,
-          username: row.username || undefined,
-          password: row.password,
-          enabled: row.enabled
-        }))
-      );
+      setValue(nextRows.map((row) => serializeRow(row)));
     }
   });
 
@@ -160,15 +155,15 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
     }));
 
     try {
+      const payload =
+        row.dialectId === SQLSERVER_DIALECT_ID
+          ? { dialectId: row.dialectId, ...row.properties, password: row.password }
+          : { dialectId: row.dialectId, url: row.url, username: row.username || undefined, password: row.password };
+
       const result = await getQueryEngineService().invoke({
         engineId: "jdbc",
         action: "jdbc.connection.test",
-        payload: {
-          dialectId: row.dialectId,
-          url: row.url,
-          username: row.username || undefined,
-          password: row.password
-        }
+        payload
       });
 
       const message =
@@ -194,7 +189,7 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
       items={rows.map((row) => ({
         id: row.id,
         label: row.connectionId || "(new jdbc connection)",
-        subtitle: row.url || "URL required",
+        subtitle: buildSubtitle(row),
         invalid: Boolean(rowErrors[row.id])
       }))}
       selectedId={selectedRowId}
@@ -207,31 +202,31 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
       renderDetails={(id) => {
         const row = rows.find((item) => item.id === id);
         if (!row) {
-          return <div className="payloadbuilder-catalog-empty">Select a connection to edit details.</div>;
+          return <div className="jdbc-settings-empty">Select a connection to edit details.</div>;
         }
 
         return (
-          <div className="payloadbuilder-settings-detail-grid" role="group" aria-label="JDBC connection details">
-            <div className="payloadbuilder-settings-cell">
-              <label className="payloadbuilder-catalog-label" htmlFor={`jdbc-connection-id-${row.id}`}>
+          <div className="jdbc-settings-detail-grid" role="group" aria-label="JDBC connection details">
+            <div className="jdbc-settings-cell">
+              <label className="jdbc-settings-label" htmlFor={`jdbc-connection-id-${row.id}`}>
                 Connection ID
               </label>
               <input
                 id={`jdbc-connection-id-${row.id}`}
-                className="payloadbuilder-catalog-input"
+                className="jdbc-settings-input"
                 value={row.connectionId}
                 readOnly={readonly}
                 onChange={(event) => updateRow(row.id, { connectionId: event.target.value })}
               />
             </div>
 
-            <div className="payloadbuilder-settings-cell">
-              <label className="payloadbuilder-catalog-label" htmlFor={`jdbc-dialect-${row.id}`}>
+            <div className="jdbc-settings-cell">
+              <label className="jdbc-settings-label" htmlFor={`jdbc-dialect-${row.id}`}>
                 Dialect
               </label>
               <select
                 id={`jdbc-dialect-${row.id}`}
-                className="payloadbuilder-catalog-select"
+                className="jdbc-settings-select"
                 value={row.dialectId}
                 disabled={readonly}
                 onChange={(event) => updateRow(row.id, { dialectId: event.target.value })}
@@ -244,45 +239,62 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
               </select>
             </div>
 
-            <div className="payloadbuilder-settings-cell">
-              <label className="payloadbuilder-catalog-label" htmlFor={`jdbc-url-${row.id}`}>
-                JDBC URL
-              </label>
-              <input
-                id={`jdbc-url-${row.id}`}
-                className="payloadbuilder-catalog-input"
-                value={row.url}
-                readOnly={readonly}
-                onChange={(event) => updateRow(row.id, { url: event.target.value })}
-              />
-            </div>
-
-            <div className="payloadbuilder-settings-cell">
-              <label className="payloadbuilder-catalog-label" htmlFor={`jdbc-username-${row.id}`}>
-                Username
-              </label>
-              <input
-                id={`jdbc-username-${row.id}`}
-                className="payloadbuilder-catalog-input"
-                value={row.username}
-                readOnly={readonly}
-                onChange={(event) => updateRow(row.id, { username: event.target.value })}
-              />
-            </div>
-
-            <div className="payloadbuilder-settings-cell">
-              <label className="payloadbuilder-catalog-label" htmlFor={`jdbc-password-${row.id}`}>
-                Password
-              </label>
-              <PasswordFieldInput
-                inputId={`jdbc-password-${row.id}`}
-                valueRef={row.password}
+            {row.dialectId === SQLSERVER_DIALECT_ID ? (
+              <SqlServerConnectionForm
+                connectionId={row.id}
+                properties={(row.properties ?? {}) as SqlServerProperties}
+                password={row.password}
                 readonly={readonly}
-                onChangeRef={(nextRef) => updateRow(row.id, { password: nextRef })}
+                onChange={(patch) => {
+                  updateRow(row.id, {
+                    ...(patch.properties !== undefined ? { properties: patch.properties as Record<string, unknown> } : {}),
+                    ...(patch.password !== undefined ? { password: patch.password } : {})
+                  });
+                }}
               />
-            </div>
+            ) : (
+              <>
+                <div className="jdbc-settings-cell">
+                  <label className="jdbc-settings-label" htmlFor={`jdbc-url-${row.id}`}>
+                    JDBC URL
+                  </label>
+                  <input
+                    id={`jdbc-url-${row.id}`}
+                    className="jdbc-settings-input"
+                    value={row.url}
+                    readOnly={readonly}
+                    onChange={(event) => updateRow(row.id, { url: event.target.value })}
+                  />
+                </div>
 
-            <div className="payloadbuilder-settings-cell">
+                <div className="jdbc-settings-cell">
+                  <label className="jdbc-settings-label" htmlFor={`jdbc-username-${row.id}`}>
+                    Username
+                  </label>
+                  <input
+                    id={`jdbc-username-${row.id}`}
+                    className="jdbc-settings-input"
+                    value={row.username}
+                    readOnly={readonly}
+                    onChange={(event) => updateRow(row.id, { username: event.target.value })}
+                  />
+                </div>
+
+                <div className="jdbc-settings-cell">
+                  <label className="jdbc-settings-label" htmlFor={`jdbc-password-${row.id}`}>
+                    Password
+                  </label>
+                  <PasswordFieldInput
+                    inputId={`jdbc-password-${row.id}`}
+                    valueRef={row.password}
+                    readonly={readonly}
+                    onChangeRef={(nextRef) => updateRow(row.id, { password: nextRef })}
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="jdbc-settings-cell">
               <button
                 type="button"
                 className="settings-list-editor-icon-button"
@@ -297,8 +309,8 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
                 <div
                   className={
                     testStatusByRowId[row.id]?.state === "error"
-                      ? "payloadbuilder-settings-error"
-                      : "payloadbuilder-settings-help"
+                      ? "jdbc-settings-error"
+                      : "jdbc-settings-help"
                   }
                 >
                   {testStatusByRowId[row.id]?.message}
@@ -312,18 +324,52 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
   );
 }
 
+function buildSubtitle(row: Row): string {
+  if (row.dialectId === SQLSERVER_DIALECT_ID) {
+    const host = String(row.properties?.host ?? "");
+    const port = row.properties?.port ?? 1433;
+    const database = String(row.properties?.database ?? "");
+    if (!host) return "Host required";
+    return database ? `${host}:${port}/${database}` : `${host}:${port}`;
+  }
+  return row.url || "URL required";
+}
+
+function serializeRow(row: Row): unknown {
+  if (row.dialectId === SQLSERVER_DIALECT_ID) {
+    return {
+      connectionId: row.connectionId,
+      title: row.title || undefined,
+      dialectId: row.dialectId,
+      properties: row.properties ?? {},
+      password: row.password,
+      enabled: row.enabled
+    };
+  }
+  return {
+    connectionId: row.connectionId,
+    title: row.title || undefined,
+    dialectId: row.dialectId,
+    url: row.url,
+    username: row.username || undefined,
+    password: row.password,
+    enabled: row.enabled
+  };
+}
+
 function toRows(definitions: JdbcConnectionDefinition[]): Row[] {
   return definitions.map((definition) => ({
     id: crypto.randomUUID(),
     connectionId: definition.connectionId,
     title: definition.title ?? "",
     dialectId: definition.dialectId,
-    url: definition.url,
+    url: definition.url ?? "",
     username: definition.username ?? "",
     password:
       definition.password && typeof definition.password === "object"
         ? definition.password
         : undefined,
+    properties: definition.properties,
     enabled: definition.enabled
   }));
 }
@@ -338,18 +384,19 @@ function mergeRows(previous: Row[], definitions: JdbcConnectionDefinition[]): Ro
       connectionId: definition.connectionId,
       title: definition.title ?? "",
       dialectId: definition.dialectId,
-      url: definition.url,
+      url: definition.url ?? "",
       username: definition.username ?? "",
       password:
         definition.password && typeof definition.password === "object"
           ? definition.password
           : undefined,
+      properties: definition.properties,
       enabled: definition.enabled
     };
   });
 }
 
-function buildRowErrors(rows: Row[]): Record<string, { connectionId?: string; url?: string }> {
+function buildRowErrors(rows: Row[]): Record<string, { connectionId?: string; url?: string; host?: string }> {
   const idCounts = new Map<string, number>();
   for (const row of rows) {
     const id = row.connectionId.trim();
@@ -359,20 +406,25 @@ function buildRowErrors(rows: Row[]): Record<string, { connectionId?: string; ur
     idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
   }
 
-  const errors: Record<string, { connectionId?: string; url?: string }> = {};
+  const errors: Record<string, { connectionId?: string; url?: string; host?: string }> = {};
   for (const row of rows) {
-    const rowError: { connectionId?: string; url?: string } = {};
+    const rowError: { connectionId?: string; url?: string; host?: string } = {};
     if (!row.connectionId.trim()) {
       rowError.connectionId = "Connection ID is required";
     } else if ((idCounts.get(row.connectionId.trim()) ?? 0) > 1) {
       rowError.connectionId = "Connection ID must be unique";
     }
 
-    if (!row.url.trim()) {
+    if (row.dialectId === SQLSERVER_DIALECT_ID) {
+      const host = String(row.properties?.host ?? "").trim();
+      if (!host) {
+        rowError.host = "Host is required";
+      }
+    } else if (!row.url.trim()) {
       rowError.url = "JDBC URL is required";
     }
 
-    if (rowError.connectionId || rowError.url) {
+    if (rowError.connectionId || rowError.url || rowError.host) {
       errors[row.id] = rowError;
     }
   }

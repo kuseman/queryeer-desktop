@@ -58,14 +58,18 @@ export class DevBackendTransport extends StdioBackendTransportBase {
       "exec:java"
     ];
 
+    const appDir = this.launchContext?.appDir ?? process.env.QUERYEER_APP_DIR;
     const debugArgs =
       process.env.QUERYEER_BACKEND_JDWP?.trim() ||
+      //"-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:51050";
       "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=0";
     const existingMavenOpts = process.env.MAVEN_OPTS?.trim();
+    const libNativeArg = appDir ? `-Djava.library.path=${join(appDir, "libNative")}` : null;
     const spawnEnv = {
       ...process.env,
-      MAVEN_OPTS: [existingMavenOpts, debugArgs].filter((value) => Boolean(value)).join(" ") || undefined,
-      QUERYEER_APP_DIR: this.launchContext?.appDir ?? process.env.QUERYEER_APP_DIR,
+      MAVEN_OPTS:
+        [existingMavenOpts, debugArgs, libNativeArg].filter(Boolean).join(" ") || undefined,
+      QUERYEER_APP_DIR: appDir,
       QUERYEER_SETTINGS_DIR:
         this.launchContext?.settingsDirPath ?? process.env.QUERYEER_SETTINGS_DIR
     };

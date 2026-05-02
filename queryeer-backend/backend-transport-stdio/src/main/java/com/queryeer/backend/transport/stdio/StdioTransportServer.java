@@ -28,6 +28,7 @@ final class StdioTransportServer
         return t;
     });
     private volatile boolean stopped;
+    private volatile long lastFrameAtNanos = System.nanoTime();
 
     public StdioTransportServer(InputStream input, EnvelopeCodec codec, ResponseWriter responseWriter, RequestDispatcher requestDispatcher, NotificationDispatcher notificationDispatcher)
     {
@@ -39,12 +40,18 @@ final class StdioTransportServer
         this.notificationDispatcher = notificationDispatcher;
     }
 
+    long lastFrameAtNanos()
+    {
+        return lastFrameAtNanos;
+    }
+
     public void start() throws IOException
     {
         String frame;
         while (!stopped
                 && (frame = framedReader.readFrame()) != null)
         {
+            lastFrameAtNanos = System.nanoTime();
             final String f = frame;
             handlerExecutor.submit(() -> handleLine(f));
         }

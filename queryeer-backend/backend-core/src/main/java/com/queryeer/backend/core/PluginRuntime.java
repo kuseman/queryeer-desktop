@@ -51,9 +51,9 @@ public final class PluginRuntime
                 activated.add(plugin);
                 statusByPluginId.put(pluginId, new PluginRuntimeStatus(pluginId, PluginRuntimeState.ACTIVATED, "Activated"));
             }
-            catch (Exception e)
+            catch (Throwable t)
             {
-                statusByPluginId.put(pluginId, new PluginRuntimeStatus(pluginId, PluginRuntimeState.FAILED, e.getMessage()));
+                statusByPluginId.put(pluginId, new PluginRuntimeStatus(pluginId, PluginRuntimeState.FAILED, t.getMessage()));
             }
         }
     }
@@ -71,9 +71,9 @@ public final class PluginRuntime
                 plugin.deactivate();
                 statusByPluginId.put(pluginId, new PluginRuntimeStatus(pluginId, PluginRuntimeState.DEACTIVATED, "Deactivated"));
             }
-            catch (Exception e)
+            catch (Throwable t)
             {
-                statusByPluginId.put(pluginId, new PluginRuntimeStatus(pluginId, PluginRuntimeState.FAILED, e.getMessage()));
+                statusByPluginId.put(pluginId, new PluginRuntimeStatus(pluginId, PluginRuntimeState.FAILED, t.getMessage()));
             }
         }
         activated.clear();

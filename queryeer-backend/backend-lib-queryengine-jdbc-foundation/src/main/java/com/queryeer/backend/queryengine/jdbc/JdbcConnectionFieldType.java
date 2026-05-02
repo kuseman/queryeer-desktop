@@ -6,5 +6,6 @@ public enum JdbcConnectionFieldType
     NUMBER,
     SECRET,
     BOOLEAN,
-    SELECT
+    SELECT,
+    FOLDER_PATH
 }

@@ -1,3 +1,4 @@
+import { getCoreSecurityService } from "../core.security/service";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import { getConfiguredJdbcConnections } from "./jdbc-settings";
 import type {
@@ -82,24 +83,45 @@ export class JdbcNavigationStore {
 
     this.updateNode(nodeId, { isLoading: true, loadError: undefined });
     try {
-      const children = await this.fetchChildren(node);
-      const newNodeMap = new Map(this.state.nodeMap);
-      const childIds = this.materializeNodes(node.connectionId, children, newNodeMap);
-      newNodeMap.set(nodeId, {
-        ...newNodeMap.get(nodeId)!,
-        isLoading: false,
-        isLoaded: true,
-        isExpanded: true,
-        childIds
-      });
-      this.state = { ...this.state, nodeMap: newNodeMap };
-      this.notify();
+      await this.doFetchAndApply(nodeId, node);
     } catch (e) {
-      this.updateNode(nodeId, {
-        isLoading: false,
-        loadError: e instanceof Error ? e.message : String(e)
-      });
+      const message = e instanceof Error ? e.message : String(e);
+      if (isSessionLockedMessage(message)) {
+        const unlocked =
+          (await getCoreSecurityService()?.ensureUnlockedForSecretAccess({ interactive: true })) ??
+          false;
+        if (unlocked) {
+          this.updateNode(nodeId, { isLoading: true, loadError: undefined });
+          try {
+            await this.doFetchAndApply(nodeId, node);
+          } catch (retryE) {
+            this.updateNode(nodeId, {
+              isLoading: false,
+              loadError: retryE instanceof Error ? retryE.message : String(retryE)
+            });
+          }
+        } else {
+          this.updateNode(nodeId, { isLoading: false });
+        }
+        return;
+      }
+      this.updateNode(nodeId, { isLoading: false, loadError: message });
     }
+  }
+
+  private async doFetchAndApply(nodeId: string, node: JdbcTreeNode): Promise<void> {
+    const children = await this.fetchChildren(node);
+    const newNodeMap = new Map(this.state.nodeMap);
+    const childIds = this.materializeNodes(node.connectionId, children, newNodeMap);
+    newNodeMap.set(nodeId, {
+      ...newNodeMap.get(nodeId)!,
+      isLoading: false,
+      isLoaded: true,
+      isExpanded: true,
+      childIds
+    });
+    this.state = { ...this.state, nodeMap: newNodeMap };
+    this.notify();
   }
 
   collapseNode(nodeId: string): void {
@@ -151,20 +173,29 @@ export class JdbcNavigationStore {
   private async fetchChildren(node: JdbcTreeNode): Promise<JdbcSchemaObject[]> {
     const service = getQueryEngineService();
     if (node.kind === "connection") {
+      const connection = getConfiguredJdbcConnections().find((c) => c.connectionId === node.connectionId);
       return (await service.invoke({
         engineId: "jdbc",
         action: "jdbc.schema.fetch",
-        payload: { connectionId: node.connectionId, scope: "top" }
+        payload: {
+          connectionId: node.connectionId,
+          scope: "top",
+          password: connection?.password,
+          properties: connection?.properties
+        }
       })) as JdbcSchemaObject[];
     }
     if (node.kind === "schema") {
+      const connection = getConfiguredJdbcConnections().find((c) => c.connectionId === node.connectionId);
       return (await service.invoke({
         engineId: "jdbc",
         action: "jdbc.schema.fetch",
         payload: {
           connectionId: node.connectionId,
           scope: "tables",
-          target: { database: node.attributes.catalog as string, schema: node.name }
+          target: { database: node.attributes.catalog as string, schema: node.name },
+          password: connection?.password,
+          properties: connection?.properties
         }
       })) as JdbcSchemaObject[];
     }
@@ -260,4 +291,8 @@ export function getJdbcNavigationStore(): JdbcNavigationStore {
     instance = new JdbcNavigationStore();
   }
   return instance;
+}
+
+function isSessionLockedMessage(message: string): boolean {
+  return message.toLowerCase().includes("session is locked");
 }

@@ -1,6 +1,11 @@
 package com.queryeer.backend.runner;
 
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import com.queryeer.backend.api.PluginHostServices;
@@ -9,23 +14,52 @@ final class BuiltinPluginDiscovery
 {
     private final PluginFactory pluginFactory;
     private final PluginHostServices hostServices;
+    private final PluginClassLoaderFactory classLoaderFactory;
+    private final Path builtinsDir;
+    private final List<URL> sharedLibUrls;
+    private final ClassLoader appClassLoader;
 
-    BuiltinPluginDiscovery(PluginFactory pluginFactory, PluginHostServices hostServices)
+    BuiltinPluginDiscovery(PluginFactory pluginFactory, PluginHostServices hostServices, PluginClassLoaderFactory classLoaderFactory, Path builtinsDir, List<URL> sharedLibUrls,
+            ClassLoader appClassLoader)
     {
         this.pluginFactory = pluginFactory;
         this.hostServices = hostServices;
+        this.classLoaderFactory = classLoaderFactory;
+        this.builtinsDir = builtinsDir;
+        this.sharedLibUrls = sharedLibUrls;
+        this.appClassLoader = appClassLoader;
     }
 
     List<DiscoveredPlugin> discover()
     {
-        ClassLoader classLoader = BackendRunnerApp.class.getClassLoader();
         return builtinManifests().stream()
                 .map(manifest ->
                 {
-                    Path source = Path.of("builtin", manifest.id());
-                    return new DiscoveredPlugin(manifest, new PluginManifestBackedPlugin(manifest, pluginFactory.instantiate(manifest, classLoader, source, hostServices)), null, false, null);
+                    Path source = builtinsDir.resolve(manifest.id());
+                    if (Files.isDirectory(source))
+                    {
+                        URLClassLoader classLoader = classLoaderFactory.createClassLoader(source, manifest);
+                        return new DiscoveredPlugin(manifest, new PluginManifestBackedPlugin(manifest, pluginFactory.instantiate(manifest, classLoader, source, hostServices)), source, true,
+                                classLoader);
+                    }
+                    URLClassLoader classLoader = createDevFallbackClassLoader();
+                    return new DiscoveredPlugin(manifest, new PluginManifestBackedPlugin(manifest, pluginFactory.instantiate(manifest, classLoader, null, hostServices)), null, true, classLoader);
                 })
                 .toList();
+    }
+
+    private URLClassLoader createDevFallbackClassLoader()
+    {
+        List<URL> urls = new ArrayList<>(sharedLibUrls);
+        // In dev mode, also inherit the app classloader URLs so plugin classes
+        // are loaded by PluginCL, not via parent-delegation to AppCL.
+        // This ensures DriverManager.isDriverAllowed passes because the caller
+        // classloader (PluginCL) can directly resolve driver classes from libShared.
+        if (appClassLoader instanceof URLClassLoader urlCL)
+        {
+            urls.addAll(Arrays.asList(urlCL.getURLs()));
+        }
+        return new PluginClassLoaderFactory.ParentAwarePluginClassLoader(urls.toArray(URL[]::new), classLoaderFactory.sharedLoader());
     }
 
     private List<PluginManifest> builtinManifests()
