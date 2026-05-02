@@ -252,6 +252,8 @@ export type FileBindParams = {
   fileId: string;
   engineId: string;
   connectionId?: string;
+  uri?: string;
+  mimeType?: string;
 };
 
 export type FileBindResult = {

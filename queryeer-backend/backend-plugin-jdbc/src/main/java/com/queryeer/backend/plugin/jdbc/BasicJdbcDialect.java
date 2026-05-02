@@ -17,7 +17,7 @@ final class BasicJdbcDialect implements JdbcDialect
     @Override
     public JdbcDialectMetadata metadata()
     {
-        return new JdbcDialectMetadata("jdbc", "Generic JDBC", null, "jdbc:<driver>://<host>:<port>/<database>");
+        return new JdbcDialectMetadata("jdbc", "Generic JDBC", null, "jdbc:<driver>://<host>:<port>/<database>", null);
     }
 
     @Override

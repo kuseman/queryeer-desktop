@@ -1,5 +1,6 @@
 package com.queryeer.backend.transport.stdio;
 
+import java.net.URI;
 import java.util.Optional;
 
 import com.queryeer.backend.api.FileRegistry;
@@ -36,6 +37,19 @@ final class FileBindRequestHandler implements RequestHandler
     {
         FileBindParams params = codec.objectMapper()
                 .convertValue(envelope.params(), FileBindParams.class);
+
+        if (fileRegistry.get(params.fileId())
+                .isEmpty()
+                && params.uri() != null
+                && !params.uri()
+                        .isBlank())
+        {
+            String mimeType = params.mimeType() != null
+                    && !params.mimeType()
+                            .isBlank() ? params.mimeType()
+                                    : "text/plain";
+            fileRegistry.open(params.fileId(), URI.create(params.uri()), mimeType, null, null, null);
+        }
 
         Optional<FileSession> session = fileRegistry.bind(params.fileId(), params.engineId(), params.connectionId());
         if (session.isEmpty())

@@ -23,7 +23,7 @@ class ServiceLoaderJdbcDialectDiscoveryTest
     {
         JdbcDialectRegistry registry = new DefaultJdbcDialectRegistry();
         registry.register(new BasicJdbcDialect());
-        ServiceLoaderJdbcDialectDiscovery discovery = new ServiceLoaderJdbcDialectDiscovery();
+        ServiceLoaderJdbcDialectDiscovery discovery = new ServiceLoaderJdbcDialectDiscovery(getClass().getClassLoader());
 
         discovery.discoverAndRegister(registry, new NoopLoggerService());
 
@@ -59,7 +59,7 @@ class ServiceLoaderJdbcDialectDiscoveryTest
                 @Override
                 public JdbcDialectMetadata metadata()
                 {
-                    return new JdbcDialectMetadata("tracking", "Tracking", null, "jdbc:tracking://<host>");
+                    return new JdbcDialectMetadata("tracking", "Tracking", null, "jdbc:tracking://<host>", null);
                 }
 
                 @Override

@@ -15,18 +15,23 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.queryeer.backend.api.BackendPlugin;
 
-class PluginClasspathFactoryTest
+class PluginClassLoaderFactoryTest
 {
     @TempDir
     Path tempDir;
 
+    private PluginClassLoaderFactory createFactory()
+    {
+        return new PluginClassLoaderFactory(new SharedClassLoader(List.of(), getClass().getClassLoader()));
+    }
+
     @Test
     void resolvesBackendApiTypesFromParentClassLoader() throws Exception
     {
-        PluginClasspathFactory factory = new PluginClasspathFactory();
+        PluginClassLoaderFactory factory = createFactory();
         PluginManifest manifest = pluginManifest(null);
 
-        try (var classLoader = factory.createClassLoader(tempDir, manifest, getClass().getClassLoader()))
+        try (var classLoader = factory.createClassLoader(tempDir, manifest))
         {
             Class<?> loaded = classLoader.loadClass(BackendPlugin.class.getName());
 
@@ -40,9 +45,9 @@ class PluginClasspathFactoryTest
         Path classesRoot = tempDir.resolve("classes");
         compilePluginClass(classesRoot, "com.queryeer.backend.runner.testsupport.ShadowedType", "plugin");
 
-        PluginClasspathFactory factory = new PluginClasspathFactory();
+        PluginClassLoaderFactory factory = createFactory();
         PluginManifest manifest = pluginManifest(new PluginManifest.Classpath(".", List.of(".")));
-        try (var classLoader = factory.createClassLoader(classesRoot, manifest, getClass().getClassLoader()))
+        try (var classLoader = factory.createClassLoader(classesRoot, manifest))
         {
             Class<?> loaded = classLoader.loadClass("com.queryeer.backend.runner.testsupport.ShadowedType");
             Object instance = loaded.getDeclaredConstructor()
@@ -67,8 +72,8 @@ class PluginClasspathFactoryTest
         Files.writeString(sourceDir.resolve("deps-list.txt"), depJar.toString(), StandardCharsets.UTF_8);
 
         PluginManifest manifest = pluginManifest(new PluginManifest.Classpath(".", List.of("classes", "@deps-list.txt")));
-        PluginClasspathFactory factory = new PluginClasspathFactory();
-        try (var classLoader = factory.createClassLoader(sourceDir, manifest, getClass().getClassLoader()))
+        PluginClassLoaderFactory factory = createFactory();
+        try (var classLoader = factory.createClassLoader(sourceDir, manifest))
         {
             Class<?> loaded = classLoader.loadClass("dev.sample.PluginType");
             Assertions.assertSame(classLoader, loaded.getClassLoader());
@@ -84,9 +89,9 @@ class PluginClasspathFactoryTest
         Files.writeString(sourceDir.resolve("deps-list.txt"), missingJar.toString(), StandardCharsets.UTF_8);
 
         PluginManifest manifest = pluginManifest(new PluginManifest.Classpath(".", List.of("@deps-list.txt")));
-        PluginClasspathFactory factory = new PluginClasspathFactory();
+        PluginClassLoaderFactory factory = createFactory();
 
-        PluginDiscoveryException error = Assertions.assertThrows(PluginDiscoveryException.class, () -> factory.createClassLoader(sourceDir, manifest, getClass().getClassLoader()));
+        PluginDiscoveryException error = Assertions.assertThrows(PluginDiscoveryException.class, () -> factory.createClassLoader(sourceDir, manifest));
         Assertions.assertTrue(error.getMessage()
                 .contains("Classpath entry not found"));
     }
@@ -101,8 +106,8 @@ class PluginClasspathFactoryTest
         Files.writeString(libDir.resolve("dep-b.jar"), "b", StandardCharsets.UTF_8);
 
         PluginManifest manifest = pluginManifest(new PluginManifest.Classpath("lib", List.of("*.jar")));
-        PluginClasspathFactory factory = new PluginClasspathFactory();
-        try (var classLoader = factory.createClassLoader(sourceDir, manifest, getClass().getClassLoader()))
+        PluginClassLoaderFactory factory = createFactory();
+        try (var classLoader = factory.createClassLoader(sourceDir, manifest))
         {
             Assertions.assertNotNull(classLoader);
         }

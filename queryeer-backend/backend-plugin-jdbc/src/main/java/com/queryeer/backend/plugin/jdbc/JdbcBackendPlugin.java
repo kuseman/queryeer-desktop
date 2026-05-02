@@ -22,11 +22,10 @@ public final class JdbcBackendPlugin implements BackendPlugin
     static final String EVENT_SECURITY_SESSION_OPENED = "security.session.opened";
     static final String EVENT_SECURITY_SESSION_CLOSED = "security.session.closed";
 
-    private final JdbcDialectDiscovery dialectDiscovery;
+    private JdbcDialectDiscovery dialectDiscovery;
 
     public JdbcBackendPlugin()
     {
-        this(new ServiceLoaderJdbcDialectDiscovery());
     }
 
     JdbcBackendPlugin(JdbcDialectDiscovery dialectDiscovery)
@@ -43,28 +42,25 @@ public final class JdbcBackendPlugin implements BackendPlugin
     @Override
     public void activate(BackendPluginContext context)
     {
+        if (dialectDiscovery == null)
+        {
+            dialectDiscovery = new ServiceLoaderJdbcDialectDiscovery(getClass().getClassLoader());
+        }
         JdbcDialectRegistry registry = new DefaultJdbcDialectRegistry();
         registry.register(new BasicJdbcDialect());
         context.logger()
                 .info("Registered built-in generic JDBC dialect");
         dialectDiscovery.discoverAndRegister(registry, context.logger());
-        JdbcConnectionRegistry connections = new JdbcConnectionRegistry();
         JdbcSettingsConnectionSource settingsSource = new JdbcSettingsConnectionSource();
-        for (JdbcSettingsConnectionSource.JdbcConfiguredConnection configured : settingsSource.load(context.config(), context.logger()))
-        {
-            Object enabled = configured.connection()
-                    .get("enabled");
-            if (enabled instanceof Boolean bool
-                    && !bool)
-            {
-                continue;
-            }
-            connections.upsert(configured.connectionId(), configured.name(), configured.connection());
-        }
+        JdbcConnectionRegistry connections = new JdbcConnectionRegistry();
+        connections.reload(settingsSource.load(context.config(), context.logger()));
+        JdbcConnectionResolver resolver = new JdbcConnectionResolver();
+        JdbcSettingsWatcher settingsWatcher = new JdbcSettingsWatcher(settingsSource, context.config(), context.logger());
         JdbcSchemaStore schemaStore = new JdbcSchemaStore(resolveSchemaCacheDir(context.config()));
-        JdbcSchemaCrawler schemaCrawler = new JdbcSchemaCrawler(registry, schemaStore, context.logger());
+        JdbcSchemaCrawler schemaCrawler = new JdbcSchemaCrawler(registry, resolver, schemaStore, context.logger());
         JdbcSecuritySessionState securitySessionState = new JdbcSecuritySessionState();
-        JdbcSchemaCrawlCoordinator crawlCoordinator = new JdbcSchemaCrawlCoordinator(connections, schemaCrawler, schemaStore, new JdbcSchemaCrawlPolicy(), securitySessionState, context.logger());
+        JdbcSchemaCrawlCoordinator crawlCoordinator = new JdbcSchemaCrawlCoordinator(connections, schemaCrawler, schemaStore, new JdbcSchemaCrawlPolicy(), securitySessionState, settingsWatcher,
+                context.logger());
         context.events()
                 .subscribe(EVENT_SECURITY_SESSION_OPENED, event -> securitySessionState.markOpen());
         context.events()

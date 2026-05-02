@@ -66,6 +66,7 @@
         <module>backend-runner</module>
         <module>backend-plugin-payloadbuilder</module>
         <module>backend-plugin-jdbc</module>
+        <module>backend-plugin-dialect-sqlserver</module>
         <module>backend-plugin-queryengine-payloadbuilder-jdbc</module>
         <module>backend-plugin-devprobe</module>
     </modules>

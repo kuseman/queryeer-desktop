@@ -201,6 +201,16 @@ export abstract class StdioBackendTransportBase implements BackendTransport {
     if (normalized.includes("[warn]") || normalized.includes("[warning]")) {
       return "warn";
     }
+    // Java stacktrace / exception continuation lines (no log-level prefix)
+    if (
+      /^\s+at\s/.test(line) ||
+      normalized.startsWith("caused by:") ||
+      normalized.startsWith("suppressed:") ||
+      /\s+\.{3}\s+\d+\s+more\s*$/.test(line) ||
+      /^\S.*(Exception|Error)(:|$)/.test(line.trimStart())
+    ) {
+      return "error";
+    }
     return "info";
   }
 }

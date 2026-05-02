@@ -17,11 +17,11 @@ final class PluginDiscoveryService
     private final BackendPluginResolver backendResolver;
     private final FrontendPluginResolver frontendResolver;
 
-    PluginDiscoveryService(ObjectMapper objectMapper, PluginHostServices hostServices)
+    PluginDiscoveryService(ObjectMapper objectMapper, PluginHostServices hostServices, PluginClassLoaderFactory classLoaderFactory)
     {
         this.sourceExplorer = new PluginSourceExplorer();
         this.manifestLoader = new PluginManifestLoader(objectMapper);
-        this.backendResolver = new ManifestBackendPluginResolver(new PluginClasspathFactory(), new PluginFactory(), hostServices);
+        this.backendResolver = new ManifestBackendPluginResolver(classLoaderFactory, new PluginFactory(), hostServices);
         this.frontendResolver = new ManifestFrontendPluginResolver();
     }
 

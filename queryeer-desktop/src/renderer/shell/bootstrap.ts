@@ -63,7 +63,9 @@ export async function bootstrapShell() {
       await window.appShell.bindBackendFile({
         fileId: file.fileId,
         engineId: file.engineBinding.engineId,
-        connectionId: file.engineBinding.connectionId
+        connectionId: file.engineBinding.connectionId,
+        uri: file.uri,
+        mimeType: file.mimeType
       });
     },
     changeFile: async (file, text) => {

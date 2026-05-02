@@ -10,9 +10,9 @@ final class PluginResourceCloser
     {
     }
 
-    static void closeClassLoaders(List<DiscoveredPlugin> discoveredPlugins, LoggerService logger)
+    static void closeAll(List<DiscoveredPlugin> plugins, SharedClassLoader sharedLoader, LoggerService logger)
     {
-        for (DiscoveredPlugin plugin : discoveredPlugins)
+        for (DiscoveredPlugin plugin : plugins)
         {
             AutoCloseable classLoaderResource = plugin.classLoaderResource();
             if (classLoaderResource == null)
@@ -28,6 +28,14 @@ final class PluginResourceCloser
                 logger.error("Failed to close plugin classloader resource for " + plugin.manifest()
                         .id(), e);
             }
+        }
+        try
+        {
+            sharedLoader.close();
+        }
+        catch (Exception e)
+        {
+            logger.error("Failed to close shared classloader", e);
         }
     }
 }

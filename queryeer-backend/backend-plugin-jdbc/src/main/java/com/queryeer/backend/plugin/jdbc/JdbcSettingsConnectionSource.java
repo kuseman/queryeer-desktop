@@ -77,24 +77,45 @@ final class JdbcSettingsConnectionSource
                 continue;
             }
             String connectionId = text(map.get("connectionId"));
-            String url = text(map.get("url"));
             if (connectionId == null
-                    || url == null
                     || seen.contains(connectionId))
             {
                 continue;
             }
-            seen.add(connectionId);
             String dialectId = text(map.get("dialectId"));
-            String username = text(map.get("username"));
+            String url = text(map.get("url"));
+            boolean hasStructuredProperties = map.get("properties") instanceof Map<?, ?>;
+
+            // Accept connections that either have an explicit URL (generic JDBC) or
+            // have a structured properties map (e.g. SQL Server).
+            if (url == null
+                    && !hasStructuredProperties)
+            {
+                continue;
+            }
+            seen.add(connectionId);
+
             Map<String, Object> connection = new LinkedHashMap<>();
             connection.put("dialectId", dialectId == null ? "jdbc"
                     : dialectId);
-            connection.put("url", url);
-            if (username != null)
+
+            if (hasStructuredProperties)
             {
-                connection.put("username", username);
+                // Flatten dialect-specific structured properties into the connection map.
+                @SuppressWarnings("unchecked")
+                Map<String, Object> props = (Map<String, Object>) map.get("properties");
+                connection.putAll(props);
             }
+            else
+            {
+                connection.put("url", url);
+                String username = text(map.get("username"));
+                if (username != null)
+                {
+                    connection.put("username", username);
+                }
+            }
+
             Object password = normalizePassword(map.get("password"));
             if (password != null)
             {
@@ -107,7 +128,7 @@ final class JdbcSettingsConnectionSource
         return List.copyOf(result);
     }
 
-    private static Path resolvePath(ConfigService config)
+    static Path resolvePath(ConfigService config)
     {
         String explicitPath = trimToNull(config.get(SETTINGS_PATH_KEY));
         if (explicitPath != null)

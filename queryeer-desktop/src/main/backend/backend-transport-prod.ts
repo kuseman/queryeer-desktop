@@ -25,13 +25,20 @@ export class ProdBackendTransport extends StdioBackendTransportBase {
       throw new Error(`Backend JAR not found: ${jarPath}`);
     }
 
-    return spawn("java", ["-jar", jarPath], {
+    const appDir = this.launchContext?.appDir ?? process.env.QUERYEER_APP_DIR;
+    const jvmArgs: string[] = [];
+    if (appDir) {
+      jvmArgs.push(`-Djava.library.path=${join(appDir, "libNative")}`);
+    }
+    jvmArgs.push("-jar", jarPath);
+
+    return spawn("java", jvmArgs, {
       cwd: join(jarPath, ".."),
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
       env: {
         ...process.env,
-        QUERYEER_APP_DIR: this.launchContext?.appDir ?? process.env.QUERYEER_APP_DIR,
+        QUERYEER_APP_DIR: appDir,
         QUERYEER_SETTINGS_DIR:
           this.launchContext?.settingsDirPath ?? process.env.QUERYEER_SETTINGS_DIR
       }

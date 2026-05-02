@@ -1,0 +1,40 @@
+.jdbc-settings-detail-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.jdbc-settings-cell {
+  display: grid;
+  gap: 2px;
+}
+
+.jdbc-settings-label {
+  font-size: var(--ui-font-size-sm);
+  color: var(--text-1);
+}
+
+.jdbc-settings-input,
+.jdbc-settings-select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-0);
+  color: var(--text-0);
+  min-height: 28px;
+  padding: 4px 8px;
+}
+
+.jdbc-settings-help {
+  font-size: var(--ui-font-size-sm);
+  color: var(--text-1);
+}
+
+.jdbc-settings-error {
+  color: #e57373;
+  font-size: 11px;
+}
+
+.jdbc-settings-empty {
+  font-size: var(--ui-font-size-sm);
+  color: var(--text-1);
+}

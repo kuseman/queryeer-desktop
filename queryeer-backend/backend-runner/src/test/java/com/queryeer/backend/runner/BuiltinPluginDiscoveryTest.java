@@ -1,5 +1,6 @@
 package com.queryeer.backend.runner;
 
+import java.nio.file.Path;
 import java.util.List;
 
 import org.junit.jupiter.api.Assertions;
@@ -12,7 +13,9 @@ class BuiltinPluginDiscoveryTest
     @Test
     void discoversBuiltinPluginsFromManifestDefinitions()
     {
-        BuiltinPluginDiscovery discovery = new BuiltinPluginDiscovery(new PluginFactory(), BackendPlatformServices.defaultServices());
+        PluginClassLoaderFactory classLoaderFactory = new PluginClassLoaderFactory(new SharedClassLoader(List.of(), getClass().getClassLoader()));
+        BuiltinPluginDiscovery discovery = new BuiltinPluginDiscovery(new PluginFactory(), BackendPlatformServices.defaultServices(), classLoaderFactory, Path.of("."), List.of(),
+                getClass().getClassLoader());
 
         List<DiscoveredPlugin> discovered = discovery.discover();
 

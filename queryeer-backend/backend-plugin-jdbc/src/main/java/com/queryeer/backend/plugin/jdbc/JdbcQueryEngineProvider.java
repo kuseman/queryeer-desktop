@@ -88,7 +88,9 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             JdbcDialect dialect = registry.find(state.dialectId())
                     .orElseThrow(() -> new IllegalArgumentException("Unsupported JDBC dialect: " + state.dialectId()));
             JdbcConnectionProfile connectionProfile = toConnectionProfile(state);
-            Connection sessionConnection = fileConnections.acquire(fileId, state);
+            // Dialects that construct their own URL manage connections internally — skip file session reuse
+            Connection sessionConnection = dialect.requiresExplicitUrl() ? fileConnections.acquire(fileId, state)
+                    : null;
             JdbcQueryRequest request = new JdbcQueryRequest(queryExecutionId, fileId, text, List.of(), connectionProfile, sessionConnection);
 
             if (dialect.queryExecutor() instanceof CancellableJdbcQueryExecutor cancellable)
@@ -164,25 +166,21 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         return new JdbcConnectionSetupDefinition(List.of(new JdbcConnectionFieldDefinition("dialectId", "Dialect", JdbcConnectionFieldType.SELECT, true, "Select JDBC dialect", registry.all()
                 .stream()
                 .map(metadata -> new JdbcConnectionFieldOption(metadata.id(), metadata.displayName()))
-                .toList(), ENGINE_ID), new JdbcConnectionFieldDefinition("url", "JDBC URL", JdbcConnectionFieldType.TEXT, true, "Example: jdbc:postgresql://localhost:5432/appdb", List.of(), null),
-                new JdbcConnectionFieldDefinition("username", "Username", JdbcConnectionFieldType.TEXT, false, null, List.of(), null),
-                new JdbcConnectionFieldDefinition("password", "Password", JdbcConnectionFieldType.SECRET, false, "Stored in security vault", List.of(), null)));
+                .toList(), ENGINE_ID, null),
+                new JdbcConnectionFieldDefinition("url", "JDBC URL", JdbcConnectionFieldType.TEXT, true, "Example: jdbc:postgresql://localhost:5432/appdb", List.of(), null, null),
+                new JdbcConnectionFieldDefinition("username", "Username", JdbcConnectionFieldType.TEXT, false, null, List.of(), null, null),
+                new JdbcConnectionFieldDefinition("password", "Password", JdbcConnectionFieldType.SECRET, false, "Stored in security vault", List.of(), null, null)));
     }
 
     private Object connectionTest(Object payload)
     {
         JdbcExecutionState state = resolvePayloadExecutionState(payload);
-        if (registry.find(state.dialectId())
-                .isEmpty())
-        {
-            throw new IllegalArgumentException("Unsupported JDBC dialect: " + state.dialectId());
-        }
-        JdbcExecutionState validatedState = requireUrlAndDialect(state);
-        JdbcConnectionProfile connectionProfile = toConnectionProfile(validatedState);
+        JdbcDialect dialect = registry.find(state.dialectId())
+                .orElseThrow(() -> new IllegalArgumentException("Unsupported JDBC dialect: " + state.dialectId()));
+        requireUrlIfNeeded(dialect, state);
+        JdbcConnectionProfile connectionProfile = toConnectionProfile(state);
         try
         {
-            JdbcDialect dialect = registry.find(validatedState.dialectId())
-                    .orElseThrow(() -> new IllegalArgumentException("Unsupported JDBC dialect: " + validatedState.dialectId()));
             dialect.queryExecutor()
                     .execute(new JdbcQueryRequest("connection-test", null, "select 1", List.of(), connectionProfile, null), new NoopJdbcQueryEventListener());
             return Map.of("ok", true, "message", "Connection successful");
@@ -232,20 +230,16 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                 : ENGINE_ID;
         String url = stringValue(stored.connection()
                 .get("url"));
-        String username = stringValue(stored.connection()
-                .get("username"));
-        String password = stringValue(stored.connection()
-                .get("password"));
         if (url == null)
         {
             throw new IllegalArgumentException("Connection has no url configured: " + connectionId);
         }
         JdbcDialect dialect = registry.find(dialectId)
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported JDBC dialect: " + dialectId));
-        JdbcConnectionProfile profile = new JdbcConnectionProfile(connectionId, stored.name(), dialectId, Map.of("url", url, "username", username == null ? ""
-                : username, "password",
-                password == null ? ""
-                        : password));
+
+        Map<String, Object> resolvedProperties = resolvePasswordInProperties(mergeProperties(stored.connection(), value));
+        JdbcConnectionProfile profile = new JdbcConnectionProfile(stored.connectionId(), stored.name(), dialectId, resolvedProperties);
+
         String scope = stringValue(value.get("scope"));
         Map<String, Object> targetMap = asMap(value.get("target"));
         Map<String, Object> options = new java.util.HashMap<>();
@@ -259,6 +253,25 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         }
         return dialect.schemaResolver()
                 .resolveSchema(profile, options);
+    }
+
+    private Map<String, Object> mergeProperties(Map<String, Object> stored, Map<String, Object> payload)
+    {
+        Map<String, Object> merged = new java.util.LinkedHashMap<>(stored);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> payloadProps = (Map<String, Object>) payload.get("properties");
+        if (payloadProps != null
+                && !payloadProps.isEmpty())
+        {
+            merged.putAll(payloadProps);
+        }
+        Object resolvedPassword = payload.get("password");
+        if (resolvedPassword instanceof String s
+                && !s.isBlank())
+        {
+            merged.put("password", s);
+        }
+        return merged;
     }
 
     private Object schemaSnapshot(Object payload)
@@ -343,30 +356,29 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                 .get("password"));
         String username = stringValue(stored.connection()
                 .get("username"));
+        Map<String, Object> rawProperties = resolvePasswordInProperties(stored.connection());
         return new JdbcExecutionState(stored.connectionId(), dialectId == null ? ENGINE_ID
-                : dialectId, url, username, password);
+                : dialectId, url, username, password, rawProperties);
     }
 
     private JdbcExecutionState requireExecutionState(Object engineState)
     {
         JdbcExecutionState state = resolveExecutionState(engineState);
-        if (registry.find(state.dialectId())
-                .isEmpty())
-        {
-            throw new IllegalArgumentException("Unsupported JDBC dialect: " + state.dialectId());
-        }
-        return requireUrlAndDialect(state);
+        JdbcDialect dialect = registry.find(state.dialectId())
+                .orElseThrow(() -> new IllegalArgumentException("Unsupported JDBC dialect: " + state.dialectId()));
+        requireUrlIfNeeded(dialect, state);
+        return state;
     }
 
-    private JdbcExecutionState requireUrlAndDialect(JdbcExecutionState state)
+    private void requireUrlIfNeeded(JdbcDialect dialect, JdbcExecutionState state)
     {
-        if (state.url() == null
-                || state.url()
-                        .isBlank())
+        if (dialect.requiresExplicitUrl()
+                && (state.url() == null
+                        || state.url()
+                                .isBlank()))
         {
             throw new IllegalArgumentException("JDBC connection url is required");
         }
-        return state;
     }
 
     private JdbcExecutionState resolvePayloadExecutionState(Object payload)
@@ -376,16 +388,29 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         String url = stringValue(connection.get("url"));
         String username = stringValue(connection.get("username"));
         String password = stringValue(connection.get("password"));
+        Map<String, Object> rawProperties = resolvePasswordInProperties(connection);
         return new JdbcExecutionState(null, dialectId == null ? ENGINE_ID
-                : dialectId, url, username, password);
+                : dialectId, url, username, password, rawProperties);
     }
 
     private JdbcConnectionProfile toConnectionProfile(JdbcExecutionState state)
     {
-        return new JdbcConnectionProfile(state.connectionId(), null, state.dialectId(), Map.of("url", state.url(), "username", state.username() == null ? ""
-                : state.username(), "password",
-                state.resolvedPassword() == null ? ""
+        if (!state.rawProperties()
+                .isEmpty())
+        {
+            return new JdbcConnectionProfile(state.connectionId(), null, state.dialectId(), state.rawProperties());
+        }
+        return new JdbcConnectionProfile(state.connectionId(), null, state.dialectId(), Map.of("url", state.url() == null ? ""
+                : state.url(), "username",
+                state.username() == null ? ""
+                        : state.username(),
+                "password", state.resolvedPassword() == null ? ""
                         : state.resolvedPassword()));
+    }
+
+    private Map<String, Object> resolvePasswordInProperties(Map<String, Object> properties)
+    {
+        return java.util.Collections.unmodifiableMap(properties);
     }
 
     @SuppressWarnings("unchecked")

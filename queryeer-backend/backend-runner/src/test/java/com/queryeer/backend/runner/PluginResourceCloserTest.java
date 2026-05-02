@@ -13,13 +13,18 @@ import com.queryeer.backend.core.BackendPlatformServices;
 
 class PluginResourceCloserTest
 {
+    private static SharedClassLoader emptySharedLoader()
+    {
+        return new SharedClassLoader(List.of(), PluginResourceCloserTest.class.getClassLoader());
+    }
+
     @Test
     void closesDiscoveredPluginClassLoaderResources()
     {
         RecordingCloseable closeable = new RecordingCloseable();
         DiscoveredPlugin discovered = new DiscoveredPlugin(manifest(), plugin(), Path.of("plugins/sample"), true, closeable);
 
-        PluginResourceCloser.closeClassLoaders(List.of(discovered), BackendPlatformServices.defaultServices()
+        PluginResourceCloser.closeAll(List.of(discovered), emptySharedLoader(), BackendPlatformServices.defaultServices()
                 .logger());
 
         Assertions.assertTrue(closeable.closed);
@@ -30,7 +35,7 @@ class PluginResourceCloserTest
     {
         DiscoveredPlugin discovered = new DiscoveredPlugin(manifest(), plugin(), null, false, null);
 
-        Assertions.assertDoesNotThrow(() -> PluginResourceCloser.closeClassLoaders(List.of(discovered), BackendPlatformServices.defaultServices()
+        Assertions.assertDoesNotThrow(() -> PluginResourceCloser.closeAll(List.of(discovered), emptySharedLoader(), BackendPlatformServices.defaultServices()
                 .logger()));
     }
 

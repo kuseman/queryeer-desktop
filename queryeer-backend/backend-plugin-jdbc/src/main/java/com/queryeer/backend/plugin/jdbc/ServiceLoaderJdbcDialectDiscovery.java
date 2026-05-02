@@ -8,34 +8,68 @@ import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
 
 final class ServiceLoaderJdbcDialectDiscovery implements JdbcDialectDiscovery
 {
+    private final ClassLoader dialectClassLoader;
+
+    ServiceLoaderJdbcDialectDiscovery(ClassLoader dialectClassLoader)
+    {
+        this.dialectClassLoader = dialectClassLoader;
+    }
+
     @Override
     public void discoverAndRegister(JdbcDialectRegistry registry, LoggerService logger)
     {
-        ClassLoader classLoader = Thread.currentThread()
-                .getContextClassLoader();
-        ServiceLoader<JdbcDialectContributor> contributors = classLoader == null ? ServiceLoader.load(JdbcDialectContributor.class)
-                : ServiceLoader.load(JdbcDialectContributor.class, classLoader);
-
-        for (JdbcDialectContributor contributor : contributors)
+        Thread current = Thread.currentThread();
+        ClassLoader previous = current.getContextClassLoader();
+        current.setContextClassLoader(dialectClassLoader);
+        try
         {
-            try
+            ServiceLoader<JdbcDialectContributor> contributors = ServiceLoader.load(JdbcDialectContributor.class, dialectClassLoader);
+
+            java.util.Iterator<JdbcDialectContributor> it = contributors.iterator();
+            while (true)
             {
-                contributor.contribute(registry);
-                logger.info("Registered JDBC dialect contributor: " + contributor.getClass()
-                        .getName());
-            }
-            catch (IllegalArgumentException e)
-            {
-                if (e.getMessage() != null
-                        && e.getMessage()
-                                .startsWith("dialect already registered:"))
+                JdbcDialectContributor contributor;
+                try
                 {
-                    logger.warn("Skipped JDBC dialect contributor due to duplicate dialect id: " + contributor.getClass()
-                            .getName() + " (" + e.getMessage() + ")");
+                    if (!it.hasNext())
+                    {
+                        break;
+                    }
+                    contributor = it.next();
+                }
+                catch (java.util.ServiceConfigurationError e)
+                {
+                    logger.warn("Failed to load JDBC dialect contributor (skipping): " + e.getMessage());
                     continue;
                 }
-                throw e;
+                try
+                {
+                    contributor.contribute(registry);
+                    logger.info("Registered JDBC dialect contributor: " + contributor.getClass()
+                            .getName());
+                }
+                catch (IllegalArgumentException e)
+                {
+                    if (e.getMessage() != null
+                            && e.getMessage()
+                                    .startsWith("dialect already registered:"))
+                    {
+                        logger.warn("Skipped JDBC dialect contributor due to duplicate dialect id: " + contributor.getClass()
+                                .getName() + " (" + e.getMessage() + ")");
+                        continue;
+                    }
+                    throw e;
+                }
+                catch (Throwable t)
+                {
+                    logger.warn("JDBC dialect contributor threw unexpected error (skipping): " + contributor.getClass()
+                            .getName() + " — " + t);
+                }
             }
+        }
+        finally
+        {
+            current.setContextClassLoader(previous);
         }
     }
 }

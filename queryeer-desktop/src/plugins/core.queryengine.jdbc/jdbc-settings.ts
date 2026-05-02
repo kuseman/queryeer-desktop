@@ -7,9 +7,12 @@ export type JdbcConnectionDefinition = {
   connectionId: string;
   title?: string;
   dialectId: string;
-  url: string;
+  /** JDBC URL — used by generic JDBC dialect. Empty/absent for structured-field dialects. */
+  url?: string;
   username?: string;
   password?: string | SecretRefValue;
+  /** Dialect-specific structured fields (host, port, database, authType, etc.) */
+  properties?: Record<string, unknown>;
   enabled: boolean;
 };
 
@@ -44,19 +47,28 @@ export function parseJdbcConnectionDefinitions(raw: unknown): JdbcConnectionDefi
     }
 
     const connectionId = text(item.connectionId);
-    const url = text(item.url);
-    if (!connectionId || !url || seen.has(connectionId)) {
+    if (!connectionId || seen.has(connectionId)) {
       continue;
     }
+
+    const url = text(item.url);
+    const hasStructuredProperties = isRecord(item.properties);
+
+    // Accept connections that have a URL (generic JDBC) or structured properties (e.g. SQL Server).
+    if (!url && !hasStructuredProperties) {
+      continue;
+    }
+
     seen.add(connectionId);
 
     result.push({
       connectionId,
       title: text(item.title) || undefined,
       dialectId: text(item.dialectId) || "jdbc",
-      url,
+      url: url || undefined,
       username: text(item.username) || undefined,
-      password: parseSecretRef(item.password) || text(item.password) || undefined,
+      password: parseSecretRef(item.password) ?? (text(item.password) || undefined),
+      properties: hasStructuredProperties ? (item.properties as Record<string, unknown>) : undefined,
       enabled: typeof item.enabled === "boolean" ? item.enabled : true
     });
   }

@@ -165,6 +165,8 @@ type AppShellApi = {
   toggleDevTools: () => Promise<void>;
   showItemInFolder: (uri: string) => Promise<{ success: boolean }>;
   openPath: (uri: string) => Promise<{ success: boolean; error?: string }>;
+  getAppDir: () => Promise<string>;
+  openExternal: (url: string) => Promise<void>;
   getRecentFiles: () => Promise<RecentFileEntry[]>;
   addRecentFile: (uri: string, maxCount?: number) => Promise<{ accepted: boolean }>;
   removeRecentFile: (uri: string) => Promise<{ removed: boolean }>;
@@ -405,6 +407,12 @@ const appShellApi: AppShellApi = {
   },
   openPath: async (uri: string) => {
     return ipcRenderer.invoke("shell:open-path", { uri });
+  },
+  getAppDir: async () => {
+    return ipcRenderer.invoke("app:get-dir");
+  },
+  openExternal: async (url: string) => {
+    return ipcRenderer.invoke("shell:open-external", { url });
   },
   getRecentFiles: async () => {
     return ipcRenderer.invoke("recent:get");

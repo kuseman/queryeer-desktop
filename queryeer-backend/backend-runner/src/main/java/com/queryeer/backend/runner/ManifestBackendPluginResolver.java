@@ -8,13 +8,13 @@ import com.queryeer.backend.api.PluginHostServices;
 
 final class ManifestBackendPluginResolver implements BackendPluginResolver
 {
-    private final PluginClasspathFactory classpathFactory;
+    private final PluginClassLoaderFactory classLoaderFactory;
     private final PluginFactory pluginFactory;
     private final PluginHostServices hostServices;
 
-    ManifestBackendPluginResolver(PluginClasspathFactory classpathFactory, PluginFactory pluginFactory, PluginHostServices hostServices)
+    ManifestBackendPluginResolver(PluginClassLoaderFactory classLoaderFactory, PluginFactory pluginFactory, PluginHostServices hostServices)
     {
-        this.classpathFactory = classpathFactory;
+        this.classLoaderFactory = classLoaderFactory;
         this.pluginFactory = pluginFactory;
         this.hostServices = hostServices;
     }
@@ -27,7 +27,7 @@ final class ManifestBackendPluginResolver implements BackendPluginResolver
             return Optional.empty();
         }
 
-        URLClassLoader classLoader = classpathFactory.createClassLoader(source, manifest, BackendRunnerApp.class.getClassLoader());
+        URLClassLoader classLoader = classLoaderFactory.createClassLoader(source, manifest);
         return Optional.of(new DiscoveredPlugin(manifest, new PluginManifestBackedPlugin(manifest, pluginFactory.instantiate(manifest, classLoader, source, hostServices)), source, true, classLoader));
     }
 }

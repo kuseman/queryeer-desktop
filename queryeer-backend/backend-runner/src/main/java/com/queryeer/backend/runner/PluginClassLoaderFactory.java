@@ -10,11 +10,18 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-final class PluginClasspathFactory
+final class PluginClassLoaderFactory
 {
     private static final List<String> PARENT_FIRST_PREFIXES = List.of("java.", "javax.", "jdk.", "sun.", "com.queryeer.backend.api.", "com.queryeer.backend.contract.");
 
-    URLClassLoader createClassLoader(Path source, PluginManifest manifest, ClassLoader parent)
+    private final SharedClassLoader sharedLoader;
+
+    PluginClassLoaderFactory(SharedClassLoader sharedLoader)
+    {
+        this.sharedLoader = sharedLoader;
+    }
+
+    URLClassLoader createClassLoader(Path source, PluginManifest manifest)
     {
         List<URL> urls = new ArrayList<>();
         try
@@ -25,7 +32,7 @@ final class PluginClasspathFactory
             {
                 buildManifestClasspath(source, manifest.backend()
                         .classpath(), urls);
-                return new ParentAwarePluginClassLoader(urls.toArray(URL[]::new), parent);
+                return new ParentAwarePluginClassLoader(urls.toArray(URL[]::new), sharedLoader);
             }
 
             if (Files.isDirectory(source))
@@ -57,7 +64,7 @@ final class PluginClasspathFactory
             throw new PluginDiscoveryException("Failed to build classpath for plugin source: " + source, e);
         }
 
-        return new ParentAwarePluginClassLoader(urls.toArray(URL[]::new), parent);
+        return new ParentAwarePluginClassLoader(urls.toArray(URL[]::new), sharedLoader);
     }
 
     private void buildManifestClasspath(Path source, PluginManifest.Classpath classpath, List<URL> urls) throws IOException
@@ -174,7 +181,12 @@ final class PluginClasspathFactory
                 || candidate.indexOf('?') >= 0;
     }
 
-    private static final class ParentAwarePluginClassLoader extends URLClassLoader
+    SharedClassLoader sharedLoader()
+    {
+        return sharedLoader;
+    }
+
+    static final class ParentAwarePluginClassLoader extends URLClassLoader
     {
         ParentAwarePluginClassLoader(URL[] urls, ClassLoader parent)
         {

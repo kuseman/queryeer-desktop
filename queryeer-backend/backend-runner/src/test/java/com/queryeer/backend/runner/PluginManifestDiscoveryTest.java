@@ -102,7 +102,8 @@ class PluginManifestDiscoveryTest
         Files.writeString(pluginFolderA.resolve("plugin.json"), duplicateManifestA, StandardCharsets.UTF_8);
         Files.writeString(pluginFolderB.resolve("plugin.json"), duplicateManifestB, StandardCharsets.UTF_8);
 
-        PluginDiscoveryService service = new PluginDiscoveryService(new ObjectMapper(), BackendPlatformServices.defaultServices());
+        PluginClassLoaderFactory classLoaderFactory = new PluginClassLoaderFactory(new SharedClassLoader(List.of(), getClass().getClassLoader()));
+        PluginDiscoveryService service = new PluginDiscoveryService(new ObjectMapper(), BackendPlatformServices.defaultServices(), classLoaderFactory);
         PluginDiscoveryException error = Assertions.assertThrows(PluginDiscoveryException.class, () -> service.discoverFromPath(pluginsDir.toString()));
 
         Assertions.assertTrue(error.getMessage()

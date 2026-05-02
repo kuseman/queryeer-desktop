@@ -195,17 +195,15 @@ export class BackendGateway {
   }
 
   public async executeQuery(params: QueryExecuteParams): Promise<QueryExecuteResult> {
-    if (this.statusStore.get().state !== "healthy") {
-      await this.waitUntilHealthy(12_000);
-    }
-    if (this.statusStore.get().state !== "healthy") {
-      throw new Error(this.statusStore.get().error ?? "Backend is not healthy yet");
-    }
-
     const resolvedParams = this.resolveSecretReferences(params) as QueryExecuteParams;
 
     this.executionStore.markAccepted(resolvedParams.queryExecutionId, resolvedParams.engineId);
     this.syncExecutionSnapshot();
+
+    await this.waitUntilHealthy(30_000);
+    if (this.statusStore.get().state !== "healthy") {
+      throw new Error(this.statusStore.get().error ?? "Backend is not healthy yet");
+    }
 
     const envelope = this.createRequest("queryengine.execute", resolvedParams);
     this.appendLog("debug", "gateway", `Sending request ${envelope.id} queryengine.execute`);
@@ -236,6 +234,10 @@ export class BackendGateway {
     const resolvedParams = this.resolveSecretReferences(params) as EngineInvokeParams;
     const envelope = this.createRequest("queryengine.invoke", resolvedParams);
     this.appendLog("debug", "gateway", `Sending request ${envelope.id} queryengine.invoke`);
+    await this.waitUntilHealthy(30_000);
+    if (this.statusStore.get().state !== "healthy") {
+      throw new Error(this.statusStore.get().error ?? "Backend is not healthy yet");
+    }
     if (this.tracePayloads) {
       this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
     }
@@ -525,10 +527,19 @@ export class BackendGateway {
     };
   }
 
-  private sendRequest(
+  private async sendRequest(
     envelope: BackendRequestEnvelope,
     timeoutMs = 10_000
   ): Promise<BackendResponseEnvelope> {
+    if (
+      envelope.method !== "backend.handshake" &&
+      envelope.method !== "health.ping" &&
+      envelope.method !== "backend.runtimeStatus" &&
+      this.statusStore.get().state !== "healthy"
+    ) {
+      throw new Error(this.statusStore.get().error ?? "Backend is not healthy yet");
+    }
+
     return new Promise<BackendResponseEnvelope>((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pending.cancel(envelope.id);

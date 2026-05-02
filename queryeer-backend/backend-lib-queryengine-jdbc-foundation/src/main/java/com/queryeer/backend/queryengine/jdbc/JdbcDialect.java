@@ -9,4 +9,13 @@ public interface JdbcDialect
     JdbcQueryExecutor queryExecutor();
 
     JdbcSchemaResolver schemaResolver();
+
+    /**
+     * Returns {@code true} if this dialect requires an explicit JDBC URL in the connection configuration, or {@code false} if the dialect constructs the URL itself from structured connection fields
+     * (host, port, database, etc.).
+     */
+    default boolean requiresExplicitUrl()
+    {
+        return true;
+    }
 }
