@@ -56,8 +56,8 @@ export class MockJavaBackend {
       return;
     }
 
-    if (envelope.method === "engine.invoke") {
-      this.respondEngineInvoke(envelope as BackendRequestEnvelope<"engine.invoke">);
+    if (envelope.method === "queryengine.invoke") {
+      this.respondEngineInvoke(envelope as BackendRequestEnvelope<"queryengine.invoke">);
       return;
     }
 
@@ -99,7 +99,7 @@ export class MockJavaBackend {
         "health.ping",
         "queryengine.execute",
         "queryengine.cancel",
-        "engine.invoke",
+        "queryengine.invoke",
         "queryengine.progress",
         "queryengine.chunkStart",
         "queryengine.chunkRows",
@@ -138,7 +138,7 @@ export class MockJavaBackend {
         }
       ],
       activatedPluginIds: ["query.payloadbuilder", "query.jdbc"],
-      providedCapabilities: ["queryengine.execute", "queryengine.cancel", "engine.invoke"]
+      providedCapabilities: ["queryengine.execute", "queryengine.cancel", "queryengine.invoke"]
     };
 
     const response: BackendResponseEnvelope<RuntimeStatusResult> = {
@@ -391,7 +391,7 @@ export class MockJavaBackend {
     } satisfies BackendResponseEnvelope<FileBindResult>);
   }
 
-  private respondEngineInvoke(request: BackendRequestEnvelope<"engine.invoke">): void {
+  private respondEngineInvoke(request: BackendRequestEnvelope<"queryengine.invoke">): void {
     const params = request.params as {
       engineId: string;
       fileId?: string;

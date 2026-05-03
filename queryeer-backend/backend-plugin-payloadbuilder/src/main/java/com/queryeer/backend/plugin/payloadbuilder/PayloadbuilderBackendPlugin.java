@@ -11,8 +11,8 @@ public final class PayloadbuilderBackendPlugin implements BackendPlugin
     @Override
     public PluginDescriptor descriptor()
     {
-        return new PluginDescriptor("query.payloadbuilder", "Payloadbuilder Query Engine", "0.1.0", List.of(), List.of("queryengine.execute", "engine.invoke", "queryengine.payloadbuilder.catalog"),
-                List.of());
+        return new PluginDescriptor("query.payloadbuilder", "Payloadbuilder Query Engine", "0.1.0", List.of(),
+                List.of("queryengine.execute", "queryengine.invoke", "queryengine.payloadbuilder.catalog"), List.of());
     }
 
     @Override

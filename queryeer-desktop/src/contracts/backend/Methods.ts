@@ -7,7 +7,7 @@ export type BackendRequestMethod =
   | "health.ping"
   | "queryengine.execute"
   | "queryengine.cancel"
-  | "engine.invoke"
+  | "queryengine.invoke"
   | "connection.upsert"
   | "file.open"
   | "file.close"

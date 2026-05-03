@@ -67,7 +67,7 @@ const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
             "health.ping",
             "queryengine.execute",
             "queryengine.cancel",
-            "engine.invoke",
+            "queryengine.invoke",
             "queryengine.progress",
             "queryengine.chunkStart",
             "queryengine.chunkRows",
@@ -105,12 +105,12 @@ const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
             }
           ],
           activatedPluginIds: ["query.payloadbuilder"],
-          providedCapabilities: ["queryengine.execute", "engine.invoke"]
+          providedCapabilities: ["queryengine.execute", "queryengine.invoke"]
         } satisfies RuntimeStatusResult);
         return;
       }
 
-      if (envelope.method === "engine.invoke") {
+      if (envelope.method === "queryengine.invoke") {
         const params = envelope.params as {
           engineId: string;
           fileId?: string;
@@ -496,14 +496,14 @@ describe("BackendGateway", () => {
       .map((call: [BackendEnvelope]) => call[0])
       .find(
         (envelope): envelope is BackendRequestEnvelope =>
-          envelope.type === "request" && envelope.method === "engine.invoke"
+          envelope.type === "request" && envelope.method === "queryengine.invoke"
       );
 
     expect(invokeRequest).toBeDefined();
     await gateway.stop();
   });
 
-  it("forwards structured secret refs on engine.invoke", async () => {
+  it("forwards structured secret refs on queryengine.invoke", async () => {
     const { gateway, transport } = createGatewayWithTestTransport();
     await gateway.start();
 
@@ -523,7 +523,7 @@ describe("BackendGateway", () => {
       .map((call: [BackendEnvelope]) => call[0])
       .find(
         (envelope): envelope is BackendRequestEnvelope =>
-          envelope.type === "request" && envelope.method === "engine.invoke"
+          envelope.type === "request" && envelope.method === "queryengine.invoke"
       );
 
     expect(invokeRequest).toBeDefined();
@@ -540,7 +540,7 @@ describe("BackendGateway", () => {
     await gateway.stop();
   });
 
-  it("forwards nested structured secret refs on engine.invoke", async () => {
+  it("forwards nested structured secret refs on queryengine.invoke", async () => {
     const { gateway, transport } = createGatewayWithTestTransport();
     await gateway.start();
 
@@ -560,7 +560,7 @@ describe("BackendGateway", () => {
       .map((call: [BackendEnvelope]) => call[0])
       .find(
         (envelope): envelope is BackendRequestEnvelope =>
-          envelope.type === "request" && envelope.method === "engine.invoke"
+          envelope.type === "request" && envelope.method === "queryengine.invoke"
       );
 
     expect(invokeRequest).toBeDefined();

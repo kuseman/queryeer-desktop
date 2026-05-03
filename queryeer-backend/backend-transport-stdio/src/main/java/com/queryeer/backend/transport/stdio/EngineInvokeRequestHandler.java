@@ -23,7 +23,7 @@ final class EngineInvokeRequestHandler implements RequestHandler
     @Override
     public String method()
     {
-        return "engine.invoke";
+        return "queryengine.invoke";
     }
 
     @Override

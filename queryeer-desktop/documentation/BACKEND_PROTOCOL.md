@@ -120,7 +120,7 @@ Request params:
   "requestedCapabilities": [
     "queryengine.execute",
     "queryengine.cancel",
-    "engine.invoke",
+    "queryengine.invoke",
     "queryengine.progress",
     "queryengine.resultChunk"
   ]
@@ -152,7 +152,7 @@ Success result:
     }
   ],
   "activatedPluginIds": ["query.payloadbuilder"],
-  "providedCapabilities": ["queryengine.execute", "engine.invoke"]
+  "providedCapabilities": ["queryengine.execute", "queryengine.invoke"]
 }
 ```
 
@@ -174,7 +174,7 @@ Notes:
     "health.ping",
     "queryengine.execute",
     "queryengine.cancel",
-    "engine.invoke",
+    "queryengine.invoke",
     "queryengine.progress",
     "queryengine.resultChunk",
     "queryengine.completed",
@@ -524,7 +524,7 @@ Rules:
 }
 ```
 
-## 5.4a `engine.invoke`
+## 5.4a `queryengine.invoke`
 
 Purpose: execute engine-specific operations that are not query execution (for example completion, schema lookup, metadata fetch, diagnostics, or catalog operations).
 
