@@ -12,7 +12,6 @@ import com.queryeer.backend.api.FileSession;
 import com.queryeer.backend.api.FileSessionHandler;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryPublisher;
-import com.queryeer.backend.api.SecretService;
 import com.queryeer.backend.queryengine.jdbc.CancellableJdbcQueryExecutor;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnectionFieldDefinition;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnectionFieldOption;
@@ -38,7 +37,6 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private static final String ACTION_SCHEMA_FETCH = "jdbc.schema.fetch";
     private final JdbcDialectRegistry registry;
     private final JdbcConnectionRegistry connections;
-    private final SecretService secrets;
     private final JdbcFileConnectionManager fileConnections;
     private final JdbcConnectionUsageListener usageListener;
     private final JdbcSchemaStore schemaStore;
@@ -46,12 +44,11 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private final Map<String, CancellableJdbcQueryExecutor> activeExecutors = new ConcurrentHashMap<>();
     private final Set<String> cancelledExecutionIds = ConcurrentHashMap.newKeySet();
 
-    JdbcQueryEngineProvider(JdbcDialectRegistry registry, JdbcConnectionRegistry connections, SecretService secrets, JdbcFileConnectionManager fileConnections,
-            JdbcConnectionUsageListener usageListener, JdbcSchemaStore schemaStore, JdbcSchemaCrawlCoordinator crawlCoordinator)
+    JdbcQueryEngineProvider(JdbcDialectRegistry registry, JdbcConnectionRegistry connections, JdbcFileConnectionManager fileConnections, JdbcConnectionUsageListener usageListener,
+            JdbcSchemaStore schemaStore, JdbcSchemaCrawlCoordinator crawlCoordinator)
     {
         this.registry = registry;
         this.connections = connections;
-        this.secrets = secrets;
         this.fileConnections = fileConnections;
         this.usageListener = usageListener;
         this.schemaStore = schemaStore;
@@ -237,7 +234,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                 .get("url"));
         String username = stringValue(stored.connection()
                 .get("username"));
-        String password = secretValue(stored.connection()
+        String password = stringValue(stored.connection()
                 .get("password"));
         if (url == null)
         {
@@ -342,7 +339,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                 .get("dialectId"));
         String url = stringValue(stored.connection()
                 .get("url"));
-        String password = secretValue(stored.connection()
+        String password = stringValue(stored.connection()
                 .get("password"));
         String username = stringValue(stored.connection()
                 .get("username"));
@@ -378,7 +375,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         String dialectId = stringValue(connection.get("dialectId"));
         String url = stringValue(connection.get("url"));
         String username = stringValue(connection.get("username"));
-        String password = secretValue(connection.get("password"));
+        String password = stringValue(connection.get("password"));
         return new JdbcExecutionState(null, dialectId == null ? ENGINE_ID
                 : dialectId, url, username, password);
     }
@@ -411,25 +408,6 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                     : trimmed;
         }
         return null;
-    }
-
-    private String secretValue(Object value)
-    {
-        if (value instanceof Map<?, ?> map)
-        {
-            String secretRef = stringValue(map.get("secretRef"));
-            if (secretRef == null)
-            {
-                return null;
-            }
-            char[] chars = secrets.getSecret(secretRef);
-            if (chars == null)
-            {
-                return null;
-            }
-            return new String(chars);
-        }
-        return stringValue(value);
     }
 
     private static final class QueryCancelledException extends RuntimeException

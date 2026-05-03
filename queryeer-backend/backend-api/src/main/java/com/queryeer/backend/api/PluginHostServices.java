@@ -6,11 +6,7 @@ public interface PluginHostServices
 
     ConfigService config();
 
-    SecretService secrets();
-
     QueryEngineRegistry queryEngines();
-
-    MetadataRegistry metadata();
 
     FileSessionHandlerRegistry fileSessions();
 

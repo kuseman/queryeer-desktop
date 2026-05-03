@@ -73,7 +73,7 @@ public final class JdbcBackendPlugin implements BackendPlugin
         long reaperIntervalMs = parseDurationMs(context.config(), REAPER_INTERVAL_KEY, Math.max(1_000L, Math.min(idleTimeoutMs, TimeUnit.MINUTES.toMillis(5))));
         long schemaCrawlIntervalMs = parseDurationMs(context.config(), SCHEMA_CRAWL_INTERVAL_KEY, TimeUnit.MINUTES.toMillis(5));
         JdbcFileConnectionManager fileConnections = new JdbcFileConnectionManager(idleTimeoutMs);
-        JdbcQueryEngineProvider provider = new JdbcQueryEngineProvider(registry, connections, context.secrets(), fileConnections, crawlCoordinator::onUsage, schemaStore, crawlCoordinator);
+        JdbcQueryEngineProvider provider = new JdbcQueryEngineProvider(registry, connections, fileConnections, crawlCoordinator::onUsage, schemaStore, crawlCoordinator);
 
         context.scheduler()
                 .schedule("jdbc.file-session-reaper", () -> startReaperThread(fileConnections, reaperIntervalMs));

@@ -5,6 +5,7 @@ import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.query.QueryCancelParams;
 import com.queryeer.backend.contract.query.QueryCancelResult;
+import com.queryeer.backend.core.query.QueryExecutionService;
 
 final class QueryCancelRequestHandler implements RequestHandler
 {
@@ -33,6 +34,6 @@ final class QueryCancelRequestHandler implements RequestHandler
 
         responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, new QueryCancelResult(true, params.queryExecutionId()), null));
 
-        queryExecutionService.cancel(params);
+        queryExecutionService.cancel(params.queryExecutionId());
     }
 }

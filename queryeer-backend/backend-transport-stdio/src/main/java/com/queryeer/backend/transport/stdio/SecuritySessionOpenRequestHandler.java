@@ -9,19 +9,20 @@ import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.security.SecuritySessionOpenParams;
 import com.queryeer.backend.contract.security.SecuritySessionOpenResult;
+import com.queryeer.backend.core.security.SecuritySession;
 
 final class SecuritySessionOpenRequestHandler implements RequestHandler
 {
     private final ResponseWriter responseWriter;
     private final EnvelopeCodec codec;
-    private final SecuritySessionBridge securityBridge;
+    private final SecuritySession securitySession;
     private final EventBus events;
 
-    public SecuritySessionOpenRequestHandler(ResponseWriter responseWriter, EnvelopeCodec codec, SecuritySessionBridge securityBridge, EventBus events)
+    public SecuritySessionOpenRequestHandler(ResponseWriter responseWriter, EnvelopeCodec codec, SecuritySession securitySession, EventBus events)
     {
         this.responseWriter = responseWriter;
         this.codec = codec;
-        this.securityBridge = securityBridge;
+        this.securitySession = securitySession;
         this.events = events;
     }
 
@@ -39,7 +40,7 @@ final class SecuritySessionOpenRequestHandler implements RequestHandler
 
         if (params != null)
         {
-            securityBridge.openSession(params.sessionId(), params.vaultPath(), params.sessionKeyBase64(), params.vaultUpdatedAt());
+            securitySession.openSession(params.sessionId(), params.vaultPath(), params.sessionKeyBase64(), params.vaultUpdatedAt());
             Map<String, Object> event = new LinkedHashMap<>();
             event.put("sessionId", params.sessionId());
             event.put("vaultPath", params.vaultPath());
