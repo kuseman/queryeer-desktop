@@ -27,6 +27,26 @@ vi.mock("./QueryTextEditorRegistry", () => ({
   }
 }));
 
+vi.mock("../../core/plugin-runtime/ExtensionRegistry", () => ({
+  getEditorRegistryHost: () => ({
+    getActiveEditor: () => null,
+    onActiveEditorChanged: () => ({ dispose: () => {} }),
+    setActiveEditor: () => {},
+    registerContentRepository: () => () => {},
+    resolveFileContent: () => undefined,
+    broadcastContentUpdate: () => {},
+    applyRecoveredContent: () => {},
+    onContentDirty: () => () => {}
+  }),
+  getOutlineRegistry: () => ({
+    registerOutlineProvider: () => {},
+    registerSupplementaryOutlineProvider: () => {},
+    hasProvider: () => false,
+    getProvider: () => undefined,
+    getSymbols: async () => []
+  })
+}));
+
 import { coreQueryEnginePlugin } from "./plugin";
 
 function makeFile(overrides: Partial<FileEntity> = {}): FileEntity {

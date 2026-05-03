@@ -103,9 +103,26 @@ import type { OutlineRegistry } from "../../contracts/extensions/OutlineExtensio
 void React;
 
 const mockEditorRegistryHost: EditorRegistryHost = {
-  getActiveEditor: () => null,
+  getActiveEditor: () => {
+    const editor = mocks.getActiveEditorMock();
+    if (!editor) return null;
+    return {
+      editorId: "test",
+      fileId: "file-1",
+      focus: { focus: () => {} },
+      selection: {
+        getSelectedText: () => editor.getSelectedText?.() ?? null,
+        getContent: () => editor.getContent?.() ?? ""
+      }
+    };
+  },
   onActiveEditorChanged: () => ({ dispose: () => {} }),
-  setActiveEditor: () => {}
+  setActiveEditor: () => {},
+  registerContentRepository: () => () => {},
+  resolveFileContent: () => undefined,
+  broadcastContentUpdate: () => {},
+  applyRecoveredContent: () => {},
+  onContentDirty: () => () => {}
 };
 
 const mockOutlineRegistry: OutlineRegistry = {

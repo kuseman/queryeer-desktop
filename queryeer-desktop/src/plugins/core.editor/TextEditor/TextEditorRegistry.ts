@@ -51,6 +51,10 @@ export class TextEditorRegistry {
   private scopeId: string | null = null;
   private scopeUnregister: (() => void) | null = null;
 
+  constructor() {
+    registerTextEditorRepository(this);
+  }
+
   getCommandTargetEditor(): TextEditorApi | null {
     if (this.editorApi?.getModel()) {
       return this.editorApi;

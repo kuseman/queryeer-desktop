@@ -17,7 +17,7 @@ describe("EditorRegistry via ExtensionRegistry", () => {
       changes.push(editor);
     });
 
-    const handle = { editorId: "test-editor" };
+    const handle = { editorId: "test-editor", fileId: null };
     host.setActiveEditor(handle);
     host.setActiveEditor(null);
 
@@ -37,9 +37,9 @@ describe("EditorRegistry via ExtensionRegistry", () => {
       callCount++;
     });
 
-    host.setActiveEditor({ editorId: "a" });
+    host.setActiveEditor({ editorId: "a", fileId: null });
     unsub.dispose();
-    host.setActiveEditor({ editorId: "b" });
+    host.setActiveEditor({ editorId: "b", fileId: null });
 
     expect(callCount).toBe(1);
   });
@@ -49,7 +49,7 @@ describe("EditorRegistry via ExtensionRegistry", () => {
     const registry = ext.createEditorRegistry();
     const host = ext.getEditorRegistryHost();
 
-    const handle = { editorId: "test-editor" };
+    const handle = { editorId: "test-editor", fileId: null };
     host.setActiveEditor(handle);
     expect(registry.getActiveEditor()).toBe(handle);
   });
@@ -59,7 +59,7 @@ describe("EditorRegistry via ExtensionRegistry", () => {
     const registry = ext.createEditorRegistry();
     const host = ext.getEditorRegistryHost();
 
-    host.setActiveEditor({ editorId: "test-editor" });
+    host.setActiveEditor({ editorId: "test-editor", fileId: null });
     host.setActiveEditor(null);
     expect(registry.getActiveEditor()).toBeNull();
   });

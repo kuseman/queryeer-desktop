@@ -11,8 +11,8 @@ import { createKeybindingService } from "../../plugins/core.commands/keybinding-
 import {
   resolveKeybindingState
 } from "../../plugins/core.commands/keybinding-resolver";
-import { getTextEditorModelRepositories, getTextEditorRepositoryStates } from "../../plugins/core.editor/TextEditor/TextEditorModelRepository";
 import { setTextEditorContextChain } from "../../plugins/core.editor/TextEditor/TextEditorRegistry";
+import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegistry";
 import { createBackendCommandContext } from "./backend-command-context";
 import { filterMenuItemsByWhen } from "../../plugins/core.menu/menu-item-filter";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
@@ -76,13 +76,7 @@ export async function bootstrapShell() {
   };
 
   const resolveFileContent = (fileId: string, uri: string): string | undefined => {
-    for (const repo of getTextEditorModelRepositories()) {
-      const model = repo.getModelForFile(fileId) ?? repo.getModelForUri(uri);
-      if (model) {
-        return model.getContent();
-      }
-    }
-    return undefined;
+    return getEditorRegistryHost().resolveFileContent(fileId, uri);
   };
 
   const fileWatcher = new RendererFileWatcherService({
@@ -97,9 +91,7 @@ export async function bootstrapShell() {
   let fileMediator: FileMediator | null = null;
 
   const onFileChanged = (file: FileEntity, text: string): void => {
-    for (const repo of getTextEditorRepositoryStates()) {
-      repo.updateModelContent(file.uri, text);
-    }
+    getEditorRegistryHost().broadcastContentUpdate(file.uri, text);
     workspaceService?.handleFileChanged(file, text);
   };
 
@@ -225,23 +217,20 @@ export async function bootstrapShell() {
     filesRegistry: filesRegistry!,
     fileMediator: fileMediator!,
     fileWatcher,
+    editorRegistryHost: getEditorRegistryHost(),
     showDialog: (options) => window.appShell.showDialogMessage(options),
     applyRecoveredContent: (fileId, text) => {
-      for (const repo of getTextEditorRepositoryStates()) {
-        repo.applyRecoveredContent(fileId, text);
-      }
+      getEditorRegistryHost().applyRecoveredContent(fileId, text);
     }
   });
   await workspaceService.hydrate();
 
-  for (const repo of getTextEditorRepositoryStates()) {
-    repo.onContentDirty((fileId, text) => {
-      const file = filesRegistry!.getFile(fileId);
-      if (file) {
-        workspaceService?.handleFileChanged(file, text);
-      }
-    });
-  }
+  getEditorRegistryHost().onContentDirty((fileId, text) => {
+    const file = filesRegistry!.getFile(fileId);
+    if (file) {
+      workspaceService?.handleFileChanged(file, text);
+    }
+  });
 
   const commandExecution = await executeCommand("core.commands.about");
 
