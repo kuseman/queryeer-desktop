@@ -116,7 +116,18 @@ function createContext(file: FileEntity): PluginContext {
       getAdvancedRenderer: vi.fn(),
       getAdvancedValidator: vi.fn()
     },
-    quickcommand: { registerProvider: vi.fn() }
+    quickcommand: { registerProvider: vi.fn() },
+    outline: {
+      registerOutlineProvider: vi.fn(),
+      registerSupplementaryOutlineProvider: vi.fn(),
+      hasProvider: vi.fn(() => false),
+      getProvider: vi.fn(),
+      getSymbols: vi.fn()
+    },
+    editors: {
+      getActiveEditor: vi.fn(() => null),
+      onActiveEditorChanged: vi.fn(() => ({ dispose: vi.fn() }))
+    }
   };
 }
 

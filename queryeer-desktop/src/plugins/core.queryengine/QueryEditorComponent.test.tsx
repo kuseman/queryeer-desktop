@@ -97,8 +97,24 @@ vi.mock("./output/OutputRegistry", () => ({
 }));
 
 import { QueryEditorComponent } from "./QueryEditorComponent";
+import type { EditorRegistryHost } from "../../contracts/editor/EditorCapability";
+import type { OutlineRegistry } from "../../contracts/extensions/OutlineExtension";
 
 void React;
+
+const mockEditorRegistryHost: EditorRegistryHost = {
+  getActiveEditor: () => null,
+  onActiveEditorChanged: () => ({ dispose: () => {} }),
+  setActiveEditor: () => {}
+};
+
+const mockOutlineRegistry: OutlineRegistry = {
+  registerOutlineProvider: () => {},
+  registerSupplementaryOutlineProvider: () => {},
+  hasProvider: () => false,
+  getProvider: () => undefined,
+  getSymbols: async () => []
+};
 
 const queryFilesById = new Map<string, FileEntity>();
 
@@ -193,7 +209,7 @@ const filesRegistry = {
     const file2 = makeFile({ fileId: "file-2", uri: "file:///q2.sql" });
 
     await act(async () => {
-      root.render(<QueryEditorComponent file={file1} />);
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
     });
 
     await act(async () => {
@@ -209,11 +225,11 @@ const filesRegistry = {
       })
     );
     await act(async () => {
-      root.render(<QueryEditorComponent file={file2} />);
+      root.render(<QueryEditorComponent file={file2} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
     });
 
     await act(async () => {
-      root.render(<QueryEditorComponent file={file1} />);
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
     });
 
     await act(async () => {
@@ -233,7 +249,7 @@ const filesRegistry = {
     mocks.executeMock.mockResolvedValueOnce("exec-1").mockResolvedValueOnce("exec-2");
 
     await act(async () => {
-      root.render(<QueryEditorComponent file={file1} />);
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
     });
 
     await act(async () => {
@@ -249,7 +265,7 @@ const filesRegistry = {
       })
     );
     await act(async () => {
-      root.render(<QueryEditorComponent file={file2} />);
+      root.render(<QueryEditorComponent file={file2} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
     });
 
     await act(async () => {
@@ -273,7 +289,7 @@ const filesRegistry = {
     expect(mocks.cancelMock).toHaveBeenCalledWith("exec-2");
 
     await act(async () => {
-      root.render(<QueryEditorComponent file={file1} />);
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
     });
 
   });
@@ -282,7 +298,7 @@ const filesRegistry = {
     const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
 
     await act(async () => {
-      root.render(<QueryEditorComponent file={file1} />);
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
     });
 
     await act(async () => {
@@ -309,7 +325,7 @@ const filesRegistry = {
     const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
 
     await act(async () => {
-      root.render(<QueryEditorComponent file={file1} />);
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
     });
 
     await act(async () => {
@@ -338,7 +354,7 @@ const filesRegistry = {
     getQueryViewStateStore().setSelectedOutput("file-1", "core.queryengine.output.table");
 
     await act(async () => {
-      root.render(<QueryEditorComponent file={file1} />);
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
     });
 
     await act(async () => {
@@ -366,7 +382,7 @@ const filesRegistry = {
     getQueryViewStateStore().setPanelSelectedOutput("file-1", "core.queryengine.output.table");
 
     await act(async () => {
-      root.render(<QueryEditorComponent file={file1} />);
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
     });
 
     let output = rootElement.querySelector('[data-testid="mock-output"]');
@@ -387,7 +403,7 @@ const filesRegistry = {
     getQueryViewStateStore().setTextOutputFormat("file-1", "json");
 
     await act(async () => {
-      root.render(<QueryEditorComponent file={file1} />);
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
     });
 
     let output = rootElement.querySelector('[data-testid="mock-output"]');
@@ -409,7 +425,7 @@ const filesRegistry = {
     const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
 
     await act(async () => {
-      root.render(<QueryEditorComponent file={file1} />);
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
     });
 
     await act(async () => {
@@ -461,11 +477,11 @@ const filesRegistry = {
     getQueryViewStateStore().setSelectedOutput("file-1", "core.queryengine.output.text");
 
     await act(async () => {
-      root.render(<QueryEditorComponent file={file1} />);
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
     });
 
     await act(async () => {
-      root.render(<QueryEditorComponent file={file1} />);
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
     });
 
     const output = rootElement.querySelector('[data-testid="mock-output"]');

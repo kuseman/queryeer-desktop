@@ -7,6 +7,8 @@ import { QueryRunIcon, QueryStopIcon } from "./query-toolbar-icons";
 import { getOutputRegistry } from "./output/OutputRegistry";
 import { getQueryViewStateStore, TEXT_OUTPUT_PRIMARY_ID } from "./QueryViewStateStore";
 import { TEXT_OUTPUT_FORMATTERS } from "../core.queryengine.output.text/formatters";
+import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegistry";
+import { getOutlineRegistry } from "../../core/plugin-runtime/ExtensionRegistry";
 
 const QUERY_TAB_STATE_METADATA_KEY = "core.queryengine.tabState";
 
@@ -101,7 +103,7 @@ export const coreQueryEnginePlugin: Plugin = {
       supportedContentCategories: ["text"],
       openIntents: ["edit", "view"],
       priority: 500,
-      render: ({ activeFile } = {}) => <QueryEditorComponent file={activeFile} />
+      render: ({ activeFile } = {}) => <QueryEditorComponent file={activeFile} editorRegistryHost={getEditorRegistryHost()} outlineRegistry={getOutlineRegistry()} />
     });
 
     context.layout.registerTabHeaderStyle({

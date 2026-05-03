@@ -9,6 +9,8 @@ import type { DialogExtension } from "../extensions/DialogExtension.js";
 import type { TooltipRegistry } from "../extensions/TooltipExtension.js";
 import type { SettingsRegistry } from "../extensions/SettingsExtension.js";
 import type { QuickCommandRegistry } from "../extensions/QuickCommandExtension.js";
+import type { OutlineRegistry } from "../extensions/OutlineExtension.js";
+import type { EditorRegistry } from "../editor/EditorCapability.js";
 import type { PluginManifest } from "./PluginManifest.js";
 
 export type Plugin = {
@@ -33,6 +35,8 @@ export type PluginContext = {
   tooltip: TooltipRegistry;
   settings: SettingsRegistry;
   quickcommand: QuickCommandRegistry;
+  outline: OutlineRegistry;
+  editors: EditorRegistry;
 };
 
 export type CommandExecutionResult = {

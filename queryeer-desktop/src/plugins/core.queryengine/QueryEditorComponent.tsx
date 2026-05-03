@@ -11,9 +11,13 @@ import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistr
 import { defineStateKey } from "../../contracts/files/FileStateRegistry";
 import { getQueryViewStateStore, TEXT_OUTPUT_PRIMARY_ID } from "./QueryViewStateStore";
 import { TEXT_OUTPUT_FORMATTERS } from "../core.queryengine.output.text/formatters";
+import type { EditorRegistryHost } from "../../contracts/editor/EditorCapability";
+import type { OutlineRegistry } from "../../contracts/extensions/OutlineExtension";
 
 type Props = {
   file?: FileEntity;
+  editorRegistryHost?: EditorRegistryHost;
+  outlineRegistry?: OutlineRegistry;
 };
 
 type ActiveExecution = {
@@ -23,7 +27,7 @@ type ActiveExecution = {
 
 const OUTPUT_CONTEXT_KEY = defineStateKey<OutputContext>("core.queryengine.outputContext");
 
-export function QueryEditorComponent({ file }: Props): JSX.Element {
+export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry }: Props): JSX.Element {
   const [outputContext, setOutputContext] = useState<OutputContext>(IDLE_OUTPUT_CONTEXT);
   const [splitPercent, setSplitPercent] = useState(60);
   const [selectedPrimaryId, setSelectedPrimaryId] = useState<string | null>(null);
@@ -370,7 +374,13 @@ export function QueryEditorComponent({ file }: Props): JSX.Element {
     <div className="query-editor">
       <div className="query-editor-split" ref={splitContainerRef}>
         <div className="query-editor-text-pane" style={{ flexBasis: `${splitPercent}%` }}>
-          <TextEditorComponent file={file} registry={queryTextRegistry} />
+          <TextEditorComponent
+            file={file}
+            registry={queryTextRegistry}
+            editorRegistryHost={editorRegistryHost}
+            outlineRegistry={outlineRegistry}
+            editorId="core.queryengine"
+          />
         </div>
 
         <div className="query-editor-divider" onMouseDown={handleDividerMouseDown} />

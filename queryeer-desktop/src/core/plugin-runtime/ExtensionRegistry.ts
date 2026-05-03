@@ -36,9 +36,39 @@ import type {
   QuickCommandProvider,
   QuickCommandRegistry
 } from "../../contracts/extensions/QuickCommandExtension";
+import type {
+  OutlineProvider,
+  OutlineProviderRegistration,
+  OutlineRegistry,
+  OutlineSymbol,
+  SymbolKind
+} from "../../contracts/extensions/OutlineExtension";
+import type { EditorHandle, EditorRegistry, EditorRegistryHost } from "../../contracts/editor/EditorCapability";
+import type { Disposable } from "../../contracts/editor/EditorApi";
 import type { ContextValues } from "../../plugins/core.commands/when-evaluator";
 import { CommandBus } from "./CommandBus";
 import { FileRegistry } from "./FileRegistry";
+
+let outlineRegistryInstance: OutlineRegistry | undefined;
+let editorRegistryInstance: EditorRegistryHost | undefined;
+
+export function getOutlineRegistry(): OutlineRegistry {
+  if (!outlineRegistryInstance) {
+    throw new Error("OutlineRegistry not initialized");
+  }
+  return outlineRegistryInstance;
+}
+
+export function setOutlineRegistry(registry: OutlineRegistry): void {
+  outlineRegistryInstance = registry;
+}
+
+export function getEditorRegistryHost(): EditorRegistryHost {
+  if (!editorRegistryInstance) {
+    throw new Error("EditorRegistryHost not initialized");
+  }
+  return editorRegistryInstance;
+}
 
 export type ExtensionSnapshot = {
   commands: CommandExtension[];
@@ -85,6 +115,32 @@ const DEFAULT_SHELL_DEFAULTS: LayoutShellDefaults = {
   statusBarHeight: 24
 };
 
+class EditorRegistryHostImpl implements EditorRegistryHost {
+  private activeEditor: EditorHandle | null = null;
+  private readonly listeners: Array<(editor: EditorHandle | null) => void> = [];
+
+  setActiveEditor(handle: EditorHandle | null): void {
+    this.activeEditor = handle;
+    for (const listener of this.listeners) {
+      listener(handle);
+    }
+  }
+
+  getActiveEditor(): EditorHandle | null {
+    return this.activeEditor;
+  }
+
+  onActiveEditorChanged(callback: (editor: EditorHandle | null) => void): Disposable {
+    this.listeners.push(callback);
+    return {
+      dispose: () => {
+        const idx = this.listeners.indexOf(callback);
+        if (idx !== -1) this.listeners.splice(idx, 1);
+      }
+    };
+  }
+}
+
 export class ExtensionRegistry {
   private readonly commandBus: CommandBus;
   private readonly commands = new Map<string, CommandExtension>();
@@ -110,9 +166,13 @@ export class ExtensionRegistry {
     getEditors: () => [...this.layoutEditors.values()]
   });
   private readonly quickCommandProviders: QuickCommandProvider[] = [];
+  private readonly outlineProviders = new Map<string, OutlineProviderRegistration>();
+  private readonly supplementaryOutlineProviders = new Map<string, OutlineProviderRegistration[]>();
+  private readonly editorRegistryHost = new EditorRegistryHostImpl();
 
   public constructor(getCommandContextValues?: () => ContextValues) {
     this.commandBus = new CommandBus(() => getCommandContextValues?.() ?? {});
+    editorRegistryInstance = this.editorRegistryHost;
   }
 
   public createCommandRegistry(): CommandRegistry {
@@ -261,6 +321,86 @@ export class ExtensionRegistry {
 
   public getQuickCommandProviders(): QuickCommandProvider[] {
     return this.quickCommandProviders;
+  }
+
+  public createOutlineRegistry(): OutlineRegistry {
+    const providers = this.outlineProviders;
+    const supplementary = this.supplementaryOutlineProviders;
+
+    const runProvider = async (
+      provider: OutlineProvider,
+      content: string
+    ): Promise<OutlineSymbol[]> => {
+      const result = provider(content);
+      return Array.isArray(result) ? result : await result;
+    };
+
+    const registry: OutlineRegistry = {
+      registerOutlineProvider: (registration) => {
+        if (providers.has(registration.mimeType)) {
+          console.warn(
+            `Outline provider for '${registration.mimeType}' already registered; overwriting.`
+          );
+        }
+        providers.set(registration.mimeType, registration);
+      },
+
+      registerSupplementaryOutlineProvider: (registration) => {
+        const list = supplementary.get(registration.mimeType) ?? [];
+        list.push(registration);
+        supplementary.set(registration.mimeType, list);
+      },
+
+      hasProvider: (mimeType: string) => providers.has(mimeType),
+
+      getProvider: (mimeType: string) => providers.get(mimeType)?.provider,
+
+      getSymbols: async (mimeType: string, content: string) => {
+        const mainResult = providers.has(mimeType)
+          ? await runProvider(providers.get(mimeType)!.provider, content).catch((err) => {
+              const message = err instanceof Error ? err.message : String(err);
+              return [{
+                id: `${mimeType}:error:0`,
+                name: "Parse Error",
+                detail: message,
+                kind: "Event" as SymbolKind,
+                range: { startLineNumber: 0, startColumn: 0, endLineNumber: 0, endColumn: 0 },
+                selectionRange: { startLineNumber: 0, startColumn: 0, endLineNumber: 0, endColumn: 0 }
+              }];
+            })
+          : [];
+
+        const supps = supplementary.get(mimeType) ?? [];
+        const suppResults: OutlineSymbol[] = [];
+        for (const reg of supps) {
+          try {
+            const result = await runProvider(reg.provider, content);
+            suppResults.push(...result);
+          } catch {
+            // Supplementary provider failures are silently ignored
+          }
+        }
+
+        const mainIds = new Set(mainResult.map((s: OutlineSymbol) => s.id));
+        const merged = [
+          ...suppResults.filter((s: OutlineSymbol) => !mainIds.has(s.id)),
+          ...mainResult
+        ];
+
+        return merged;
+      }
+    };
+
+    outlineRegistryInstance = registry;
+    return registry;
+  }
+
+  public getEditorRegistryHost(): EditorRegistryHost {
+    return this.editorRegistryHost;
+  }
+
+  public createEditorRegistry(): EditorRegistry {
+    return this.editorRegistryHost;
   }
 
   public createDialogRegistry(): DialogRegistry {

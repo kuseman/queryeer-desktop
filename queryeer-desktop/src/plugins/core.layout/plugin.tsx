@@ -117,32 +117,6 @@ export const coreLayoutPlugin: Plugin = {
       icon: "panel"
     });
 
-    context.layout.registerView({
-      id: "core.layout.view.primary",
-      title: "Primary",
-      defaultZone: "primarySidebar",
-      order: 10,
-      canMoveZones: true,
-      render: () => (
-        <div>
-          <p>Primary sidebar slot for dockable plugin views.</p>
-        </div>
-      )
-    });
-
-    context.layout.registerView({
-      id: "core.layout.view.secondary",
-      title: "Secondary",
-      defaultZone: "secondarySidebar",
-      order: 10,
-      canMoveZones: true,
-      render: () => (
-        <div>
-          <p>Secondary sidebar slot for context tools and inspectors.</p>
-        </div>
-      )
-    });
-
     context.layout.registerWelcome({
       id: "core.layout.welcome",
       order: 10,
