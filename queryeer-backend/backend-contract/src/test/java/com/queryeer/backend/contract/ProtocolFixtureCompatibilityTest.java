@@ -150,7 +150,7 @@ class ProtocolFixtureCompatibilityTest
         assertEnvelopeBase(response);
         Assertions.assertEquals(EnvelopeType.REQUEST, request.type());
         Assertions.assertEquals(EnvelopeType.RESPONSE, response.type());
-        Assertions.assertEquals("engine.invoke", request.method());
+        Assertions.assertEquals("queryengine.invoke", request.method());
         Assertions.assertEquals(request.id(), response.id());
         Assertions.assertNotNull(response.result());
 

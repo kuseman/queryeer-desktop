@@ -153,7 +153,7 @@ Scope: Build payloadbuilder-specific catalog configuration foundation with front
 
 Do this only when catalog UI needs backend calls (eg list indices/databases).
 
-- [x] Add generic core method `engine.invoke`:
+- [x] Add generic core method `queryengine.invoke`:
   - [x] request: `{ engineId, fileId, action, payload }`
   - [x] response: `{ result?: unknown }` (or agreed generic envelope)
 - [x] Route in frontend gateway/preload
@@ -215,7 +215,7 @@ Do this only when catalog UI needs backend calls (eg list indices/databases).
 - [x] Added payloadbuilder store tests for enabled filtering and configured alias ordering.
 - [x] Added backend payloadbuilder tests for engine-state apply/diff and malformed-state validation failures.
 - [x] Added payloadbuilder sidebar host tests for panel ordering and alias-to-panel bindings.
-- [x] Added generic `engine.invoke` contracts plus frontend/backend routing and payloadbuilder invoke actions.
+- [x] Added generic `queryengine.invoke` contracts plus frontend/backend routing and payloadbuilder invoke actions.
 - [x] Added invoke end-to-end tests across gateway, integration, contract fixtures, and transport/provider modules.
 
 ### In progress

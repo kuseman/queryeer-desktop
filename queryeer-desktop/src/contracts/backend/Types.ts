@@ -12,7 +12,7 @@ export type Capability =
   | "health.ping"
   | "queryengine.execute"
   | "queryengine.cancel"
-  | "engine.invoke"
+  | "queryengine.invoke"
   | "connection.upsert"
   | "queryengine.progress"
   | "queryengine.chunkStart"
@@ -275,7 +275,7 @@ export type BackendMethodParamsMap = {
   "health.ping": PingParams;
   "queryengine.execute": QueryExecuteParams;
   "queryengine.cancel": QueryCancelParams;
-  "engine.invoke": EngineInvokeParams;
+  "queryengine.invoke": EngineInvokeParams;
   "connection.upsert": ConnectionUpsertParams;
   "file.open": FileOpenParams;
   "file.close": FileCloseParams;
@@ -291,7 +291,7 @@ export type BackendMethodResultMap = {
   "health.ping": PingResult;
   "queryengine.execute": QueryExecuteResult;
   "queryengine.cancel": QueryCancelResult;
-  "engine.invoke": EngineInvokeResult;
+  "queryengine.invoke": EngineInvokeResult;
   "connection.upsert": ConnectionUpsertResult;
   "file.open": FileOpenResult;
   "file.close": FileCloseResult;

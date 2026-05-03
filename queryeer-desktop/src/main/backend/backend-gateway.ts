@@ -234,8 +234,8 @@ export class BackendGateway {
 
   public async invokeEngine(params: EngineInvokeParams): Promise<EngineInvokeResult> {
     const resolvedParams = this.resolveSecretReferences(params) as EngineInvokeParams;
-    const envelope = this.createRequest("engine.invoke", resolvedParams);
-    this.appendLog("debug", "gateway", `Sending request ${envelope.id} engine.invoke`);
+    const envelope = this.createRequest("queryengine.invoke", resolvedParams);
+    this.appendLog("debug", "gateway", `Sending request ${envelope.id} queryengine.invoke`);
     if (this.tracePayloads) {
       this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
     }
@@ -506,7 +506,7 @@ export class BackendGateway {
       | "health.ping"
       | "queryengine.execute"
       | "queryengine.cancel"
-      | "engine.invoke"
+      | "queryengine.invoke"
       | "file.open"
       | "file.close"
       | "file.bind",

@@ -33,7 +33,7 @@ Implementation status: `backend-lib-queryengine-jdbc-foundation` is now present 
 
 - `query.payloadbuilder` provides:
   - `queryengine.execute`
-  - `engine.invoke`
+  - `queryengine.invoke`
   - `queryengine.payloadbuilder.catalog`
 - `query.jdbc` provides:
   - `queryengine.execute`

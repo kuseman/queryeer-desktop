@@ -51,7 +51,7 @@ class EngineInvokeRequestHandlerTest
         SecretRefPayloadResolver secretResolver = new SecretRefPayloadResolver(new SecuritySessionBridge(), objectMapper);
         EngineInvokeRequestHandler handler = new EngineInvokeRequestHandler(responseWriter, codec, new EngineInvokeService(registry, secretResolver));
 
-        handler.handle(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-invoke-1", null, "engine.invoke",
+        handler.handle(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-invoke-1", null, "queryengine.invoke",
                 Map.of("engineId", "payloadbuilder", "fileId", "file-1", "action", "payloadbuilder.echo", "payload", Map.of("x", 1)), null, null));
 
         FramedReader reader = new FramedReader(new ByteArrayInputStream(output.toByteArray()), l ->
@@ -80,8 +80,8 @@ class EngineInvokeRequestHandlerTest
         SecretRefPayloadResolver secretResolver = new SecretRefPayloadResolver(new SecuritySessionBridge(), objectMapper);
         EngineInvokeRequestHandler handler = new EngineInvokeRequestHandler(responseWriter, codec, new EngineInvokeService(registry, secretResolver));
 
-        handler.handle(
-                new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-invoke-2", null, "engine.invoke", Map.of("engineId", "missing", "action", "payloadbuilder.echo"), null, null));
+        handler.handle(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-invoke-2", null, "queryengine.invoke", Map.of("engineId", "missing", "action", "payloadbuilder.echo"),
+                null, null));
 
         FramedReader reader = new FramedReader(new ByteArrayInputStream(output.toByteArray()), l ->
         {
