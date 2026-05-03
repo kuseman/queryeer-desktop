@@ -2,8 +2,11 @@ import React, { useEffect, useRef, useCallback } from "react";
 import type * as monacoType from "monaco-editor";
 import type { FileEntity } from "../../../contracts/files/FileEntity";
 import type { TextEditorRegistry } from "./TextEditorRegistry";
+import type { EditorRegistryHost } from "../../../contracts/editor/EditorCapability";
+import type { OutlineRegistry } from "../../../contracts/extensions/OutlineExtension";
 import { MonacoTextEditorApi } from "./MonacoTextEditorApi";
 import { getCoreSettingsService } from "../../core.settings/service";
+import { createTextEditorHandle } from "./TextEditorOutlineCapability";
 import {
   buildMonacoCreateOptions,
   buildMonacoModelUpdateOptions,
@@ -25,9 +28,12 @@ async function getMonaco(): Promise<typeof monacoType> {
 export type TextEditorComponentProps = {
   file?: FileEntity;
   registry: TextEditorRegistry;
+  editorRegistryHost?: EditorRegistryHost;
+  outlineRegistry?: OutlineRegistry;
+  editorId?: string;
 };
 
-export function TextEditorComponent({ file, registry }: TextEditorComponentProps): JSX.Element {
+export function TextEditorComponent({ file, registry, editorRegistryHost, outlineRegistry, editorId }: TextEditorComponentProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monacoType.editor.IStandaloneCodeEditor | null>(null);
   const apiRef = useRef<MonacoTextEditorApi | null>(null);
@@ -98,9 +104,6 @@ export function TextEditorComponent({ file, registry }: TextEditorComponentProps
 
     applyEditorSettings();
 
-    // Suppress Monaco's built-in panels and redirect to the application quick command.
-    // Wrapped in try/catch: Vitest mocks throw on unknown property access so this degrades
-    // gracefully in test environments without monaco.KeyCode / monaco.KeyMod.
     try {
       const kC = (monaco as unknown as Record<string, unknown>)["KeyCode"] as
         | { F1: number; KeyP: number; KeyO: number }
@@ -115,7 +118,7 @@ export function TextEditorComponent({ file, registry }: TextEditorComponentProps
             .then(({ getQuickCommandService }) => {
               getQuickCommandService()?.open(prefill ?? "");
             })
-            .catch(() => {/* service not available */});
+            .catch(() => {});
         };
         editor.addCommand(kC.F1, () => openQuickCommand("#"));
         editor.addCommand(kM.CtrlCmd | kC.KeyP, () => openQuickCommand());
@@ -127,6 +130,9 @@ export function TextEditorComponent({ file, registry }: TextEditorComponentProps
 
     disposablesRef.current.push(
       editor.onDidDispose(() => {
+        if (editorRegistryHost && outlineRegistry) {
+          editorRegistryHost.setActiveEditor(null);
+        }
         api.dispose();
         registry.onEditorDisposed();
         editorRef.current = null;
@@ -141,10 +147,19 @@ export function TextEditorComponent({ file, registry }: TextEditorComponentProps
         if (width > 0 && height > 0) {
           editor.layout({ width, height });
         }
+        if (editorRegistryHost && outlineRegistry) {
+          const handle = createTextEditorHandle(editorId ?? "core.editor.text", api, outlineRegistry, registry);
+          editorRegistryHost.setActiveEditor(handle);
+        }
       })
     );
 
     registry.onEditorReady(api);
+
+    if (editorRegistryHost && outlineRegistry) {
+      const handle = createTextEditorHandle(editorId ?? "core.editor.text", api, outlineRegistry, registry);
+      editorRegistryHost.setActiveEditor(handle);
+    }
 
     api.onDidChangeModelContent(() => {
       const currentFile = registry.getActiveFile();
@@ -162,7 +177,7 @@ export function TextEditorComponent({ file, registry }: TextEditorComponentProps
     }
 
     initStartedRef.current = false;
-  }, [applyEditorSettings, registry]);
+  }, [applyEditorSettings, registry, editorRegistryHost, outlineRegistry, editorId]);
 
   useEffect(() => {
     if (!file) return;

@@ -160,9 +160,20 @@ export class MonacoTextEditorApi extends TextEditorApi {
     return { lineNumber: pos.lineNumber, column: pos.column };
   }
 
-  setPosition(position: Position, _revealType?: RevealType): void {
+  setPosition(position: Position, revealType: RevealType = "default"): void {
     if (!this.editor) return;
+    const monaco = this.monaco();
     this.editor.setPosition(position);
+    const scrollType = revealType === "center" || revealType === "centerIfOutsideViewport"
+      ? monaco.editor.ScrollType.Smooth
+      : monaco.editor.ScrollType.Immediate;
+    if (revealType === "center") {
+      this.editor.revealPositionInCenter(position, scrollType);
+    } else if (revealType === "centerIfOutsideViewport") {
+      this.editor.revealPositionInCenterIfOutsideViewport(position, scrollType);
+    } else if (revealType === "top") {
+      this.editor.revealPositionNearTop(position, scrollType);
+    }
   }
 
   getSelection(): Selection | null {
@@ -181,10 +192,21 @@ export class MonacoTextEditorApi extends TextEditorApi {
     this.editor.setSelection(selection);
   }
 
-  revealLine(lineNumber: number, _revealType: RevealType = "default"): void {
+  revealLine(lineNumber: number, revealType: RevealType = "default"): void {
     if (!this.editor) return;
     const monaco = this.monaco();
-    this.editor.revealLine(lineNumber, monaco.editor.ScrollType.Smooth);
+    const scrollType = monaco.editor.ScrollType.Immediate;
+    if (revealType === "center") {
+      this.editor.revealLineInCenter(lineNumber, scrollType);
+    } else if (revealType === "centerIfOutsideViewport") {
+      this.editor.revealLineInCenterIfOutsideViewport(lineNumber, scrollType);
+    } else if (revealType === "top") {
+      const lineHeight = this.editor.getOption(monaco.editor.EditorOption.lineHeight);
+      const targetScrollTop = (lineNumber - 1) * lineHeight;
+      this.editor.setScrollTop(targetScrollTop, scrollType);
+    } else {
+      this.editor.revealLine(lineNumber, scrollType);
+    }
   }
 
   revealLineInCenter(lineNumber: number): void {

@@ -115,7 +115,9 @@ export class PluginHost {
       dialog: this.extensionRegistry.createDialogRegistry(),
       tooltip: this.extensionRegistry.createTooltipRegistry(),
       settings: this.extensionRegistry.createSettingsRegistry(),
-      quickcommand: this.extensionRegistry.createQuickCommandRegistry()
+      quickcommand: this.extensionRegistry.createQuickCommandRegistry(),
+      outline: this.extensionRegistry.createOutlineRegistry(),
+      editors: this.extensionRegistry.createEditorRegistry()
     };
 
     for (const plugin of orderedPlugins) {

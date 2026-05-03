@@ -23,6 +23,7 @@ import { filterSidebarViews } from "./sidebar-view-filter";
 import { filterToolbarActions } from "./toolbar-action-filter";
 import { resolveFirstAcceleratorsByCommand } from "./accelerator-utils";
 import { subscribeOpenPanelRequests } from "./layout-panel-events";
+import { getOutlineRegistry } from "../../core/plugin-runtime/ExtensionRegistry";
 import "./shell-app.css";
 
 type ShellAppProps = {
@@ -167,12 +168,16 @@ export function ShellApp({
     const hasActiveQueryExecutableFile = activeFileForViewContext
       ? filesRegistry.capabilities.hasCapability(activeFileForViewContext.mimeType, "queryexecutable")
       : false;
+    const outlineSupported = activeFileForViewContext
+      ? getOutlineRegistry().hasProvider(activeFileForViewContext.mimeType)
+      : false;
     return {
       hasOpenFiles: openFileIds.length > 0,
       hasActiveFile: activeFileForViewContext != null,
       activeFileMimeType: activeFileForViewContext?.mimeType,
       activeFileEditorId: activeFileForViewContext?.editorId,
-      hasActiveQueryExecutableFile
+      hasActiveQueryExecutableFile,
+      outlineSupported
     };
   }, [openFileIds.length, activeFileId, files, filesRegistry]);
 

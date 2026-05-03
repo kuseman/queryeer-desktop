@@ -18,6 +18,11 @@ export function getTextEditorRegistry(): TextEditorRegistry {
   return registry;
 }
 
+export function getAnyActiveEditor(): TextEditorApi | null {
+  if (globalEditorByScopeId.size === 0) return null;
+  return globalEditorByScopeId.values().next().value ?? null;
+}
+
 /** Module-level chain shared across all TextEditorRegistry instances. */
 let globalContextChain: ContextChain | null = null;
 

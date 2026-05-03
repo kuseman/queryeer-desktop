@@ -18,7 +18,7 @@ export const coreExplorerPlugin: Plugin = {
       id: "core.explorer.view",
       title: "Explorer",
       defaultZone: "secondarySidebar",
-      order: 0,
+      order: 10,
       canMoveZones: true,
       canCollapse: true,
       isOpen: true,
