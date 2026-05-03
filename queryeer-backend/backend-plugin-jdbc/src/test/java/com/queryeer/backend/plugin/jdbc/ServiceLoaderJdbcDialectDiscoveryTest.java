@@ -8,11 +8,9 @@ import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.EventBus;
 import com.queryeer.backend.api.FileSessionHandlerRegistry;
 import com.queryeer.backend.api.LoggerService;
-import com.queryeer.backend.api.MetadataRegistry;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.SchedulerService;
-import com.queryeer.backend.api.SecretService;
 import com.queryeer.backend.queryengine.jdbc.DefaultJdbcDialectRegistry;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialect;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectMetadata;
@@ -147,23 +145,9 @@ class ServiceLoaderJdbcDialectDiscoveryTest
         }
 
         @Override
-        public SecretService secrets()
-        {
-            return key -> new char[0];
-        }
-
-        @Override
         public QueryEngineRegistry queryEngines()
         {
             return queryEngineRegistry;
-        }
-
-        @Override
-        public MetadataRegistry metadata()
-        {
-            return provider ->
-            {
-            };
         }
 
         @Override

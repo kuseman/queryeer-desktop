@@ -6,6 +6,7 @@ import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.engine.EngineInvokeParams;
 import com.queryeer.backend.contract.engine.EngineInvokeResult;
+import com.queryeer.backend.core.engine.EngineInvokeService;
 
 final class EngineInvokeRequestHandler implements RequestHandler
 {

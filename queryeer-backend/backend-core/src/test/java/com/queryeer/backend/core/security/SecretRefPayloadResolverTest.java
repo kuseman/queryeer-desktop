@@ -1,4 +1,4 @@
-package com.queryeer.backend.transport.stdio;
+package com.queryeer.backend.core.security;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,11 +33,11 @@ class SecretRefPayloadResolverTest
         }
         Path vaultPath = createVault("db-pass", key, "db-password");
 
-        SecuritySessionBridge bridge = new SecuritySessionBridge();
-        bridge.openSession("session-1", vaultPath.toString(), Base64.getEncoder()
+        SecuritySession session = new SecuritySession();
+        session.openSession("session-1", vaultPath.toString(), Base64.getEncoder()
                 .encodeToString(key), null);
 
-        SecretRefPayloadResolver resolver = new SecretRefPayloadResolver(bridge, new ObjectMapper());
+        SecretRefPayloadResolver resolver = new SecretRefPayloadResolver(session, new ObjectMapper());
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("credentials", Map.of("secretRef", "db-pass"));
         payload.put("items", List.of(Map.of("secretRef", "db-pass"), Map.of("plain", "value")));
@@ -55,7 +55,7 @@ class SecretRefPayloadResolverTest
     void materializeFailsWhenSecuritySessionIsClosed() throws Exception
     {
         Path vaultPath = createVault("api-key", new byte[32], "secret");
-        SecretRefPayloadResolver resolver = new SecretRefPayloadResolver(new SecuritySessionBridge(), new ObjectMapper());
+        SecretRefPayloadResolver resolver = new SecretRefPayloadResolver(new SecuritySession(), new ObjectMapper());
 
         SecretRefPayloadResolver.SecretResolutionException error = Assertions.assertThrows(SecretRefPayloadResolver.SecretResolutionException.class,
                 () -> resolver.materialize(Map.of("auth", Map.of("secretRef", "api-key"))));
@@ -69,10 +69,10 @@ class SecretRefPayloadResolverTest
     {
         byte[] key = new byte[32];
         Path vaultPath = createVault("known", key, "value");
-        SecuritySessionBridge bridge = new SecuritySessionBridge();
-        bridge.openSession("session-2", vaultPath.toString(), Base64.getEncoder()
+        SecuritySession session = new SecuritySession();
+        session.openSession("session-2", vaultPath.toString(), Base64.getEncoder()
                 .encodeToString(key), null);
-        SecretRefPayloadResolver resolver = new SecretRefPayloadResolver(bridge, new ObjectMapper());
+        SecretRefPayloadResolver resolver = new SecretRefPayloadResolver(session, new ObjectMapper());
 
         SecretRefPayloadResolver.SecretResolutionException error = Assertions.assertThrows(SecretRefPayloadResolver.SecretResolutionException.class,
                 () -> resolver.materialize(Map.of("auth", Map.of("secretRef", "missing"))));
@@ -86,10 +86,10 @@ class SecretRefPayloadResolverTest
     {
         byte[] key = new byte[32];
         Path vaultPath = createVault("api-key-ref", key, "resolved-api-key");
-        SecuritySessionBridge bridge = new SecuritySessionBridge();
-        bridge.openSession("session-3", vaultPath.toString(), Base64.getEncoder()
+        SecuritySession session = new SecuritySession();
+        session.openSession("session-3", vaultPath.toString(), Base64.getEncoder()
                 .encodeToString(key), null);
-        SecretRefPayloadResolver resolver = new SecretRefPayloadResolver(bridge, new ObjectMapper());
+        SecretRefPayloadResolver resolver = new SecretRefPayloadResolver(session, new ObjectMapper());
 
         Object resolved = resolver.materialize(Map.of("apiKeyHandle", "api-key-ref", "name", "conn-1"));
         Assertions.assertEquals(Map.of("apiKeyHandle", "api-key-ref", "name", "conn-1"), resolved);

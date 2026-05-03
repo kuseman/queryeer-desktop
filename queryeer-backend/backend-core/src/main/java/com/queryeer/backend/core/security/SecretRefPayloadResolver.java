@@ -1,4 +1,4 @@
-package com.queryeer.backend.transport.stdio;
+package com.queryeer.backend.core.security;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -16,31 +16,31 @@ import javax.crypto.spec.SecretKeySpec;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-final class SecretRefPayloadResolver
+public final class SecretRefPayloadResolver
 {
     private static final String SECRET_REF_FIELD = "secretRef";
     private static final String CIPHER = "AES/GCM/NoPadding";
 
-    private final SecuritySessionBridge securityBridge;
+    private final SecuritySession securitySession;
     private final ObjectMapper objectMapper;
 
     private volatile String cachedVaultPath;
     private volatile long cachedModifiedAt = -1;
     private volatile JsonNode cachedEntriesNode;
 
-    public SecretRefPayloadResolver(SecuritySessionBridge securityBridge, ObjectMapper objectMapper)
+    public SecretRefPayloadResolver(SecuritySession securitySession, ObjectMapper objectMapper)
     {
-        this.securityBridge = securityBridge;
+        this.securitySession = securitySession;
         this.objectMapper = objectMapper;
     }
 
     public Object materialize(Object payload)
     {
-        SecuritySessionBridge.SecuritySessionSnapshot session = securityBridge.snapshot();
+        SecuritySession.SecuritySessionSnapshot session = securitySession.snapshot();
         return materialize(payload, session);
     }
 
-    private Object materialize(Object value, SecuritySessionBridge.SecuritySessionSnapshot session)
+    private Object materialize(Object value, SecuritySession.SecuritySessionSnapshot session)
     {
         if (value == null)
         {
@@ -80,7 +80,7 @@ final class SecretRefPayloadResolver
         return value;
     }
 
-    private String resolveSecretRef(String secretRef, SecuritySessionBridge.SecuritySessionSnapshot session)
+    private String resolveSecretRef(String secretRef, SecuritySession.SecuritySessionSnapshot session)
     {
         if (secretRef == null
                 || secretRef.isBlank())
@@ -193,14 +193,14 @@ final class SecretRefPayloadResolver
                 : null;
     }
 
-    static final class SecretResolutionException extends RuntimeException
+    public static final class SecretResolutionException extends RuntimeException
     {
-        SecretResolutionException(String message)
+        public SecretResolutionException(String message)
         {
             super(message);
         }
 
-        SecretResolutionException(String message, Throwable cause)
+        public SecretResolutionException(String message, Throwable cause)
         {
             super(message, cause);
         }

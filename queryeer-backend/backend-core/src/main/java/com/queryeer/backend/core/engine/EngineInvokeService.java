@@ -1,12 +1,13 @@
-package com.queryeer.backend.transport.stdio;
+package com.queryeer.backend.core.engine;
 
 import com.queryeer.backend.api.ErrorMessages;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.contract.BackendErrorCode;
 import com.queryeer.backend.contract.engine.EngineInvokeParams;
+import com.queryeer.backend.core.security.SecretRefPayloadResolver;
 
-final class EngineInvokeService
+public final class EngineInvokeService
 {
     private final QueryEngineRegistry engineRegistry;
     private final SecretRefPayloadResolver secretResolver;
@@ -58,7 +59,7 @@ final class EngineInvokeService
             this.code = code;
         }
 
-        BackendErrorCode code()
+        public BackendErrorCode code()
         {
             return code;
         }

@@ -7,32 +7,26 @@ import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.EventBus;
 import com.queryeer.backend.api.FileSessionHandlerRegistry;
 import com.queryeer.backend.api.LoggerService;
-import com.queryeer.backend.api.MetadataRegistry;
 import com.queryeer.backend.api.PluginHostServices;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.SchedulerService;
-import com.queryeer.backend.api.SecretService;
 
 public final class BackendPlatformServices implements PluginHostServices
 {
     private final DefaultLoggerService logger;
     private final InMemoryConfigService config;
-    private final NoopSecretService secrets;
     private final InMemoryQueryEngineRegistry queryEngines;
-    private final InMemoryMetadataRegistry metadata;
     private final DefaultFileRegistry fileRegistry;
     private final InMemoryEventBus events;
     private final InlineSchedulerService scheduler;
     private final BackendPluginContext pluginContext;
 
-    private BackendPlatformServices(DefaultLoggerService logger, InMemoryConfigService config, NoopSecretService secrets, InMemoryQueryEngineRegistry queryEngines, InMemoryMetadataRegistry metadata,
-            DefaultFileRegistry fileRegistry, InMemoryEventBus events, InlineSchedulerService scheduler, BackendPluginContext pluginContext)
+    private BackendPlatformServices(DefaultLoggerService logger, InMemoryConfigService config, InMemoryQueryEngineRegistry queryEngines, DefaultFileRegistry fileRegistry, InMemoryEventBus events,
+            InlineSchedulerService scheduler, BackendPluginContext pluginContext)
     {
         this.logger = logger;
         this.config = config;
-        this.secrets = secrets;
         this.queryEngines = queryEngines;
-        this.metadata = metadata;
         this.fileRegistry = fileRegistry;
         this.events = events;
         this.scheduler = scheduler;
@@ -48,16 +42,14 @@ public final class BackendPlatformServices implements PluginHostServices
     {
         DefaultLoggerService logger = new DefaultLoggerService();
         InMemoryConfigService config = new InMemoryConfigService(configValues);
-        NoopSecretService secrets = new NoopSecretService();
         InMemoryQueryEngineRegistry queryEngines = new InMemoryQueryEngineRegistry();
-        InMemoryMetadataRegistry metadata = new InMemoryMetadataRegistry();
         DefaultFileRegistry fileRegistry = new DefaultFileRegistry();
         InMemoryEventBus events = new InMemoryEventBus();
         InlineSchedulerService scheduler = new InlineSchedulerService(logger);
 
-        BackendPluginContext context = new DefaultBackendPluginContext(logger, config, secrets, queryEngines, metadata, fileRegistry, events, scheduler);
+        BackendPluginContext context = new DefaultBackendPluginContext(logger, config, queryEngines, fileRegistry, events, scheduler);
 
-        return new BackendPlatformServices(logger, config, secrets, queryEngines, metadata, fileRegistry, events, scheduler, context);
+        return new BackendPlatformServices(logger, config, queryEngines, fileRegistry, events, scheduler, context);
     }
 
     public BackendPluginContext pluginContext()
@@ -75,19 +67,9 @@ public final class BackendPlatformServices implements PluginHostServices
         return config;
     }
 
-    public SecretService secrets()
-    {
-        return secrets;
-    }
-
     public QueryEngineRegistry queryEngines()
     {
         return queryEngines;
-    }
-
-    public MetadataRegistry metadata()
-    {
-        return metadata;
     }
 
     public FileSessionHandlerRegistry fileSessions()
