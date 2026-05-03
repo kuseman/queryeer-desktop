@@ -3,9 +3,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
-  const registrySubscribers = new Set<() => void>();
-  const storeSubscribers = new Set<() => void>();
-  let activeFile: { fileId: string } | null = null;
+  const editorListeners = new Set<(editor: { fileId: string | null } | null) => void>();
+  let activeFileId: string | null = null;
   let instances: Array<{
     alias: string;
     catalogId: string;
@@ -22,10 +21,12 @@ const mocks = vi.hoisted(() => {
   ));
 
   return {
-    registrySubscribers,
-    storeSubscribers,
-    setActiveFile: (value: { fileId: string } | null) => {
-      activeFile = value;
+    editorListeners,
+    setActiveFileId: (value: string | null) => {
+      activeFileId = value;
+      for (const listener of editorListeners) {
+        listener(value ? { fileId: value } : null);
+      }
     },
     setInstances: (
       value: Array<{
@@ -57,23 +58,23 @@ const mocks = vi.hoisted(() => {
             defaultAlias: "jdbc",
             allowMultiple: true
           },
-    queryTextRegistry: {
-      getActiveFile: () => activeFile,
-      subscribe: (listener: () => void) => {
-        registrySubscribers.add(listener);
+    editorRegistryHost: {
+      getActiveEditor: () => (activeFileId ? { editorId: "test", fileId: activeFileId } : null),
+      onActiveEditorChanged: () => {
         return {
-          dispose: () => {
-            registrySubscribers.delete(listener);
-          }
+          dispose: () => {}
         };
-      }
+      },
+      setActiveEditor: () => {},
+      registerContentRepository: () => () => {},
+      resolveFileContent: () => undefined,
+      broadcastContentUpdate: () => {},
+      applyRecoveredContent: () => {},
+      onContentDirty: () => () => {}
     },
     store: {
-      subscribe: (listener: () => void) => {
-        storeSubscribers.add(listener);
-        return () => {
-          storeSubscribers.delete(listener);
-        };
+      subscribe: () => {
+        return () => {};
       },
       listInstances: () => instances,
       setProperty: setPropertyMock,
@@ -84,21 +85,20 @@ const mocks = vi.hoisted(() => {
     setDefaultCatalogAliasMock,
     renderPanelMock,
     reset: () => {
-      activeFile = null;
+      activeFileId = null;
       instances = [];
       setPropertyMock.mockReset();
       setDefaultCatalogAliasMock.mockReset();
       renderPanelMock.mockClear();
       defaultCatalogAlias = "";
       hasPanel = true;
-      registrySubscribers.clear();
-      storeSubscribers.clear();
+      editorListeners.clear();
     }
   };
 });
 
-vi.mock("../core.queryengine/QueryTextEditorRegistry", () => ({
-  queryTextRegistry: mocks.queryTextRegistry
+vi.mock("../../core/plugin-runtime/ExtensionRegistry", () => ({
+  getEditorRegistryHost: () => mocks.editorRegistryHost
 }));
 
 vi.mock("./catalog-store", () => ({
@@ -145,7 +145,7 @@ describe("PayloadbuilderCatalogSidebar", () => {
   });
 
   it("renders one panel per enabled alias in provided order", async () => {
-    mocks.setActiveFile({ fileId: "file-1" });
+    mocks.setActiveFileId("file-1");
     mocks.setInstances([
       { alias: "jdbc2", catalogId: "Jdbc", enabled: true, properties: {} },
       { alias: "jdbc1", catalogId: "Jdbc", enabled: true, properties: {} },
@@ -153,7 +153,7 @@ describe("PayloadbuilderCatalogSidebar", () => {
     ]);
 
     await act(async () => {
-      root.render(<PayloadbuilderCatalogSidebar />);
+      root.render(<PayloadbuilderCatalogSidebar editorRegistryHost={mocks.editorRegistryHost} />);
       await flush();
     });
 
@@ -167,7 +167,7 @@ describe("PayloadbuilderCatalogSidebar", () => {
   });
 
   it("binds panel renderer params to the matching alias", async () => {
-    mocks.setActiveFile({ fileId: "file-2" });
+    mocks.setActiveFileId("file-2");
     mocks.setInstances([
       {
         alias: "analytics",
@@ -179,7 +179,7 @@ describe("PayloadbuilderCatalogSidebar", () => {
     ]);
 
     await act(async () => {
-      root.render(<PayloadbuilderCatalogSidebar />);
+      root.render(<PayloadbuilderCatalogSidebar editorRegistryHost={mocks.editorRegistryHost} />);
       await flush();
     });
 
@@ -206,14 +206,14 @@ describe("PayloadbuilderCatalogSidebar", () => {
   });
 
   it("sets selected alias as default catalog", async () => {
-    mocks.setActiveFile({ fileId: "file-2" });
+    mocks.setActiveFileId("file-2");
     mocks.setInstances([
       { alias: "a", catalogId: "Jdbc", enabled: true, properties: {} },
       { alias: "b", catalogId: "Jdbc", enabled: true, properties: {} }
     ]);
 
     await act(async () => {
-      root.render(<PayloadbuilderCatalogSidebar />);
+      root.render(<PayloadbuilderCatalogSidebar editorRegistryHost={mocks.editorRegistryHost} />);
       await flush();
     });
 
@@ -230,11 +230,11 @@ describe("PayloadbuilderCatalogSidebar", () => {
 
   it("hides aliases without panel contribution", async () => {
     mocks.setHasPanel(false);
-    mocks.setActiveFile({ fileId: "file-3" });
+    mocks.setActiveFileId("file-3");
     mocks.setInstances([{ alias: "fs", catalogId: "filesystem", enabled: true, properties: {} }]);
 
     await act(async () => {
-      root.render(<PayloadbuilderCatalogSidebar />);
+      root.render(<PayloadbuilderCatalogSidebar editorRegistryHost={mocks.editorRegistryHost} />);
       await flush();
     });
 

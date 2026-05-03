@@ -20,17 +20,6 @@ import {
 
 const applyRecoveredContentMock = vi.fn();
 
-vi.mock("../../plugins/core.editor/TextEditor/TextEditorRegistry", () => ({
-  getTextEditorRegistry: () => ({
-    getModelForFile: () => null,
-    applyRecoveredContent: applyRecoveredContentMock
-  })
-}));
-
-vi.mock("../../plugins/core.editor/TextEditor/TextEditorModelRepository", () => ({
-  getTextEditorRepositoryStates: () => [applyRecoveredContentMock]
-}));
-
 beforeEach(() => {
   applyRecoveredContentMock.mockReset();
 });
@@ -130,12 +119,24 @@ function makeHarness(
     readLatestBackup: readLatestBackupMock
   };
   const watcher = createWatcherHarness();
+  const editorRegistryHost = {
+    getActiveEditor: () => null,
+    onActiveEditorChanged: () => ({ dispose: () => {} }),
+    setActiveEditor: () => {},
+    registerContentRepository: () => () => {},
+    resolveFileContent: () => undefined,
+    broadcastContentUpdate: () => {},
+    applyRecoveredContent: applyRecoveredContentMock,
+    onContentDirty: () => () => {}
+  };
+
   const service = new RendererWorkspaceService({
     bridge,
     filesRegistry,
     fileMediator: mediator,
     fileWatcher: watcher.service,
     showDialog: showDialogMock,
+    editorRegistryHost,
     debounceMs: 25,
     backupDebounceMs: overrides.backupDebounceMs ?? 100,
     backupMaxIntervalMs: overrides.backupMaxIntervalMs ?? 1_000,

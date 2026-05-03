@@ -2,7 +2,6 @@ import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { MimeCapability } from "../../contracts/files/FilesRegistry";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import { fileUriToPath } from "../../contracts/files/Resolvers";
-import { getTextEditorRegistry } from "../core.editor/TextEditor/TextEditorRegistry";
 import { getCoreSettingsService } from "../core.settings/service";
 import { DocumentIcon } from "./DocumentIcon";
 
@@ -74,24 +73,25 @@ function renderUnsupportedEditorView(
   );
 }
 
-async function maybeFormatBeforeSave(fileId: string): Promise<void> {
+async function maybeFormatBeforeSave(
+  fileId: string,
+  editors: { getActiveEditor(): { fileId: string | null; format?: { format(): Promise<void> } } | null }
+): Promise<void> {
   const settingsService = getCoreSettingsService();
   const formatOnSave = settingsService?.getValue("core.editor.formatOnSave") === true;
   if (!formatOnSave) {
     return;
   }
 
-  const textEditorRegistry = getTextEditorRegistry();
-  const activeFile = textEditorRegistry.getActiveFile();
-  if (!activeFile || activeFile.fileId !== fileId) {
+  const activeEditor = editors.getActiveEditor();
+  if (!activeEditor || activeEditor.fileId !== fileId) {
     return;
   }
 
-  const editor = textEditorRegistry.getActiveEditor();
-  if (!editor) {
+  if (!activeEditor.format) {
     return;
   }
-  await editor.format();
+  await activeEditor.format.format();
 }
 
 export const coreFilesPlugin: Plugin = {
@@ -209,15 +209,8 @@ export const coreFilesPlugin: Plugin = {
       handler: async () => {
         const activeFileId = context.fileMediator.getActiveFileId();
         if (activeFileId) {
-          await maybeFormatBeforeSave(activeFileId);
+          await maybeFormatBeforeSave(activeFileId, context.editors);
           await context.fileMediator.saveFile(activeFileId);
-          return;
-        }
-
-        const activeFromEditor = getTextEditorRegistry().getActiveFile();
-        if (activeFromEditor) {
-          await maybeFormatBeforeSave(activeFromEditor.fileId);
-          await context.fileMediator.saveFile(activeFromEditor.fileId);
         }
       }
     });

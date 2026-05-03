@@ -9,6 +9,7 @@ import {
   PAYLOADBUILDER_CATALOG_INSTANCES_SETTING_ID
 } from "./catalog-settings";
 import { PayloadbuilderCatalogSidebar } from "./PayloadbuilderCatalogSidebar";
+import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegistry";
 import {
   listPayloadbuilderCatalogContributions,
   subscribePayloadbuilderCatalogContributions
@@ -128,7 +129,7 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
         }
       ],
       when: "activeFileMimeType == 'application/plbsql'",
-      render: () => <PayloadbuilderCatalogSidebar />
+      render: () => <PayloadbuilderCatalogSidebar editorRegistryHost={getEditorRegistryHost()} />
     });
 
     context.commands.registerCommand({

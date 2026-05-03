@@ -6,7 +6,7 @@ import type { EditorRegistryHost } from "../../../contracts/editor/EditorCapabil
 import type { OutlineRegistry } from "../../../contracts/extensions/OutlineExtension";
 import { MonacoTextEditorApi } from "./MonacoTextEditorApi";
 import { getCoreSettingsService } from "../../core.settings/service";
-import { createTextEditorHandle } from "./TextEditorOutlineCapability";
+import { createTextEditorHandle } from "./TextEditorCapabilities";
 import {
   buildMonacoCreateOptions,
   buildMonacoModelUpdateOptions,
@@ -184,9 +184,13 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
     if (editorRef.current) {
       if (file === pendingFileRef.current) return;
       pendingFileRef.current = file;
-      void registry.openFileAsync(file).then(() => {
-        apiRef.current?.focus();
-      });
+    void registry.openFileAsync(file).then(() => {
+      apiRef.current?.focus();
+      if (editorRegistryHost && outlineRegistry && apiRef.current) {
+        const handle = createTextEditorHandle(editorId ?? "core.editor.text", apiRef.current, outlineRegistry, registry);
+        editorRegistryHost.setActiveEditor(handle);
+      }
+    });
       return;
     }
     pendingFileRef.current = file;

@@ -1,26 +1,29 @@
 import { useEffect, useState } from "react";
-import { queryTextRegistry } from "../core.queryengine/QueryTextEditorRegistry";
+import type { EditorRegistryHost } from "../../contracts/editor/EditorCapability";
 import { getPayloadbuilderCatalogStore } from "./catalog-store";
 import { onCoreSettingsServiceInitialized } from "../core.settings/service";
 import { getPayloadbuilderCatalogContribution } from "./catalog-contributions";
+
+type Props = {
+  editorRegistryHost: EditorRegistryHost;
+};
 
 type ActiveFileState = {
   fileId: string;
 };
 
-export function PayloadbuilderCatalogSidebar(): JSX.Element {
+export function PayloadbuilderCatalogSidebar({ editorRegistryHost }: Props): JSX.Element {
   const [activeFile, setActiveFile] = useState<ActiveFileState | null>(() => {
-    const file = queryTextRegistry.getActiveFile();
-    return file ? { fileId: file.fileId } : null;
+    const fileId = editorRegistryHost.getActiveEditor()?.fileId ?? null;
+    return fileId ? { fileId } : null;
   });
   const [_revision, setRevision] = useState(0);
 
   useEffect(() => {
-    const registry = queryTextRegistry;
     let unsubscribeSettingsValues: (() => void) | undefined;
-    const sub = registry.subscribe(() => {
-      const file = registry.getActiveFile();
-      setActiveFile(file ? { fileId: file.fileId } : null);
+    const sub = editorRegistryHost.onActiveEditorChanged((handle) => {
+      const fileId = handle?.fileId ?? null;
+      setActiveFile(fileId ? { fileId } : null);
     });
     const unsubscribe = getPayloadbuilderCatalogStore().subscribe(() => {
       setRevision((prev) => prev + 1);
@@ -39,7 +42,7 @@ export function PayloadbuilderCatalogSidebar(): JSX.Element {
       unsubscribeSettingsValues?.();
       unsubscribeSettingsInit();
     };
-  }, []);
+  }, [editorRegistryHost]);
 
   const instances = activeFile
     ? getPayloadbuilderCatalogStore().listInstances(activeFile.fileId).filter((instance) => instance.enabled)

@@ -43,7 +43,7 @@ import type {
   OutlineSymbol,
   SymbolKind
 } from "../../contracts/extensions/OutlineExtension";
-import type { EditorHandle, EditorRegistry, EditorRegistryHost } from "../../contracts/editor/EditorCapability";
+import type { EditorHandle, EditorRegistry, EditorRegistryHost, EditorContentRepository } from "../../contracts/editor/EditorCapability";
 import type { Disposable } from "../../contracts/editor/EditorApi";
 import type { ContextValues } from "../../plugins/core.commands/when-evaluator";
 import { CommandBus } from "./CommandBus";
@@ -118,6 +118,7 @@ const DEFAULT_SHELL_DEFAULTS: LayoutShellDefaults = {
 class EditorRegistryHostImpl implements EditorRegistryHost {
   private activeEditor: EditorHandle | null = null;
   private readonly listeners: Array<(editor: EditorHandle | null) => void> = [];
+  private readonly contentRepositories: EditorContentRepository[] = [];
 
   setActiveEditor(handle: EditorHandle | null): void {
     this.activeEditor = handle;
@@ -136,6 +137,48 @@ class EditorRegistryHostImpl implements EditorRegistryHost {
       dispose: () => {
         const idx = this.listeners.indexOf(callback);
         if (idx !== -1) this.listeners.splice(idx, 1);
+      }
+    };
+  }
+
+  registerContentRepository(repo: EditorContentRepository): () => void {
+    this.contentRepositories.push(repo);
+    return () => {
+      const idx = this.contentRepositories.indexOf(repo);
+      if (idx !== -1) this.contentRepositories.splice(idx, 1);
+    };
+  }
+
+  resolveFileContent(fileId: string, uri: string): string | undefined {
+    for (const repo of this.contentRepositories) {
+      const model = repo.getModelForFile(fileId) ?? repo.getModelForUri(uri);
+      if (model) {
+        return model.getContent();
+      }
+    }
+    return undefined;
+  }
+
+  broadcastContentUpdate(uri: string, content: string): void {
+    for (const repo of this.contentRepositories) {
+      repo.updateModelContent(uri, content);
+    }
+  }
+
+  applyRecoveredContent(fileId: string, content: string): void {
+    for (const repo of this.contentRepositories) {
+      repo.applyRecoveredContent(fileId, content);
+    }
+  }
+
+  onContentDirty(listener: (fileId: string, text: string) => void): () => void {
+    const disposables: (() => void)[] = [];
+    for (const repo of this.contentRepositories) {
+      disposables.push(repo.onContentDirty(listener));
+    }
+    return () => {
+      for (const disposable of disposables) {
+        disposable();
       }
     };
   }

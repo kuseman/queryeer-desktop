@@ -71,7 +71,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     }
 
     const raf = requestAnimationFrame(() => {
-      queryTextRegistry.getActiveEditor()?.focus();
+      editorRegistryHost?.getActiveEditor()?.focus?.focus();
     });
 
     return () => {
@@ -141,10 +141,8 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
         activeExecutionByFileIdRef.current.delete(targetFileId);
       }
 
-      const editor = queryTextRegistry.getActiveEditor();
-      if (!editor) return;
-
-      const text = editor.getSelectedText() ?? editor.getContent();
+      const handle = editorRegistryHost?.getActiveEditor();
+      const text = handle?.selection?.getSelectedText() ?? handle?.selection?.getContent() ?? "";
       if (!text.trim()) return;
 
       const panelState = getQueryViewStateStore().read(targetFileId);

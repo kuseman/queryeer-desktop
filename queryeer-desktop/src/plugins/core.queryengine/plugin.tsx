@@ -55,6 +55,7 @@ export const coreQueryEnginePlugin: Plugin = {
     const queryEngineService = getQueryEngineService();
     queryEngineService.initialize();
     queryTextRegistry.setFilesRegistry(context.files);
+    getEditorRegistryHost().registerContentRepository(queryTextRegistry);
     getQueryViewStateStore().initialize(context.files);
 
     const getActiveQueryFile = () => {

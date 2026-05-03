@@ -13,8 +13,7 @@ import {
   type PersistedLayoutSnapshot,
   type WorkspaceSnapshot
 } from "../../contracts/workspace/WorkspaceSnapshot";
-import { getTextEditorRegistry } from "../../plugins/core.editor/TextEditor/TextEditorRegistry";
-import { getTextEditorRepositoryStates } from "../../plugins/core.editor/TextEditor/TextEditorModelRepository";
+import type { EditorRegistryHost } from "../../contracts/editor/EditorCapability";
 
 export type WorkspaceBridge = {
   getWorkspace: () => Promise<WorkspaceSnapshot>;
@@ -46,6 +45,7 @@ export type RendererWorkspaceServiceOptions = {
     detail?: string;
     options?: DialogOption[];
   }) => Promise<{ action: string }>;
+  editorRegistryHost?: EditorRegistryHost;
   applyRecoveredContent?: (fileId: string, text: string) => void;
   debounceMs?: number;
   backupDebounceMs?: number;
@@ -78,6 +78,7 @@ export class RendererWorkspaceService {
   private readonly fileMediator: FileMediator;
   private readonly fileWatcher: FileWatcherService;
   private readonly showDialog: RendererWorkspaceServiceOptions["showDialog"];
+  private readonly editorRegistryHost: EditorRegistryHost | undefined;
   private readonly applyRecoveredContent: (fileId: string, text: string) => void;
   private readonly debounceMs: number;
   private readonly backupDebounceMs: number;
@@ -104,10 +105,9 @@ export class RendererWorkspaceService {
     this.fileMediator = options.fileMediator;
     this.fileWatcher = options.fileWatcher;
     this.showDialog = options.showDialog;
-    this.applyRecoveredContent = options.applyRecoveredContent ?? ((fileId, text) => {
-      for (const repo of getTextEditorRepositoryStates()) {
-        repo.applyRecoveredContent(fileId, text);
-      }
+    this.editorRegistryHost = options.editorRegistryHost;
+    this.applyRecoveredContent = options.applyRecoveredContent ?? ((_fileId, _text) => {
+      // No-op when not provided; bootstrap passes an explicit implementation.
     });
     this.debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
     this.backupDebounceMs = options.backupDebounceMs ?? DEFAULT_BACKUP_DEBOUNCE_MS;
@@ -622,15 +622,12 @@ export class RendererWorkspaceService {
   private isActiveFile(fileId: string): boolean {
     const snapshotActiveFileId = this.activeFileSnapshotProvider?.() ?? null;
     const mediatorActiveFileId = this.fileMediator.getActiveFileId();
-    const textRegistry = getTextEditorRegistry() as unknown as {
-      getActiveFile?: () => { fileId?: string } | null;
-    };
-    const textEditorActiveFileId = textRegistry.getActiveFile?.()?.fileId ?? null;
+    const editorActiveFileId = this.editorRegistryHost?.getActiveEditor()?.fileId ?? null;
     return (
       snapshotActiveFileId === fileId ||
       mediatorActiveFileId === fileId ||
       this.activeFileId === fileId ||
-      textEditorActiveFileId === fileId
+      editorActiveFileId === fileId
     );
   }
 

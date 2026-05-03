@@ -30,6 +30,7 @@ export const coreEditorTextPlugin: Plugin = {
   activate: (context) => {
     const textRegistry = getTextEditorRegistry();
     textRegistry.setFilesRegistry(context.files);
+    getEditorRegistryHost().registerContentRepository(textRegistry);
     registerTextEditorMimeTypes(context.files);
 
     context.files.mimeIcons.registerMimeIcon({
