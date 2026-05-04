@@ -21,4 +21,11 @@ public interface ConfigService
     {
         return payload;
     }
+
+    /**
+     * Explicitly invalidates the cached settings module so the next {@link #getModule(String)} call re-reads from disk.
+     */
+    default void invalidateModule(String moduleId)
+    {
+    }
 }

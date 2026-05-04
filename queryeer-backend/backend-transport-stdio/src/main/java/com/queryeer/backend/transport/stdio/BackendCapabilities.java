@@ -10,5 +10,5 @@ final class BackendCapabilities
 
     public static final List<String> HANDSHAKE_SUPPORTED_CAPABILITIES = List.of("backend.runtimeStatus", "security.session.open", "security.session.close", "security.vault.changed", "health.ping",
             "queryengine.execute", "queryengine.cancel", "queryengine.invoke", "connection.upsert", "file.open", "file.close", "file.bind", "queryengine.progress", "queryengine.chunkStart",
-            "queryengine.chunkRows", "queryengine.completed", "queryengine.failed", "file.change");
+            "queryengine.chunkRows", "queryengine.completed", "queryengine.failed", "file.change", "settings.module.changed");
 }

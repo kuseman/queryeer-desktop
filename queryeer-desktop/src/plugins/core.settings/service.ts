@@ -13,6 +13,9 @@ export async function initializeCoreSettingsService(registry: SettingsRegistry):
         getSettingsModule: (params) => window.appShell.getSettingsModule(params),
         saveSettingsIndex: (document) => window.appShell.saveSettingsIndex(document),
         saveSettingsModule: (params) => window.appShell.saveSettingsModule(params)
+      },
+      notifyBackendModuleChanged: async (moduleId, version) => {
+        await window.appShell.notifyBackendSettingsModuleChanged({ moduleId, version });
       }
     });
     for (const subscriber of coreSettingsServiceSubscribers) {

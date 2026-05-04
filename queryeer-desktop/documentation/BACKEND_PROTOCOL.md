@@ -555,6 +555,23 @@ Rules:
 - Debouncing lives on the renderer (mediator); backend MUST tolerate out-of-order or rapid bursts.
 - `version` MUST be monotonically increasing per `fileId`; backend MAY drop notifications with a stale `version`.
 
+## 6.4b `settings.module.changed`
+
+Renderer → backend notification. Tells the backend that a settings module has been modified so it can invalidate its in-memory cache.
+
+```json
+{
+  "moduleId": "core.editor",
+  "version": 7
+}
+```
+
+Rules:
+
+- `version` is a monotonic change counter incremented by the frontend on every modification.
+- Backend MUST remove the cached module entry for `moduleId`; the next `ConfigService.getModule()` call re-reads from disk.
+- Backend MUST NOT reject or drop the notification for an unknown `moduleId`.
+
 ## 6.4 `queryengine.failed`
 
 ```json

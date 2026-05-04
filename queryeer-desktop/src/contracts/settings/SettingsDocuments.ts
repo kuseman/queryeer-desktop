@@ -1,6 +1,3 @@
-export const SETTINGS_INDEX_VERSION = 1;
-export const SETTINGS_MODULE_VERSION = 1;
-
 export type SettingsIndexModuleEntry = {
   file: string;
   version: number;
@@ -8,13 +5,13 @@ export type SettingsIndexModuleEntry = {
 };
 
 export type SettingsIndexDocument = {
-  version: typeof SETTINGS_INDEX_VERSION;
+  version: number;
   updatedAt: string;
   modules: Record<string, SettingsIndexModuleEntry>;
 };
 
 export type SettingsModuleDocument = {
-  version: typeof SETTINGS_MODULE_VERSION;
+  version: number;
   moduleId: string;
   updatedAt: string;
   values: Record<string, unknown>;
@@ -22,7 +19,7 @@ export type SettingsModuleDocument = {
 
 export function emptySettingsIndexDocument(): SettingsIndexDocument {
   return {
-    version: SETTINGS_INDEX_VERSION,
+    version: 1,
     updatedAt: new Date(0).toISOString(),
     modules: {}
   };
@@ -30,7 +27,7 @@ export function emptySettingsIndexDocument(): SettingsIndexDocument {
 
 export function emptySettingsModuleDocument(moduleId: string): SettingsModuleDocument {
   return {
-    version: SETTINGS_MODULE_VERSION,
+    version: 1,
     moduleId,
     updatedAt: new Date(0).toISOString(),
     values: {}

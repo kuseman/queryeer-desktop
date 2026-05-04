@@ -10,10 +10,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  SETTINGS_INDEX_VERSION,
-  SETTINGS_MODULE_VERSION
-} from "../../contracts/settings/SettingsDocuments.js";
 import { SettingsStore } from "./settings-store.js";
 
 let workDir: string;
@@ -38,28 +34,33 @@ describe("SettingsStore read", () => {
     const index = await store.readIndex();
     const moduleDoc = await store.readModule("core.editor");
 
-    expect(index.version).toBe(SETTINGS_INDEX_VERSION);
+    expect(index.version).toBe(1);
     expect(index.modules).toEqual({});
-    expect(moduleDoc.version).toBe(SETTINGS_MODULE_VERSION);
+    expect(moduleDoc.version).toBe(1);
     expect(moduleDoc.moduleId).toBe("core.editor");
     expect(moduleDoc.values).toEqual({});
   });
 
-  it("returns empty document for schema mismatch", async () => {
+  it("preserves version from disk", async () => {
     const { store, settingsDir } = makeStore();
     mkdirSync(settingsDir, { recursive: true });
-    writeFileSync(join(settingsDir, "index.json"), JSON.stringify({ version: 999 }), "utf8");
+    writeFileSync(
+      join(settingsDir, "index.json"),
+      JSON.stringify({ version: 42, updatedAt: "now", modules: {} }),
+      "utf8"
+    );
     writeFileSync(
       join(settingsDir, "core.editor.json"),
-      JSON.stringify({ version: 999, moduleId: "core.editor", values: { x: 1 } }),
+      JSON.stringify({ version: 99, moduleId: "core.editor", updatedAt: "now", values: { x: 1 } }),
       "utf8"
     );
 
     const index = await store.readIndex();
     const moduleDoc = await store.readModule("core.editor");
 
-    expect(index.modules).toEqual({});
-    expect(moduleDoc.values).toEqual({});
+    expect(index.version).toBe(42);
+    expect(moduleDoc.version).toBe(99);
+    expect(moduleDoc.values).toEqual({ x: 1 });
   });
 
   it("quarantines broken json and returns defaults", async () => {
@@ -80,18 +81,18 @@ describe("SettingsStore write", () => {
   it("writes index and module documents atomically", async () => {
     const { store, settingsDir } = makeStore();
     await store.writeIndex({
-      version: SETTINGS_INDEX_VERSION,
+      version: 5,
       updatedAt: "stale",
       modules: {
         "core.editor": {
           file: "core.editor.json",
-          version: SETTINGS_MODULE_VERSION,
+          version: 3,
           updatedAt: "stale"
         }
       }
     });
     await store.writeModule("core.editor", {
-      version: SETTINGS_MODULE_VERSION,
+      version: 3,
       moduleId: "core.editor",
       updatedAt: "stale",
       values: {
@@ -101,7 +102,9 @@ describe("SettingsStore write", () => {
 
     const persistedIndex = JSON.parse(readFileSync(join(settingsDir, "index.json"), "utf8"));
     const persistedModule = JSON.parse(readFileSync(join(settingsDir, "core.editor.json"), "utf8"));
+    expect(persistedIndex.version).toBe(5);
     expect(persistedIndex.modules["core.editor"].file).toBe("core.editor.json");
+    expect(persistedModule.version).toBe(3);
     expect(persistedModule.values["core.editor.tabSize"]).toBe(2);
     expect(existsSync(join(settingsDir, "index.json.tmp"))).toBe(false);
     expect(existsSync(join(settingsDir, "core.editor.json.tmp"))).toBe(false);

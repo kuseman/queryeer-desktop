@@ -24,6 +24,7 @@ import {
   type SecuritySessionCloseResult,
   type SecurityVaultChangedParams,
   type SecurityVaultChangedResult,
+  type SettingsModuleChangedNotification,
   type RuntimeStatusResult,
   type QueryCancelParams,
   type QueryCancelResult,
@@ -150,6 +151,9 @@ export class BackendGateway {
     });
     ipcMain.handle("backend:file-change", async (_event, params: FileChangeNotification) => {
       return this.notifyFileChange(params);
+    });
+    ipcMain.handle("backend:settings-module-changed", async (_event, params: SettingsModuleChangedNotification) => {
+      return this.notifySettingsModuleChanged(params);
     });
   }
 
@@ -312,6 +316,25 @@ export class BackendGateway {
     } catch (error) {
       const message = redactErrorMessage(error);
       this.appendLog("error", "gateway", `Send file.change failed: ${message}`);
+    }
+  }
+
+  public notifySettingsModuleChanged(params: SettingsModuleChangedNotification): void {
+    const envelope: BackendNotificationEnvelope<"settings.module.changed", SettingsModuleChangedNotification> = {
+      protocolVersion: BACKEND_PROTOCOL_VERSION,
+      type: "notification",
+      method: "settings.module.changed",
+      params
+    };
+    this.appendLog("debug", "gateway", `Sending notification settings.module.changed (${params.moduleId}@${params.version})`);
+    if (this.tracePayloads) {
+      this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
+    }
+    try {
+      this.transport.sendEnvelope(envelope);
+    } catch (error) {
+      const message = redactErrorMessage(error);
+      this.appendLog("error", "gateway", `Send settings.module.changed failed: ${message}`);
     }
   }
 

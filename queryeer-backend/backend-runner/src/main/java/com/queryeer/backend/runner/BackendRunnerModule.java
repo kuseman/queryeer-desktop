@@ -85,7 +85,7 @@ public final class BackendRunnerModule
 
         long startedAt = System.currentTimeMillis();
         StdioTransportModule.RunningTransport transportServer = new StdioTransportModule().create(input, output, objectMapper, services.queryEngines(), services.fileRegistryView(), services.events(),
-                () -> runtimeStatusSnapshot(runtime), startedAt, securitySession);
+                () -> runtimeStatusSnapshot(runtime), startedAt, services.config(), securitySession);
         System.err.println(withCorrelation("Queryeer backend runner started (stdio mode).", null));
 
         Thread selfDestruct = new Thread(() ->

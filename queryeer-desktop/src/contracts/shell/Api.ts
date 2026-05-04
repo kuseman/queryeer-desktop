@@ -79,6 +79,7 @@ export interface ShellApi {
   openBackendFile: (params: { fileId: string; uri: string; mimeType: string; engineBinding?: { engineId: string; connectionId?: string }; initialText?: string }) => Promise<{ fileId: string; backendVersion: number }>;
   closeBackendFile: (params: { fileId: string }) => Promise<{ fileId: string; accepted: boolean }>;
   notifyBackendFileChange: (params: { fileId: string; version: number; text: string }) => Promise<void>;
+  notifyBackendSettingsModuleChanged: (params: { moduleId: string; version: number }) => Promise<void>;
   watchFile: (params: { uri: string; options: { recursive?: boolean } }) => Promise<{ subscriptionId: string }>;
   unwatchFile: (params: { subscriptionId: string }) => Promise<{ removed: boolean }>;
   muteFileWatcherPath: (params: { uri: string; durationMs: number }) => Promise<{ muted: boolean }>;

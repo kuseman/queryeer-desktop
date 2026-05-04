@@ -1,7 +1,7 @@
 package com.queryeer.backend.plugin.jdbc;
 
+import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -9,9 +9,27 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.queryeer.backend.api.ConfigService;
+import com.queryeer.backend.api.LoggerService;
+
 final class JdbcConnectionRegistry
 {
     private final Map<String, JdbcStoredConnection> byId = new ConcurrentHashMap<>();
+    private final ConfigService config;
+    private final JdbcSettingsConnectionSource source;
+    private final LoggerService logger;
+
+    JdbcConnectionRegistry()
+    {
+        this(null, null, null);
+    }
+
+    JdbcConnectionRegistry(ConfigService config, JdbcSettingsConnectionSource source, LoggerService logger)
+    {
+        this.config = config;
+        this.source = source;
+        this.logger = logger;
+    }
 
     JdbcStoredConnection upsert(String connectionId, String name, Map<String, Object> connection)
     {
@@ -24,7 +42,7 @@ final class JdbcConnectionRegistry
                     : existing.version();
             versionRef.set(version);
             Map<String, Object> normalizedConnection = connection == null ? Map.of()
-                    : new LinkedHashMap<>(connection);
+                    : new java.util.LinkedHashMap<>(connection);
             return new JdbcStoredConnection(connectionId, versionRef, name, normalizedConnection);
         })
                 .snapshot();
@@ -33,46 +51,65 @@ final class JdbcConnectionRegistry
     Optional<JdbcStoredConnection> get(String connectionId)
     {
         JdbcStoredConnection value = byId.get(connectionId);
-        return value == null ? Optional.empty()
-                : Optional.of(value.snapshot());
+        if (value != null)
+        {
+            return Optional.of(value.snapshot());
+        }
+        return loadConfigured(connectionId);
     }
 
     List<JdbcStoredConnection> all()
     {
-        return byId.values()
-                .stream()
-                .map(JdbcStoredConnection::snapshot)
-                .toList();
+        List<JdbcStoredConnection> result = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        if (config != null
+                && source != null)
+        {
+            for (JdbcSettingsConnectionSource.JdbcConfiguredConnection configured : source.load(config, logger))
+            {
+                seen.add(configured.connectionId());
+                result.add(toStoredConnection(configured));
+            }
+        }
+        for (JdbcStoredConnection adHoc : byId.values())
+        {
+            if (!seen.contains(adHoc.connectionId()))
+            {
+                result.add(adHoc.snapshot());
+            }
+        }
+        return List.copyOf(result);
     }
 
-    /**
-     * Replaces the registry contents with the supplied configuration list. Connections present in {@code configurations} are upserted; connections that have disappeared from the list are removed.
-     * Disabled connections ({@code enabled=false}) are treated as removed.
-     */
-    void reload(List<JdbcSettingsConnectionSource.JdbcConfiguredConnection> configurations)
+    private Optional<JdbcStoredConnection> loadConfigured(String connectionId)
     {
-        Set<String> activeIds = new HashSet<>();
-        for (JdbcSettingsConnectionSource.JdbcConfiguredConnection configured : configurations)
+        if (config == null
+                || source == null)
         {
-            Object enabled = configured.connection()
-                    .get("enabled");
-            if (enabled instanceof Boolean bool
-                    && !bool)
-            {
-                continue;
-            }
-            upsert(configured.connectionId(), configured.name(), configured.connection());
-            activeIds.add(configured.connectionId());
+            return Optional.empty();
         }
-        byId.keySet()
-                .retainAll(activeIds);
+        for (JdbcSettingsConnectionSource.JdbcConfiguredConnection configured : source.load(config, logger))
+        {
+            if (connectionId.equals(configured.connectionId()))
+            {
+                return Optional.of(toStoredConnection(configured));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private JdbcStoredConnection toStoredConnection(JdbcSettingsConnectionSource.JdbcConfiguredConnection configured)
+    {
+        Map<String, Object> conn = new java.util.LinkedHashMap<>(configured.connection());
+        AtomicLong version = new AtomicLong(0L);
+        return new JdbcStoredConnection(configured.connectionId(), version, configured.name(), conn);
     }
 
     record JdbcStoredConnection(String connectionId, AtomicLong version, String name, Map<String, Object> connection)
     {
         JdbcStoredConnection snapshot()
         {
-            return new JdbcStoredConnection(connectionId, new AtomicLong(version.get()), name, new LinkedHashMap<>(connection));
+            return new JdbcStoredConnection(connectionId, new AtomicLong(version.get()), name, new java.util.LinkedHashMap<>(connection));
         }
     }
 }

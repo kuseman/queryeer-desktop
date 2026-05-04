@@ -21,7 +21,8 @@ export type Capability =
   | "queryengine.failed"
   | "file.open"
   | "file.close"
-  | "file.change";
+  | "file.change"
+  | "settings.module.changed";
 
 export type ClientIdentity = {
   name: string;
@@ -252,6 +253,11 @@ export type FileChangeNotification = {
   text: string;
 };
 
+export type SettingsModuleChangedNotification = {
+  moduleId: string;
+  version: number;
+};
+
 export type BackendMethodParamsMap = {
   "backend.handshake": HandshakeParams;
   "backend.runtimeStatus": RuntimeStatusParams;
@@ -289,6 +295,7 @@ export type BackendNotificationParamsMap = {
   "queryengine.completed": QueryCompletedNotification;
   "queryengine.failed": QueryFailedNotification;
   "file.change": FileChangeNotification;
+  "settings.module.changed": SettingsModuleChangedNotification;
 };
 
 export type RequestParamsOf<TMethod extends BackendRequestMethod> =
