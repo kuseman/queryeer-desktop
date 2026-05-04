@@ -4,8 +4,6 @@ import { dirname, join } from "node:path";
 import {
   emptySettingsIndexDocument,
   emptySettingsModuleDocument,
-  SETTINGS_INDEX_VERSION,
-  SETTINGS_MODULE_VERSION,
   type SettingsIndexDocument,
   type SettingsModuleDocument
 } from "../../contracts/settings/SettingsDocuments.js";
@@ -50,11 +48,8 @@ export class SettingsStore {
     try {
       const raw = await readFile(path, "utf8");
       const parsed = JSON.parse(raw) as Partial<SettingsIndexDocument>;
-      if (parsed.version !== SETTINGS_INDEX_VERSION) {
-        return emptySettingsIndexDocument();
-      }
       return {
-        version: SETTINGS_INDEX_VERSION,
+        version: typeof parsed.version === "number" ? parsed.version : 1,
         updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date(0).toISOString(),
         modules: typeof parsed.modules === "object" && parsed.modules !== null ? parsed.modules : {}
       };
@@ -68,12 +63,9 @@ export class SettingsStore {
     try {
       const raw = await readFile(path, "utf8");
       const parsed = JSON.parse(raw) as Partial<SettingsModuleDocument>;
-      if (parsed.version !== SETTINGS_MODULE_VERSION || parsed.moduleId !== moduleId) {
-        return emptySettingsModuleDocument(moduleId);
-      }
       return {
-        version: SETTINGS_MODULE_VERSION,
-        moduleId,
+        version: typeof parsed.version === "number" ? parsed.version : 1,
+        moduleId: typeof parsed.moduleId === "string" ? parsed.moduleId : moduleId,
         updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date(0).toISOString(),
         values: typeof parsed.values === "object" && parsed.values !== null ? parsed.values : {}
       };
@@ -85,7 +77,6 @@ export class SettingsStore {
   public async writeIndex(document: SettingsIndexDocument): Promise<void> {
     await this.writeAtomic(this.indexFilePath(), {
       ...document,
-      version: SETTINGS_INDEX_VERSION,
       updatedAt: this.now().toISOString()
     });
   }
@@ -93,7 +84,6 @@ export class SettingsStore {
   public async writeModule(moduleId: string, document: SettingsModuleDocument): Promise<void> {
     await this.writeAtomic(this.moduleFilePath(moduleId), {
       ...document,
-      version: SETTINGS_MODULE_VERSION,
       moduleId,
       updatedAt: this.now().toISOString()
     });

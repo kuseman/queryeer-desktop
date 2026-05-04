@@ -78,6 +78,7 @@ type AppShellApi = {
   openBackendFile: (params: FileOpenParams) => Promise<FileOpenResult>;
   closeBackendFile: (params: FileCloseParams) => Promise<FileCloseResult>;
   notifyBackendFileChange: (params: FileChangeNotification) => Promise<void>;
+  notifyBackendSettingsModuleChanged: (params: { moduleId: string; version: number }) => Promise<void>;
   getWorkspace: () => Promise<WorkspaceSnapshot>;
   saveWorkspace: (snapshot: WorkspaceSnapshot) => Promise<{ accepted: boolean }>;
   getUserKeybindings: () => Promise<UserKeybindingsDocument>;
@@ -221,6 +222,9 @@ const appShellApi: AppShellApi = {
   },
   notifyBackendFileChange: async (params) => {
     return ipcRenderer.invoke("backend:file-change", params);
+  },
+  notifyBackendSettingsModuleChanged: async (params) => {
+    return ipcRenderer.invoke("backend:settings-module-changed", params);
   },
   getWorkspace: async () => {
     return ipcRenderer.invoke("workspace:get");

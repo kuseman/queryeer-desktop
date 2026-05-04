@@ -4,10 +4,6 @@ import type {
   AdvancedSettingsValidator,
   SettingsRegistry
 } from "../../contracts/extensions/SettingsExtension";
-import {
-  SETTINGS_INDEX_VERSION,
-  SETTINGS_MODULE_VERSION
-} from "../../contracts/settings/SettingsDocuments";
 import { SettingsService } from "./settings-service";
 
 function makeRegistry(): SettingsRegistry {
@@ -89,18 +85,18 @@ describe("SettingsService", () => {
       registry,
       bridge: {
         getSettingsIndex: async () => ({
-          version: SETTINGS_INDEX_VERSION,
+          version: 1,
           updatedAt: "now",
           modules: {
             "core.editor": {
               file: "core.editor.json",
-              version: SETTINGS_MODULE_VERSION,
+              version: 3,
               updatedAt: "now"
             }
           }
         }),
         getSettingsModule: async ({ moduleId }) => ({
-          version: SETTINGS_MODULE_VERSION,
+          version: 3,
           moduleId,
           updatedAt: "now",
           values: {
@@ -118,6 +114,45 @@ describe("SettingsService", () => {
     expect(service.getValue("core.editor.wordWrap")).toBe("off");
   });
 
+  it("increments version on setValue and notifies backend after persist", async () => {
+    const saveSettingsModule = vi.fn(async () => ({ accepted: true }));
+    const notifyBackendModuleChanged = vi.fn(async () => {});
+    const service = new SettingsService({
+      registry: makeRegistry(),
+      bridge: {
+        getSettingsIndex: async () => ({
+          version: 1,
+          updatedAt: "now",
+          modules: {}
+        }),
+        getSettingsModule: async ({ moduleId }) => ({
+          version: 1,
+          moduleId,
+          updatedAt: "now",
+          values: {}
+        }),
+        saveSettingsIndex: async () => ({ accepted: true }),
+        saveSettingsModule
+      },
+      notifyBackendModuleChanged,
+      debounceMs: 100
+    });
+    await service.initialize();
+
+    await service.setValue("core.editor.tabSize", 8);
+
+    expect(saveSettingsModule).not.toHaveBeenCalled();
+    expect(notifyBackendModuleChanged).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(120);
+
+    expect(saveSettingsModule).toHaveBeenCalledTimes(1);
+    const savedCall = (saveSettingsModule.mock.calls[0] as unknown[])[0] as { moduleId: string; document: { version: number } };
+    expect(savedCall.document.version).toBe(2);
+    expect(notifyBackendModuleChanged).toHaveBeenCalledTimes(1);
+    expect(notifyBackendModuleChanged).toHaveBeenCalledWith("core.editor", 2);
+  });
+
   it("debounces persistence after setValue", async () => {
     const saveSettingsIndex = vi.fn(async () => ({ accepted: true }));
     const saveSettingsModule = vi.fn(async () => ({ accepted: true }));
@@ -126,12 +161,12 @@ describe("SettingsService", () => {
       debounceMs: 100,
       bridge: {
         getSettingsIndex: async () => ({
-          version: SETTINGS_INDEX_VERSION,
+          version: 1,
           updatedAt: "now",
           modules: {}
         }),
         getSettingsModule: async ({ moduleId }) => ({
-          version: SETTINGS_MODULE_VERSION,
+          version: 1,
           moduleId,
           updatedAt: "now",
           values: {}
@@ -157,12 +192,12 @@ describe("SettingsService", () => {
       registry: makeRegistry(),
       bridge: {
         getSettingsIndex: async () => ({
-          version: SETTINGS_INDEX_VERSION,
+          version: 1,
           updatedAt: "now",
           modules: {}
         }),
         getSettingsModule: async ({ moduleId }) => ({
-          version: SETTINGS_MODULE_VERSION,
+          version: 1,
           moduleId,
           updatedAt: "now",
           values: {}
@@ -184,12 +219,12 @@ describe("SettingsService", () => {
       registry: makeRegistry(),
       bridge: {
         getSettingsIndex: async () => ({
-          version: SETTINGS_INDEX_VERSION,
+          version: 1,
           updatedAt: "now",
           modules: {}
         }),
         getSettingsModule: async ({ moduleId }) => ({
-          version: SETTINGS_MODULE_VERSION,
+          version: 1,
           moduleId,
           updatedAt: "now",
           values: {}
@@ -211,12 +246,12 @@ describe("SettingsService", () => {
       registry: makeRegistry(),
       bridge: {
         getSettingsIndex: async () => ({
-          version: SETTINGS_INDEX_VERSION,
+          version: 1,
           updatedAt: "now",
           modules: {}
         }),
         getSettingsModule: async ({ moduleId }) => ({
-          version: SETTINGS_MODULE_VERSION,
+          version: 1,
           moduleId,
           updatedAt: "now",
           values: {}

@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.function.Supplier;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.EventBus;
 import com.queryeer.backend.api.FileRegistry;
 import com.queryeer.backend.api.QueryEngineRegistry;
@@ -20,11 +21,17 @@ public final class StdioTransportModule
     public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry, EventBus events,
             Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt)
     {
-        return create(input, output, objectMapper, queryEngines, fileRegistry, events, runtimeStatusSupplier, startedAt, new SecuritySession());
+        return create(input, output, objectMapper, queryEngines, fileRegistry, events, runtimeStatusSupplier, startedAt, null, new SecuritySession());
     }
 
     public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry, EventBus events,
-            Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt, SecuritySession securitySession)
+            Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt, ConfigService configService)
+    {
+        return create(input, output, objectMapper, queryEngines, fileRegistry, events, runtimeStatusSupplier, startedAt, configService, new SecuritySession());
+    }
+
+    public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry, EventBus events,
+            Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt, ConfigService configService, SecuritySession securitySession)
     {
         EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
         ResponseWriter responseWriter = new ResponseWriter(output, codec);
@@ -42,7 +49,16 @@ public final class StdioTransportModule
 
         RequestDispatcher requestDispatcher = new RequestDispatcher(responseWriter, handlers);
 
-        List<NotificationHandler> notificationHandlers = List.of(new FileChangeNotificationHandler(codec, fileRegistry));
+        List<NotificationHandler> notificationHandlers = List.of(new FileChangeNotificationHandler(codec, fileRegistry),
+                new SettingsModuleChangedNotificationHandler(codec, configService != null ? configService
+                        : new com.queryeer.backend.api.ConfigService()
+                        {
+                            @Override
+                            public String get(String key)
+                            {
+                                return null;
+                            }
+                        }));
         NotificationDispatcher notificationDispatcher = new NotificationDispatcher(notificationHandlers);
 
         StdioTransportServer transportServer = new StdioTransportServer(input, codec, responseWriter, requestDispatcher, notificationDispatcher);

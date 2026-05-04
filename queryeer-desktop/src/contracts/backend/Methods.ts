@@ -18,4 +18,5 @@ export type BackendNotificationMethod =
   | "queryengine.chunkRows"
   | "queryengine.completed"
   | "queryengine.failed"
-  | "file.change";
+  | "file.change"
+  | "settings.module.changed";

@@ -5,8 +5,6 @@ import type {
   SettingsRegistry
 } from "../../contracts/extensions/SettingsExtension";
 import {
-  SETTINGS_INDEX_VERSION,
-  SETTINGS_MODULE_VERSION,
   type SettingsIndexDocument,
   type SettingsModuleDocument
 } from "../../contracts/settings/SettingsDocuments";
@@ -24,6 +22,7 @@ type SettingsBridge = {
 export type SettingsServiceOptions = {
   registry: SettingsRegistry;
   bridge: SettingsBridge;
+  notifyBackendModuleChanged?: (moduleId: string, version: number) => Promise<void>;
   debounceMs?: number;
   now?: () => Date;
 };
@@ -33,6 +32,7 @@ const DEFAULT_DEBOUNCE_MS = 500;
 export class SettingsService {
   private readonly registry: SettingsRegistry;
   private readonly bridge: SettingsBridge;
+  private readonly notifyBackendModuleChanged?: (moduleId: string, version: number) => Promise<void>;
   private readonly debounceMs: number;
   private readonly now: () => Date;
   private initialized = false;
@@ -50,6 +50,7 @@ export class SettingsService {
   public constructor(options: SettingsServiceOptions) {
     this.registry = options.registry;
     this.bridge = options.bridge;
+    this.notifyBackendModuleChanged = options.notifyBackendModuleChanged;
     this.debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
     this.now = options.now ?? (() => new Date());
   }
@@ -93,7 +94,7 @@ export class SettingsService {
 
       const doc = await this.bridge.getSettingsModule({ moduleId });
       this.moduleDocs.set(moduleId, {
-        version: SETTINGS_MODULE_VERSION,
+        version: typeof doc.version === "number" ? doc.version : 1,
         moduleId,
         updatedAt: typeof doc.updatedAt === "string" ? doc.updatedAt : new Date(0).toISOString(),
         values: typeof doc.values === "object" && doc.values !== null ? doc.values : {}
@@ -159,6 +160,7 @@ export class SettingsService {
     } else {
       moduleDoc.values[settingId] = nextValue;
     }
+    moduleDoc.version = (typeof moduleDoc.version === "number" ? moduleDoc.version : 1) + 1;
     moduleDoc.updatedAt = this.now().toISOString();
     this.moduleDocs.set(definition.moduleId, moduleDoc);
 
@@ -245,7 +247,7 @@ export class SettingsService {
       return existing;
     }
     const created: SettingsModuleDocument = {
-      version: SETTINGS_MODULE_VERSION,
+      version: 1,
       moduleId,
       updatedAt: this.now().toISOString(),
       values: {}
@@ -265,7 +267,7 @@ export class SettingsService {
       [...moduleIds].map(async (moduleId) => {
         const doc = await this.bridge.getSettingsModule({ moduleId });
         this.moduleDocs.set(moduleId, {
-          version: SETTINGS_MODULE_VERSION,
+          version: typeof doc.version === "number" ? doc.version : 1,
           moduleId,
           updatedAt: typeof doc.updatedAt === "string" ? doc.updatedAt : new Date(0).toISOString(),
           values: typeof doc.values === "object" && doc.values !== null ? doc.values : {}
@@ -404,10 +406,16 @@ export class SettingsService {
       document: {
         ...doc,
         moduleId,
-        version: SETTINGS_MODULE_VERSION,
         updatedAt: this.now().toISOString()
       }
     });
+    if (this.notifyBackendModuleChanged) {
+      try {
+        await this.notifyBackendModuleChanged(moduleId, doc.version);
+      } catch {
+        // Best-effort notification; do not fail persistence
+      }
+    }
   }
 
   private async persistIndex(): Promise<void> {
@@ -424,7 +432,7 @@ export class SettingsService {
       };
     }
     await this.bridge.saveSettingsIndex({
-      version: SETTINGS_INDEX_VERSION,
+      version: 1,
       updatedAt: this.now().toISOString(),
       modules
     });

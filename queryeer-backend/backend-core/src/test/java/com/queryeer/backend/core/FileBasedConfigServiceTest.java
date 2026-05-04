@@ -106,20 +106,22 @@ class FileBasedConfigServiceTest
     }
 
     @Test
-    void getModuleReReadsWhenCacheAgeExceedsMaxTtl() throws Exception
+    void invalidateModuleRemovesCacheEntry() throws Exception
     {
-        writeModule("ttl.test", Map.of("v", "first"));
+        writeModule("invalidate.test", Map.of("v", "first"));
 
         FileBasedConfigService config = configWithDir();
-        SettingsModule m1 = config.getModule("ttl.test");
+        SettingsModule m1 = config.getModule("invalidate.test");
         assertEquals("first", m1.values()
                 .get("v"));
 
-        // Sleep past the 1-second cache TTL to force a re-read even if mtime appears unchanged
-        Thread.sleep(1100L);
-        writeModule("ttl.test", Map.of("v", "second"));
+        // Change file without mtime tick guarantee (same second)
+        writeModule("invalidate.test", Map.of("v", "second"));
 
-        SettingsModule m2 = config.getModule("ttl.test");
+        // Without invalidation, same mtime might return stale data
+        config.invalidateModule("invalidate.test");
+
+        SettingsModule m2 = config.getModule("invalidate.test");
         assertEquals("second", m2.values()
                 .get("v"));
     }

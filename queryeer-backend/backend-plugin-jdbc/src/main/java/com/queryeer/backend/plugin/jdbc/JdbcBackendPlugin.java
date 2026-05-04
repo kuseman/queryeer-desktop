@@ -52,14 +52,12 @@ public final class JdbcBackendPlugin implements BackendPlugin
                 .info("Registered built-in generic JDBC dialect");
         dialectDiscovery.discoverAndRegister(registry, context.logger());
         JdbcSettingsConnectionSource settingsSource = new JdbcSettingsConnectionSource();
-        JdbcConnectionRegistry connections = new JdbcConnectionRegistry();
-        connections.reload(settingsSource.load(context.config(), context.logger()));
+        JdbcConnectionRegistry connections = new JdbcConnectionRegistry(context.config(), settingsSource, context.logger());
         JdbcConnectionResolver resolver = new JdbcConnectionResolver();
         JdbcSchemaStore schemaStore = new JdbcSchemaStore(resolveSchemaCacheDir(context.config()));
         JdbcSchemaCrawler schemaCrawler = new JdbcSchemaCrawler(registry, resolver, schemaStore, context.logger());
         JdbcSecuritySessionState securitySessionState = new JdbcSecuritySessionState();
-        JdbcSchemaCrawlCoordinator crawlCoordinator = new JdbcSchemaCrawlCoordinator(connections, schemaCrawler, schemaStore, new JdbcSchemaCrawlPolicy(), securitySessionState, settingsSource,
-                context.config(), context.logger());
+        JdbcSchemaCrawlCoordinator crawlCoordinator = new JdbcSchemaCrawlCoordinator(connections, schemaCrawler, schemaStore, new JdbcSchemaCrawlPolicy(), securitySessionState, context.logger());
         context.events()
                 .subscribe(EVENT_SECURITY_SESSION_OPENED, event -> securitySessionState.markOpen());
         context.events()

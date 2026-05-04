@@ -20,7 +20,8 @@ export const BACKEND_NOTIFICATION_CAPABILITIES: ReadonlyArray<Capability> = [
   "queryengine.chunkRows",
   "queryengine.completed",
   "queryengine.failed",
-  "file.change"
+  "file.change",
+  "settings.module.changed"
 ];
 
 export const BACKEND_DEFAULT_REQUESTED_CAPABILITIES: ReadonlyArray<Capability> = [

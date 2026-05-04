@@ -90,6 +90,7 @@ describe("bootstrapShell diagnostics wiring", () => {
       openBackendFile: async () => ({ fileId: "f-1", backendVersion: 0 }),
       closeBackendFile: async () => ({ fileId: "f-1", accepted: true }),
       notifyBackendFileChange: async () => {},
+      notifyBackendSettingsModuleChanged: async () => {},
       watchFile: async () => ({ subscriptionId: "fw-test-1" }),
       unwatchFile: async () => ({ removed: true }),
       muteFileWatcherPath: async () => ({ muted: true }),
