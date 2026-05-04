@@ -173,29 +173,23 @@ export class JdbcNavigationStore {
   private async fetchChildren(node: JdbcTreeNode): Promise<JdbcSchemaObject[]> {
     const service = getQueryEngineService();
     if (node.kind === "connection") {
-      const connection = getConfiguredJdbcConnections().find((c) => c.connectionId === node.connectionId);
       return (await service.invoke({
         engineId: "jdbc",
         action: "jdbc.schema.fetch",
         payload: {
           connectionId: node.connectionId,
-          scope: "top",
-          password: connection?.password,
-          properties: connection?.properties
+          scope: "top"
         }
       })) as JdbcSchemaObject[];
     }
     if (node.kind === "schema") {
-      const connection = getConfiguredJdbcConnections().find((c) => c.connectionId === node.connectionId);
       return (await service.invoke({
         engineId: "jdbc",
         action: "jdbc.schema.fetch",
         payload: {
           connectionId: node.connectionId,
           scope: "tables",
-          target: { database: node.attributes.catalog as string, schema: node.name },
-          password: connection?.password,
-          properties: connection?.properties
+          target: { database: node.attributes.catalog as string, schema: node.name }
         }
       })) as JdbcSchemaObject[];
     }

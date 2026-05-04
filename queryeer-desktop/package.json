@@ -13,7 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:protocol-fixtures": "node scripts/backend-protocol-fixtures-check.mjs",
+    "test:protocol-fixtures": "vitest run --project main src/main/backend/protocol-fixtures.test.ts",
     "test:integration": "vitest run --project integration",
     "dev:plugin:stage": "node scripts/dev-plugin-stage.mjs",
     "dev:classpath:probe:stage": "node scripts/dev-classpath-probe-stage.mjs",

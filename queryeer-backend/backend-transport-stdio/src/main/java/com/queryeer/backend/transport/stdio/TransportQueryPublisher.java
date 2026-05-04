@@ -60,9 +60,9 @@ final class TransportQueryPublisher implements QueryPublisher
     }
 
     @Override
-    public void completed(long durationMs, long rowCount, Object engineStatePatch)
+    public void completed(long durationMs, long rowCount, Object engineState)
     {
-        notificationPublisher.publishForQuery(executionId, "queryengine.completed", new QueryCompletedNotification(executionId, new QueryMetrics((int) durationMs, (int) rowCount), engineStatePatch));
+        notificationPublisher.publishForQuery(executionId, "queryengine.completed", new QueryCompletedNotification(executionId, new QueryMetrics((int) durationMs, (int) rowCount), engineState));
     }
 
     @Override

@@ -10,8 +10,7 @@ export type BackendRequestMethod =
   | "queryengine.invoke"
   | "connection.upsert"
   | "file.open"
-  | "file.close"
-  | "file.bind";
+  | "file.close";
 
 export type BackendNotificationMethod =
   | "queryengine.progress"

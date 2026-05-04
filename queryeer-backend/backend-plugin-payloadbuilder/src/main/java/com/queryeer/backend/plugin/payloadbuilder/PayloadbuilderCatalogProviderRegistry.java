@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.plugin.payloadbuilder.elasticsearch.ElasticsearchCatalogProvider;
 import com.queryeer.backend.plugin.payloadbuilder.filesystem.FilesystemCatalogProvider;
 
@@ -31,9 +32,9 @@ final class PayloadbuilderCatalogProviderRegistry
         this.providersByAction = Map.copyOf(byAction);
     }
 
-    static PayloadbuilderCatalogProviderRegistry defaults()
+    static PayloadbuilderCatalogProviderRegistry defaults(ConfigService configService)
     {
-        return new PayloadbuilderCatalogProviderRegistry(List.of(new ElasticsearchCatalogProvider(), new FilesystemCatalogProvider()));
+        return new PayloadbuilderCatalogProviderRegistry(List.of(new ElasticsearchCatalogProvider(configService), new FilesystemCatalogProvider()));
     }
 
     Catalog createCatalog(String catalogId)
@@ -61,5 +62,16 @@ final class PayloadbuilderCatalogProviderRegistry
             throw new IllegalArgumentException("Unsupported payloadbuilder action: " + action);
         }
         return provider.invoke(action, payload);
+    }
+
+    /** Resolves connection properties by catalogId + connectionId from ConfigService. */
+    Map<String, Object> resolveConnection(String catalogId, String connectionId)
+    {
+        PayloadbuilderCatalogProvider provider = providersByCatalogId.get(catalogId);
+        if (provider != null)
+        {
+            return provider.resolveConnection(connectionId);
+        }
+        return Map.of();
     }
 }

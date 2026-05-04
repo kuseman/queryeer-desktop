@@ -4,14 +4,17 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
+import com.queryeer.backend.queryengine.jdbc.JdbcConnectionProfile;
+
 final class JdbcFileConnectionManager
 {
     private static final long DEFAULT_IDLE_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(30);
-    private final Map<String, FileConnectionSession> byFileId = new ConcurrentHashMap<>();
+    private final Map<String, FileSessionHandle> byFileId = new ConcurrentHashMap<>();
     private final long idleTimeoutMs;
 
     JdbcFileConnectionManager()
@@ -24,13 +27,13 @@ final class JdbcFileConnectionManager
         this.idleTimeoutMs = Math.max(0L, idleTimeoutMs);
     }
 
-    Connection acquire(String fileId, JdbcExecutionState state) throws SQLException
+    Connection acquire(String fileId, JdbcConnectionProfile profile) throws SQLException
     {
         long now = System.currentTimeMillis();
-        FileConnectionSession session = byFileId.compute(fileId, (id, existing) ->
+        FileSessionHandle session = byFileId.compute(fileId, (id, existing) ->
         {
             if (existing != null
-                    && existing.matches(state))
+                    && existing.matches(profile))
             {
                 try
                 {
@@ -51,8 +54,9 @@ final class JdbcFileConnectionManager
                 rollbackAndClose(existing.connection());
             }
 
-            Connection connection = openConnection(state);
-            return new FileConnectionSession(state.connectionId(), state.dialectId(), state.url(), state.username(), state.resolvedPassword(), connection, now);
+            Connection connection = openConnection(profile);
+            return new FileSessionHandle(profile.connectionId(), profile.dialectId(), text(profile.properties(), "url"), text(profile.properties(), "username"), text(profile.properties(), "password"),
+                    connection, now);
         });
 
         return session.connection();
@@ -60,7 +64,7 @@ final class JdbcFileConnectionManager
 
     void closeFile(String fileId)
     {
-        FileConnectionSession removed = byFileId.remove(fileId);
+        FileSessionHandle removed = byFileId.remove(fileId);
         if (removed != null)
         {
             rollbackAndClose(removed.connection());
@@ -86,20 +90,28 @@ final class JdbcFileConnectionManager
         });
     }
 
-    private static Connection openConnection(JdbcExecutionState state)
+    private static Connection openConnection(JdbcConnectionProfile profile)
     {
         try
         {
+            Map<String, Object> props = profile.properties();
+            String url = text(props, "url");
+            if (url == null)
+            {
+                throw new IllegalArgumentException("Connection profile has no url");
+            }
             Properties properties = new Properties();
-            if (state.username() != null)
+            String username = text(props, "username");
+            if (username != null)
             {
-                properties.setProperty("user", state.username());
+                properties.setProperty("user", username);
             }
-            if (state.resolvedPassword() != null)
+            String password = text(props, "password");
+            if (password != null)
             {
-                properties.setProperty("password", state.resolvedPassword());
+                properties.setProperty("password", password);
             }
-            return DriverManager.getConnection(state.url(), properties);
+            return DriverManager.getConnection(url, properties);
         }
         catch (SQLException e)
         {
@@ -136,26 +148,33 @@ final class JdbcFileConnectionManager
         }
     }
 
-    private record FileConnectionSession(String connectionId, String dialectId, String url, String username, String password, Connection connection, long lastUsedAtMs)
+    private static String text(Map<String, Object> properties, String key)
     {
-        FileConnectionSession touch(long now)
+        Object value = properties.get(key);
+        if (value instanceof String s)
         {
-            return new FileConnectionSession(connectionId, dialectId, url, username, password, connection, now);
+            String trimmed = s.trim();
+            return trimmed.isEmpty() ? null
+                    : trimmed;
+        }
+        return null;
+    }
+
+    private record FileSessionHandle(String connectionId, String dialectId, String url, String username, String password, Connection connection, long lastUsedAtMs)
+    {
+        FileSessionHandle touch(long now)
+        {
+            return new FileSessionHandle(connectionId, dialectId, url, username, password, connection, now);
         }
 
-        boolean matches(JdbcExecutionState state)
+        boolean matches(JdbcConnectionProfile profile)
         {
-            return same(connectionId, state.connectionId())
-                    && same(dialectId, state.dialectId())
-                    && same(url, state.url())
-                    && same(username, state.username())
-                    && same(password, state.resolvedPassword());
-        }
-
-        private static boolean same(String left, String right)
-        {
-            return left == null ? right == null
-                    : left.equals(right);
+            Map<String, Object> props = profile.properties();
+            return Objects.equals(connectionId, profile.connectionId())
+                    && Objects.equals(dialectId, profile.dialectId())
+                    && Objects.equals(url, text(props, "url"))
+                    && Objects.equals(username, text(props, "username"))
+                    && Objects.equals(password, text(props, "password"));
         }
     }
 }

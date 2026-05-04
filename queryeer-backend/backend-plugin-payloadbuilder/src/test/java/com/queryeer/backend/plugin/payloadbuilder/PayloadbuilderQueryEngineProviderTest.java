@@ -10,6 +10,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.QueryPublisher;
 
 import se.kuseman.payloadbuilder.api.catalog.Column;
@@ -24,10 +25,12 @@ import se.kuseman.payloadbuilder.api.execution.ValueVector;
 
 class PayloadbuilderQueryEngineProviderTest
 {
+    private static final ConfigService NOOP_CONFIG = key -> null;
+
     @Test
     void invokeEchoReturnsPayload()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider();
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG);
 
         Object result = provider.invoke("file-1", "payloadbuilder.echo", Map.of("hello", "world"));
 
@@ -42,7 +45,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void invokeCapabilitiesIncludesCatalogActions()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider();
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG);
 
         Object result = provider.invoke("file-1", "engine.capabilities", null);
 
@@ -55,7 +58,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void invokeEsListIndicesRequiresEndpoint()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider();
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG);
 
         IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class, () -> provider.invoke("file-1", "payloadbuilder.es.listIndices", Map.of("properties", Map.of())));
 
@@ -65,7 +68,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void invokeThrowsForUnsupportedAction()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider();
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG);
 
         IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class, () -> provider.invoke("file-1", "payloadbuilder.unknown", null));
 
@@ -75,20 +78,20 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void executePublishesCompletionWithEngineStatePatch()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider();
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG);
         RecordingPublisher publisher = new RecordingPublisher();
 
         provider.execute("exec-2", "file-1", "select 1", null, publisher);
 
         Assertions.assertTrue(publisher.completedWithPatchCalled);
-        Assertions.assertNull(publisher.completedEngineStatePatch);
+        Assertions.assertNull(publisher.completedEngineState);
         Assertions.assertNull(publisher.errorCode);
     }
 
     @Test
     void executeReturnsValidationFailureForMalformedEngineState()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider();
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG);
         RecordingPublisher publisher = new RecordingPublisher();
         Map<String, Object> malformed = Map.of("payloadbuilder", Map.of("catalogs", Map.of("jdbc1", "bad")));
 
@@ -102,7 +105,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void executeIncludesExceptionTypeInFailureMessage()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider();
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG);
         RecordingPublisher publisher = new RecordingPublisher();
 
         provider.execute("exec-3", "file-1", "select from", null, publisher);
@@ -231,7 +234,7 @@ class PayloadbuilderQueryEngineProviderTest
     {
         private boolean completed;
         private boolean completedWithPatchCalled;
-        private Object completedEngineStatePatch;
+        private Object completedEngineState;
         private String errorCode;
         private String errorMessage;
 
@@ -257,11 +260,11 @@ class PayloadbuilderQueryEngineProviderTest
         }
 
         @Override
-        public void completed(long durationMs, long rowCount, Object engineStatePatch)
+        public void completed(long durationMs, long rowCount, Object engineState)
         {
             completed = true;
             completedWithPatchCalled = true;
-            completedEngineStatePatch = engineStatePatch;
+            completedEngineState = engineState;
         }
 
         @Override

@@ -3,10 +3,12 @@ import {
   BACKEND_PROTOCOL_VERSION,
   type BackendError,
   type BackendEnvelope,
+  type BackendNotificationEnvelope,
   type BackendRequestEnvelope,
   type BackendResponseEnvelope,
   type HandshakeResult,
   type PingResult,
+  type QueryCompletedNotification,
   type RuntimeStatusResult,
   type QueryCancelParams,
   type QueryCancelResult,
@@ -449,21 +451,90 @@ describe("BackendGateway", () => {
       );
 
     expect(executeRequest).toBeDefined();
-    expect(executeRequest?.params).toEqual({
-      queryExecutionId: "exec-secret-ref",
-      engineId: "payloadbuilder",
+    expect((executeRequest?.params as QueryExecuteParams).engineState).toEqual({
+      payloadbuilder: {
+        catalogs: {
+          es1: {
+            catalogId: "elasticsearch",
+            properties: {
+              authUsername: "elastic",
+              authPassword: { secretRef: "secret-ref-1" }
+            }
+          }
+        }
+      }
+    });
+
+    await gateway.stop();
+  });
+
+  it("execute query forwards JDBC engineState over wire", async () => {
+    const { gateway, transport } = createGatewayWithTestTransport();
+    await gateway.start();
+
+    await gateway.executeQuery({
+      queryExecutionId: "exec-jdbc-state",
+      engineId: "jdbc",
       fileId: "file-1",
-      text: "select 1",
-      engineState: {
-        payloadbuilder: {
-          catalogs: {
-            es1: {
-              catalogId: "elasticsearch",
-              properties: {
-                authUsername: "elastic",
-                authPassword: { secretRef: "secret-ref-1" }
+      text: "SELECT * FROM users",
+      engineState: { connectionId: "prod-db" }
+    });
+
+    const executeRequest = transport.sendEnvelope.mock.calls
+      .map((call: [BackendEnvelope]) => call[0])
+      .find(
+        (envelope): envelope is BackendRequestEnvelope =>
+          envelope.type === "request" && envelope.method === "queryengine.execute"
+      );
+
+    expect(executeRequest).toBeDefined();
+    expect((executeRequest?.params as QueryExecuteParams).engineState).toEqual({
+      connectionId: "prod-db"
+    });
+
+    await gateway.stop();
+  });
+
+  it("completed notification forwards engineState to renderer", async () => {
+    const { gateway, transport } = createGatewayWithTestTransport();
+    const events: { method: string; params: unknown }[] = [];
+    gateway.setRendererSink((method, params) => events.push({ method, params }));
+
+    await gateway.start();
+
+    const notification: BackendNotificationEnvelope<"queryengine.completed"> = {
+      protocolVersion: BACKEND_PROTOCOL_VERSION,
+      type: "notification",
+      method: "queryengine.completed",
+      params: {
+        queryExecutionId: "exec-pb-1",
+        metrics: { durationMs: 120, rowCount: 2 },
+        engineState: {
+          payloadbuilder: {
+            catalogs: {
+              es1: {
+                catalogId: "elasticsearch",
+                properties: { index: "my-idx-updated" }
               }
             }
+          }
+        }
+      } satisfies QueryCompletedNotification
+    };
+
+    transport.emitEnvelope(notification);
+
+    const completed = events.find((e) => e.method === "queryengine.completed");
+    expect(completed).toBeDefined();
+
+    const params = completed!.params as QueryCompletedNotification;
+    expect(params.engineState).toBeDefined();
+    expect(params.engineState).toEqual({
+      payloadbuilder: {
+        catalogs: {
+          es1: {
+            catalogId: "elasticsearch",
+            properties: { index: "my-idx-updated" }
           }
         }
       }

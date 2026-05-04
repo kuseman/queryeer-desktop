@@ -221,7 +221,6 @@ Request params:
   "engineId": "payloadbuilder",
   "fileId": "file-001",
   "text": "select * from foo",
-  "parameters": [],
   "engineState": {
     "payloadbuilder": {
       "defaultCatalogAlias": "jdbc1",
@@ -428,35 +427,7 @@ Success result:
 { "fileId": "file-001", "accepted": true }
 ```
 
-## 5.6c `file.bind`
-
-Purpose: attach or rebind a file to an engine/connection after initial open.
-
-Request params:
-
-```json
-{
-  "fileId": "file-001",
-  "engineId": "payloadbuilder",
-  "connectionId": "conn-001"
-}
-```
-
-Success result:
-
-```json
-{
-  "fileId": "file-001",
-  "engineId": "payloadbuilder",
-  "backendVersion": 1
-}
-```
-
-Rules:
-
-- If the file was previously unbound, backend creates the engine session on bind.
-- If the file was already bound and engine/connection changed, backend closes old engine-scoped file resources and opens a new session for the updated binding.
-- JDBC file-scoped SQL sessions are released on rebind, on `file.close`, or by idle timeout reaper.
+> **Note:** `file.bind` has been removed from the protocol. Re-binding is handled automatically by the backend on `queryengine.execute` (auto-upsert). The frontend no longer sends `file.bind` — the backend detects connection changes from `engineState.connectionId` and updates the file session internally.
 
 ## 5.6d `queryengine.execute` fileId session binding
 
@@ -510,7 +481,7 @@ Rules:
     "durationMs": 412,
     "rowCount": 2
   },
-  "engineStatePatch": {
+  "engineState": {
     "payloadbuilder": {
       "catalogs": {
         "jdbc1": {
@@ -562,7 +533,7 @@ Rules:
 
 Rules:
 
-- `engineStatePatch` is an engine-owned opaque blob. Core protocol forwards it without interpretation.
+- `engineState` is an engine-owned opaque blob. Core protocol forwards it without interpretation.
 - Engines SHOULD only return changed values in patches.
 
 ## 6.4a `file.change`
@@ -683,7 +654,7 @@ Current Java stdio scaffold implementation status:
 - `backend.runtimeStatus` implemented
 - `connection.upsert` request handling scaffolded
 - JDBC provider actions include `jdbc.schema.snapshot` (latest cached snapshot by `connectionId` and optional `scope`) and `jdbc.schema.refresh` (synchronous refresh + cache persist with scope-aware behavior)
-- `file.open` / `file.close` / `file.bind` request handlers implemented against `DefaultFileRegistry`; JDBC provider registers `FileSessionHandler` for file-scoped connection lifecycle and rebind cleanup
+- `file.open` / `file.close` request handlers implemented against `DefaultFileRegistry`; JDBC provider registers `FileSessionHandler` for file-scoped connection lifecycle and cleanup. `file.bind` has been removed — backend auto-upserts on `queryengine.execute`.
 - `file.change` notification handler implemented
 
 JDBC file-session cleanup configuration:

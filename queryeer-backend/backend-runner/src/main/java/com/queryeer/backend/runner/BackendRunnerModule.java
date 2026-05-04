@@ -49,7 +49,8 @@ public final class BackendRunnerModule
         PluginClassLoaderFactory classLoaderFactory = new PluginClassLoaderFactory(sharedLoader);
         Path builtinsDir = Path.of(appDir, "plugins", "builtin");
 
-        BackendPlatformServices services = BackendPlatformServices.defaultServices(config);
+        SecuritySession securitySession = new SecuritySession();
+        BackendPlatformServices services = BackendPlatformServices.fileBased(config, securitySession);
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
         objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -72,7 +73,6 @@ public final class BackendRunnerModule
             throw e;
         }
 
-        SecuritySession securitySession = new SecuritySession();
         try
         {
             runtime.activateAll(services.pluginContext());

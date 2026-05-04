@@ -16,7 +16,6 @@ export type FileBackendSync = {
   openFile?: (file: FileEntity, initialText?: string) => void | Promise<void>;
   closeFile?: (file: FileEntity) => void | Promise<void>;
   changeFile?: (file: FileEntity, text: string) => void | Promise<void>;
-  bindFile?: (file: FileEntity) => void | Promise<void>;
 };
 
 export type FileMediatorOptions = {
@@ -252,13 +251,8 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
           } catch {
             // best effort - backend may not be running
           }
-        } else {
-          try {
-            await backendSync?.bindFile?.(next);
-          } catch {
-            // best effort - backend may not be running
-          }
         }
+        // On rebind, backend auto-upserts on next query — no explicit bindFile needed
       return next;
     },
 

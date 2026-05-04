@@ -11,8 +11,7 @@ export const BACKEND_REQUEST_CAPABILITIES: ReadonlyArray<Capability> = [
   "queryengine.invoke",
   "connection.upsert",
   "file.open",
-  "file.close",
-  "file.bind"
+  "file.close"
 ];
 
 export const BACKEND_NOTIFICATION_CAPABILITIES: ReadonlyArray<Capability> = [

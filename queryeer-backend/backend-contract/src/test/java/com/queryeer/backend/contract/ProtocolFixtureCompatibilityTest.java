@@ -13,8 +13,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.contract.connection.ConnectionUpsertResult;
 import com.queryeer.backend.contract.engine.EngineInvokeParams;
 import com.queryeer.backend.contract.engine.EngineInvokeResult;
-import com.queryeer.backend.contract.file.FileBindParams;
-import com.queryeer.backend.contract.file.FileBindResult;
 import com.queryeer.backend.contract.file.FileChangeNotification;
 import com.queryeer.backend.contract.file.FileCloseParams;
 import com.queryeer.backend.contract.file.FileCloseResult;
@@ -119,6 +117,76 @@ class ProtocolFixtureCompatibilityTest
 
         Assertions.assertThrows(IllegalArgumentException.class,
                 () -> objectMapper.convertValue(Map.of("queryExecutionId", "exec-missing-file", "engineId", "payloadbuilder", "text", "select 1"), QueryExecuteParams.class));
+    }
+
+    @Test
+    void jdbcEngineStateRoundTrips() throws IOException
+    {
+        BackendEnvelope request = readFixture("request-query-execute-jdbc.json");
+
+        QueryExecuteParams params = objectMapper.convertValue(request.params(), QueryExecuteParams.class);
+        Assertions.assertEquals("prod-db", objectMapper.convertValue(params.engineState(), Map.class)
+                .get("connectionId"));
+
+        // Round-trip: serialize back and verify
+        BackendEnvelope roundTripped = objectMapper.readValue(objectMapper.writeValueAsString(request), BackendEnvelope.class);
+        QueryExecuteParams roundParams = objectMapper.convertValue(roundTripped.params(), QueryExecuteParams.class);
+        Assertions.assertEquals("prod-db", objectMapper.convertValue(roundParams.engineState(), Map.class)
+                .get("connectionId"));
+    }
+
+    @Test
+    void payloadbuilderEngineStateRoundTrips() throws IOException
+    {
+        BackendEnvelope request = readFixture("request-query-execute-payloadbuilder.json");
+
+        QueryExecuteParams params = objectMapper.convertValue(request.params(), QueryExecuteParams.class);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> engineState = objectMapper.convertValue(params.engineState(), Map.class);
+        Assertions.assertEquals("es1", engineState.get("defaultAlias"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> catalogs = (Map<String, Object>) engineState.get("catalogs");
+        Assertions.assertNotNull(catalogs);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> es1 = (Map<String, Object>) catalogs.get("es1");
+        Assertions.assertEquals("elasticsearch", es1.get("catalogId"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> properties = (Map<String, Object>) es1.get("properties");
+        Assertions.assertEquals("cluster1", properties.get("connectionId"));
+        Assertions.assertEquals("my-idx", properties.get("index"));
+
+        // Round-trip
+        BackendEnvelope roundTripped = objectMapper.readValue(objectMapper.writeValueAsString(request), BackendEnvelope.class);
+        QueryExecuteParams roundParams = objectMapper.convertValue(roundTripped.params(), QueryExecuteParams.class);
+        Assertions.assertNotNull(roundParams.engineState());
+    }
+
+    @Test
+    void completedNotificationEngineStateRoundTrips() throws IOException
+    {
+        BackendEnvelope notification = readFixture("notification-query-completed-payloadbuilder.json");
+
+        QueryCompletedNotification params = objectMapper.convertValue(notification.params(), QueryCompletedNotification.class);
+        Assertions.assertEquals("exec-pb-1", params.queryExecutionId());
+        Assertions.assertNotNull(params.engineState());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> engineState = objectMapper.convertValue(params.engineState(), Map.class);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> pb = (Map<String, Object>) engineState.get("payloadbuilder");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> catalogs = (Map<String, Object>) pb.get("catalogs");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> es1 = (Map<String, Object>) catalogs.get("es1");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> properties = (Map<String, Object>) es1.get("properties");
+        Assertions.assertEquals("my-idx-updated", properties.get("index"));
+
+        // Round-trip
+        BackendEnvelope roundTripped = objectMapper.readValue(objectMapper.writeValueAsString(notification), BackendEnvelope.class);
+        QueryCompletedNotification roundParams = objectMapper.convertValue(roundTripped.params(), QueryCompletedNotification.class);
+        Assertions.assertNotNull(roundParams.engineState());
     }
 
     @Test
@@ -251,7 +319,7 @@ class ProtocolFixtureCompatibilityTest
         Assertions.assertNotNull(params.metrics());
         Assertions.assertEquals(2, params.metrics()
                 .rowCount());
-        Assertions.assertNotNull(params.engineStatePatch());
+        Assertions.assertNotNull(params.engineState());
     }
 
     @Test
@@ -314,26 +382,6 @@ class ProtocolFixtureCompatibilityTest
         FileCloseResult result = objectMapper.convertValue(response.result(), FileCloseResult.class);
         Assertions.assertEquals(params.fileId(), result.fileId());
         Assertions.assertTrue(result.accepted());
-    }
-
-    @Test
-    void fileBindFixturesAreCompatible() throws IOException
-    {
-        BackendEnvelope request = readFixture("request-file-bind.json");
-        BackendEnvelope response = readFixture("response-file-bind.json");
-
-        assertEnvelopeBase(request);
-        assertEnvelopeBase(response);
-        Assertions.assertEquals(EnvelopeType.REQUEST, request.type());
-        Assertions.assertEquals(EnvelopeType.RESPONSE, response.type());
-        Assertions.assertEquals("file.bind", request.method());
-        Assertions.assertEquals(request.id(), response.id());
-
-        FileBindParams params = objectMapper.convertValue(request.params(), FileBindParams.class);
-        FileBindResult result = objectMapper.convertValue(response.result(), FileBindResult.class);
-        Assertions.assertEquals(params.fileId(), result.fileId());
-        Assertions.assertEquals(params.engineId(), result.engineId());
-        Assertions.assertTrue(result.backendVersion() >= 0L);
     }
 
     @Test

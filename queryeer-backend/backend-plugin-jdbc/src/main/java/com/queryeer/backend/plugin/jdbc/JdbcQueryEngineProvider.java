@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.ErrorMessages;
 import com.queryeer.backend.api.FileSession;
 import com.queryeer.backend.api.FileSessionHandler;
@@ -16,9 +17,7 @@ import com.queryeer.backend.queryengine.jdbc.CancellableJdbcQueryExecutor;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnectionFieldDefinition;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnectionFieldOption;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnectionFieldType;
-import com.queryeer.backend.queryengine.jdbc.JdbcConnectionProfile;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnectionSetupDefinition;
-import com.queryeer.backend.queryengine.jdbc.JdbcDialect;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
 import com.queryeer.backend.queryengine.jdbc.JdbcQueryEventListener;
 import com.queryeer.backend.queryengine.jdbc.JdbcQueryRequest;
@@ -41,11 +40,12 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private final JdbcConnectionUsageListener usageListener;
     private final JdbcSchemaStore schemaStore;
     private final JdbcSchemaCrawlCoordinator crawlCoordinator;
+    private final ConfigService configService;
     private final Map<String, CancellableJdbcQueryExecutor> activeExecutors = new ConcurrentHashMap<>();
     private final Set<String> cancelledExecutionIds = ConcurrentHashMap.newKeySet();
 
     JdbcQueryEngineProvider(JdbcDialectRegistry registry, JdbcConnectionRegistry connections, JdbcFileConnectionManager fileConnections, JdbcConnectionUsageListener usageListener,
-            JdbcSchemaStore schemaStore, JdbcSchemaCrawlCoordinator crawlCoordinator)
+            JdbcSchemaStore schemaStore, JdbcSchemaCrawlCoordinator crawlCoordinator, ConfigService configService)
     {
         this.registry = registry;
         this.connections = connections;
@@ -53,6 +53,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         this.usageListener = usageListener;
         this.schemaStore = schemaStore;
         this.crawlCoordinator = crawlCoordinator;
+        this.configService = configService;
     }
 
     @Override
@@ -78,32 +79,31 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             {
                 throw new IllegalArgumentException("fileId is required for JDBC query execution");
             }
-
-            JdbcExecutionState state = requireExecutionState(engineState);
             if (cancelledExecutionIds.contains(queryExecutionId))
             {
                 throw new QueryCancelledException();
             }
 
-            JdbcDialect dialect = registry.find(state.dialectId())
-                    .orElseThrow(() -> new IllegalArgumentException("Unsupported JDBC dialect: " + state.dialectId()));
-            JdbcConnectionProfile connectionProfile = toConnectionProfile(state);
-            // Dialects that construct their own URL manage connections internally — skip file session reuse
-            Connection sessionConnection = dialect.requiresExplicitUrl() ? fileConnections.acquire(fileId, state)
-                    : null;
-            JdbcQueryRequest request = new JdbcQueryRequest(queryExecutionId, fileId, text, List.of(), connectionProfile, sessionConnection);
+            JdbcResolvedConnection resolved = JdbcResolvedConnection.fromEngineState(engineState, connections, registry, configService);
 
-            if (dialect.queryExecutor() instanceof CancellableJdbcQueryExecutor cancellable)
+            Connection sessionConnection = resolved.dialect()
+                    .requiresExplicitUrl() ? fileConnections.acquire(fileId, resolved.profile())
+                            : null;
+
+            JdbcQueryRequest request = new JdbcQueryRequest(queryExecutionId, fileId, text, List.of(), resolved.profile(), sessionConnection);
+
+            if (resolved.dialect()
+                    .queryExecutor() instanceof CancellableJdbcQueryExecutor cancellable)
             {
                 activeExecutors.put(queryExecutionId, cancellable);
             }
 
-            rowCount = dialect.queryExecutor()
+            rowCount = resolved.dialect()
+                    .queryExecutor()
                     .execute(request, new TransportJdbcQueryEventListener(publisher))
                     .rowCount();
 
-            usageListener.onUsage(state.connectionId());
-
+            usageListener.onUsage(resolved.connectionId());
             publisher.completed(System.currentTimeMillis() - startedAt, rowCount);
         }
         catch (IllegalArgumentException e)
@@ -174,15 +174,12 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
 
     private Object connectionTest(Object payload)
     {
-        JdbcExecutionState state = resolvePayloadExecutionState(payload);
-        JdbcDialect dialect = registry.find(state.dialectId())
-                .orElseThrow(() -> new IllegalArgumentException("Unsupported JDBC dialect: " + state.dialectId()));
-        requireUrlIfNeeded(dialect, state);
-        JdbcConnectionProfile connectionProfile = toConnectionProfile(state);
+        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromPayload(payload, registry, configService);
         try
         {
-            dialect.queryExecutor()
-                    .execute(new JdbcQueryRequest("connection-test", null, "select 1", List.of(), connectionProfile, null), new NoopJdbcQueryEventListener());
+            resolved.dialect()
+                    .queryExecutor()
+                    .execute(new JdbcQueryRequest("connection-test", null, "select 1", List.of(), resolved.profile(), null), new NoopJdbcQueryEventListener());
             return Map.of("ok", true, "message", "Connection successful");
         }
         catch (RuntimeException e)
@@ -216,30 +213,9 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
 
     private Object schemaFetch(Object payload)
     {
+        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromRegistryWithOverrides(payload, connections, registry, configService);
+
         Map<String, Object> value = asMap(payload);
-        String connectionId = stringValue(value.get("connectionId"));
-        if (connectionId == null)
-        {
-            throw new IllegalArgumentException("connectionId is required");
-        }
-        JdbcConnectionRegistry.JdbcStoredConnection stored = connections.get(connectionId)
-                .orElseThrow(() -> new IllegalArgumentException("Unknown connectionId: " + connectionId));
-        String rawDialectId = stringValue(stored.connection()
-                .get("dialectId"));
-        String dialectId = rawDialectId != null ? rawDialectId
-                : ENGINE_ID;
-        String url = stringValue(stored.connection()
-                .get("url"));
-        if (url == null)
-        {
-            throw new IllegalArgumentException("Connection has no url configured: " + connectionId);
-        }
-        JdbcDialect dialect = registry.find(dialectId)
-                .orElseThrow(() -> new IllegalArgumentException("Unsupported JDBC dialect: " + dialectId));
-
-        Map<String, Object> resolvedProperties = resolvePasswordInProperties(mergeProperties(stored.connection(), value));
-        JdbcConnectionProfile profile = new JdbcConnectionProfile(stored.connectionId(), stored.name(), dialectId, resolvedProperties);
-
         String scope = stringValue(value.get("scope"));
         Map<String, Object> targetMap = asMap(value.get("target"));
         Map<String, Object> options = new java.util.HashMap<>();
@@ -251,27 +227,9 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         {
             options.put("target", targetMap);
         }
-        return dialect.schemaResolver()
-                .resolveSchema(profile, options);
-    }
-
-    private Map<String, Object> mergeProperties(Map<String, Object> stored, Map<String, Object> payload)
-    {
-        Map<String, Object> merged = new java.util.LinkedHashMap<>(stored);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> payloadProps = (Map<String, Object>) payload.get("properties");
-        if (payloadProps != null
-                && !payloadProps.isEmpty())
-        {
-            merged.putAll(payloadProps);
-        }
-        Object resolvedPassword = payload.get("password");
-        if (resolvedPassword instanceof String s
-                && !s.isBlank())
-        {
-            merged.put("password", s);
-        }
-        return merged;
+        return resolved.dialect()
+                .schemaResolver()
+                .resolveSchema(resolved.profile(), options);
     }
 
     private Object schemaSnapshot(Object payload)
@@ -325,94 +283,6 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         return crawlCoordinator.refreshNow(connectionId, crawlScope, target);
     }
 
-    private JdbcExecutionState resolveExecutionState(Object engineState)
-    {
-        JdbcExecutionState state = JdbcExecutionState.parse(engineState);
-        if (state.url() != null
-                && !state.url()
-                        .isBlank())
-        {
-            return state;
-        }
-        if (state.connectionId() == null
-                || state.connectionId()
-                        .isBlank())
-        {
-            return state;
-        }
-
-        JdbcConnectionRegistry.JdbcStoredConnection stored = connections.get(state.connectionId())
-                .orElse(null);
-        if (stored == null)
-        {
-            return state;
-        }
-
-        String dialectId = stringValue(stored.connection()
-                .get("dialectId"));
-        String url = stringValue(stored.connection()
-                .get("url"));
-        String password = stringValue(stored.connection()
-                .get("password"));
-        String username = stringValue(stored.connection()
-                .get("username"));
-        Map<String, Object> rawProperties = resolvePasswordInProperties(stored.connection());
-        return new JdbcExecutionState(stored.connectionId(), dialectId == null ? ENGINE_ID
-                : dialectId, url, username, password, rawProperties);
-    }
-
-    private JdbcExecutionState requireExecutionState(Object engineState)
-    {
-        JdbcExecutionState state = resolveExecutionState(engineState);
-        JdbcDialect dialect = registry.find(state.dialectId())
-                .orElseThrow(() -> new IllegalArgumentException("Unsupported JDBC dialect: " + state.dialectId()));
-        requireUrlIfNeeded(dialect, state);
-        return state;
-    }
-
-    private void requireUrlIfNeeded(JdbcDialect dialect, JdbcExecutionState state)
-    {
-        if (dialect.requiresExplicitUrl()
-                && (state.url() == null
-                        || state.url()
-                                .isBlank()))
-        {
-            throw new IllegalArgumentException("JDBC connection url is required");
-        }
-    }
-
-    private JdbcExecutionState resolvePayloadExecutionState(Object payload)
-    {
-        Map<String, Object> connection = asMap(payload);
-        String dialectId = stringValue(connection.get("dialectId"));
-        String url = stringValue(connection.get("url"));
-        String username = stringValue(connection.get("username"));
-        String password = stringValue(connection.get("password"));
-        Map<String, Object> rawProperties = resolvePasswordInProperties(connection);
-        return new JdbcExecutionState(null, dialectId == null ? ENGINE_ID
-                : dialectId, url, username, password, rawProperties);
-    }
-
-    private JdbcConnectionProfile toConnectionProfile(JdbcExecutionState state)
-    {
-        if (!state.rawProperties()
-                .isEmpty())
-        {
-            return new JdbcConnectionProfile(state.connectionId(), null, state.dialectId(), state.rawProperties());
-        }
-        return new JdbcConnectionProfile(state.connectionId(), null, state.dialectId(), Map.of("url", state.url() == null ? ""
-                : state.url(), "username",
-                state.username() == null ? ""
-                        : state.username(),
-                "password", state.resolvedPassword() == null ? ""
-                        : state.resolvedPassword()));
-    }
-
-    private Map<String, Object> resolvePasswordInProperties(Map<String, Object> properties)
-    {
-        return java.util.Collections.unmodifiableMap(properties);
-    }
-
     @SuppressWarnings("unchecked")
     private static Map<String, Object> asMap(Object value)
     {
@@ -440,7 +310,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         private static final long serialVersionUID = 1L;
     }
 
-    private static final class TransportJdbcQueryEventListener implements com.queryeer.backend.queryengine.jdbc.JdbcQueryEventListener
+    private static final class TransportJdbcQueryEventListener implements JdbcQueryEventListener
     {
         private final QueryPublisher publisher;
 
@@ -450,7 +320,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         }
 
         @Override
-        public void onResultSetStart(List<com.queryeer.backend.queryengine.jdbc.JdbcResultColumn> columns)
+        public void onResultSetStart(List<JdbcResultColumn> columns)
         {
             publisher.resultSetStart(columns.stream()
                     .map(c -> c.name())

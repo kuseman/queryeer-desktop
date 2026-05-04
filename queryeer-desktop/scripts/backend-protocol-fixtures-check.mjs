@@ -79,6 +79,11 @@ const testExecuteFixtures = () => {
   assert(request.id === response.id, "Execute request/response id mismatch");
   assert(response.result && typeof response.result === "object", "Execute response result is missing");
   assert(request.params?.queryExecutionId === response.result?.queryExecutionId, "Execute queryExecutionId mismatch");
+  assert(typeof request.params?.fileId === "string", "Execute fileId must be string");
+  assert(typeof request.params?.engineId === "string", "Execute engineId must be string");
+  assert(typeof request.params?.text === "string", "Execute text must be string");
+  assert(request.params.engineState !== undefined, "Execute engineState must be present");
+  assert(request.params.parameters === undefined, "Execute must NOT have parameters field");
 };
 
 const testCancelFixtures = () => {
@@ -136,17 +141,38 @@ const testFileCloseFixtures = () => {
   assert(response.result?.accepted === true, "file.close accepted must be true");
 };
 
-const testFileBindFixtures = () => {
-  const request = readFixture("request-file-bind.json");
-  const response = readFixture("response-file-bind.json");
+const testJdbcEngineStateFixture = () => {
+  const request = readFixture("request-query-execute-jdbc.json");
 
   assertEnvelopeBase(request);
-  assertEnvelopeBase(response);
-  assert(request.method === "file.bind", "Unexpected file.bind method");
-  assert(request.id === response.id, "file.bind request/response id mismatch");
-  assert(request.params?.fileId === response.result?.fileId, "file.bind fileId mismatch");
-  assert(request.params?.engineId === response.result?.engineId, "file.bind engineId mismatch");
-  assert(typeof response.result?.backendVersion === "number", "file.bind backendVersion missing");
+  assert(request.method === "queryengine.execute", "Unexpected method for JDBC execute");
+  assert(typeof request.params?.engineState === "object", "JDBC engineState must be present");
+  assert(request.params.engineState.connectionId === "prod-db", "JDBC engineState.connectionId mismatch");
+};
+
+const testPayloadbuilderEngineStateFixture = () => {
+  const request = readFixture("request-query-execute-payloadbuilder.json");
+
+  assertEnvelopeBase(request);
+  assert(request.method === "queryengine.execute", "Unexpected method for PB execute");
+  assert(typeof request.params?.engineState === "object", "PB engineState must be present");
+  assert(request.params.engineState.defaultAlias === "es1", "PB engineState.defaultAlias mismatch");
+  assert(typeof request.params.engineState.catalogs === "object", "PB engineState.catalogs missing");
+  assert(request.params.engineState.catalogs.es1.catalogId === "elasticsearch", "PB catalogId mismatch");
+  assert(request.params.engineState.catalogs.es1.properties.connectionId === "cluster1", "PB connectionId mismatch");
+};
+
+const testCompletedNotificationEngineState = () => {
+  const notification = readFixture("notification-query-completed.json");
+
+  assertEnvelopeBase(notification);
+  assert(notification.method === "queryengine.completed", "Unexpected completed notification method");
+  assert(notification.params.engineState !== undefined, "Completed notification engineState must be present");
+  assert(notification.params.engineStatePatch === undefined, "Completed notification must NOT have engineStatePatch");
+
+  const pbNotif = readFixture("notification-query-completed-payloadbuilder.json");
+  assert(pbNotif.params.engineState !== undefined, "PB completed engineState must be present");
+  assert(typeof pbNotif.params.engineState.payloadbuilder === "object", "PB completed engineState.payloadbuilder missing");
 };
 
 const testNotificationFixture = (name, method) => {
@@ -165,9 +191,10 @@ testCancelFixtures();
 testConnectionUpsertFixtures();
 testFileOpenFixtures();
 testFileCloseFixtures();
-testFileBindFixtures();
+testJdbcEngineStateFixture();
+testPayloadbuilderEngineStateFixture();
+testCompletedNotificationEngineState();
 testNotificationFixture("notification-query-progress.json", "queryengine.progress");
 testNotificationFixture("notification-query-result-chunk.json", "queryengine.resultChunk");
-testNotificationFixture("notification-query-completed.json", "queryengine.completed");
 testNotificationFixture("notification-query-failed.json", "queryengine.failed");
 testNotificationFixture("notification-file-change.json", "file.change");

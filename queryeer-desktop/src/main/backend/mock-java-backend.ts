@@ -4,7 +4,6 @@ import {
   type BackendNotificationEnvelope,
   type BackendRequestEnvelope,
   type BackendResponseEnvelope,
-  type FileBindResult,
   type FileCloseResult,
   type FileOpenResult,
   type HandshakeResult,
@@ -71,11 +70,6 @@ export class MockJavaBackend {
       return;
     }
 
-    if (envelope.method === "file.bind") {
-      this.respondFileBind(envelope as BackendRequestEnvelope<"file.bind">);
-      return;
-    }
-
     this.sink({
       protocolVersion: BACKEND_PROTOCOL_VERSION,
       type: "response",
@@ -107,7 +101,6 @@ export class MockJavaBackend {
         "queryengine.failed",
         "file.open",
         "file.close",
-        "file.bind",
         "file.change"
       ]
     };
@@ -374,21 +367,6 @@ export class MockJavaBackend {
       id: request.id,
       result
     } satisfies BackendResponseEnvelope<FileCloseResult>);
-  }
-
-  private respondFileBind(request: BackendRequestEnvelope<"file.bind">): void {
-    const params = request.params as { fileId: string; engineId: string };
-    const result: FileBindResult = {
-      fileId: params.fileId,
-      engineId: params.engineId,
-      backendVersion: 0
-    };
-    this.sink({
-      protocolVersion: BACKEND_PROTOCOL_VERSION,
-      type: "response",
-      id: request.id,
-      result
-    } satisfies BackendResponseEnvelope<FileBindResult>);
   }
 
   private respondEngineInvoke(request: BackendRequestEnvelope<"queryengine.invoke">): void {

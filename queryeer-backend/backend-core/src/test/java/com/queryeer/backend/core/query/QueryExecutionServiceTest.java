@@ -130,7 +130,7 @@ class QueryExecutionServiceTest
         }
 
         @Override
-        public void completed(long durationMs, long rowCount, Object engineStatePatch)
+        public void completed(long durationMs, long rowCount, Object engineState)
         {
             completed = true;
             completedLatch.countDown();

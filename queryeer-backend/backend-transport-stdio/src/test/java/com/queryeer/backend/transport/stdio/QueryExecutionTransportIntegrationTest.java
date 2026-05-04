@@ -36,7 +36,7 @@ class QueryExecutionTransportIntegrationTest
         QueryExecuteRequestHandler handler = new QueryExecuteRequestHandler(responseWriter, codec, queryExecutionService, notifications);
 
         handler.handle(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-exec-1", null, "queryengine.execute",
-                Map.of("queryExecutionId", "exec-int-1", "engineId", "fake", "fileId", "file-1", "text", "select 1", "parameters", List.of(), "engineState", Map.of()), null, null));
+                Map.of("queryExecutionId", "exec-int-1", "engineId", "fake", "fileId", "file-1", "text", "select 1", "engineState", Map.of()), null, null));
 
         List<BackendEnvelope> envelopes = awaitNotifications(codec, output, envelope -> "queryengine.completed".equals(envelope.method()));
 

@@ -21,7 +21,6 @@ export type Capability =
   | "queryengine.failed"
   | "file.open"
   | "file.close"
-  | "file.bind"
   | "file.change";
 
 export type ClientIdentity = {
@@ -114,7 +113,6 @@ export type QueryExecuteParams = {
   engineId: string;
   fileId: string;
   text: string;
-  parameters?: unknown[];
   engineState?: unknown;
   options?: {
     maxRows?: number;
@@ -213,7 +211,7 @@ export type QueryCompletedNotification = {
   };
   /** Which output capabilities this result provides, e.g. ["rows"], ["rows", "plan"]. Absent = ["rows"] by convention. */
   features?: string[];
-  engineStatePatch?: unknown;
+  engineState?: unknown;
 };
 
 export type QueryFailedNotification = {
@@ -248,20 +246,6 @@ export type FileCloseResult = {
   accepted: boolean;
 };
 
-export type FileBindParams = {
-  fileId: string;
-  engineId: string;
-  connectionId?: string;
-  uri?: string;
-  mimeType?: string;
-};
-
-export type FileBindResult = {
-  fileId: string;
-  engineId: string;
-  backendVersion: number;
-};
-
 export type FileChangeNotification = {
   fileId: string;
   version: number;
@@ -281,7 +265,6 @@ export type BackendMethodParamsMap = {
   "connection.upsert": ConnectionUpsertParams;
   "file.open": FileOpenParams;
   "file.close": FileCloseParams;
-  "file.bind": FileBindParams;
 };
 
 export type BackendMethodResultMap = {
@@ -297,7 +280,6 @@ export type BackendMethodResultMap = {
   "connection.upsert": ConnectionUpsertResult;
   "file.open": FileOpenResult;
   "file.close": FileCloseResult;
-  "file.bind": FileBindResult;
 };
 
 export type BackendNotificationParamsMap = {
