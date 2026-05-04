@@ -327,7 +327,7 @@ class JdbcBackendPluginTest
         QueryEngineProvider provider = engines.provider;
 
         RecordingPublisher publisher = new RecordingPublisher();
-        provider.execute("exec-preload", "file-1", "select 1", Map.of("connectionId", "defaulted"), publisher);
+        provider.execute("exec-preload", "file-1", "select 1", Map.of("connectionId", "550e8400-e29b-41d4-a716-446655440003"), publisher);
 
         Assertions.assertNull(publisher.errorCode, publisher.errorMessage);
         Assertions.assertTrue(publisher.completed);
@@ -388,7 +388,7 @@ class JdbcBackendPluginTest
                 {
                     if (stream.anyMatch(path -> path.getFileName()
                             .toString()
-                            .contains("defaulted")))
+                            .contains("550e8400-e29b-41d4-a716-446655440003")))
                     {
                         created = true;
                         break;

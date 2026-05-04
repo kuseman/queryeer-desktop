@@ -27,22 +27,7 @@ export function registerPayloadbuilderElasticsearchCatalogContribution(): void {
       connectionId: asText(properties.connectionId),
       index: asText(properties.index)
     }),
-    resolveRuntimeProperties: (properties) => {
-      const connectionId = asText(properties.connectionId);
-      const connection = getConfiguredElasticsearchConnections().find(
-        (entry) => entry.connectionId === connectionId
-      );
-      if (!connection) {
-        return properties;
-      }
-      return {
-        ...properties,
-        endpoint: connection.endpoint,
-        authType: connection.authType,
-        authUsername: connection.authUsername,
-        authPassword: connection.authPassword
-      };
-    },
+    resolveRuntimeProperties: (properties) => properties,
     renderPanel: (props) => <ElasticsearchPanel {...props} />
   });
 }
@@ -91,14 +76,11 @@ function ElasticsearchPanel({ fileId, alias, properties, setProperty }: Payloadb
         action: "payloadbuilder.es.listIndices",
         payload: {
           alias,
-            properties: {
-              endpoint: selectedConnection.endpoint,
-              authType: selectedConnection.authType,
-              authUsername: selectedConnection.authUsername,
-              authPassword: selectedConnection.authPassword
-            }
+          properties: {
+            connectionId: selectedConnection.connectionId
           }
-        })) as ListIndicesResult | undefined;
+        }
+      })) as ListIndicesResult | undefined;
       const next = Array.isArray(result?.indices)
         ? result.indices.filter((entry): entry is string => typeof entry === "string")
         : [];
@@ -134,7 +116,7 @@ function ElasticsearchPanel({ fileId, alias, properties, setProperty }: Payloadb
         {connections.length === 0 && <option value="">No connections configured</option>}
         {connections.map((connection) => (
           <option key={connection.connectionId} value={connection.connectionId}>
-            {connection.title?.trim() || connection.connectionId}
+            {connection.title?.trim() || "Untitled connection"}
           </option>
         ))}
       </select>

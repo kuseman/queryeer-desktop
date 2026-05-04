@@ -1,82 +1,52 @@
 # Session Handoff
 
-## Summary
+## What changed in this session
 
-Refactored the outline plugin to use a generic `EditorRegistry` / `OutlineCapability` architecture, inverting the dependency so editors expose outline support instead of the outline plugin reaching into editor internals.
+### Generated stable `connectionId` for JDBC and Elasticsearch connections
 
-## Key Architectural Changes
+**Problem:** `connectionId` was previously a user-defined string that served as both the technical key and the display name. Renaming a connection orphaned schema crawl caches (stored by `connectionId` in H2 filenames) and broke workspace/engine bindings.
 
-### New Contract: `contracts/editor/EditorCapability.ts`
-- `OutlineCapability`: `getSymbols()`, `revealSymbol()`, `onSymbolsChanged()` — the capability interface any editor can implement
-- `EditorHandle`: `{ editorId, outline? }` — a generic handle to the active editor
-- `EditorRegistry`: `getActiveEditor()`, `onActiveEditorChanged()` — the consumer interface
-- `EditorRegistryHost`: extends `EditorRegistry` with `setActiveEditor()` — the producer interface (used by editor plugins)
+**Solution:** `connectionId` is now a frontend-generated UUID v4 (`crypto.randomUUID()`). The human-readable label lives in `name`/`title` and is purely cosmetic.
 
-### Plugin Context
-- Added `editors: EditorRegistry` to `PluginContext` — available to all plugins
+#### Frontend changes
 
-### Provider Ownership Transfer
-- All MIME-type outline providers (json, xml, yaml, sql, custom-pattern) moved from `core.outline/providers/` → `core.editor/TextEditor/outline-providers/`
-- `core.editor.text` now registers providers with `context.outline.registerOutlineProvider()`
-- `core.outline` no longer imports any providers — it's a pure view plugin
-- `OutlineRegistry` remains in `PluginContext` for third-party extensibility
+- **New utility:** `src/core/utils/ids.ts` — `generateConnectionId()` returns `crypto.randomUUID()`.
+- **JDBC settings editor** (`JdbcConnectionsSettingsEditor.tsx`):
+  - `connectionId` input field hidden from the detail form.
+  - `addRow()` and `cloneRow()` auto-generate a fresh UUID via `generateConnectionId()`.
+  - List item labels use `title.trim() || "Untitled connection"` instead of `connectionId`.
+  - Removed `buildCloneConnectionId()` (no longer needed).
+  - Simplified `buildRowErrors()` — no longer validates `connectionId` uniqueness or emptiness.
+- **ES settings editor** (`ElasticsearchConnectionsSettingsEditor.tsx`): same pattern as JDBC.
+- **ES catalog contribution** (`elasticsearch-catalog-contribution.tsx`):
+  - `resolveRuntimeProperties` no longer expands credentials into the engine state. It returns properties as-is (only `connectionId` + `index` are persisted).
+  - `loadIndices` now sends `{ properties: { connectionId } }` to the backend instead of expanded endpoint/auth fields.
+- **JDBC connection selector** (`JdbcConnectionSelector.tsx`): display fallback changed from `c.title ?? c.connectionId` to `c.title ?? "Untitled connection"`.
+- **JDBC navigation store** (`jdbc-navigation-store.ts`): same display fallback for connection root nodes.
+- **Protocol fixtures** updated to use UUID-style `connectionId` values.
 
-### TextEditor Integration
-- `TextEditorOutlineCapability` class implements `OutlineCapability` by delegating to `OutlineRegistry.getSymbols()` and `TextEditorApi` navigation
-- `TextEditorComponent` accepts optional `editorRegistryHost`, `outlineRegistry`, and `editorId` props
-- On editor ready and on focus, `TextEditorComponent` creates a `TextEditorOutlineCapability` and calls `editorRegistryHost.setActiveEditor(handle)`
-- On unmount, calls `editorRegistryHost.setActiveEditor(null)`
+#### Backend changes
 
-### QueryEngine Integration
-- `QueryEditorComponent` passes `editorRegistryHost` and `outlineRegistry` props through to `TextEditorComponent`
-- Uses `editorId="core.queryengine"` for the query editor handle
+- **`ConnectionUpsertRequestHandler.java`**: rejects blank/null `connectionId` with `BackendErrorCode.VALIDATION` instead of auto-generating `"conn-" + envelope.id()`.
+- **Tests updated** across `ProtocolFixtureCompatibilityTest`, `ElasticsearchCatalogProviderTest`, `JdbcBackendPluginTest`, `JdbcSettingsConnectionSourceTest`, `ConnectionUpsertRequestHandlerTest`, and `ConnectionUpsertRequestHandlerTest` to provide explicit `connectionId` values.
 
-### Outline View Simplification
-- `OutlineView` now depends only on `EditorRegistry` (from `PluginContext`) — no more `TextEditorRegistry`, `TextEditorApi`, or `TextEditorModelRepository` imports
-- Symbol loading: `editorHandle.outline.getSymbols()`
-- Navigation: `editorHandle.outline.revealSymbol()`
-- Change detection: `editorHandle.outline.onSymbolsChanged()`
-- Active editor tracking: `editorRegistry.onActiveEditorChanged()`
-- Removed polling/retry logic — the capability only exists once the editor is ready
+#### Validation
 
-### OutlineStore Changes
-- Replaced `activeFileId`/`activeMimeType` with `hasOutlineCapability` boolean
-- `clear()` takes `resetCapability` instead of `resetActiveFile`
+- Desktop: `npm run typecheck && npm run lint && npm run build && npm run test` — all green (625 passed, 10 skipped).
+- Backend: `./mvnw -f queryeer-backend/pom.xml clean verify` — all green.
+- Protocol fixture check script (`scripts/backend-protocol-fixtures-check.mjs`) passes.
 
-## Files Changed
+### FileBasedConfigService cache TTL fix
 
-### New Files
-- `contracts/editor/EditorCapability.ts` — Editor capability and registry contracts
-- `plugins/core.editor/TextEditor/TextEditorOutlineCapability.ts` — Outline capability implementation
-- `plugins/core.editor/TextEditor/outline-providers/` — Moved providers + tests + barrel export
-- `core/plugin-runtime/EditorRegistry.test.ts` — EditorRegistry tests
+**Problem:** `FileBasedConfigService.getModule()` relied solely on mtime comparison for cache invalidation. On Windows, filesystem mtime can truncate to milliseconds (`FileTime.toMillis()`), causing the backend to miss settings changes that happen within the same millisecond window — common when the desktop writes settings atomically (temp + rename).
 
-### Modified Files
-- `contracts/plugin/Plugin.ts` — Added `editors: EditorRegistry` to `PluginContext`
-- `core/plugin-runtime/ExtensionRegistry.ts` — Added `EditorRegistryHostImpl`, `createEditorRegistry()`, `getEditorRegistryHost()`
-- `core/plugin-runtime/PluginHost.ts` — Added `editors` to plugin context
-- `plugins/core.editor/TextEditor/plugin.tsx` — Registers providers, passes editorRegistryHost to component
-- `plugins/core.editor/TextEditor/TextEditorComponent.tsx` — Accepts editorRegistryHost/outlineRegistry props, creates/disposes EditorHandle
-- `plugins/core.editor/ImageEditor/` — Unchanged (no outline capability yet)
-- `plugins/core.queryengine/QueryEditorComponent.tsx` — Accepts and passes editorRegistryHost/outlineRegistry props
-- `plugins/core.queryengine/plugin.tsx` — Passes getEditorRegistryHost() and getOutlineRegistry() to QueryEditorComponent
-- `plugins/core.outline/plugin.tsx` — Removed all provider registrations; passes context.editors to OutlineView
-- `plugins/core.outline/OutlineView.tsx` — Complete rewrite: uses EditorHandle.outline instead of TextEditor internals
-- `plugins/core.outline/OutlineStore.ts` — Replaced activeFileId/activeMimeType with hasOutlineCapability
-- `plugins/core.outline/OutlineStore.test.ts` — Updated tests for new state shape
+**Solution:** Added a 1-second cache TTL (`MAX_CACHE_AGE_MS = 1000L`). The `CachedModule` record now stores `cachedAt` (timestamp when the entry was created). `getModule()` returns the cached module only if **both** mtime is unchanged **and** the cache entry is younger than the TTL. This ensures stale data is never held for more than 1 second, regardless of filesystem mtime resolution.
 
-### Deleted Files
-- `plugins/core.outline/providers/` — Entire directory moved to `core.editor/TextEditor/outline-providers/`
+**Files changed:**
+- `FileBasedConfigService.java` — added `MAX_CACHE_AGE_MS`, `cachedAt` field to `CachedModule`, updated cache hit/miss logic
+- `FileBasedConfigServiceTest.java` — added `getModuleReReadsWhenCacheAgeExceedsMaxTtl()` test
 
-### Test Files Modified
-- `plugins/core.layout/plugin.test.ts` — Added `editors` mock to PluginContext
-- `plugins/core.queryengine.payloadbuilder/plugin.integration.test.ts` — Added `editors` mock
-- `plugins/core.queryengine/engine-registration.test.ts` — Added `editors` mock
-- `plugins/core.queryengine/plugin.test.ts` — Added `editors` mock
-- `plugins/core.queryengine/QueryEditorComponent.test.tsx` — Added editorRegistryHost/outlineRegistry mock props
+## Known gaps / temporary scaffolds
 
-## Known Gaps / Future Work
-
-- **Image editor outline**: `core.editor.image` could provide `OutlineCapability` for image metadata (EXIF, dimensions) but doesn't yet
-- **`outlineSupported` when-clause**: Still uses `OutlineRegistry.hasProvider(mimeType)` in ShellApp for the sidebar visibility toggle. Could be enhanced to also check `EditorRegistry.getActiveEditor()?.outline` for more accurate detection
-- **Editor content without outline**: If an editor type doesn't support outline, the view falls through cleanly (no symbols shown), but `outlineSupported` may still be true based on MIME type alone
+- No migration path for old settings — users must clear appDir/start fresh (acceptable per user: "no backward compatibility needed").
+- Old H2 schema cache files from previous `connectionId` values will simply be orphaned on disk until manual cleanup.

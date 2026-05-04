@@ -106,6 +106,25 @@ class FileBasedConfigServiceTest
     }
 
     @Test
+    void getModuleReReadsWhenCacheAgeExceedsMaxTtl() throws Exception
+    {
+        writeModule("ttl.test", Map.of("v", "first"));
+
+        FileBasedConfigService config = configWithDir();
+        SettingsModule m1 = config.getModule("ttl.test");
+        assertEquals("first", m1.values()
+                .get("v"));
+
+        // Sleep past the 1-second cache TTL to force a re-read even if mtime appears unchanged
+        Thread.sleep(1100L);
+        writeModule("ttl.test", Map.of("v", "second"));
+
+        SettingsModule m2 = config.getModule("ttl.test");
+        assertEquals("second", m2.values()
+                .get("v"));
+    }
+
+    @Test
     void getModuleResolvesSecretsWhenSessionOpen() throws Exception
     {
         byte[] key = new byte[32];

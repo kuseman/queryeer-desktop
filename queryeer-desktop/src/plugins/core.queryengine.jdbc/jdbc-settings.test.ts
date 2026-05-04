@@ -22,7 +22,7 @@ describe("parseJdbcConnectionDefinitions", () => {
 
     expect(result).toEqual([
       {
-        connectionId: "pg1",
+        connectionId: "550e8400-e29b-41d4-a716-446655440001",
         title: "Local Postgres",
         dialectId: "postgres",
         url: "jdbc:postgresql://localhost:5432/app",
@@ -31,7 +31,7 @@ describe("parseJdbcConnectionDefinitions", () => {
         enabled: true
       },
       {
-        connectionId: "dup",
+        connectionId: "550e8400-e29b-41d4-a716-446655440002",
         title: undefined,
         dialectId: "jdbc",
         url: "jdbc:first",
@@ -40,7 +40,7 @@ describe("parseJdbcConnectionDefinitions", () => {
         enabled: true
       },
       {
-        connectionId: "defaulted",
+        connectionId: "550e8400-e29b-41d4-a716-446655440003",
         title: undefined,
         dialectId: "jdbc",
         url: "jdbc:h2:mem:def",
@@ -49,7 +49,7 @@ describe("parseJdbcConnectionDefinitions", () => {
         enabled: true
       },
       {
-        connectionId: "disabled",
+        connectionId: "550e8400-e29b-41d4-a716-446655440004",
         title: undefined,
         dialectId: "mysql",
         url: "jdbc:mysql://localhost:3306/app",

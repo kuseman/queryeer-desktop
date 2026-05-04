@@ -122,7 +122,7 @@ describe("Protocol fixture compatibility", () => {
     assertEnvelopeBase(request);
     expect(request.method).toBe("queryengine.execute");
     const engineState = (request.params as Record<string, unknown>).engineState as Record<string, unknown>;
-    expect(engineState?.connectionId).toBe("prod-db");
+    expect(engineState?.connectionId).toBe("550e8400-e29b-41d4-a716-446655440010");
   });
 
   it("Payloadbuilder engineState fixture", () => {
@@ -133,7 +133,7 @@ describe("Protocol fixture compatibility", () => {
     expect(engineState?.defaultAlias).toBe("es1");
     const catalogs = engineState?.catalogs as Record<string, Record<string, unknown>>;
     expect(catalogs?.es1?.catalogId).toBe("elasticsearch");
-    expect((catalogs?.es1?.properties as Record<string, unknown>)?.connectionId).toBe("cluster1");
+    expect((catalogs?.es1?.properties as Record<string, unknown>)?.connectionId).toBe("550e8400-e29b-41d4-a716-446655440020");
   });
 
   it("completed notification engineState", () => {

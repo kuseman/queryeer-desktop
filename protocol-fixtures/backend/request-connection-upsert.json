@@ -4,6 +4,7 @@
   "id": "req-fixture-connection-upsert-1",
   "method": "connection.upsert",
   "params": {
+    "connectionId": "conn-fixture-1",
     "engineId": "jdbc",
     "name": "Local Postgres",
     "connection": {

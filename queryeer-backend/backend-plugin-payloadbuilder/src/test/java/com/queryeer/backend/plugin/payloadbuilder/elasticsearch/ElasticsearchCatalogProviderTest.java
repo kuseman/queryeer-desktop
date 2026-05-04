@@ -16,7 +16,7 @@ class ElasticsearchCatalogProviderTest
     @Test
     void resolveConnectionReturnsConfigFromSettingsModule()
     {
-        Map<String, Object> conn = Map.of("connectionId", "es-cluster-1", "endpoint", "https://localhost:9200", "authType", "BASIC", "authUsername", "elastic", "authPassword",
+        Map<String, Object> conn = Map.of("connectionId", "550e8400-e29b-41d4-a716-446655440100", "endpoint", "https://localhost:9200", "authType", "BASIC", "authUsername", "elastic", "authPassword",
                 Map.of("secretRef", "es-pass"));
         Map<String, Object> values = Map.of("core.queryengine.payloadbuilder.elasticsearch.connections", java.util.List.of(conn));
         SettingsModule module = new SettingsModule("core.queryengine.payloadbuilder.elasticsearch", 1L, "2026-01-01T00:00:00Z", values);
@@ -39,7 +39,7 @@ class ElasticsearchCatalogProviderTest
 
         ElasticsearchCatalogProvider provider = new ElasticsearchCatalogProvider(config);
 
-        Map<String, Object> resolved = provider.resolveConnection("es-cluster-1");
+        Map<String, Object> resolved = provider.resolveConnection("550e8400-e29b-41d4-a716-446655440100");
 
         assertNotNull(resolved);
         assertEquals("https://localhost:9200", resolved.get("endpoint"));

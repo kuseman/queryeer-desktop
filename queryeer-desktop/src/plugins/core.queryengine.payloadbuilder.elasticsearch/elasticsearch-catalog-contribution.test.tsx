@@ -13,7 +13,7 @@ vi.mock("../core.queryengine/QueryEngineService", () => ({
 vi.mock("./elasticsearch-settings", () => ({
   getConfiguredElasticsearchConnections: () => [
     {
-      connectionId: "cluster1",
+      connectionId: "550e8400-e29b-41d4-a716-446655440100",
       title: "Cluster One",
       endpoint: "https://localhost:9200",
       authType: "BASIC",
@@ -76,7 +76,7 @@ describe("payloadbuilder elasticsearch catalog contribution", () => {
           alias: "es1",
           catalogId: "elasticsearch",
           properties: {
-            connectionId: "cluster1"
+            connectionId: "550e8400-e29b-41d4-a716-446655440100"
           },
           setProperty: setPropertyMock
         }) as React.ReactElement
@@ -99,12 +99,7 @@ describe("payloadbuilder elasticsearch catalog contribution", () => {
       payload: {
         alias: "es1",
         properties: {
-          endpoint: "https://localhost:9200",
-          authType: "BASIC",
-          authUsername: "elastic",
-          authPassword: {
-            secretRef: "secret-ref"
-          }
+          connectionId: "550e8400-e29b-41d4-a716-446655440100"
         }
       }
     });
@@ -139,6 +134,6 @@ describe("payloadbuilder elasticsearch catalog contribution", () => {
       await flush();
     });
 
-    expect(setPropertyMock).toHaveBeenCalledWith("connectionId", "cluster1");
+    expect(setPropertyMock).toHaveBeenCalledWith("connectionId", "550e8400-e29b-41d4-a716-446655440100");
   });
 });

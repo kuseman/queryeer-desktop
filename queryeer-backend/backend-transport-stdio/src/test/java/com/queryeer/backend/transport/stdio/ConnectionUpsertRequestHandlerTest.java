@@ -32,7 +32,7 @@ class ConnectionUpsertRequestHandlerTest
         Map<String, Object> connection = Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test", "username", "alice", "password", "secret-ref");
 
         handler.handle(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-upsert-1", null, "connection.upsert",
-                Map.of("engineId", "jdbc", "name", "Local JDBC", "connection", connection), null, null));
+                Map.of("connectionId", "conn-req-upsert-1", "engineId", "jdbc", "name", "Local JDBC", "connection", connection), null, null));
 
         FramedReader reader = new FramedReader(new ByteArrayInputStream(output.toByteArray()), l ->
         {
@@ -67,7 +67,7 @@ class ConnectionUpsertRequestHandlerTest
         ConnectionUpsertRequestHandler handler = new ConnectionUpsertRequestHandler(responseWriter, codec, registry);
 
         handler.handle(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-upsert-2", null, "connection.upsert",
-                Map.of("engineId", "missing", "name", "missing", "connection", Map.of("anything", "value")), null, null));
+                Map.of("connectionId", "conn-req-upsert-2", "engineId", "missing", "name", "missing", "connection", Map.of("anything", "value")), null, null));
 
         FramedReader reader = new FramedReader(new ByteArrayInputStream(output.toByteArray()), l ->
         {
