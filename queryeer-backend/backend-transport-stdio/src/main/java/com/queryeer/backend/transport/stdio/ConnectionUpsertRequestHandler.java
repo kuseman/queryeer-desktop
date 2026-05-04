@@ -37,10 +37,14 @@ final class ConnectionUpsertRequestHandler implements RequestHandler
         ConnectionUpsertParams params = codec.objectMapper()
                 .convertValue(envelope.params(), ConnectionUpsertParams.class);
 
-        String connectionId = params.connectionId() == null
-                || params.connectionId()
-                        .isBlank() ? "conn-" + envelope.id()
-                                : params.connectionId();
+        String connectionId = params.connectionId();
+        if (connectionId == null
+                || connectionId.isBlank())
+        {
+            responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, null,
+                    new BackendError(BackendErrorCode.VALIDATION, "connectionId is required", null)));
+            return;
+        }
 
         QueryEngineProvider provider = queryEngines.getProvider(params.engineId());
         if (provider == null)

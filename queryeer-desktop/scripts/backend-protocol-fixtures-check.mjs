@@ -147,7 +147,7 @@ const testJdbcEngineStateFixture = () => {
   assertEnvelopeBase(request);
   assert(request.method === "queryengine.execute", "Unexpected method for JDBC execute");
   assert(typeof request.params?.engineState === "object", "JDBC engineState must be present");
-  assert(request.params.engineState.connectionId === "prod-db", "JDBC engineState.connectionId mismatch");
+  assert(request.params.engineState.connectionId === "550e8400-e29b-41d4-a716-446655440010", "JDBC engineState.connectionId mismatch");
 };
 
 const testPayloadbuilderEngineStateFixture = () => {
@@ -159,7 +159,7 @@ const testPayloadbuilderEngineStateFixture = () => {
   assert(request.params.engineState.defaultAlias === "es1", "PB engineState.defaultAlias mismatch");
   assert(typeof request.params.engineState.catalogs === "object", "PB engineState.catalogs missing");
   assert(request.params.engineState.catalogs.es1.catalogId === "elasticsearch", "PB catalogId mismatch");
-  assert(request.params.engineState.catalogs.es1.properties.connectionId === "cluster1", "PB connectionId mismatch");
+  assert(request.params.engineState.catalogs.es1.properties.connectionId === "550e8400-e29b-41d4-a716-446655440020", "PB connectionId mismatch");
 };
 
 const testCompletedNotificationEngineState = () => {

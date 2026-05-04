@@ -31,7 +31,7 @@ class JdbcSettingsConnectionSourceTest
         List<JdbcSettingsConnectionSource.JdbcConfiguredConnection> connections = source.parseConnections(moduleDocument);
 
         Assertions.assertEquals(4, connections.size());
-        Assertions.assertEquals("pg1", connections.get(0)
+        Assertions.assertEquals("550e8400-e29b-41d4-a716-446655440001", connections.get(0)
                 .connectionId());
         Assertions.assertEquals("postgres", connections.get(0)
                 .connection()
@@ -39,17 +39,17 @@ class JdbcSettingsConnectionSourceTest
         Assertions.assertEquals(Map.of("secretRef", "sec-1"), connections.get(0)
                 .connection()
                 .get("password"));
-        Assertions.assertEquals("dup", connections.get(1)
+        Assertions.assertEquals("550e8400-e29b-41d4-a716-446655440002", connections.get(1)
                 .connectionId());
         Assertions.assertEquals("jdbc:first", connections.get(1)
                 .connection()
                 .get("url"));
-        Assertions.assertEquals("defaulted", connections.get(2)
+        Assertions.assertEquals("550e8400-e29b-41d4-a716-446655440003", connections.get(2)
                 .connectionId());
         Assertions.assertEquals("jdbc", connections.get(2)
                 .connection()
                 .get("dialectId"));
-        Assertions.assertEquals("disabled", connections.get(3)
+        Assertions.assertEquals("550e8400-e29b-41d4-a716-446655440004", connections.get(3)
                 .connectionId());
         Assertions.assertEquals(Boolean.FALSE, connections.get(3)
                 .connection()

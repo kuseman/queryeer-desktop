@@ -102,7 +102,7 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
           <option value="">— none —</option>
           {configuredConnections.map((c) => (
             <option key={c.connectionId} value={c.connectionId}>
-              {c.title ?? c.connectionId}
+              {c.title ?? "Untitled connection"}
             </option>
           ))}
         </select>

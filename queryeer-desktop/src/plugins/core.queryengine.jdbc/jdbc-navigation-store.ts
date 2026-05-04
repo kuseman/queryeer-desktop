@@ -35,7 +35,7 @@ export class JdbcNavigationStore {
       const rootNodeId = `${conn.connectionId}::__root__`;
       newEntries.push({
         connectionId: conn.connectionId,
-        title: conn.title ?? conn.connectionId,
+        title: conn.title ?? "Untitled connection",
         dialectId: conn.dialectId,
         rootNodeId
       });
@@ -44,7 +44,7 @@ export class JdbcNavigationStore {
           id: rootNodeId,
           connectionId: conn.connectionId,
           kind: "connection",
-          name: conn.title ?? conn.connectionId,
+          name: conn.title ?? "Untitled connection",
           attributes: {},
           isExpanded: false,
           isLoaded: false,

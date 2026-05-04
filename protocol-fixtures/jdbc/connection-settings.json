@@ -5,7 +5,7 @@
   "values": {
     "core.queryengine.jdbc.connections": [
       {
-        "connectionId": "pg1",
+        "connectionId": "550e8400-e29b-41d4-a716-446655440001",
         "title": "Local Postgres",
         "dialectId": "postgres",
         "url": "jdbc:postgresql://localhost:5432/app",
@@ -20,19 +20,19 @@
         "url": "jdbc:ignore"
       },
       {
-        "connectionId": "dup",
+        "connectionId": "550e8400-e29b-41d4-a716-446655440002",
         "url": "jdbc:first"
       },
       {
-        "connectionId": "dup",
+        "connectionId": "550e8400-e29b-41d4-a716-446655440002",
         "url": "jdbc:second"
       },
       {
-        "connectionId": "defaulted",
+        "connectionId": "550e8400-e29b-41d4-a716-446655440003",
         "url": "jdbc:h2:mem:def"
       },
       {
-        "connectionId": "disabled",
+        "connectionId": "550e8400-e29b-41d4-a716-446655440004",
         "dialectId": "mysql",
         "url": "jdbc:mysql://localhost:3306/app",
         "enabled": false

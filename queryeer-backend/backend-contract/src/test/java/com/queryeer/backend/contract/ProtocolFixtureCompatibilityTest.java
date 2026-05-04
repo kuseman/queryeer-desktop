@@ -125,13 +125,13 @@ class ProtocolFixtureCompatibilityTest
         BackendEnvelope request = readFixture("request-query-execute-jdbc.json");
 
         QueryExecuteParams params = objectMapper.convertValue(request.params(), QueryExecuteParams.class);
-        Assertions.assertEquals("prod-db", objectMapper.convertValue(params.engineState(), Map.class)
+        Assertions.assertEquals("550e8400-e29b-41d4-a716-446655440010", objectMapper.convertValue(params.engineState(), Map.class)
                 .get("connectionId"));
 
         // Round-trip: serialize back and verify
         BackendEnvelope roundTripped = objectMapper.readValue(objectMapper.writeValueAsString(request), BackendEnvelope.class);
         QueryExecuteParams roundParams = objectMapper.convertValue(roundTripped.params(), QueryExecuteParams.class);
-        Assertions.assertEquals("prod-db", objectMapper.convertValue(roundParams.engineState(), Map.class)
+        Assertions.assertEquals("550e8400-e29b-41d4-a716-446655440010", objectMapper.convertValue(roundParams.engineState(), Map.class)
                 .get("connectionId"));
     }
 
@@ -153,7 +153,7 @@ class ProtocolFixtureCompatibilityTest
         Assertions.assertEquals("elasticsearch", es1.get("catalogId"));
         @SuppressWarnings("unchecked")
         Map<String, Object> properties = (Map<String, Object>) es1.get("properties");
-        Assertions.assertEquals("cluster1", properties.get("connectionId"));
+        Assertions.assertEquals("550e8400-e29b-41d4-a716-446655440020", properties.get("connectionId"));
         Assertions.assertEquals("my-idx", properties.get("index"));
 
         // Round-trip

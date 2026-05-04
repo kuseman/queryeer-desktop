@@ -24,6 +24,10 @@ import com.queryeer.backend.core.security.SecuritySession;
 final class FileBasedConfigService implements ConfigService
 {
     private static final String SETTINGS_DIR_KEY = "queryeer.settings.dir";
+    /**
+     * Maximum cache age in milliseconds. Even when mtime appears unchanged (possible on Windows due to truncation), the cache is considered stale after this duration and the file is re-read.
+     */
+    private static final long MAX_CACHE_AGE_MS = 1000L;
 
     private final Map<String, String> systemProperties;
     private final Map<String, CachedModule> moduleCache = new ConcurrentHashMap<>();
@@ -64,8 +68,10 @@ final class FileBasedConfigService implements ConfigService
         {
             long currentMtime = Files.getLastModifiedTime(path)
                     .toMillis();
+            long now = System.currentTimeMillis();
             if (cached != null
-                    && cached.mtime == currentMtime)
+                    && cached.mtime == currentMtime
+                    && now - cached.cachedAt < MAX_CACHE_AGE_MS)
             {
                 return cached.module;
             }
@@ -101,7 +107,7 @@ final class FileBasedConfigService implements ConfigService
 
             SettingsModule module = new SettingsModule(id != null ? id
                     : moduleId, version, updatedAt, values);
-            moduleCache.put(moduleId, new CachedModule(path, mtime, module));
+            moduleCache.put(moduleId, new CachedModule(path, mtime, System.currentTimeMillis(), module));
             return module;
         }
         catch (IOException e)
@@ -214,7 +220,7 @@ final class FileBasedConfigService implements ConfigService
         return defaultValue;
     }
 
-    private record CachedModule(Path path, long mtime, SettingsModule module)
+    private record CachedModule(Path path, long mtime, long cachedAt, SettingsModule module)
     {
     }
 }

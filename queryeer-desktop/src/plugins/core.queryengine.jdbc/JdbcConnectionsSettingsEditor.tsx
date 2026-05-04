@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { SecretRefValue } from "../../contracts/security/Security";
+import { generateConnectionId } from "../../core/utils/ids";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import {
   CollectionSettingsListEditor,
@@ -116,7 +117,7 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
   const addRow = (): void => {
     const row: Row = {
       id: crypto.randomUUID(),
-      connectionId: "",
+      connectionId: generateConnectionId(),
       title: "",
       dialectId: dialects[0]?.id ?? "jdbc",
       url: "",
@@ -141,7 +142,7 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
     const clone: Row = {
       ...source,
       id: crypto.randomUUID(),
-      connectionId: buildCloneConnectionId(source.connectionId, rows)
+      connectionId: generateConnectionId()
     };
     syncRows([...rows, clone], clone.id);
   };
@@ -188,7 +189,7 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
     <CollectionSettingsListEditor
       items={rows.map((row) => ({
         id: row.id,
-        label: row.connectionId || "(new jdbc connection)",
+        label: row.title.trim() || "Untitled connection",
         subtitle: buildSubtitle(row),
         invalid: Boolean(rowErrors[row.id])
       }))}
@@ -208,15 +209,16 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
         return (
           <div className="jdbc-settings-detail-grid" role="group" aria-label="JDBC connection details">
             <div className="jdbc-settings-cell">
-              <label className="jdbc-settings-label" htmlFor={`jdbc-connection-id-${row.id}`}>
-                Connection ID
+              <label className="jdbc-settings-label" htmlFor={`jdbc-title-${row.id}`}>
+                Title
               </label>
               <input
-                id={`jdbc-connection-id-${row.id}`}
+                id={`jdbc-title-${row.id}`}
                 className="jdbc-settings-input"
-                value={row.connectionId}
+                value={row.title}
                 readOnly={readonly}
-                onChange={(event) => updateRow(row.id, { connectionId: event.target.value })}
+                placeholder="Untitled connection"
+                onChange={(event) => updateRow(row.id, { title: event.target.value })}
               />
             </div>
 
@@ -396,24 +398,10 @@ function mergeRows(previous: Row[], definitions: JdbcConnectionDefinition[]): Ro
   });
 }
 
-function buildRowErrors(rows: Row[]): Record<string, { connectionId?: string; url?: string; host?: string }> {
-  const idCounts = new Map<string, number>();
+function buildRowErrors(rows: Row[]): Record<string, { url?: string; host?: string }> {
+  const errors: Record<string, { url?: string; host?: string }> = {};
   for (const row of rows) {
-    const id = row.connectionId.trim();
-    if (!id) {
-      continue;
-    }
-    idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
-  }
-
-  const errors: Record<string, { connectionId?: string; url?: string; host?: string }> = {};
-  for (const row of rows) {
-    const rowError: { connectionId?: string; url?: string; host?: string } = {};
-    if (!row.connectionId.trim()) {
-      rowError.connectionId = "Connection ID is required";
-    } else if ((idCounts.get(row.connectionId.trim()) ?? 0) > 1) {
-      rowError.connectionId = "Connection ID must be unique";
-    }
+    const rowError: { url?: string; host?: string } = {};
 
     if (row.dialectId === SQLSERVER_DIALECT_ID) {
       const host = String(row.properties?.host ?? "").trim();
@@ -424,22 +412,9 @@ function buildRowErrors(rows: Row[]): Record<string, { connectionId?: string; ur
       rowError.url = "JDBC URL is required";
     }
 
-    if (rowError.connectionId || rowError.url || rowError.host) {
+    if (rowError.url || rowError.host) {
       errors[row.id] = rowError;
     }
   }
   return errors;
-}
-
-function buildCloneConnectionId(connectionId: string, rows: Row[]): string {
-  const normalized = connectionId.trim() || "jdbc";
-  const taken = new Set(rows.map((row) => row.connectionId.trim()));
-  if (!taken.has(normalized)) {
-    return normalized;
-  }
-  let index = 2;
-  while (taken.has(`${normalized}${index}`)) {
-    index++;
-  }
-  return `${normalized}${index}`;
 }

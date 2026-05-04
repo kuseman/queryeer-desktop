@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { generateConnectionId } from "../../core/utils/ids";
 import {
   CollectionSettingsListEditor,
   useCollectionSettingsPersistence
@@ -85,7 +86,7 @@ export function ElasticsearchConnectionsSettingsEditor({ value, readonly, setVal
   const addRow = (): void => {
     const next: Row = {
       id: crypto.randomUUID(),
-      connectionId: "",
+      connectionId: generateConnectionId(),
       title: "",
       endpoint: "",
       authType: "NONE",
@@ -110,7 +111,7 @@ export function ElasticsearchConnectionsSettingsEditor({ value, readonly, setVal
     const clone: Row = {
       ...source,
       id: crypto.randomUUID(),
-      connectionId: buildCloneConnectionId(source.connectionId, rows)
+      connectionId: generateConnectionId()
     };
     syncRows([...rows, clone], clone.id);
   };
@@ -124,12 +125,12 @@ export function ElasticsearchConnectionsSettingsEditor({ value, readonly, setVal
       </div>
 
       <CollectionSettingsListEditor
-        items={rows.map((row) => ({
-          id: row.id,
-          label: row.connectionId.trim() || "(new connection)",
-          subtitle: row.endpoint || "Endpoint required",
-          invalid: Boolean(rowErrors[row.id])
-        }))}
+      items={rows.map((row) => ({
+        id: row.id,
+        label: row.title.trim() || "Untitled connection",
+        subtitle: row.endpoint || "Endpoint required",
+        invalid: Boolean(rowErrors[row.id])
+      }))}
         selectedId={selectedRowId}
         readonly={readonly}
         addLabel="Add Connection"
@@ -145,23 +146,6 @@ export function ElasticsearchConnectionsSettingsEditor({ value, readonly, setVal
 
           return (
             <div className="payloadbuilder-settings-detail-grid" role="group" aria-label="Elasticsearch connection details">
-              <div className="payloadbuilder-settings-cell">
-                <label className="payloadbuilder-catalog-label" htmlFor="payloadbuilder-es-connection-id">
-                  Connection ID
-                </label>
-                <input
-                  id="payloadbuilder-es-connection-id"
-                  className="payloadbuilder-catalog-input"
-                  value={row.connectionId}
-                  readOnly={readonly}
-                  placeholder="cluster1"
-                  onChange={(event) => updateRow(row.id, { connectionId: event.target.value })}
-                />
-                {rowErrors[row.id]?.connectionId && (
-                  <div className="payloadbuilder-settings-error">{rowErrors[row.id].connectionId}</div>
-                )}
-              </div>
-
               <div className="payloadbuilder-settings-cell">
                 <label className="payloadbuilder-catalog-label" htmlFor="payloadbuilder-es-connection-title">
                   Title (optional)
@@ -295,46 +279,20 @@ function mergeRows(previous: Row[], definitions: ElasticsearchConnectionDefiniti
   });
 }
 
-function buildRowErrors(rows: Row[]): Record<string, { connectionId?: string; endpoint?: string }> {
-  const connectionIdCounts = new Map<string, number>();
+function buildRowErrors(rows: Row[]): Record<string, { endpoint?: string }> {
+  const errors: Record<string, { endpoint?: string }> = {};
   for (const row of rows) {
-    const connectionId = row.connectionId.trim();
-    if (!connectionId) continue;
-    connectionIdCounts.set(connectionId, (connectionIdCounts.get(connectionId) ?? 0) + 1);
-  }
-
-  const errors: Record<string, { connectionId?: string; endpoint?: string }> = {};
-  for (const row of rows) {
-    const connectionId = row.connectionId.trim();
     const endpoint = row.endpoint.trim();
-    const rowError: { connectionId?: string; endpoint?: string } = {};
-    if (!connectionId) {
-      rowError.connectionId = "Connection ID is required";
-    } else if ((connectionIdCounts.get(connectionId) ?? 0) > 1) {
-      rowError.connectionId = "Connection ID must be unique";
-    }
+    const rowError: { endpoint?: string } = {};
 
     if (!endpoint) {
       rowError.endpoint = "Endpoint is required";
     }
 
-    if (rowError.connectionId || rowError.endpoint) {
+    if (rowError.endpoint) {
       errors[row.id] = rowError;
     }
   }
 
   return errors;
-}
-
-function buildCloneConnectionId(connectionId: string, rows: Row[]): string {
-  const normalized = connectionId.trim() || "connection";
-  const taken = new Set(rows.map((row) => row.connectionId.trim()));
-  if (!taken.has(normalized)) {
-    return normalized;
-  }
-  let index = 2;
-  while (taken.has(`${normalized}${index}`)) {
-    index++;
-  }
-  return `${normalized}${index}`;
 }

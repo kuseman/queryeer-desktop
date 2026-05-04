@@ -282,11 +282,13 @@ Success result:
 
 Purpose: create/update engine-owned connection payload. Transport treats `connection` as opaque.
 
+`connectionId` is a **frontend-generated stable UUID** (e.g. `550e8400-e29b-41d4-a716-446655440001`). It is not a user-defined name — the human-readable label is carried in `name`. The backend must reject requests with a missing or blank `connectionId`.
+
 Request params:
 
 ```json
 {
-  "connectionId": "conn-001",
+  "connectionId": "550e8400-e29b-41d4-a716-446655440001",
   "engineId": "jdbc",
   "name": "Local Postgres",
   "connection": {
@@ -304,7 +306,7 @@ Success result:
 
 ```json
 {
-  "connectionId": "conn-001",
+  "connectionId": "550e8400-e29b-41d4-a716-446655440001",
   "version": 2
 }
 ```
