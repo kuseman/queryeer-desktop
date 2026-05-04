@@ -3,7 +3,7 @@
   "type": "notification",
   "method": "queryengine.completed",
   "params": {
-    "queryExecutionId": "exec-fixture-1",
+    "queryExecutionId": "exec-pb-1",
     "metrics": {
       "durationMs": 120,
       "rowCount": 2
@@ -11,9 +11,10 @@
     "engineState": {
       "payloadbuilder": {
         "catalogs": {
-          "jdbc1": {
+          "es1": {
+            "catalogId": "elasticsearch",
             "properties": {
-              "database": "appdb_reporting"
+              "index": "my-idx-updated"
             }
           }
         }

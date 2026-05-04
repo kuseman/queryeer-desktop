@@ -3,6 +3,7 @@ package com.queryeer.backend.core;
 import java.util.Map;
 
 import com.queryeer.backend.api.ConfigService;
+import com.queryeer.backend.api.SettingsModule;
 
 final class InMemoryConfigService implements ConfigService
 {
@@ -17,5 +18,11 @@ final class InMemoryConfigService implements ConfigService
     public String get(String key)
     {
         return values.get(key);
+    }
+
+    @Override
+    public SettingsModule getModule(String moduleId)
+    {
+        return null;
     }
 }

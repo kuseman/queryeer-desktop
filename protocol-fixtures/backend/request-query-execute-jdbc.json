@@ -1,0 +1,19 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "request",
+  "id": "req-fixture-query-execute-jdbc-1",
+  "method": "queryengine.execute",
+  "params": {
+    "queryExecutionId": "exec-jdbc-1",
+    "engineId": "jdbc",
+    "fileId": "file-fixture-1",
+    "text": "SELECT * FROM users",
+    "engineState": {
+      "connectionId": "prod-db"
+    },
+    "options": {
+      "maxRows": 100,
+      "timeoutMs": 15000
+    }
+  }
+}

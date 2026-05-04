@@ -4,7 +4,6 @@ import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import { getCoreSettingsService } from "../core.settings/service";
 import { JdbcConnectionsSettingsEditor } from "./JdbcConnectionsSettingsEditor";
 import {
-  getConfiguredJdbcConnections,
   JDBC_CONNECTIONS_SETTING_ID,
   parseJdbcConnectionDefinitions
 } from "./jdbc-settings";
@@ -131,26 +130,8 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
         return undefined;
       }
 
-      const connection = getConfiguredJdbcConnections().find(
-        (item) => item.connectionId === connectionId && item.enabled
-      );
-      if (!connection) {
-        return undefined;
-      }
-
       return {
-        engineState: {
-          jdbc: {
-            connection: {
-              connectionId: connection.connectionId,
-              dialectId: connection.dialectId,
-              url: connection.url,
-              username: connection.username,
-              password: connection.password,
-              ...(connection.properties ? { properties: connection.properties } : {})
-            }
-          }
-        }
+        engineState: { connectionId }
       };
     });
   }

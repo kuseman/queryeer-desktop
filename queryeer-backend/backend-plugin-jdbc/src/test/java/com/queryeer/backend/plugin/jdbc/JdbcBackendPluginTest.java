@@ -123,7 +123,7 @@ class JdbcBackendPluginTest
         Assertions.assertEquals(1L, upsert.get("version"));
 
         RecordingPublisher publisher = new RecordingPublisher();
-        provider.execute("exec-1", "file-1", "select 1", Map.of("jdbc", Map.of("connection", Map.of("connectionId", "jdbc1"))), publisher);
+        provider.execute("exec-1", "file-1", "select 1", Map.of("connectionId", "jdbc1"), publisher);
 
         Assertions.assertNull(publisher.errorCode);
         Assertions.assertTrue(publisher.completed);
@@ -140,7 +140,7 @@ class JdbcBackendPluginTest
                 Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_secret;DB_CLOSE_DELAY=-1", "username", "sa", "password", Map.of("secretRef", "jdbc-pass"))));
 
         RecordingPublisher publisher = new RecordingPublisher();
-        provider.execute("exec-2", "file-1", "select 1", Map.of("jdbc", Map.of("connection", Map.of("connectionId", "jdbc-secret"))), publisher);
+        provider.execute("exec-2", "file-1", "select 1", Map.of("connectionId", "jdbc-secret"), publisher);
 
         Assertions.assertNull(publisher.errorCode);
         Assertions.assertTrue(publisher.completed);
@@ -177,10 +177,11 @@ class JdbcBackendPluginTest
         QueryEngineProvider provider = activateAndGetProvider();
         RecordingPublisher publisher = new RecordingPublisher();
 
-        provider.execute("exec-1", "file-1", "select 1", Map.of("jdbc", Map.of("connection", Map.of("dialectId", "jdbc"))), publisher);
+        provider.invoke(null, "connection.upsert", Map.of("connectionId", "bad-url", "connection", Map.of("dialectId", "jdbc")));
+        provider.execute("exec-1", "file-1", "select 1", Map.of("connectionId", "bad-url"), publisher);
 
         Assertions.assertEquals("VALIDATION", publisher.errorCode);
-        Assertions.assertEquals("JDBC connection url is required", publisher.errorMessage);
+        Assertions.assertEquals("Connection has no url configured: bad-url", publisher.errorMessage);
     }
 
     @Test
@@ -189,8 +190,9 @@ class JdbcBackendPluginTest
         QueryEngineProvider provider = activateAndGetProvider();
         RecordingPublisher publisher = new RecordingPublisher();
 
+        provider.invoke(null, "connection.upsert", Map.of("connectionId", "cancel-conn", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_cancel;DB_CLOSE_DELAY=-1")));
         provider.cancel("exec-cancelled");
-        provider.execute("exec-cancelled", "file-1", "select 1", Map.of("jdbc", Map.of("connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_cancel;DB_CLOSE_DELAY=-1"))), publisher);
+        provider.execute("exec-cancelled", "file-1", "select 1", Map.of("connectionId", "cancel-conn"), publisher);
 
         Assertions.assertEquals("CANCELLED", publisher.errorCode);
         Assertions.assertEquals("Execution cancelled by client", publisher.errorMessage);
@@ -204,15 +206,15 @@ class JdbcBackendPluginTest
         provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-session", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_session;DB_CLOSE_DELAY=-1")));
 
         RecordingPublisher createPublisher = new RecordingPublisher();
-        provider.execute("exec-session-1", "file-session", "create local temporary table temp_t(v int)", Map.of("jdbc", Map.of("connection", Map.of("connectionId", "jdbc-session"))), createPublisher);
+        provider.execute("exec-session-1", "file-session", "create local temporary table temp_t(v int)", Map.of("connectionId", "jdbc-session"), createPublisher);
         Assertions.assertNull(createPublisher.errorCode, createPublisher.errorMessage);
 
         RecordingPublisher insertPublisher = new RecordingPublisher();
-        provider.execute("exec-session-1b", "file-session", "insert into temp_t(v) values (42)", Map.of("jdbc", Map.of("connection", Map.of("connectionId", "jdbc-session"))), insertPublisher);
+        provider.execute("exec-session-1b", "file-session", "insert into temp_t(v) values (42)", Map.of("connectionId", "jdbc-session"), insertPublisher);
         Assertions.assertNull(insertPublisher.errorCode);
 
         RecordingPublisher selectPublisher = new RecordingPublisher();
-        provider.execute("exec-session-2", "file-session", "select v from temp_t", Map.of("jdbc", Map.of("connection", Map.of("connectionId", "jdbc-session"))), selectPublisher);
+        provider.execute("exec-session-2", "file-session", "select v from temp_t", Map.of("connectionId", "jdbc-session"), selectPublisher);
 
         Assertions.assertNull(selectPublisher.errorCode);
         Assertions.assertTrue(selectPublisher.completed);
@@ -235,19 +237,18 @@ class JdbcBackendPluginTest
         provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-rebind-b", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_rebind_b;DB_CLOSE_DELAY=-1")));
 
         RecordingPublisher createPublisher = new RecordingPublisher();
-        provider.execute("exec-rebind-1", "file-rebind", "create local temporary table temp_rebind(v int)", Map.of("jdbc", Map.of("connection", Map.of("connectionId", "jdbc-rebind-a"))),
-                createPublisher);
+        provider.execute("exec-rebind-1", "file-rebind", "create local temporary table temp_rebind(v int)", Map.of("connectionId", "jdbc-rebind-a"), createPublisher);
         Assertions.assertNull(createPublisher.errorCode, createPublisher.errorMessage);
 
         fileSessions.handler.onClose(new com.queryeer.backend.api.FileSession("file-rebind", java.net.URI.create("file:///tmp.sql"), "text/sql", "jdbc", "jdbc-rebind-a", 1L));
         fileSessions.handler.onOpen(new com.queryeer.backend.api.FileSession("file-rebind", java.net.URI.create("file:///tmp.sql"), "text/sql", "jdbc", "jdbc-rebind-b", 2L), null);
 
         RecordingPublisher oldConnectionPublisher = new RecordingPublisher();
-        provider.execute("exec-rebind-2", "file-rebind", "select v from temp_rebind", Map.of("jdbc", Map.of("connection", Map.of("connectionId", "jdbc-rebind-a"))), oldConnectionPublisher);
+        provider.execute("exec-rebind-2", "file-rebind", "select v from temp_rebind", Map.of("connectionId", "jdbc-rebind-a"), oldConnectionPublisher);
         Assertions.assertEquals("INTERNAL", oldConnectionPublisher.errorCode);
 
         RecordingPublisher newConnectionPublisher = new RecordingPublisher();
-        provider.execute("exec-rebind-3", "file-rebind", "select 1", Map.of("jdbc", Map.of("connection", Map.of("connectionId", "jdbc-rebind-b"))), newConnectionPublisher);
+        provider.execute("exec-rebind-3", "file-rebind", "select 1", Map.of("connectionId", "jdbc-rebind-b"), newConnectionPublisher);
         Assertions.assertNull(newConnectionPublisher.errorCode, newConnectionPublisher.errorMessage);
     }
 
@@ -263,17 +264,17 @@ class JdbcBackendPluginTest
         provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-close", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_close_session;DB_CLOSE_DELAY=-1")));
 
         RecordingPublisher createPublisher = new RecordingPublisher();
-        provider.execute("exec-close-1", "file-close", "create local temporary table temp_close(v int)", Map.of("jdbc", Map.of("connection", Map.of("connectionId", "jdbc-close"))), createPublisher);
+        provider.execute("exec-close-1", "file-close", "create local temporary table temp_close(v int)", Map.of("connectionId", "jdbc-close"), createPublisher);
         Assertions.assertNull(createPublisher.errorCode, createPublisher.errorMessage);
 
         RecordingPublisher insertPublisher = new RecordingPublisher();
-        provider.execute("exec-close-1b", "file-close", "insert into temp_close(v) values (1)", Map.of("jdbc", Map.of("connection", Map.of("connectionId", "jdbc-close"))), insertPublisher);
+        provider.execute("exec-close-1b", "file-close", "insert into temp_close(v) values (1)", Map.of("connectionId", "jdbc-close"), insertPublisher);
         Assertions.assertNull(insertPublisher.errorCode);
 
         fileSessions.handler.onClose(new com.queryeer.backend.api.FileSession("file-close", java.net.URI.create("file:///tmp.sql"), "text/sql", "jdbc", "jdbc-close", 1L));
 
         RecordingPublisher selectPublisher = new RecordingPublisher();
-        provider.execute("exec-close-2", "file-close", "select v from temp_close", Map.of("jdbc", Map.of("connection", Map.of("connectionId", "jdbc-close"))), selectPublisher);
+        provider.execute("exec-close-2", "file-close", "select v from temp_close", Map.of("connectionId", "jdbc-close"), selectPublisher);
 
         Assertions.assertEquals("INTERNAL", selectPublisher.errorCode);
     }
@@ -326,7 +327,7 @@ class JdbcBackendPluginTest
         QueryEngineProvider provider = engines.provider;
 
         RecordingPublisher publisher = new RecordingPublisher();
-        provider.execute("exec-preload", "file-1", "select 1", Map.of("jdbc", Map.of("connection", Map.of("connectionId", "defaulted"))), publisher);
+        provider.execute("exec-preload", "file-1", "select 1", Map.of("connectionId", "defaulted"), publisher);
 
         Assertions.assertNull(publisher.errorCode, publisher.errorMessage);
         Assertions.assertTrue(publisher.completed);

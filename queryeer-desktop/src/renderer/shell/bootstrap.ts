@@ -56,18 +56,6 @@ export async function bootstrapShell() {
     closeFile: async (file) => {
       await window.appShell.closeBackendFile({ fileId: file.fileId });
     },
-    bindFile: async (file) => {
-      if (!file.engineBinding) {
-        return;
-      }
-      await window.appShell.bindBackendFile({
-        fileId: file.fileId,
-        engineId: file.engineBinding.engineId,
-        connectionId: file.engineBinding.connectionId,
-        uri: file.uri,
-        mimeType: file.mimeType
-      });
-    },
     changeFile: async (file, text) => {
       await window.appShell.notifyBackendFileChange({
         fileId: file.fileId,

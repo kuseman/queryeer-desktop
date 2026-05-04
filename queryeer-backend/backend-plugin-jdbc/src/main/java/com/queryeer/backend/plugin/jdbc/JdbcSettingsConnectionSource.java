@@ -13,11 +13,12 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.LoggerService;
+import com.queryeer.backend.api.SettingsModule;
 
 final class JdbcSettingsConnectionSource
 {
-    private static final String SETTINGS_PATH_KEY = "queryeer.settings.path";
     private static final String SETTINGS_DIR_KEY = "queryeer.settings.dir";
+    private static final String JDBC_MODULE_ID = "core.queryengine.jdbc";
     private static final String JDBC_MODULE_FILE = "core.queryengine.jdbc.json";
     private static final String JDBC_CONNECTIONS_SETTING_ID = "core.queryengine.jdbc.connections";
 
@@ -25,44 +26,47 @@ final class JdbcSettingsConnectionSource
 
     List<JdbcConfiguredConnection> load(ConfigService config, LoggerService logger)
     {
-        Path settingsPath = resolvePath(config);
-        if (settingsPath == null)
+        SettingsModule module = config.getModule(JDBC_MODULE_ID);
+        if (module != null)
         {
-            return List.of();
+            return parseConnections(module.values());
         }
-        if (!Files.exists(settingsPath))
+
+        // Fallback: direct file read when ConfigService doesn't support getModule()
+        Path path = resolvePath(config);
+        if (path == null
+                || !Files.exists(path))
         {
-            logger.info("JDBC settings module file not found: " + settingsPath);
+            logger.info("JDBC settings module not found: " + JDBC_MODULE_ID);
             return List.of();
         }
 
         try
         {
-            Map<String, Object> module = objectMapper.readValue(settingsPath.toFile(), new TypeReference<Map<String, Object>>()
+            Map<String, Object> moduleDocument = objectMapper.readValue(path.toFile(), new TypeReference<Map<String, Object>>()
             {
             });
-            return parseConnections(module);
+            return parseConnections(moduleDocument);
         }
         catch (IOException e)
         {
-            logger.warn("Failed to read JDBC settings module file: " + settingsPath);
+            logger.warn("Failed to read JDBC settings module file: " + path);
             logger.error("Failed to parse JDBC settings module", e);
             return List.of();
         }
     }
 
-    List<JdbcConfiguredConnection> parseConnections(Map<String, Object> moduleDocument)
+    List<JdbcConfiguredConnection> parseConnections(Map<String, Object> values)
     {
-        if (moduleDocument == null)
+        if (values == null)
         {
             return List.of();
         }
-        Object valuesRaw = moduleDocument.get("values");
-        if (!(valuesRaw instanceof Map<?, ?> values))
-        {
-            return List.of();
-        }
-        Object listRaw = values.get(JDBC_CONNECTIONS_SETTING_ID);
+        // Accept both a full module document (with "values" key) and bare values map
+        @SuppressWarnings("unchecked")
+        Map<String, Object> effective = values.get("values") instanceof Map<?, ?> raw ? (Map<String, Object>) raw
+                : values;
+        Object listRaw = effective.get(JDBC_CONNECTIONS_SETTING_ID);
         if (!(listRaw instanceof List<?> list))
         {
             return List.of();
@@ -86,8 +90,6 @@ final class JdbcSettingsConnectionSource
             String url = text(map.get("url"));
             boolean hasStructuredProperties = map.get("properties") instanceof Map<?, ?>;
 
-            // Accept connections that either have an explicit URL (generic JDBC) or
-            // have a structured properties map (e.g. SQL Server).
             if (url == null
                     && !hasStructuredProperties)
             {
@@ -101,7 +103,6 @@ final class JdbcSettingsConnectionSource
 
             if (hasStructuredProperties)
             {
-                // Flatten dialect-specific structured properties into the connection map.
                 @SuppressWarnings("unchecked")
                 Map<String, Object> props = (Map<String, Object>) map.get("properties");
                 connection.putAll(props);
@@ -128,13 +129,8 @@ final class JdbcSettingsConnectionSource
         return List.copyOf(result);
     }
 
-    static Path resolvePath(ConfigService config)
+    private static Path resolvePath(ConfigService config)
     {
-        String explicitPath = trimToNull(config.get(SETTINGS_PATH_KEY));
-        if (explicitPath != null)
-        {
-            return Path.of(explicitPath);
-        }
         String settingsDir = trimToNull(config.get(SETTINGS_DIR_KEY));
         if (settingsDir == null)
         {

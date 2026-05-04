@@ -38,8 +38,7 @@ public final class StdioTransportModule
                 new SecurityVaultChangedRequestHandler(responseWriter, codec, securitySession), new HealthPingRequestHandler(startedAt, responseWriter, codec),
                 new QueryExecuteRequestHandler(responseWriter, codec, queryExecutionService, notificationPublisher), new QueryCancelRequestHandler(responseWriter, codec, queryExecutionService),
                 new EngineInvokeRequestHandler(responseWriter, codec, engineInvokeService), new ConnectionUpsertRequestHandler(responseWriter, codec, queryEngines),
-                new FileOpenRequestHandler(responseWriter, codec, fileRegistry), new FileCloseRequestHandler(responseWriter, codec, fileRegistry),
-                new FileBindRequestHandler(responseWriter, codec, fileRegistry));
+                new FileOpenRequestHandler(responseWriter, codec, fileRegistry), new FileCloseRequestHandler(responseWriter, codec, fileRegistry));
 
         RequestDispatcher requestDispatcher = new RequestDispatcher(responseWriter, handlers);
 

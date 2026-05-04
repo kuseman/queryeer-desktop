@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.ErrorMessages;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryPublisher;
@@ -45,7 +46,14 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
 
     private final Set<String> cancelledExecutionIds = ConcurrentHashMap.newKeySet();
     private final Map<String, QuerySession> activeSessions = new ConcurrentHashMap<>();
-    private final PayloadbuilderCatalogProviderRegistry catalogProviders = PayloadbuilderCatalogProviderRegistry.defaults();
+    private final PayloadbuilderCatalogProviderRegistry catalogProviders;
+    private final ConfigService configService;
+
+    public PayloadbuilderQueryEngineProvider(ConfigService configService)
+    {
+        this.configService = configService;
+        this.catalogProviders = PayloadbuilderCatalogProviderRegistry.defaults(configService);
+    }
 
     @Override
     public String engineId()
@@ -61,6 +69,7 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
         try
         {
             PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState catalogState = PayloadbuilderEngineStateSupport.parse(engineState);
+            catalogState = resolveCatalogConnections(catalogState);
             CatalogRegistry catalogRegistry = buildCatalogRegistry(catalogState);
             session = new QuerySession(catalogRegistry);
             session.setAbortSupplier(() -> cancelledExecutionIds.contains(queryExecutionId));
@@ -161,6 +170,42 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
             }
         }
         return registry;
+    }
+
+    private PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState resolveCatalogConnections(PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
+    {
+        Map<String, PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState.Instance> resolved = new java.util.LinkedHashMap<>();
+        for (PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState.Instance instance : state.instancesByAlias()
+                .values())
+        {
+            String connectionId = stringValue(instance.properties()
+                    .get("connectionId"));
+            if (connectionId != null)
+            {
+                Map<String, Object> connProperties = catalogProviders.resolveConnection(instance.catalogId(), connectionId);
+                if (!connProperties.isEmpty())
+                {
+                    Map<String, Object> merged = new java.util.LinkedHashMap<>(connProperties);
+                    merged.putAll(instance.properties());
+                    String alias = instance.alias();
+                    resolved.put(alias, new PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState.Instance(alias, instance.catalogId(), merged));
+                    continue;
+                }
+            }
+            resolved.put(instance.alias(), instance);
+        }
+        return new PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState(state.defaultCatalogAlias(), resolved);
+    }
+
+    private static String stringValue(Object value)
+    {
+        if (value instanceof String s)
+        {
+            String trimmed = s.trim();
+            return trimmed.isEmpty() ? null
+                    : trimmed;
+        }
+        return null;
     }
 
     private List<String> mergeActions()

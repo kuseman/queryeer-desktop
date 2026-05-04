@@ -48,8 +48,7 @@ function setupHarness(options?: {
   const sync: Required<FileBackendSync> = {
     openFile: vi.fn(async () => {}),
     closeFile: vi.fn(async () => {}),
-    changeFile: vi.fn(async () => {}),
-    bindFile: vi.fn(async () => {})
+    changeFile: vi.fn(async () => {})
   };
   const writeFile = vi.fn(async () => ({ success: true }));
   const readFile = vi.fn(async () => ({ success: true, content: "" }));
@@ -423,10 +422,9 @@ describe("FileMediator.bindEngine", () => {
       connectionId: undefined
     });
     expect(sync.openFile).toHaveBeenCalledTimes(1);
-    expect(sync.bindFile).not.toHaveBeenCalled();
   });
 
-  it("calls bindFile (not openFile) on rebind", async () => {
+  it("does not call openFile on rebind (backend auto-upserts)", async () => {
     const { mediator, sync } = setupHarness();
     const file = await mediator.openFile("untitled:r", {
       mimeType: "text/plain",
@@ -436,7 +434,6 @@ describe("FileMediator.bindEngine", () => {
     await mediator.bindEngine(file.fileId, "payloadbuilder", "conn-2");
 
     expect(sync.openFile).toHaveBeenCalledTimes(1);
-    expect(sync.bindFile).toHaveBeenCalledTimes(1);
   });
 });
 

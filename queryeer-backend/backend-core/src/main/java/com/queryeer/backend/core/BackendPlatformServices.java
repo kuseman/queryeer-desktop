@@ -10,18 +10,19 @@ import com.queryeer.backend.api.LoggerService;
 import com.queryeer.backend.api.PluginHostServices;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.SchedulerService;
+import com.queryeer.backend.core.security.SecuritySession;
 
 public final class BackendPlatformServices implements PluginHostServices
 {
     private final DefaultLoggerService logger;
-    private final InMemoryConfigService config;
+    private final ConfigService config;
     private final InMemoryQueryEngineRegistry queryEngines;
     private final DefaultFileRegistry fileRegistry;
     private final InMemoryEventBus events;
     private final InlineSchedulerService scheduler;
     private final BackendPluginContext pluginContext;
 
-    private BackendPlatformServices(DefaultLoggerService logger, InMemoryConfigService config, InMemoryQueryEngineRegistry queryEngines, DefaultFileRegistry fileRegistry, InMemoryEventBus events,
+    private BackendPlatformServices(DefaultLoggerService logger, ConfigService config, InMemoryQueryEngineRegistry queryEngines, DefaultFileRegistry fileRegistry, InMemoryEventBus events,
             InlineSchedulerService scheduler, BackendPluginContext pluginContext)
     {
         this.logger = logger;
@@ -38,10 +39,26 @@ public final class BackendPlatformServices implements PluginHostServices
         return defaultServices(Map.of());
     }
 
+    /** Creates services with {@link InMemoryConfigService}. For tests. */
     public static BackendPlatformServices defaultServices(Map<String, String> configValues)
     {
         DefaultLoggerService logger = new DefaultLoggerService();
-        InMemoryConfigService config = new InMemoryConfigService(configValues);
+        ConfigService config = new InMemoryConfigService(configValues);
+        InMemoryQueryEngineRegistry queryEngines = new InMemoryQueryEngineRegistry();
+        DefaultFileRegistry fileRegistry = new DefaultFileRegistry();
+        InMemoryEventBus events = new InMemoryEventBus();
+        InlineSchedulerService scheduler = new InlineSchedulerService(logger);
+
+        BackendPluginContext context = new DefaultBackendPluginContext(logger, config, queryEngines, fileRegistry, events, scheduler);
+
+        return new BackendPlatformServices(logger, config, queryEngines, fileRegistry, events, scheduler, context);
+    }
+
+    /** Creates services with {@link FileBasedConfigService} connected to the given security session. */
+    public static BackendPlatformServices fileBased(Map<String, String> configValues, SecuritySession securitySession)
+    {
+        DefaultLoggerService logger = new DefaultLoggerService();
+        ConfigService config = new FileBasedConfigService(configValues, securitySession, logger);
         InMemoryQueryEngineRegistry queryEngines = new InMemoryQueryEngineRegistry();
         DefaultFileRegistry fileRegistry = new DefaultFileRegistry();
         InMemoryEventBus events = new InMemoryEventBus();

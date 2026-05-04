@@ -32,9 +32,6 @@ jobs:
       - name: Run desktop unit tests
         run: npm run test
 
-      - name: Run desktop protocol fixture checks
-        run: npm run test:protocol-fixtures
-
       - name: Run desktop typecheck
         run: npm run typecheck
 

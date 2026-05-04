@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.LoggerService;
 
 final class JdbcSchemaCrawlCoordinator
@@ -13,18 +14,20 @@ final class JdbcSchemaCrawlCoordinator
     private final JdbcSchemaStore store;
     private final JdbcSchemaCrawlPolicy policy;
     private final JdbcSecuritySessionState securitySessionState;
-    private final JdbcSettingsWatcher settingsWatcher;
+    private final JdbcSettingsConnectionSource settingsSource;
+    private final ConfigService config;
     private final LoggerService logger;
 
     JdbcSchemaCrawlCoordinator(JdbcConnectionRegistry connections, JdbcSchemaCrawler crawler, JdbcSchemaStore store, JdbcSchemaCrawlPolicy policy, JdbcSecuritySessionState securitySessionState,
-            JdbcSettingsWatcher settingsWatcher, LoggerService logger)
+            JdbcSettingsConnectionSource settingsSource, ConfigService config, LoggerService logger)
     {
         this.connections = connections;
         this.crawler = crawler;
         this.store = store;
         this.policy = policy;
         this.securitySessionState = securitySessionState;
-        this.settingsWatcher = settingsWatcher;
+        this.settingsSource = settingsSource;
+        this.config = config;
         this.logger = logger;
     }
 
@@ -87,7 +90,8 @@ final class JdbcSchemaCrawlCoordinator
         while (!Thread.currentThread()
                 .isInterrupted())
         {
-            settingsWatcher.checkAndReload(connections);
+            settingsSource.load(config, logger)
+                    .forEach(loaded -> connections.upsert(loaded.connectionId(), loaded.name(), loaded.connection()));
 
             if (!securitySessionState.isOpen())
             {

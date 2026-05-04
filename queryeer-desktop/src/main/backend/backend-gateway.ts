@@ -7,8 +7,6 @@ import {
   type BackendNotificationEnvelope,
   type BackendRequestEnvelope,
   type BackendResponseEnvelope,
-  type FileBindParams,
-  type FileBindResult,
   type FileChangeNotification,
   type FileCloseParams,
   type FileCloseResult,
@@ -149,9 +147,6 @@ export class BackendGateway {
     });
     ipcMain.handle("backend:file-close", async (_event, params: FileCloseParams) => {
       return this.closeFile(params);
-    });
-    ipcMain.handle("backend:file-bind", async (_event, params: FileBindParams) => {
-      return this.bindFile(params);
     });
     ipcMain.handle("backend:file-change", async (_event, params: FileChangeNotification) => {
       return this.notifyFileChange(params);
@@ -299,19 +294,6 @@ export class BackendGateway {
       throw new Error("file.close failed: missing result");
     }
     return response.result as FileCloseResult;
-  }
-
-  public async bindFile(params: FileBindParams): Promise<FileBindResult> {
-    const envelope = this.createRequest("file.bind", params);
-    this.appendLog("debug", "gateway", `Sending request ${envelope.id} file.bind`);
-    if (this.tracePayloads) {
-      this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
-    }
-    const response = await this.sendRequest(envelope);
-    if (!response.result) {
-      throw new Error("file.bind failed: missing result");
-    }
-    return response.result as FileBindResult;
   }
 
   public notifyFileChange(params: FileChangeNotification): void {
@@ -510,8 +492,7 @@ export class BackendGateway {
       | "queryengine.cancel"
       | "queryengine.invoke"
       | "file.open"
-      | "file.close"
-      | "file.bind",
+      | "file.close",
     TParams
   >(
     method: TMethod,

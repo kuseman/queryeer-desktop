@@ -15,7 +15,7 @@ public interface QueryPublisher
 
     void completed(long durationMs, long rowCount);
 
-    default void completed(long durationMs, long rowCount, Object engineStatePatch)
+    default void completed(long durationMs, long rowCount, Object engineState)
     {
         completed(durationMs, rowCount);
     }

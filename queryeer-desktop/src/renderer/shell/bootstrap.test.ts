@@ -89,7 +89,6 @@ describe("bootstrapShell diagnostics wiring", () => {
       showOpenFolder: async () => ({ canceled: true, folderPath: undefined }),
       openBackendFile: async () => ({ fileId: "f-1", backendVersion: 0 }),
       closeBackendFile: async () => ({ fileId: "f-1", accepted: true }),
-      bindBackendFile: async () => ({ fileId: "f-1", engineId: "payloadbuilder", backendVersion: 1 }),
       notifyBackendFileChange: async () => {},
       watchFile: async () => ({ subscriptionId: "fw-test-1" }),
       unwatchFile: async () => ({ removed: true }),

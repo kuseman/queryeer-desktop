@@ -1,21 +1,21 @@
 {
   "protocolVersion": "1.0.0",
   "type": "request",
-  "id": "req-fixture-query-execute-1",
+  "id": "req-fixture-query-execute-pb-1",
   "method": "queryengine.execute",
   "params": {
-    "queryExecutionId": "exec-fixture-1",
+    "queryExecutionId": "exec-pb-1",
     "engineId": "payloadbuilder",
     "fileId": "file-fixture-1",
     "text": "select 1",
     "engineState": {
-      "payloadbuilder": {
-        "catalogs": {
-          "jdbc1": {
-            "catalogId": "Jdbc",
-            "properties": {
-              "database": "appdb"
-            }
+      "defaultAlias": "es1",
+      "catalogs": {
+        "es1": {
+          "catalogId": "elasticsearch",
+          "properties": {
+            "connectionId": "cluster1",
+            "index": "my-idx"
           }
         }
       }

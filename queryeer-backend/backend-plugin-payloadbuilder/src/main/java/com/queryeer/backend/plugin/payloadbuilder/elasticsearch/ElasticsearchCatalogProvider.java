@@ -15,6 +15,8 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.queryeer.backend.api.ConfigService;
+import com.queryeer.backend.api.SettingsModule;
 import com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderCatalogProvider;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
@@ -23,11 +25,50 @@ import se.kuseman.payloadbuilder.catalog.es.ESCatalog;
 public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalogProvider
 {
     private static final String LIST_INDICES_ACTION = "payloadbuilder.es.listIndices";
+    private static final String ES_MODULE_ID = "core.queryengine.payloadbuilder.elasticsearch";
+    private static final String ES_CONNECTIONS_SETTING_ID = "core.queryengine.payloadbuilder.elasticsearch.connections";
     private static final Pattern INDEX_JSON_PATTERN = Pattern.compile("\\\"index\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
 
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
+    private final ConfigService configService;
+
+    public ElasticsearchCatalogProvider(ConfigService configService)
+    {
+        this.configService = configService;
+    }
+
+    /** Resolves connection properties from settings by connectionId and merges into the given properties map. */
+    @SuppressWarnings("unchecked")
+    @Override
+    public Map<String, Object> resolveConnection(String connectionId)
+    {
+        SettingsModule module = configService.getModule(ES_MODULE_ID);
+        if (module == null)
+        {
+            return Map.of();
+        }
+        Object conns = module.values()
+                .get(ES_CONNECTIONS_SETTING_ID);
+        if (!(conns instanceof List<?> list))
+        {
+            return Map.of();
+        }
+        for (Object item : list)
+        {
+            if (!(item instanceof Map<?, ?> entry))
+            {
+                continue;
+            }
+            if (!connectionId.equals(stringValue(entry.get("connectionId"))))
+            {
+                continue;
+            }
+            return (Map<String, Object>) entry;
+        }
+        return Map.of();
+    }
 
     @Override
     public String catalogId()
@@ -69,7 +110,13 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
             throw new IllegalArgumentException("payloadbuilder.es.listIndices payload.properties must be an object");
         }
 
-        String endpoint = normalize(properties.get(ESCatalog.ENDPOINT_KEY));
+        // Resolve connection from settings by connectionId if present
+        String connectionId = stringValue(properties.get("connectionId"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> effectiveProperties = connectionId != null ? resolveConnection(connectionId)
+                : (Map<String, Object>) properties;
+
+        String endpoint = normalize(effectiveProperties.get(ESCatalog.ENDPOINT_KEY));
         if (endpoint.isEmpty())
         {
             throw new IllegalArgumentException("endpoint is required for payloadbuilder.es.listIndices");
@@ -80,11 +127,11 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
                 .timeout(Duration.ofSeconds(30))
                 .header("Accept", "application/json");
 
-        String authType = normalize(properties.get(ESCatalog.AUTH_TYPE_KEY)).toUpperCase();
+        String authType = normalize(effectiveProperties.get(ESCatalog.AUTH_TYPE_KEY)).toUpperCase();
         if ("BASIC".equals(authType))
         {
-            String username = normalize(properties.get(ESCatalog.AUTH_USERNAME_KEY));
-            String password = normalize(properties.get(ESCatalog.AUTH_PASSWORD_KEY));
+            String username = normalize(effectiveProperties.get(ESCatalog.AUTH_USERNAME_KEY));
+            String password = normalize(effectiveProperties.get(ESCatalog.AUTH_PASSWORD_KEY));
             String token = Base64.getEncoder()
                     .encodeToString((username + ":" + password).getBytes(StandardCharsets.UTF_8));
             requestBuilder.header("Authorization", "Basic " + token);
@@ -142,5 +189,16 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
     {
         return value instanceof String text ? text.trim()
                 : "";
+    }
+
+    private static String stringValue(Object value)
+    {
+        if (value instanceof String string)
+        {
+            String trimmed = string.trim();
+            return trimmed.isEmpty() ? null
+                    : trimmed;
+        }
+        return null;
     }
 }

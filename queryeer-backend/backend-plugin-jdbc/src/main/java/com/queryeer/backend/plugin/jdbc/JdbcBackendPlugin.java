@@ -55,12 +55,11 @@ public final class JdbcBackendPlugin implements BackendPlugin
         JdbcConnectionRegistry connections = new JdbcConnectionRegistry();
         connections.reload(settingsSource.load(context.config(), context.logger()));
         JdbcConnectionResolver resolver = new JdbcConnectionResolver();
-        JdbcSettingsWatcher settingsWatcher = new JdbcSettingsWatcher(settingsSource, context.config(), context.logger());
         JdbcSchemaStore schemaStore = new JdbcSchemaStore(resolveSchemaCacheDir(context.config()));
         JdbcSchemaCrawler schemaCrawler = new JdbcSchemaCrawler(registry, resolver, schemaStore, context.logger());
         JdbcSecuritySessionState securitySessionState = new JdbcSecuritySessionState();
-        JdbcSchemaCrawlCoordinator crawlCoordinator = new JdbcSchemaCrawlCoordinator(connections, schemaCrawler, schemaStore, new JdbcSchemaCrawlPolicy(), securitySessionState, settingsWatcher,
-                context.logger());
+        JdbcSchemaCrawlCoordinator crawlCoordinator = new JdbcSchemaCrawlCoordinator(connections, schemaCrawler, schemaStore, new JdbcSchemaCrawlPolicy(), securitySessionState, settingsSource,
+                context.config(), context.logger());
         context.events()
                 .subscribe(EVENT_SECURITY_SESSION_OPENED, event -> securitySessionState.markOpen());
         context.events()
@@ -69,7 +68,7 @@ public final class JdbcBackendPlugin implements BackendPlugin
         long reaperIntervalMs = parseDurationMs(context.config(), REAPER_INTERVAL_KEY, Math.max(1_000L, Math.min(idleTimeoutMs, TimeUnit.MINUTES.toMillis(5))));
         long schemaCrawlIntervalMs = parseDurationMs(context.config(), SCHEMA_CRAWL_INTERVAL_KEY, TimeUnit.MINUTES.toMillis(5));
         JdbcFileConnectionManager fileConnections = new JdbcFileConnectionManager(idleTimeoutMs);
-        JdbcQueryEngineProvider provider = new JdbcQueryEngineProvider(registry, connections, fileConnections, crawlCoordinator::onUsage, schemaStore, crawlCoordinator);
+        JdbcQueryEngineProvider provider = new JdbcQueryEngineProvider(registry, connections, fileConnections, crawlCoordinator::onUsage, schemaStore, crawlCoordinator, context.config());
 
         context.scheduler()
                 .schedule("jdbc.file-session-reaper", () -> startReaperThread(fileConnections, reaperIntervalMs));

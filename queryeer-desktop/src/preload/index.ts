@@ -1,8 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   BackendGatewayStatus,
-  FileBindParams,
-  FileBindResult,
   FileChangeNotification,
   FileCloseParams,
   FileCloseResult,
@@ -79,7 +77,6 @@ type AppShellApi = {
   invokeBackendEngine: (params: EngineInvokeParams) => Promise<EngineInvokeResult>;
   openBackendFile: (params: FileOpenParams) => Promise<FileOpenResult>;
   closeBackendFile: (params: FileCloseParams) => Promise<FileCloseResult>;
-  bindBackendFile: (params: FileBindParams) => Promise<FileBindResult>;
   notifyBackendFileChange: (params: FileChangeNotification) => Promise<void>;
   getWorkspace: () => Promise<WorkspaceSnapshot>;
   saveWorkspace: (snapshot: WorkspaceSnapshot) => Promise<{ accepted: boolean }>;
@@ -221,9 +218,6 @@ const appShellApi: AppShellApi = {
   },
   closeBackendFile: async (params) => {
     return ipcRenderer.invoke("backend:file-close", params);
-  },
-  bindBackendFile: async (params) => {
-    return ipcRenderer.invoke("backend:file-bind", params);
   },
   notifyBackendFileChange: async (params) => {
     return ipcRenderer.invoke("backend:file-change", params);
