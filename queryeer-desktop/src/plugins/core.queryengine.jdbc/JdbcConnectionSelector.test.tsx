@@ -81,7 +81,6 @@ function makeFileMediator(file: FileEntity): FileMediator {
     onActiveFileChanged: vi.fn(() => () => {}),
     setContextFileId: vi.fn(),
     getContextFileId: vi.fn(),
-    executeFile: vi.fn(),
     reloadFile: vi.fn(),
     acceptExternalChange: vi.fn(),
     discardExternalChange: vi.fn()

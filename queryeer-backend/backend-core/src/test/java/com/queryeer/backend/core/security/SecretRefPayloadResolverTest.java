@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.queryeer.backend.api.SecuritySessionClosedException;
 
 class SecretRefPayloadResolverTest
 {
@@ -57,8 +58,7 @@ class SecretRefPayloadResolverTest
         Path vaultPath = createVault("api-key", new byte[32], "secret");
         SecretRefPayloadResolver resolver = new SecretRefPayloadResolver(new SecuritySession(), new ObjectMapper());
 
-        SecretRefPayloadResolver.SecretResolutionException error = Assertions.assertThrows(SecretRefPayloadResolver.SecretResolutionException.class,
-                () -> resolver.materialize(Map.of("auth", Map.of("secretRef", "api-key"))));
+        SecuritySessionClosedException error = Assertions.assertThrows(SecuritySessionClosedException.class, () -> resolver.materialize(Map.of("auth", Map.of("secretRef", "api-key"))));
 
         Assertions.assertEquals("Security session is not open", error.getMessage());
         Assertions.assertTrue(Files.exists(vaultPath));

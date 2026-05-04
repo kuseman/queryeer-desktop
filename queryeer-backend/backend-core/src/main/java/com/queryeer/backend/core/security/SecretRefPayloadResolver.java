@@ -15,6 +15,7 @@ import javax.crypto.spec.SecretKeySpec;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.queryeer.backend.api.SecuritySessionClosedException;
 
 public final class SecretRefPayloadResolver
 {
@@ -91,7 +92,7 @@ public final class SecretRefPayloadResolver
         if (session == null
                 || !session.isOpen())
         {
-            throw new SecretResolutionException("Security session is not open");
+            throw new SecuritySessionClosedException("Security session is not open");
         }
 
         JsonNode entries = loadEntries(session.vaultPath());

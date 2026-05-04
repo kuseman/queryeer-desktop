@@ -7,16 +7,17 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.ErrorMessages;
 import com.queryeer.backend.api.FileSession;
 import com.queryeer.backend.api.FileSessionHandler;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryPublisher;
+import com.queryeer.backend.api.SecuritySessionClosedException;
 import com.queryeer.backend.queryengine.jdbc.CancellableJdbcQueryExecutor;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnectionFieldDefinition;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnectionFieldOption;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnectionFieldType;
+import com.queryeer.backend.queryengine.jdbc.JdbcConnectionProfile;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnectionSetupDefinition;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
 import com.queryeer.backend.queryengine.jdbc.JdbcQueryEventListener;
@@ -40,12 +41,12 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private final JdbcConnectionUsageListener usageListener;
     private final JdbcSchemaStore schemaStore;
     private final JdbcSchemaCrawlCoordinator crawlCoordinator;
-    private final ConfigService configService;
+    private final JdbcCredentialResolver credentialResolver;
     private final Map<String, CancellableJdbcQueryExecutor> activeExecutors = new ConcurrentHashMap<>();
     private final Set<String> cancelledExecutionIds = ConcurrentHashMap.newKeySet();
 
     JdbcQueryEngineProvider(JdbcDialectRegistry registry, JdbcConnectionRegistry connections, JdbcFileConnectionManager fileConnections, JdbcConnectionUsageListener usageListener,
-            JdbcSchemaStore schemaStore, JdbcSchemaCrawlCoordinator crawlCoordinator, ConfigService configService)
+            JdbcSchemaStore schemaStore, JdbcSchemaCrawlCoordinator crawlCoordinator, JdbcCredentialResolver credentialResolver)
     {
         this.registry = registry;
         this.connections = connections;
@@ -53,7 +54,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         this.usageListener = usageListener;
         this.schemaStore = schemaStore;
         this.crawlCoordinator = crawlCoordinator;
-        this.configService = configService;
+        this.credentialResolver = credentialResolver;
     }
 
     @Override
@@ -84,13 +85,14 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                 throw new QueryCancelledException();
             }
 
-            JdbcResolvedConnection resolved = JdbcResolvedConnection.fromEngineState(engineState, connections, registry, configService);
+            JdbcResolvedConnection resolved = JdbcResolvedConnection.fromEngineState(engineState, connections, registry);
+            JdbcConnectionProfile materializedProfile = credentialResolver.resolve(resolved.profile());
 
             Connection sessionConnection = resolved.dialect()
-                    .requiresExplicitUrl() ? fileConnections.acquire(fileId, resolved.profile())
+                    .requiresExplicitUrl() ? fileConnections.acquire(fileId, materializedProfile)
                             : null;
 
-            JdbcQueryRequest request = new JdbcQueryRequest(queryExecutionId, fileId, text, List.of(), resolved.profile(), sessionConnection);
+            JdbcQueryRequest request = new JdbcQueryRequest(queryExecutionId, fileId, text, List.of(), materializedProfile, sessionConnection);
 
             if (resolved.dialect()
                     .queryExecutor() instanceof CancellableJdbcQueryExecutor cancellable)
@@ -113,6 +115,10 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         catch (QueryCancelledException e)
         {
             publisher.failed("CANCELLED", "Execution cancelled by client");
+        }
+        catch (SecuritySessionClosedException e)
+        {
+            throw e;
         }
         catch (Exception e)
         {
@@ -174,12 +180,13 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
 
     private Object connectionTest(Object payload)
     {
-        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromPayload(payload, registry, configService);
+        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromPayload(payload, registry);
+        JdbcConnectionProfile materializedProfile = credentialResolver.resolve(resolved.profile());
         try
         {
             resolved.dialect()
                     .queryExecutor()
-                    .execute(new JdbcQueryRequest("connection-test", null, "select 1", List.of(), resolved.profile(), null), new NoopJdbcQueryEventListener());
+                    .execute(new JdbcQueryRequest("connection-test", null, "select 1", List.of(), materializedProfile, null), new NoopJdbcQueryEventListener());
             return Map.of("ok", true, "message", "Connection successful");
         }
         catch (RuntimeException e)
@@ -213,7 +220,8 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
 
     private Object schemaFetch(Object payload)
     {
-        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromRegistryWithOverrides(payload, connections, registry, configService);
+        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromRegistryWithOverrides(payload, connections, registry);
+        JdbcConnectionProfile materializedProfile = credentialResolver.resolve(resolved.profile());
 
         Map<String, Object> value = asMap(payload);
         String scope = stringValue(value.get("scope"));
@@ -229,7 +237,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         }
         return resolved.dialect()
                 .schemaResolver()
-                .resolveSchema(resolved.profile(), options);
+                .resolveSchema(materializedProfile, options);
     }
 
     private Object schemaSnapshot(Object payload)

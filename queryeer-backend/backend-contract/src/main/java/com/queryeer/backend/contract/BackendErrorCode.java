@@ -9,5 +9,6 @@ public enum BackendErrorCode
     QUERY_NOT_FOUND,
     TIMEOUT,
     CANCELLED,
+    SECURITY_SESSION_CLOSED,
     INTERNAL
 }

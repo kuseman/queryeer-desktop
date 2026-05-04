@@ -96,9 +96,6 @@ final class FileBasedConfigService implements ConfigService
             Map<String, Object> values = raw.get("values") instanceof Map ? (Map<String, Object>) raw.get("values")
                     : Map.of();
 
-            // Resolve { secretRef: "..." } wrappers to plaintext
-            values = resolveSecrets(values);
-
             SettingsModule module = new SettingsModule(id != null ? id
                     : moduleId, version, updatedAt, values);
             moduleCache.put(moduleId, new CachedModule(path, mtime, module));
@@ -125,37 +122,7 @@ final class FileBasedConfigService implements ConfigService
         {
             return payload;
         }
-        try
-        {
-            return resolver.materialize(payload);
-        }
-        catch (SecretRefPayloadResolver.SecretResolutionException e)
-        {
-            return payload;
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> resolveSecrets(Map<String, Object> values)
-    {
-        SecretRefPayloadResolver resolver = getOrCreateSecretResolver();
-        if (resolver == null)
-        {
-            return values;
-        }
-        try
-        {
-            Object resolved = resolver.materialize(values);
-            if (resolved instanceof Map)
-            {
-                return (Map<String, Object>) resolved;
-            }
-        }
-        catch (SecretRefPayloadResolver.SecretResolutionException e)
-        {
-            // Session not open — return raw values with secretRefs intact
-        }
-        return values;
+        return resolver.materialize(payload);
     }
 
     private SecretRefPayloadResolver getOrCreateSecretResolver()

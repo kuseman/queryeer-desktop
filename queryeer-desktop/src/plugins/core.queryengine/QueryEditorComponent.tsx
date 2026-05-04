@@ -10,6 +10,7 @@ import type { FileEntity } from "../../contracts/files/FileEntity";
 import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistryImpl";
 import { defineStateKey } from "../../contracts/files/FileStateRegistry";
 import { getQueryViewStateStore, TEXT_OUTPUT_PRIMARY_ID } from "./QueryViewStateStore";
+import { getCoreSecurityService } from "../core.security/service";
 import { TEXT_OUTPUT_FORMATTERS } from "../core.queryengine.output.text/formatters";
 import type { EditorRegistryHost } from "../../contracts/editor/EditorCapability";
 import type { OutlineRegistry } from "../../contracts/extensions/OutlineExtension";
@@ -266,6 +267,29 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
             }
           } else if (event.method === "queryengine.failed") {
             const p = event.params as { error?: { code: string; message: string } };
+            if (p.error?.code === "SECURITY_SESSION_CLOSED") {
+              void (async () => {
+                const security = getCoreSecurityService();
+                if (security) {
+                  const accepted = await security.ensureUnlockedForSecretAccess({ interactive: true });
+                  if (accepted) {
+                    handleExecuteRef.current();
+                    return;
+                  }
+                }
+                activeExecutionByFileIdRef.current.delete(targetFileId);
+                updateOutputContextForFile(targetFileId, (prev) => ({
+                  ...prev,
+                  state: "failed",
+                  error: p.error ?? null,
+                  progress: null,
+                  executionStartedAtMs: null
+                }));
+                getQueryViewStateStore().setPanelSelectedOutput(targetFileId, TEXT_OUTPUT_PRIMARY_ID);
+                setExecutionPrimaryOverride(targetFileId, null);
+              })();
+              return;
+            }
             activeExecutionByFileIdRef.current.delete(targetFileId);
             updateOutputContextForFile(targetFileId, (prev) => ({
               ...prev,

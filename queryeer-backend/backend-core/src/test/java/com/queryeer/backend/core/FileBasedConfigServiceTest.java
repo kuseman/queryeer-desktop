@@ -3,6 +3,7 @@ package com.queryeer.backend.core;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -127,7 +128,22 @@ class FileBasedConfigServiceTest
     }
 
     @Test
-    void getModuleResolvesSecretsWhenSessionOpen() throws Exception
+    void getModuleReturnsRawSecretRefsWhenSessionOpen()
+    {
+        SecuritySession session = new SecuritySession();
+
+        writeModule("credentials.test", Map.of("db_password", Map.of("secretRef", "db-pass")));
+
+        FileBasedConfigService config = new FileBasedConfigService(Map.of("queryeer.settings.dir", settingsDir.toString()), session, logger);
+        SettingsModule module = config.getModule("credentials.test");
+
+        assertNotNull(module);
+        assertEquals(Map.of("secretRef", "db-pass"), module.values()
+                .get("db_password"));
+    }
+
+    @Test
+    void materializeSecretsResolvesWhenSessionOpen() throws Exception
     {
         byte[] key = new byte[32];
         for (int i = 0; i < key.length; i++)
@@ -143,29 +159,21 @@ class FileBasedConfigServiceTest
         session.openSession("s1", vaultPath.toString(), Base64.getEncoder()
                 .encodeToString(key), null);
 
-        writeModule("credentials.test", Map.of("db_password", Map.of("secretRef", secretRef)));
-
         FileBasedConfigService config = new FileBasedConfigService(Map.of("queryeer.settings.dir", settingsDir.toString()), session, logger);
-        SettingsModule module = config.getModule("credentials.test");
+        Object resolved = config.materializeSecrets(Map.of("db_password", Map.of("secretRef", secretRef)));
 
-        assertNotNull(module);
-        assertEquals(plaintext, module.values()
-                .get("db_password"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> map = (Map<String, Object>) resolved;
+        assertEquals(plaintext, map.get("db_password"));
     }
 
     @Test
-    void getModuleReturnsRawSecretRefsWhenSessionClosed()
+    void materializeSecretsThrowsWhenSessionClosed()
     {
         SecuritySession session = new SecuritySession();
-
-        writeModule("credentials.test", Map.of("db_password", Map.of("secretRef", "db-pass")));
-
         FileBasedConfigService config = new FileBasedConfigService(Map.of("queryeer.settings.dir", settingsDir.toString()), session, logger);
-        SettingsModule module = config.getModule("credentials.test");
 
-        assertNotNull(module);
-        assertEquals(Map.of("secretRef", "db-pass"), module.values()
-                .get("db_password"));
+        assertThrows(com.queryeer.backend.api.SecuritySessionClosedException.class, () -> config.materializeSecrets(Map.of("db_password", Map.of("secretRef", "db-pass"))));
     }
 
     @Test
@@ -213,7 +221,25 @@ class FileBasedConfigServiceTest
     }
 
     @Test
-    void listValuesAreResolvedForSecretRefs() throws Exception
+    void listValuesAreRawForSecretRefs() throws Exception
+    {
+        writeModule("list.test", Map.of("items", List.of(Map.of("secretRef", "s1"), "plain-string")));
+
+        FileBasedConfigService config = configWithDir();
+        SettingsModule module = config.getModule("list.test");
+
+        assertNotNull(module);
+        assertTrue(module.values()
+                .get("items") instanceof List);
+        @SuppressWarnings("unchecked")
+        List<Object> items = (List<Object>) module.values()
+                .get("items");
+        assertEquals(Map.of("secretRef", "s1"), items.get(0));
+        assertEquals("plain-string", items.get(1));
+    }
+
+    @Test
+    void materializeSecretsResolvesListValuesWhenSessionOpen() throws Exception
     {
         byte[] key = new byte[32];
         for (int i = 0; i < key.length; i++)
@@ -228,17 +254,11 @@ class FileBasedConfigServiceTest
         session.openSession("s1", vaultPath.toString(), Base64.getEncoder()
                 .encodeToString(key), null);
 
-        writeModule("list.test", Map.of("items", List.of(Map.of("secretRef", "s1"), "plain-string")));
-
         FileBasedConfigService config = new FileBasedConfigService(Map.of("queryeer.settings.dir", settingsDir.toString()), session, logger);
-        SettingsModule module = config.getModule("list.test");
+        Object resolved = config.materializeSecrets(List.of(Map.of("secretRef", "s1"), "plain-string"));
 
-        assertNotNull(module);
-        assertTrue(module.values()
-                .get("items") instanceof List);
         @SuppressWarnings("unchecked")
-        List<Object> items = (List<Object>) module.values()
-                .get("items");
+        List<Object> items = (List<Object>) resolved;
         assertEquals(plaintext, items.get(0));
         assertEquals("plain-string", items.get(1));
     }

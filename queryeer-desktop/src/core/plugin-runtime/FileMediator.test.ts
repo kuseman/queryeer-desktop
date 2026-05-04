@@ -3,7 +3,6 @@ import type { LayoutEditorContribution } from "../../contracts/extensions/Layout
 import { FileRegistry } from "./FileRegistry";
 import {
   createFileMediator,
-  type BackendQueryExecutor,
   type FileBackendSync
 } from "./FileMediator";
 
@@ -22,7 +21,6 @@ function makeEditor(
 
 type Harness = {
   registry: FileRegistry;
-  execute: ReturnType<typeof vi.fn>;
   sync: Required<FileBackendSync>;
   writeFile: ReturnType<typeof vi.fn>;
   readFile: ReturnType<typeof vi.fn>;
@@ -34,17 +32,11 @@ type Harness = {
 function setupHarness(options?: {
   editors?: LayoutEditorContribution[];
   changeDebounceMs?: number;
-  executeResult?: { accepted: boolean; queryExecutionId: string };
 }): Harness {
   const registry = new FileRegistry({
     getEditors: () => options?.editors ?? []
   });
   const filesRegistry = registry.createFilesRegistry();
-  const execute = vi.fn<BackendQueryExecutor>(async (params) => ({
-    accepted: options?.executeResult?.accepted ?? true,
-    queryExecutionId:
-      options?.executeResult?.queryExecutionId ?? params.queryExecutionId
-  }));
   const sync: Required<FileBackendSync> = {
     openFile: vi.fn(async () => {}),
     closeFile: vi.fn(async () => {}),
@@ -56,16 +48,14 @@ function setupHarness(options?: {
   const showSaveDialog = vi.fn();
   const mediator = createFileMediator({
     filesRegistry,
-    executeBackendQuery: execute,
     backendSync: sync,
     writeFile,
     readFile,
     resolveFileContent,
     changeDebounceMs: options?.changeDebounceMs ?? 50,
-    generateQueryExecutionId: () => "qx-test",
     showSaveDialog
   });
-  return { registry, execute, sync, writeFile, readFile, resolveFileContent, showSaveDialog, mediator };
+  return { registry, sync, writeFile, readFile, resolveFileContent, showSaveDialog, mediator };
 }
 
 describe("FileMediator.openFile", () => {
@@ -384,7 +374,6 @@ describe("FileMediator.saveFile", () => {
     const writeFile = vi.fn(async () => ({ success: true }));
     const mediator = createFileMediator({
       filesRegistry,
-      executeBackendQuery: vi.fn(),
       writeFile
     });
     const file = await mediator.openFile("untitled:orphan", {
@@ -434,37 +423,6 @@ describe("FileMediator.bindEngine", () => {
     await mediator.bindEngine(file.fileId, "payloadbuilder", "conn-2");
 
     expect(sync.openFile).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("FileMediator.executeFile", () => {
-  it("rejects without engine binding", async () => {
-    const { mediator } = setupHarness();
-    const file = await mediator.openFile("untitled:e", {
-      mimeType: "text/plain"
-    });
-
-    await expect(mediator.executeFile(file.fileId, "select 1")).rejects.toThrow(
-      /engine binding/
-    );
-  });
-
-  it("forwards engineId, fileId and text to the backend executor", async () => {
-    const { mediator, execute } = setupHarness();
-    const file = await mediator.openFile("untitled:e2", {
-      mimeType: "text/plain",
-      engineBinding: { engineId: "jdbc" }
-    });
-
-    const result = await mediator.executeFile(file.fileId, "select 1");
-
-    expect(execute).toHaveBeenCalledWith({
-      queryExecutionId: "qx-test",
-      engineId: "jdbc",
-      fileId: file.fileId,
-      text: "select 1"
-    });
-    expect(result.accepted).toBe(true);
   });
 });
 

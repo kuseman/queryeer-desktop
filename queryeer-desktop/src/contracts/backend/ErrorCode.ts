@@ -6,6 +6,7 @@ export type BackendErrorCode =
   | "QUERY_NOT_FOUND"
   | "TIMEOUT"
   | "CANCELLED"
+  | "SECURITY_SESSION_CLOSED"
   | "INTERNAL";
 
 export type BackendError = {

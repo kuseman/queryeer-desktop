@@ -3,6 +3,7 @@ package com.queryeer.backend.core.engine;
 import com.queryeer.backend.api.ErrorMessages;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
+import com.queryeer.backend.api.SecuritySessionClosedException;
 import com.queryeer.backend.contract.BackendErrorCode;
 import com.queryeer.backend.contract.engine.EngineInvokeParams;
 import com.queryeer.backend.core.security.SecretRefPayloadResolver;
@@ -28,8 +29,11 @@ public final class EngineInvokeService
 
         try
         {
-            Object resolvedPayload = secretResolver.materialize(params.payload());
-            return provider.invoke(params.fileId(), params.action(), resolvedPayload);
+            return provider.invoke(params.fileId(), params.action(), params.payload());
+        }
+        catch (SecuritySessionClosedException e)
+        {
+            throw new EngineInvokeException(BackendErrorCode.SECURITY_SESSION_CLOSED, e.getMessage());
         }
         catch (SecretRefPayloadResolver.SecretResolutionException e)
         {

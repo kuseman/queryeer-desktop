@@ -88,11 +88,11 @@ describe("QueryEngineService backend readiness", () => {
       executeBackendQuery
     };
 
-    const runWithSecretsUnlocked = vi.fn(async () => {
+    const withVaultRetry = vi.fn(async (_operation: () => Promise<unknown>) => {
       throw new Error("Security vault is locked");
     });
     securityMocks.getCoreSecurityServiceMock.mockReturnValue({
-      runWithSecretsUnlocked
+      withVaultRetry
     } as unknown as ReturnType<typeof securityMocks.getCoreSecurityServiceMock>);
 
     const service = new QueryEngineService();

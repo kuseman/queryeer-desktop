@@ -1,16 +1,6 @@
-import type {
-  FileExecuteResult,
-  FileMediator
-} from "../../contracts/files/FileMediator";
+import type { FileMediator } from "../../contracts/files/FileMediator";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
-
-export type BackendQueryExecutor = (params: {
-  queryExecutionId: string;
-  engineId: string;
-  fileId: string;
-  text: string;
-}) => Promise<{ accepted: boolean; queryExecutionId: string }>;
 
 export type FileBackendSync = {
   openFile?: (file: FileEntity, initialText?: string) => void | Promise<void>;
@@ -20,14 +10,12 @@ export type FileBackendSync = {
 
 export type FileMediatorOptions = {
   filesRegistry: FilesRegistry;
-  executeBackendQuery: BackendQueryExecutor;
   backendSync?: FileBackendSync;
   writeFile?: (uri: string, text: string) => Promise<{ success: boolean }>;
   readFile?: (uri: string) => Promise<{ success: boolean; content: string }>;
   resolveFileContent?: (fileId: string, uri: string) => string | undefined;
   onFileChanged?: (file: FileEntity, text: string) => void;
   changeDebounceMs?: number;
-  generateQueryExecutionId?: () => string;
   now?: () => number;
   showSaveDialog?: (options: {
     title?: string;
@@ -37,23 +25,14 @@ export type FileMediatorOptions = {
   muteFileWatcherPath?: (uri: string, durationMs: number) => Promise<void>;
 };
 
-let executionCounter = 0;
-
-function defaultExecutionId(): string {
-  executionCounter += 1;
-  return `qx-${Date.now().toString(36)}-${executionCounter}`;
-}
-
 export function createFileMediator(options: FileMediatorOptions): FileMediator {
   const {
     filesRegistry,
-    executeBackendQuery,
     backendSync,
     writeFile,
     readFile,
     resolveFileContent,
     onFileChanged,
-    generateQueryExecutionId = defaultExecutionId,
     showSaveDialog,
     muteFileWatcherPath
   } = options;
@@ -256,38 +235,7 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
       return next;
     },
 
-    async executeFile(fileId, text): Promise<FileExecuteResult> {
-      const file = filesRegistry.getFile(fileId);
-      if (!file) {
-        throw new Error(`Cannot execute unknown file '${fileId}'`);
-      }
-      if (!file.engineBinding) {
-        throw new Error(
-          `Cannot execute file '${fileId}' without an engine binding`
-        );
-      }
-      const queryExecutionId = generateQueryExecutionId();
-      let result: { accepted: boolean; queryExecutionId: string };
-      try {
-        result = await executeBackendQuery({
-          queryExecutionId,
-          engineId: file.engineBinding.engineId,
-          fileId,
-          text
-        });
-      } catch {
-        return {
-          queryExecutionId,
-          accepted: false
-        };
-      }
-      return {
-        queryExecutionId: result.queryExecutionId,
-        accepted: result.accepted
-      };
-    },
-
-async reloadFile(fileId) {
+    async reloadFile(fileId) {
       const file = filesRegistry.getFile(fileId);
       if (!file) {
         return undefined;

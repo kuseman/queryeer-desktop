@@ -14,11 +14,6 @@ export type FileCloseOptions = {
   discardDirty?: boolean;
 };
 
-export type FileExecuteResult = {
-  queryExecutionId: string;
-  accepted: boolean;
-};
-
 export type FileMediator = {
   openFile: (uri: string, hint?: FileOpenHint) => Promise<FileEntity>;
   closeFile: (fileId: string, opts?: FileCloseOptions) => Promise<void>;
@@ -33,7 +28,6 @@ export type FileMediator = {
     engineId: string,
     connectionId?: string
   ) => Promise<FileEntity | undefined>;
-  executeFile: (fileId: string, text: string) => Promise<FileExecuteResult>;
   reloadFile: (fileId: string) => Promise<FileEntity | undefined>;
   acceptExternalChange: (fileId: string) => Promise<FileEntity | undefined>;
   discardExternalChange: (fileId: string) => Promise<FileEntity | undefined>;

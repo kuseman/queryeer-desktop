@@ -72,7 +72,6 @@ function createContext(file: FileEntity): PluginContext {
       setContextFileId: vi.fn(),
       getContextFileId: vi.fn(() => null),
       bindEngine: vi.fn(),
-      executeFile: vi.fn(),
       reloadFile: vi.fn(),
       acceptExternalChange: vi.fn(),
       discardExternalChange: vi.fn(),

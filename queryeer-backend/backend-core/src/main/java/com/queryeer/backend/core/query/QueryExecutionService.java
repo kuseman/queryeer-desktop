@@ -9,6 +9,7 @@ import com.queryeer.backend.api.ErrorMessages;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.QueryPublisher;
+import com.queryeer.backend.api.SecuritySessionClosedException;
 import com.queryeer.backend.core.security.SecretRefPayloadResolver;
 
 public final class QueryExecutionService
@@ -38,8 +39,11 @@ public final class QueryExecutionService
         {
             try
             {
-                Object resolvedEngineState = secretResolver.materialize(engineState);
-                provider.execute(queryExecutionId, fileId, text, resolvedEngineState, publisher);
+                provider.execute(queryExecutionId, fileId, text, engineState, publisher);
+            }
+            catch (SecuritySessionClosedException e)
+            {
+                publisher.failed("SECURITY_SESSION_CLOSED", e.getMessage());
             }
             catch (SecretRefPayloadResolver.SecretResolutionException e)
             {

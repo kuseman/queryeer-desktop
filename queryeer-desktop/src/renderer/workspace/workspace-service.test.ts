@@ -97,10 +97,6 @@ function makeHarness(
   const onFileChangedListeners = new Set<(file: unknown, text: string) => void>();
   const mediator = createFileMediator({
     filesRegistry,
-    executeBackendQuery: async (params) => ({
-      accepted: true,
-      queryExecutionId: params.queryExecutionId
-    }),
     changeDebounceMs: 10,
     onFileChanged: (file, text) => {
       for (const listener of onFileChangedListeners) {

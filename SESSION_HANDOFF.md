@@ -50,3 +50,71 @@
 
 - No migration path for old settings — users must clear appDir/start fresh (acceptable per user: "no backward compatibility needed").
 - Old H2 schema cache files from previous `connectionId` values will simply be orphaned on disk until manual cleanup.
+
+---
+
+## Removed `FileMediator.executeFile`
+
+**Rationale:** `FileMediator.executeFile()` was dead code — no production caller existed. Programmatic execution should go through `QueryEngineService.execute()` which handles vault retry, engine resolution, and event routing properly. Removing it eliminates a broken/less-capable alternative that would silently fail on locked vaults.
+
+**Files changed:**
+- `contracts/files/FileMediator.ts` — removed `executeFile` from interface and deleted `FileExecuteResult` type.
+- `core/plugin-runtime/FileMediator.ts` — removed `executeFile` implementation, `BackendQueryExecutor` type, `executeBackendQuery` option, `generateQueryExecutionId` option.
+- `core/plugin-runtime/PluginHost.ts` — removed `executeBackendQuery` from `PluginHostOptions` and `createFileMediator` call.
+- `renderer/shell/bootstrap.ts` — removed `executeBackendQuery` from `PluginHost` constructor.
+- `core/plugin-runtime/FileMediator.test.ts` — removed `executeFile` tests and cleaned up harness.
+- `renderer/workspace/workspace-service.test.ts` — removed `executeBackendQuery` from `createFileMediator` call.
+- 5 plugin test files — removed `executeFile: vi.fn()` from mock `fileMediator` objects.
+
+## Lazy secret materialization and vault-unlock deferral
+
+**Problem:** Secrets were eagerly materialized on both frontend (`runWithSecretsUnlocked` scanned payloads for `secretRef` before every backend call) and backend (`FileBasedConfigService.getModule()`, `QueryExecutionService`, `EngineInvokeService`, and `JdbcResolvedConnection` all eagerly resolved `secretRef` wrappers). This forced users to unlock the vault even for operations that never actually needed a secret (e.g., JDBC with Windows native auth).
+
+**Solution:** Defer secret materialization until the exact moment a plaintext secret is required (right before `DriverManager.getConnection`). Introduce a dedicated `SECURITY_SESSION_CLOSED` error code so the frontend can catch it, show the unlock dialog, and retry.
+
+### Frontend changes
+
+- **`src/contracts/backend/ErrorCode.ts`**: added `"SECURITY_SESSION_CLOSED"` to `BackendErrorCode`.
+- **`src/plugins/core.security/service.ts`**:
+  - Replaced `runWithSecretsUnlocked(payload, action)` with `withVaultRetry(operation, options?)`.
+  - Removed client-side `secretRef` scanning (`containsSecretRef`).
+  - `withVaultRetry` catches errors containing `SECURITY_SESSION_CLOSED`, prompts for unlock via `ensureUnlockedForSecretAccess`, and retries the operation once if unlocked.
+- **`src/plugins/core.queryengine/QueryEngineService.ts`**:
+  - Replaced `runWithSecretsUnlocked` wrapper with `withVaultRetry` in both `execute()` and `invoke()`.
+- **Tests updated** in `service.test.ts` and `QueryEngineService.test.ts` to cover retry success, retry cancellation, and locked-state failure.
+- **`QueryEditorComponent.tsx`** (type fix): corrected `error: p.error` to `error: p.error ?? null` at line 284 to satisfy `updateOutputContextForFile`'s `error: { code: string; message: string } | null` type.
+
+### Backend changes
+
+- **`BackendErrorCode.java`**: added `SECURITY_SESSION_CLOSED`.
+- **`SecuritySessionClosedException.java`** (new in `backend-api`): standalone exception thrown when `SecretRefPayloadResolver` attempts to decrypt while the session is closed.
+- **`SecretRefPayloadResolver.java`**: throws `SecuritySessionClosedException` (instead of generic `SecretResolutionException`) when `session.isOpen() == false`.
+- **`FileBasedConfigService.java`**:
+  - Removed eager `resolveSecrets()` from `getModule()` — modules now return raw values with `secretRef` wrappers intact.
+  - `materializeSecrets()` now propagates exceptions (no longer swallows `SecretResolutionException`).
+- **`QueryExecutionService.java`**: removed eager `secretResolver.materialize(engineState)`. Catches `SecuritySessionClosedException` and emits `publisher.failed("SECURITY_SESSION_CLOSED", ...)`.
+- **`EngineInvokeService.java`**: removed eager `secretResolver.materialize(params.payload())`. Catches `SecuritySessionClosedException` and throws `EngineInvokeException(BackendErrorCode.SECURITY_SESSION_CLOSED, ...)`.
+- **JDBC plugin**:
+  - **`JdbcCredentialResolver.java`** (new): centralizes lazy materialization of `JdbcConnectionProfile` properties.
+  - **`JdbcResolvedConnection.java`**: removed `ConfigService` dependency and eager `materialize()` calls. Profiles are built with raw properties.
+  - **`JdbcConnectionResolver.java`**: simplified to return `JdbcConnectionProfile` directly (no `Optional`).
+  - **`JdbcQueryEngineProvider.java`**: injects `JdbcCredentialResolver`; materializes profiles in `execute()`, `connectionTest()`, and `schemaFetch()` right before use.
+  - **`JdbcSchemaCrawler.java`**: injects `JdbcCredentialResolver`; materializes profile before calling `schemaResolver().resolveSchema()`.
+  - **`JdbcSchemaCrawlCoordinator.java`**:
+    - Removed `securitySessionState.isOpen()` gates from background `loop()` and `onConnectionUpsert()`.
+    - Background crawls silently swallow `SecuritySessionClosedException` (no log spam).
+    - `refreshNow()` propagates `SecuritySessionClosedException` to the caller so the frontend can show the unlock dialog.
+  - **`JdbcBackendPlugin.java`**: wired `JdbcCredentialResolver` into all components.
+- **Tests updated** across `SecretRefPayloadResolverTest`, `FileBasedConfigServiceTest`, `QueryExecutionServiceTest`, `JdbcResolvedConnectionTest`, and `JdbcBackendPluginTest`.
+
+### Protocol docs
+
+- **`BACKEND_PROTOCOL.md`**:
+  - Added `SECURITY_SESSION_CLOSED` to error codes list.
+  - Updated security constraints section to describe lazy resolution and retry behavior.
+
+### Validation
+
+- Desktop: `npm run typecheck && npm run lint && npm run build && npm run test && npm run test:integration` — all green (626 passed, 10 skipped; integration 8 passed, 2 skipped). One pre-existing unhandled rejection from `bootstrap.test.ts` timer teardown (unrelated).
+- Backend: `./mvnw -f queryeer-backend/pom.xml -DskipTests=true clean verify` — all green.
+- Full backend test suite (`./mvnw -f queryeer-backend/pom.xml test`) — all green (103 tests passed).
