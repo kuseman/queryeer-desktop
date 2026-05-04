@@ -110,7 +110,7 @@ export class QueryEngineService {
       );
     }
     try {
-      await runWithSecretsUnlocked(decoratedParams.engineState, async () => {
+      await withVaultRetry(async () => {
         await window.appShell.executeBackendQuery({
           queryExecutionId,
           engineId,
@@ -149,7 +149,7 @@ export class QueryEngineService {
 
   async invoke(params: EngineInvokeParams): Promise<unknown> {
     await ensureBackendHealthy();
-    const response = await runWithSecretsUnlocked(params.payload, async () => {
+    const response = await withVaultRetry(async () => {
       return window.appShell.invokeBackendEngine(params);
     });
     if (response.error) {
@@ -270,11 +270,11 @@ async function ensureBackendHealthy(): Promise<void> {
   throw new Error("Backend is not up and running yet. Please wait a moment and try again.");
 }
 
-async function runWithSecretsUnlocked<T>(payload: unknown, action: () => Promise<T>): Promise<T> {
+async function withVaultRetry<T>(operation: () => Promise<T>): Promise<T> {
   const security = getCoreSecurityService();
   if (!security) {
-    return action();
+    return operation();
   }
 
-  return security.runWithSecretsUnlocked(payload, action, { interactive: true });
+  return security.withVaultRetry(operation, { interactive: true });
 }

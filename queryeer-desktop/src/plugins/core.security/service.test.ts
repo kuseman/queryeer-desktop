@@ -150,7 +150,7 @@ describe("CoreSecurityService", () => {
     expect(bridge.unlock).not.toHaveBeenCalled();
   });
 
-  it("runs action without unlock when payload has no secret refs", async () => {
+  it("runs action directly with withVaultRetry", async () => {
     const { service, bridge } = createService({
       status: {
         unlocked: false,
@@ -160,14 +160,40 @@ describe("CoreSecurityService", () => {
     });
     const action = vi.fn(async () => 42);
 
-    const result = await service.runWithSecretsUnlocked({ safe: true }, action);
+    const result = await service.withVaultRetry(action);
 
     expect(result).toBe(42);
     expect(action).toHaveBeenCalledTimes(1);
     expect(bridge.unlock).not.toHaveBeenCalled();
   });
 
-  it("requires unlock when payload contains secret refs", async () => {
+  it("retries after unlock when operation throws SECURITY_SESSION_CLOSED", async () => {
+    const { service, bridge } = createService({
+      status: {
+        unlocked: false,
+        hasPersistedVault: true,
+        hasStoredMasterPassword: false
+      },
+      prompt: () => "master-pass",
+      response: { accepted: true }
+    });
+    let calls = 0;
+    const action = vi.fn(async () => {
+      calls++;
+      if (calls === 1) {
+        throw new Error("SECURITY_SESSION_CLOSED: Security session is not open");
+      }
+      return 42;
+    });
+
+    const result = await service.withVaultRetry(action);
+
+    expect(result).toBe(42);
+    expect(action).toHaveBeenCalledTimes(2);
+    expect(bridge.unlock).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws SecurityVaultLockedError when user cancels unlock retry", async () => {
     const { service } = createService({
       status: {
         unlocked: false,
@@ -176,9 +202,12 @@ describe("CoreSecurityService", () => {
       },
       prompt: () => null
     });
+    const action = vi.fn(async () => {
+      throw new Error("SECURITY_SESSION_CLOSED: Security session is not open");
+    });
 
-    await expect(
-      service.runWithSecretsUnlocked({ authPassword: { secretRef: "secret-ref-1" } }, async () => true)
-    ).rejects.toThrow("Security vault is locked");
+    await expect(service.withVaultRetry(action)).rejects.toThrow(
+      "Security vault is locked"
+    );
   });
 });

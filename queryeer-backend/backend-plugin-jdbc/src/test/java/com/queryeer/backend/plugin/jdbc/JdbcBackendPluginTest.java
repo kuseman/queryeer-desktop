@@ -56,15 +56,14 @@ class JdbcBackendPluginTest
     }
 
     @Test
-    void schemaRefreshRequiresOpenSecuritySession()
+    void schemaRefreshSucceedsWithoutOpenSessionWhenNoSecretsNeeded()
     {
         QueryEngineProvider provider = activateAndGetProvider();
         provider.invoke(null, "connection.upsert",
                 Map.of("connectionId", "jdbc-refresh-closed", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_refresh_closed;DB_CLOSE_DELAY=-1")));
 
-        IllegalStateException error = Assertions.assertThrows(IllegalStateException.class,
-                () -> provider.invoke(null, "jdbc.schema.refresh", Map.of("connectionId", "jdbc-refresh-closed", "scope", "deep", "target", Map.of("schema", "PUBLIC"))));
-        Assertions.assertEquals("security.session.open is required before schema refresh", error.getMessage());
+        Object result = provider.invoke(null, "jdbc.schema.refresh", Map.of("connectionId", "jdbc-refresh-closed", "scope", "deep", "target", Map.of("schema", "PUBLIC")));
+        Assertions.assertNotNull(result);
     }
 
     @Test
@@ -334,7 +333,7 @@ class JdbcBackendPluginTest
     }
 
     @Test
-    void startupSchemaCrawlWaitsForSecuritySessionOpen() throws Exception
+    void startupSchemaCrawlRunsEvenWhenSecuritySessionClosedForPasswordlessConnections() throws Exception
     {
         Path tempDir = Path.of("target", "test-work", "jdbc-crawl-" + java.util.UUID.randomUUID());
         Path settingsDir = tempDir.resolve("settings");
@@ -363,18 +362,6 @@ class JdbcBackendPluginTest
         }, scheduler, events));
 
         scheduler.run("jdbc.schema-crawl-startup");
-        Thread.sleep(300L);
-
-        if (Files.exists(cacheDir))
-        {
-            try (java.util.stream.Stream<Path> stream = Files.list(cacheDir))
-            {
-                Assertions.assertTrue(stream.findAny()
-                        .isEmpty());
-            }
-        }
-
-        events.publish("security.session.opened", Map.of("sessionId", "s1"));
 
         Instant deadline = Instant.now()
                 .plus(Duration.ofSeconds(5));
@@ -398,7 +385,7 @@ class JdbcBackendPluginTest
             Thread.sleep(500L);
         }
 
-        Assertions.assertTrue(created, "Expected schema cache to be created only after security.session.opened");
+        Assertions.assertTrue(created, "Expected schema cache to be created even without security.session.opened for passwordless connections");
     }
 
     @SuppressWarnings("unchecked")

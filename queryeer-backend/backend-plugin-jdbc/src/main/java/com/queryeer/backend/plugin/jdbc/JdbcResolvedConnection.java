@@ -3,7 +3,6 @@ package com.queryeer.backend.plugin.jdbc;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnectionProfile;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialect;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
@@ -20,7 +19,7 @@ record JdbcResolvedConnection(String connectionId, JdbcDialect dialect, JdbcConn
     /**
      * Resolves from an engineState. Supports {@code { "connectionId": "..." }} (new format) and inline connection properties (legacy test format with url/dialectId).
      */
-    static JdbcResolvedConnection fromEngineState(Object engineState, JdbcConnectionRegistry connections, JdbcDialectRegistry registry, ConfigService configService)
+    static JdbcResolvedConnection fromEngineState(Object engineState, JdbcConnectionRegistry connections, JdbcDialectRegistry registry)
     {
         Map<String, Object> map = asMap(engineState);
         String connectionId = stringValue(map.get("connectionId"));
@@ -28,7 +27,7 @@ record JdbcResolvedConnection(String connectionId, JdbcDialect dialect, JdbcConn
         {
             JdbcConnectionRegistry.JdbcStoredConnection stored = connections.get(connectionId)
                     .orElseThrow(() -> new IllegalArgumentException("Unknown connectionId: " + connectionId));
-            return fromStoredConnection(stored, registry, configService, Map.of());
+            return fromStoredConnection(stored, registry, Map.of());
         }
 
         // Fallback: inline connection properties (from tests using legacy format)
@@ -44,20 +43,20 @@ record JdbcResolvedConnection(String connectionId, JdbcDialect dialect, JdbcConn
                 || effective.containsKey("dialectId")
                 || effective.containsKey("properties"))
         {
-            return fromProperties(effective, null, registry, configService);
+            return fromProperties(effective, null, registry);
         }
 
         throw new IllegalArgumentException("connectionId is required");
     }
 
     /** Resolves from a raw payload containing full connection properties (used by connectionTest). */
-    static JdbcResolvedConnection fromPayload(Object payload, JdbcDialectRegistry registry, ConfigService configService)
+    static JdbcResolvedConnection fromPayload(Object payload, JdbcDialectRegistry registry)
     {
-        return fromProperties(asMap(payload), null, registry, configService);
+        return fromProperties(asMap(payload), null, registry);
     }
 
     /** Resolves from a payload with connectionId + optional property overrides (used by schemaFetch). */
-    static JdbcResolvedConnection fromRegistryWithOverrides(Object payload, JdbcConnectionRegistry connections, JdbcDialectRegistry registry, ConfigService configService)
+    static JdbcResolvedConnection fromRegistryWithOverrides(Object payload, JdbcConnectionRegistry connections, JdbcDialectRegistry registry)
     {
         Map<String, Object> value = asMap(payload);
         String connectionId = stringValue(value.get("connectionId"));
@@ -72,11 +71,10 @@ record JdbcResolvedConnection(String connectionId, JdbcDialect dialect, JdbcConn
         @SuppressWarnings("unchecked")
         Map<String, Object> overrides = value.get("properties") instanceof Map<?, ?> p ? (Map<String, Object>) p
                 : Map.of();
-        return fromStoredConnection(stored, registry, configService, overrides);
+        return fromStoredConnection(stored, registry, overrides);
     }
 
-    private static JdbcResolvedConnection fromStoredConnection(JdbcConnectionRegistry.JdbcStoredConnection stored, JdbcDialectRegistry registry, ConfigService configService,
-            Map<String, Object> overrides)
+    private static JdbcResolvedConnection fromStoredConnection(JdbcConnectionRegistry.JdbcStoredConnection stored, JdbcDialectRegistry registry, Map<String, Object> overrides)
     {
         String dialectId = stringValue(stored.connection()
                 .get("dialectId"));
@@ -85,14 +83,14 @@ record JdbcResolvedConnection(String connectionId, JdbcDialect dialect, JdbcConn
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported JDBC dialect: " + (dialectId != null ? dialectId
                         : ENGINE_ID)));
 
-        Map<String, Object> resolved = materialize(mergeProperties(stored.connection(), overrides), configService);
-        validateConnection(dialect, resolved, stored.connectionId());
+        Map<String, Object> merged = mergeProperties(stored.connection(), overrides);
+        validateConnection(dialect, merged, stored.connectionId());
 
         return new JdbcResolvedConnection(stored.connectionId(), dialect, new JdbcConnectionProfile(stored.connectionId(), stored.name(), dialect.metadata()
-                .id(), resolved));
+                .id(), merged));
     }
 
-    private static JdbcResolvedConnection fromProperties(Map<String, Object> properties, String connectionId, JdbcDialectRegistry registry, ConfigService configService)
+    private static JdbcResolvedConnection fromProperties(Map<String, Object> properties, String connectionId, JdbcDialectRegistry registry)
     {
         String dialectId = stringValue(properties.get("dialectId"));
         JdbcDialect dialect = registry.find(dialectId != null ? dialectId
@@ -100,11 +98,10 @@ record JdbcResolvedConnection(String connectionId, JdbcDialect dialect, JdbcConn
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported JDBC dialect: " + (dialectId != null ? dialectId
                         : ENGINE_ID)));
 
-        Map<String, Object> resolved = materialize(properties, configService);
-        validateConnection(dialect, resolved, connectionId);
+        validateConnection(dialect, properties, connectionId);
 
         return new JdbcResolvedConnection(connectionId, dialect, new JdbcConnectionProfile(connectionId, null, dialect.metadata()
-                .id(), resolved));
+                .id(), properties));
     }
 
     private static void validateConnection(JdbcDialect dialect, Map<String, Object> properties, String connectionId)
@@ -133,17 +130,6 @@ record JdbcResolvedConnection(String connectionId, JdbcDialect dialect, JdbcConn
         Map<String, Object> merged = new LinkedHashMap<>(stored);
         merged.putAll(overrides);
         return merged;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> materialize(Map<String, Object> properties, ConfigService configService)
-    {
-        Object resolved = configService.materializeSecrets(properties);
-        if (resolved instanceof Map<?, ?> resolvedMap)
-        {
-            return (Map<String, Object>) resolvedMap;
-        }
-        return properties;
     }
 
     private static Map<String, Object> asMap(Object value)

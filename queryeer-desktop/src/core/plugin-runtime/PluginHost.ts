@@ -7,7 +7,6 @@ import type { PluginManifestFile } from "../../contracts/plugin/PluginManifestFi
 import { ExtensionRegistry } from "./ExtensionRegistry";
 import {
   createFileMediator,
-  type BackendQueryExecutor,
   type FileBackendSync
 } from "./FileMediator";
 import type { PluginDiagnostics } from "./PluginDiagnostics";
@@ -26,7 +25,6 @@ export type PluginHostState = {
 };
 
 export type PluginHostOptions = {
-  executeBackendQuery: BackendQueryExecutor;
   fileWatcher: FileWatcherService;
   backendSync?: FileBackendSync;
   onFileChanged?: (file: FileEntity, text: string) => void;
@@ -61,7 +59,6 @@ export class PluginHost {
     this.fileWatcher = options.fileWatcher;
     this.fileMediator = createFileMediator({
       filesRegistry: this.extensionRegistry.createFilesRegistry(),
-      executeBackendQuery: options.executeBackendQuery,
       backendSync: options.backendSync,
       onFileChanged: options.onFileChanged,
       writeFile: options.writeFile,

@@ -192,23 +192,27 @@ export class CoreSecurityService {
     return false;
   }
 
-  public async runWithSecretsUnlocked<T>(
-    payload: unknown,
-    action: () => Promise<T>,
+  public async withVaultRetry<T>(
+    operation: () => Promise<T>,
     options?: { interactive?: boolean }
   ): Promise<T> {
-    if (!containsSecretRef(payload)) {
-      return action();
+    try {
+      return await operation();
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes("SECURITY_SESSION_CLOSED")
+      ) {
+        const accepted = await this.ensureUnlockedForSecretAccess({
+          interactive: options?.interactive ?? true
+        });
+        if (!accepted) {
+          throw new SecurityVaultLockedError();
+        }
+        return await operation();
+      }
+      throw error;
     }
-
-    const accepted = await this.ensureUnlockedForSecretAccess({
-      interactive: options?.interactive ?? true
-    });
-    if (!accepted) {
-      throw new Error("Security vault is locked");
-    }
-
-    return action();
   }
 
   public async rotateMasterPassword(
@@ -272,32 +276,6 @@ export function initializeCoreSecurityService(dialog: DialogRegistry): CoreSecur
 
 export function getCoreSecurityService(): CoreSecurityService | null {
   return coreSecurityService;
-}
-
-function containsSecretRef(value: unknown): boolean {
-  if (!value) {
-    return false;
-  }
-
-  if (Array.isArray(value)) {
-    return value.some((entry) => containsSecretRef(entry));
-  }
-
-  if (typeof value !== "object") {
-    return false;
-  }
-
-  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
-    if (key === "secretRef" && typeof nested === "string" && nested.trim()) {
-      return true;
-    }
-
-    if (containsSecretRef(nested)) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 async function requestMasterPasswordViaDialog(

@@ -54,8 +54,9 @@ public final class JdbcBackendPlugin implements BackendPlugin
         JdbcSettingsConnectionSource settingsSource = new JdbcSettingsConnectionSource();
         JdbcConnectionRegistry connections = new JdbcConnectionRegistry(context.config(), settingsSource, context.logger());
         JdbcConnectionResolver resolver = new JdbcConnectionResolver();
+        JdbcCredentialResolver credentialResolver = new JdbcCredentialResolver(context.config());
         JdbcSchemaStore schemaStore = new JdbcSchemaStore(resolveSchemaCacheDir(context.config()));
-        JdbcSchemaCrawler schemaCrawler = new JdbcSchemaCrawler(registry, resolver, schemaStore, context.logger());
+        JdbcSchemaCrawler schemaCrawler = new JdbcSchemaCrawler(registry, resolver, schemaStore, context.logger(), credentialResolver);
         JdbcSecuritySessionState securitySessionState = new JdbcSecuritySessionState();
         JdbcSchemaCrawlCoordinator crawlCoordinator = new JdbcSchemaCrawlCoordinator(connections, schemaCrawler, schemaStore, new JdbcSchemaCrawlPolicy(), securitySessionState, context.logger());
         context.events()
@@ -66,7 +67,7 @@ public final class JdbcBackendPlugin implements BackendPlugin
         long reaperIntervalMs = parseDurationMs(context.config(), REAPER_INTERVAL_KEY, Math.max(1_000L, Math.min(idleTimeoutMs, TimeUnit.MINUTES.toMillis(5))));
         long schemaCrawlIntervalMs = parseDurationMs(context.config(), SCHEMA_CRAWL_INTERVAL_KEY, TimeUnit.MINUTES.toMillis(5));
         JdbcFileConnectionManager fileConnections = new JdbcFileConnectionManager(idleTimeoutMs);
-        JdbcQueryEngineProvider provider = new JdbcQueryEngineProvider(registry, connections, fileConnections, crawlCoordinator::onUsage, schemaStore, crawlCoordinator, context.config());
+        JdbcQueryEngineProvider provider = new JdbcQueryEngineProvider(registry, connections, fileConnections, crawlCoordinator::onUsage, schemaStore, crawlCoordinator, credentialResolver);
 
         context.scheduler()
                 .schedule("jdbc.file-session-reaper", () -> startReaperThread(fileConnections, reaperIntervalMs));

@@ -86,7 +86,6 @@ export async function bootstrapShell() {
   };
 
   const host = new PluginHost({
-    executeBackendQuery: (params) => window.appShell.executeBackendQuery(params),
     fileWatcher,
     backendSync,
     onFileChanged,

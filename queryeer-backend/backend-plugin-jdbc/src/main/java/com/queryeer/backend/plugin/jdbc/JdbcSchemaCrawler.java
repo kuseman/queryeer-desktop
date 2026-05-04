@@ -2,7 +2,6 @@ package com.queryeer.backend.plugin.jdbc;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import com.queryeer.backend.api.LoggerService;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnectionProfile;
@@ -16,13 +15,15 @@ final class JdbcSchemaCrawler
     private final JdbcConnectionResolver resolver;
     private final JdbcSchemaStore store;
     private final LoggerService logger;
+    private final JdbcCredentialResolver credentialResolver;
 
-    JdbcSchemaCrawler(JdbcDialectRegistry registry, JdbcConnectionResolver resolver, JdbcSchemaStore store, LoggerService logger)
+    JdbcSchemaCrawler(JdbcDialectRegistry registry, JdbcConnectionResolver resolver, JdbcSchemaStore store, LoggerService logger, JdbcCredentialResolver credentialResolver)
     {
         this.registry = registry;
         this.resolver = resolver;
         this.store = store;
         this.logger = logger;
+        this.credentialResolver = credentialResolver;
     }
 
     void crawl(JdbcConnectionRegistry.JdbcStoredConnection stored, JdbcSchemaCrawlScope scope, JdbcSchemaTarget target)
@@ -41,11 +42,8 @@ final class JdbcSchemaCrawler
             return;
         }
 
-        Optional<JdbcConnectionProfile> profileOpt = resolver.resolve(stored);
-        if (profileOpt.isEmpty())
-        {
-            return; // session locked — skip silently
-        }
+        JdbcConnectionProfile profile = resolver.resolve(stored);
+        JdbcConnectionProfile materializedProfile = credentialResolver.resolve(profile);
 
         Map<String, Object> options = Map.of("scope", scope.name()
                 .toLowerCase(), "target",
@@ -53,7 +51,7 @@ final class JdbcSchemaCrawler
                         : Map.of("database", target.database() == null ? ""
                                 : target.database(), "schema", target.schema()));
         List<JdbcSchemaObject> objects = dialect.schemaResolver()
-                .resolveSchema(profileOpt.get(), options);
+                .resolveSchema(materializedProfile, options);
         store.persistSnapshot(stored.connectionId(), scope, objects);
     }
 

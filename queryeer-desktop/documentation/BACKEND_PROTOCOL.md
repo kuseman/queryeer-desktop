@@ -593,6 +593,7 @@ Rules:
 - `QUERY_NOT_FOUND`: cancellation or progress target missing
 - `TIMEOUT`: operation exceeded deadline
 - `CANCELLED`: operation canceled
+- `SECURITY_SESSION_CLOSED`: operation required an open security session but the vault is locked
 - `INTERNAL`: unhandled backend exception
 
 Error payload schema:
@@ -626,7 +627,8 @@ Error payload schema:
 - No arbitrary code evaluation or dynamic method invocation.
 - Protocol payloads SHOULD avoid carrying raw secrets (passwords, tokens, API keys) where a stable id/handle can be used instead.
 - Preferred payload secret marker is `{ "secretRef": "<ref-id>" }` at the value position.
-- Backend resolves structured secret wrappers only (`{ "secretRef": "<ref-id>" }`) before engine/plugin invocation.
+- Backend resolves structured secret wrappers (`{ "secretRef": "<ref-id>" }`) lazily, only when a provider actually needs the plaintext value (for example right before opening a JDBC connection).
+- If the security session is closed and a secret must be resolved, the backend returns `SECURITY_SESSION_CLOSED`. The frontend MAY prompt the user to unlock the vault and retry the operation.
 - `security.*` control requests MUST never log sensitive values (`sessionKeyBase64`, secret refs, decrypted plaintext).
 - `security.session.open` transports a derived session key and MUST NOT transport raw master password.
 - Desktop and backend diagnostic logs MUST redact sensitive fields before persistence/display.

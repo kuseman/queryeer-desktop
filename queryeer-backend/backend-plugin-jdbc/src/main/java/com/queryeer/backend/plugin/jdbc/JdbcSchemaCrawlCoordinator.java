@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 
 import com.queryeer.backend.api.LoggerService;
+import com.queryeer.backend.api.SecuritySessionClosedException;
 
 final class JdbcSchemaCrawlCoordinator
 {
@@ -53,10 +54,7 @@ final class JdbcSchemaCrawlCoordinator
         Instant now = Instant.now();
         JdbcSchemaStore.CrawlState topState = store.readState(connectionId, JdbcSchemaCrawlScope.TOP);
         store.updateState(connectionId, JdbcSchemaCrawlScope.TOP, topState, now, Instant.EPOCH);
-        if (securitySessionState.isOpen())
-        {
-            findConnection(connectionId).ifPresent(connection -> crawlOne(connection, JdbcSchemaCrawlScope.TOP, true, null, now));
-        }
+        findConnection(connectionId).ifPresent(connection -> crawlOneSilent(connection, JdbcSchemaCrawlScope.TOP, true, null, now));
     }
 
     List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> refreshNow(String connectionId, JdbcSchemaCrawlScope scope, JdbcSchemaTarget target)
@@ -65,10 +63,6 @@ final class JdbcSchemaCrawlCoordinator
                 || connectionId.isBlank())
         {
             throw new IllegalArgumentException("connectionId is required");
-        }
-        if (!securitySessionState.isOpen())
-        {
-            throw new IllegalStateException("security.session.open is required before schema refresh");
         }
         JdbcConnectionRegistry.JdbcStoredConnection stored = findConnection(connectionId).orElseThrow(() -> new IllegalArgumentException("Unknown connectionId: " + connectionId));
         if (scope == JdbcSchemaCrawlScope.DEEP
@@ -85,18 +79,24 @@ final class JdbcSchemaCrawlCoordinator
         while (!Thread.currentThread()
                 .isInterrupted())
         {
-            if (!securitySessionState.isOpen())
-            {
-                sleepQuietly(1_000L);
-                continue;
-            }
-
             List<JdbcConnectionRegistry.JdbcStoredConnection> current = connections.all();
             for (JdbcConnectionRegistry.JdbcStoredConnection connection : current)
             {
-                crawlOne(connection, JdbcSchemaCrawlScope.TOP, false, null, Instant.now());
+                crawlOneSilent(connection, JdbcSchemaCrawlScope.TOP, false, null, Instant.now());
             }
             sleepQuietly(Math.max(500L, intervalMs));
+        }
+    }
+
+    private void crawlOneSilent(JdbcConnectionRegistry.JdbcStoredConnection connection, JdbcSchemaCrawlScope scope, boolean force, JdbcSchemaTarget target, Instant now)
+    {
+        try
+        {
+            crawlOne(connection, scope, force, target, now);
+        }
+        catch (SecuritySessionClosedException e)
+        {
+            // Silently skip connections that require a locked vault
         }
     }
 
