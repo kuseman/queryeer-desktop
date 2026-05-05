@@ -16,6 +16,11 @@
     <dependencies>
         <dependency>
             <groupId>com.queryeer.backend</groupId>
+            <artifactId>backend-contract</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.queryeer.backend</groupId>
             <artifactId>backend-lib-queryengine-jdbc-foundation</artifactId>
             <version>${project.version}</version>
         </dependency>

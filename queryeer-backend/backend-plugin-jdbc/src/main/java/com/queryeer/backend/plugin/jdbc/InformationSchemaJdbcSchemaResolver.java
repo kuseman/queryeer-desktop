@@ -20,6 +20,39 @@ import com.queryeer.backend.queryengine.jdbc.JdbcSchemaResolver;
 
 final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
 {
+    private static final String KEY_URL = "url";
+    private static final String KEY_USERNAME = "username";
+    private static final String KEY_PASSWORD = "password";
+    private static final String KEY_USER = "user";
+    private static final String OPTION_SCOPE = "scope";
+    private static final String OPTION_TARGET = "target";
+    private static final String SCOPE_TOP = "top";
+    private static final String SCOPE_TABLES = "tables";
+    private static final String SCOPE_COLUMNS = "columns";
+    private static final String KEY_DATABASE = "database";
+    private static final String KEY_SCHEMA = "schema";
+    private static final String KEY_TABLE = "table";
+    private static final String KEY_CATALOG = "catalog";
+    private static final String KIND_SCHEMA = "schema";
+    private static final String KIND_TABLE = "table";
+    private static final String KIND_VIEW = "view";
+    private static final String KIND_COLUMN = "column";
+    private static final String KIND_DATABASE = "database";
+    private static final String KIND_PRIMARY_KEY = "primary_key";
+    private static final String KIND_FOREIGN_KEY = "foreign_key";
+    private static final String KIND_INDEX = "index";
+    private static final String DEFAULT_SCHEMA_NAME = "default";
+    private static final String DEFAULT_CATALOG_NAME = "default";
+    private static final String ERROR_RESOLVE_SCHEMA = "Failed to resolve JDBC schema";
+
+    private static final String KEY_TYPE = "type";
+    private static final String KEY_NULLABLE = "nullable";
+    private static final String KEY_ORDINAL = "ordinal";
+    private static final String KEY_COLUMN = "column";
+    private static final String KEY_REFERENCES_TABLE = "referencesTable";
+    private static final String KEY_REFERENCES_COLUMN = "referencesColumn";
+    private static final String KEY_NON_UNIQUE = "nonUnique";
+
     @Override
     public List<JdbcSchemaObject> resolveSchema(JdbcConnectionProfile connection)
     {
@@ -30,7 +63,7 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
     public List<JdbcSchemaObject> resolveSchema(JdbcConnectionProfile connection, Map<String, Object> options)
     {
         String url = text(connection.properties()
-                .get("url"));
+                .get(KEY_URL));
         if (url == null)
         {
             return List.of();
@@ -38,31 +71,31 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
 
         Properties properties = new Properties();
         String username = text(connection.properties()
-                .get("username"));
+                .get(KEY_USERNAME));
         String password = text(connection.properties()
-                .get("password"));
+                .get(KEY_PASSWORD));
         if (username != null)
         {
-            properties.setProperty("user", username);
+            properties.setProperty(KEY_USER, username);
         }
         if (password != null)
         {
-            properties.setProperty("password", password);
+            properties.setProperty(KEY_PASSWORD, password);
         }
 
         try (Connection jdbc = DriverManager.getConnection(url, properties))
         {
-            String scope = text(options.get("scope"));
-            if ("top".equalsIgnoreCase(scope))
+            String scope = text(options.get(OPTION_SCOPE));
+            if (SCOPE_TOP.equalsIgnoreCase(scope))
             {
                 return readTopLevelObjects(jdbc);
             }
-            JdbcSchemaTarget target = targetFrom(options.get("target"));
-            if ("tables".equalsIgnoreCase(scope))
+            JdbcSchemaTarget target = targetFrom(options.get(OPTION_TARGET));
+            if (SCOPE_TABLES.equalsIgnoreCase(scope))
             {
                 return readTableNames(jdbc, target);
             }
-            if ("columns".equalsIgnoreCase(scope))
+            if (SCOPE_COLUMNS.equalsIgnoreCase(scope))
             {
                 return readTableDetail(jdbc, target);
             }
@@ -70,7 +103,7 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
         }
         catch (SQLException e)
         {
-            throw new RuntimeException("Failed to resolve JDBC schema", e);
+            throw new RuntimeException(ERROR_RESOLVE_SCHEMA, e);
         }
     }
 
@@ -97,15 +130,15 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
                 List<ColumnRow> columns = columnsByTable.getOrDefault(key(table.tableCatalog(), table.tableSchema(), table.tableName()), List.of());
                 List<JdbcSchemaObject> columnObjects = columns.stream()
                         .sorted(Comparator.comparingInt(ColumnRow::ordinalPosition))
-                        .map(column -> new JdbcSchemaObject("column:" + schemaKey + ":" + table.tableName() + ":" + column.columnName(), column.columnName(), "column", List.of(),
-                                Map.of("type", column.dataType(), "nullable", column.nullable(), "ordinal", column.ordinalPosition())))
+                        .map(column -> new JdbcSchemaObject("column:" + schemaKey + ":" + table.tableName() + ":" + column.columnName(), column.columnName(), KIND_COLUMN, List.of(),
+                                Map.of(KEY_TYPE, column.dataType(), KEY_NULLABLE, column.nullable(), KEY_ORDINAL, column.ordinalPosition())))
                         .toList();
                 List<JdbcSchemaObject> children = new ArrayList<>(columnObjects);
                 children.addAll(readPrimaryKeyObjects(metadata, table));
                 children.addAll(readForeignKeyObjects(metadata, table));
                 children.addAll(readIndexObjects(metadata, table));
                 tableObjects.add(new JdbcSchemaObject("table:" + schemaKey + ":" + table.tableName(), table.tableName(), table.tableType()
-                        .toLowerCase(), children, Map.of("catalog", nullToEmpty(table.tableCatalog()), "schema", nullToEmpty(table.tableSchema()))));
+                        .toLowerCase(), children, Map.of(KEY_CATALOG, nullToEmpty(table.tableCatalog()), KEY_SCHEMA, nullToEmpty(table.tableSchema()))));
             }
             String[] split = schemaKey.split("\\|", -1);
             String catalog = split.length > 0 ? split[0]
@@ -114,8 +147,8 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
                     : "";
             if (!tableObjects.isEmpty())
             {
-                result.add(new JdbcSchemaObject("schema:" + schemaKey, schema.isBlank() ? "default"
-                        : schema, "schema", tableObjects, Map.of("catalog", catalog)));
+                result.add(new JdbcSchemaObject("schema:" + schemaKey, schema.isBlank() ? DEFAULT_SCHEMA_NAME
+                        : schema, KIND_SCHEMA, tableObjects, Map.of(KEY_CATALOG, catalog)));
             }
         });
         return toDatabaseHierarchy(result);
@@ -126,9 +159,9 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
         List<JdbcSchemaObject> schemas = readTables(jdbc).stream()
                 .map(table -> new JdbcSchemaObject("schema:" + key(table.tableCatalog(), table.tableSchema()), (table.tableSchema() == null
                         || table.tableSchema()
-                                .isBlank()) ? "default"
+                                .isBlank()) ? DEFAULT_SCHEMA_NAME
                                         : table.tableSchema(),
-                        "schema", List.of(), Map.of("catalog", nullToEmpty(table.tableCatalog()))))
+                        KIND_SCHEMA, List.of(), Map.of(KEY_CATALOG, nullToEmpty(table.tableCatalog()))))
                 .distinct()
                 .toList();
         return toDatabaseHierarchy(schemas);
@@ -138,12 +171,12 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
     {
         Map<String, List<JdbcSchemaObject>> byCatalog = schemas.stream()
                 .collect(Collectors.groupingBy(schema -> text(schema.attributes()
-                        .get("catalog")) == null ? "default"
+                        .get(KEY_CATALOG)) == null ? DEFAULT_CATALOG_NAME
                                 : text(schema.attributes()
-                                        .get("catalog")),
+                                        .get(KEY_CATALOG)),
                         LinkedHashMap::new, Collectors.toList()));
         List<JdbcSchemaObject> databases = new ArrayList<>();
-        byCatalog.forEach((catalog, children) -> databases.add(new JdbcSchemaObject("database:" + catalog, catalog, "database", children, Map.of())));
+        byCatalog.forEach((catalog, children) -> databases.add(new JdbcSchemaObject("database:" + catalog, catalog, KIND_DATABASE, children, Map.of())));
         return databases;
     }
 
@@ -171,9 +204,10 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
                     continue;
                 }
                 String schemaKey = key(tableCatalog, tableSchema);
-                String kind = "VIEW".equalsIgnoreCase(tableType) ? "view"
-                        : "table";
-                result.add(new JdbcSchemaObject("table:" + schemaKey + ":" + tableName, tableName, kind, List.of(), Map.of("catalog", nullToEmpty(tableCatalog), "schema", nullToEmpty(tableSchema))));
+                String kind = "VIEW".equalsIgnoreCase(tableType) ? KIND_VIEW
+                        : KIND_TABLE;
+                result.add(
+                        new JdbcSchemaObject("table:" + schemaKey + ":" + tableName, tableName, kind, List.of(), Map.of(KEY_CATALOG, nullToEmpty(tableCatalog), KEY_SCHEMA, nullToEmpty(tableSchema))));
             }
         }
         return result;
@@ -218,8 +252,8 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
                     String dataType = resultSet.getString(2);
                     String nullable = resultSet.getString(3);
                     int ordinal = resultSet.getInt(4);
-                    children.add(new JdbcSchemaObject("column:" + schemaKey + ":" + tableName + ":" + colName, colName, "column", List.of(),
-                            Map.of("type", nullToEmpty(dataType), "nullable", nullToEmpty(nullable), "ordinal", ordinal)));
+                    children.add(new JdbcSchemaObject("column:" + schemaKey + ":" + tableName + ":" + colName, colName, KIND_COLUMN, List.of(),
+                            Map.of(KEY_TYPE, nullToEmpty(dataType), KEY_NULLABLE, nullToEmpty(nullable), KEY_ORDINAL, ordinal)));
                 }
             }
         }
@@ -232,15 +266,23 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
         return children;
     }
 
-    @SuppressWarnings("unchecked")
     private static JdbcSchemaTarget targetFrom(Object value)
     {
-        if (!(value instanceof Map<?, ?> map))
+        if (value instanceof com.queryeer.backend.contract.jdbc.JdbcSchemaTarget t)
         {
-            return null;
+            return new JdbcSchemaTarget(trimToNull(t.database()), trimToNull(t.schema()), trimToNull(t.table()));
         }
-        Map<String, Object> m = (Map<String, Object>) map;
-        return new JdbcSchemaTarget(text(m.get("database")), text(m.get("schema")), text(m.get("table")));
+        if (value instanceof Map<?, ?> map)
+        {
+            String database = map.get("database") instanceof String s ? trimToNull(s)
+                    : null;
+            String schema = map.get("schema") instanceof String s ? trimToNull(s)
+                    : null;
+            String table = map.get("table") instanceof String s ? trimToNull(s)
+                    : null;
+            return new JdbcSchemaTarget(database, schema, table);
+        }
+        return null;
     }
 
     private List<JdbcSchemaObject> readPrimaryKeyObjects(DatabaseMetaData metadata, TableRow table)
@@ -257,7 +299,7 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
                 }
                 String pkName = rs.getString("PK_NAME");
                 result.add(new JdbcSchemaObject("pk:" + table.tableSchema() + ":" + table.tableName() + ":" + columnName, pkName == null ? "PRIMARY_KEY"
-                        : pkName, "primary_key", List.of(), Map.of("column", columnName, "ordinal", rs.getShort("KEY_SEQ"))));
+                        : pkName, KIND_PRIMARY_KEY, List.of(), Map.of(KEY_COLUMN, columnName, KEY_ORDINAL, rs.getShort("KEY_SEQ"))));
             }
             return result;
         }
@@ -283,7 +325,7 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
                 String pkTable = rs.getString("PKTABLE_NAME");
                 String pkColumn = rs.getString("PKCOLUMN_NAME");
                 result.add(new JdbcSchemaObject("fk:" + table.tableSchema() + ":" + table.tableName() + ":" + fkColumn, fkName == null ? "FOREIGN_KEY"
-                        : fkName, "foreign_key", List.of(), Map.of("column", fkColumn, "referencesTable", nullToEmpty(pkTable), "referencesColumn", nullToEmpty(pkColumn))));
+                        : fkName, KIND_FOREIGN_KEY, List.of(), Map.of(KEY_COLUMN, fkColumn, KEY_REFERENCES_TABLE, nullToEmpty(pkTable), KEY_REFERENCES_COLUMN, nullToEmpty(pkColumn))));
             }
             return result;
         }
@@ -307,8 +349,8 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
                 {
                     continue;
                 }
-                result.add(new JdbcSchemaObject("idx:" + table.tableSchema() + ":" + table.tableName() + ":" + indexName + ":" + columnName, indexName, "index", List.of(),
-                        Map.of("column", columnName, "ordinal", rs.getShort("ORDINAL_POSITION"), "nonUnique", rs.getBoolean("NON_UNIQUE"))));
+                result.add(new JdbcSchemaObject("idx:" + table.tableSchema() + ":" + table.tableName() + ":" + indexName + ":" + columnName, indexName, KIND_INDEX, List.of(),
+                        Map.of(KEY_COLUMN, columnName, KEY_ORDINAL, rs.getShort("ORDINAL_POSITION"), KEY_NON_UNIQUE, rs.getBoolean("NON_UNIQUE"))));
             }
             return result;
         }
@@ -372,6 +414,17 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
             return null;
         }
         String trimmed = stringValue.trim();
+        return trimmed.isBlank() ? null
+                : trimmed;
+    }
+
+    private static String trimToNull(String value)
+    {
+        if (value == null)
+        {
+            return null;
+        }
+        String trimmed = value.trim();
         return trimmed.isBlank() ? null
                 : trimmed;
     }

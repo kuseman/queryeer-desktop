@@ -13,10 +13,19 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.LoggerService;
+import com.queryeer.backend.api.PayloadMapper;
 
 class JdbcSettingsConnectionSourceTest
 {
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final PayloadMapper payloadMapper = new PayloadMapper()
+    {
+        @Override
+        public <T> T convert(Object fromValue, Class<T> toValueType)
+        {
+            return objectMapper.convertValue(fromValue, toValueType);
+        }
+    };
 
     @Test
     void parsesSharedJdbcFixture() throws IOException
@@ -26,7 +35,7 @@ class JdbcSettingsConnectionSourceTest
         @SuppressWarnings("unchecked")
         Map<String, Object> moduleDocument = objectMapper.readValue(fixturePath.toFile(), Map.class);
 
-        JdbcSettingsConnectionSource source = new JdbcSettingsConnectionSource();
+        JdbcSettingsConnectionSource source = new JdbcSettingsConnectionSource(payloadMapper);
 
         List<JdbcSettingsConnectionSource.JdbcConfiguredConnection> connections = source.parseConnections(moduleDocument);
 
@@ -65,7 +74,7 @@ class JdbcSettingsConnectionSourceTest
                 .normalize();
         Files.copy(fixturePath, settingsDir.resolve("core.queryengine.jdbc.json"), StandardCopyOption.REPLACE_EXISTING);
 
-        JdbcSettingsConnectionSource source = new JdbcSettingsConnectionSource();
+        JdbcSettingsConnectionSource source = new JdbcSettingsConnectionSource(payloadMapper);
         List<JdbcSettingsConnectionSource.JdbcConfiguredConnection> connections = source.load(key -> "queryeer.settings.dir".equals(key) ? settingsDir.toString()
                 : null, new NoopLoggerService());
 

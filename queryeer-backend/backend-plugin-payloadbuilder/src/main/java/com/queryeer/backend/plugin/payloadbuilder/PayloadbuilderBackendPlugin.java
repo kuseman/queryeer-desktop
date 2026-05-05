@@ -19,7 +19,7 @@ public final class PayloadbuilderBackendPlugin implements BackendPlugin
     public void activate(BackendPluginContext context)
     {
         context.queryEngines()
-                .register(new PayloadbuilderQueryEngineProvider(context.config()));
+                .register(new PayloadbuilderQueryEngineProvider(context.config(), context.payloadMapper()));
         context.logger()
                 .info("Activated payloadbuilder backend plugin");
     }

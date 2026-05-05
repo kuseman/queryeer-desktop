@@ -8,11 +8,24 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.ConfigService;
+import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.SettingsModule;
 
 class ElasticsearchCatalogProviderTest
 {
+    private static final PayloadMapper TEST_MAPPER = new PayloadMapper()
+    {
+        private final ObjectMapper objectMapper = new ObjectMapper();
+
+        @Override
+        public <T> T convert(Object fromValue, Class<T> toValueType)
+        {
+            return objectMapper.convertValue(fromValue, toValueType);
+        }
+    };
+
     @Test
     void resolveConnectionReturnsConfigFromSettingsModule()
     {
@@ -37,7 +50,7 @@ class ElasticsearchCatalogProviderTest
             }
         };
 
-        ElasticsearchCatalogProvider provider = new ElasticsearchCatalogProvider(config);
+        ElasticsearchCatalogProvider provider = new ElasticsearchCatalogProvider(config, TEST_MAPPER);
 
         Map<String, Object> resolved = provider.resolveConnection("550e8400-e29b-41d4-a716-446655440100");
 
@@ -66,7 +79,7 @@ class ElasticsearchCatalogProviderTest
             }
         };
 
-        ElasticsearchCatalogProvider provider = new ElasticsearchCatalogProvider(config);
+        ElasticsearchCatalogProvider provider = new ElasticsearchCatalogProvider(config, TEST_MAPPER);
 
         Map<String, Object> resolved = provider.resolveConnection("nonexistent");
 
@@ -91,7 +104,7 @@ class ElasticsearchCatalogProviderTest
             }
         };
 
-        ElasticsearchCatalogProvider provider = new ElasticsearchCatalogProvider(config);
+        ElasticsearchCatalogProvider provider = new ElasticsearchCatalogProvider(config, TEST_MAPPER);
 
         Map<String, Object> resolved = provider.resolveConnection("any");
 

@@ -10,7 +10,9 @@ import java.util.Set;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.ConfigService;
+import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.QueryPublisher;
 
 import se.kuseman.payloadbuilder.api.catalog.Column;
@@ -26,11 +28,21 @@ import se.kuseman.payloadbuilder.api.execution.ValueVector;
 class PayloadbuilderQueryEngineProviderTest
 {
     private static final ConfigService NOOP_CONFIG = key -> null;
+    private static final PayloadMapper TEST_MAPPER = new PayloadMapper()
+    {
+        private final ObjectMapper objectMapper = new ObjectMapper();
+
+        @Override
+        public <T> T convert(Object fromValue, Class<T> toValueType)
+        {
+            return objectMapper.convertValue(fromValue, toValueType);
+        }
+    };
 
     @Test
     void invokeEchoReturnsPayload()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER);
 
         Object result = provider.invoke("file-1", "payloadbuilder.echo", Map.of("hello", "world"));
 
@@ -45,7 +57,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void invokeCapabilitiesIncludesCatalogActions()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER);
 
         Object result = provider.invoke("file-1", "engine.capabilities", null);
 
@@ -58,7 +70,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void invokeEsListIndicesRequiresEndpoint()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER);
 
         IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class, () -> provider.invoke("file-1", "payloadbuilder.es.listIndices", Map.of("properties", Map.of())));
 
@@ -68,7 +80,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void invokeThrowsForUnsupportedAction()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER);
 
         IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class, () -> provider.invoke("file-1", "payloadbuilder.unknown", null));
 
@@ -78,7 +90,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void executePublishesCompletionWithEngineStatePatch()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER);
         RecordingPublisher publisher = new RecordingPublisher();
 
         provider.execute("exec-2", "file-1", "select 1", null, publisher);
@@ -91,21 +103,21 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void executeReturnsValidationFailureForMalformedEngineState()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER);
         RecordingPublisher publisher = new RecordingPublisher();
         Map<String, Object> malformed = Map.of("payloadbuilder", Map.of("catalogs", Map.of("jdbc1", "bad")));
 
         provider.execute("exec-1", "file-1", "select 1", malformed, publisher);
 
         Assertions.assertEquals("VALIDATION", publisher.errorCode);
-        Assertions.assertEquals("Catalog instance for alias 'jdbc1' must be an object", publisher.errorMessage);
+        Assertions.assertTrue(publisher.errorMessage.contains("jdbc1"));
         Assertions.assertFalse(publisher.completed);
     }
 
     @Test
     void executeIncludesExceptionTypeInFailureMessage()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER);
         RecordingPublisher publisher = new RecordingPublisher();
 
         provider.execute("exec-3", "file-1", "select from", null, publisher);

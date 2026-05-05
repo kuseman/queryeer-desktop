@@ -16,7 +16,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.queryeer.backend.api.ConfigService;
+import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.SettingsModule;
+import com.queryeer.backend.contract.payloadbuilder.EsListIndicesPayload;
 import com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderCatalogProvider;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
@@ -29,14 +31,32 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
     private static final String ES_CONNECTIONS_SETTING_ID = "core.queryengine.payloadbuilder.elasticsearch.connections";
     private static final Pattern INDEX_JSON_PATTERN = Pattern.compile("\\\"index\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
 
+    private static final String KEY_CONNECTION_ID = "connectionId";
+    private static final String KEY_INDICES = "indices";
+    private static final String ERROR_UNSUPPORTED_ACTION = "Unsupported payloadbuilder action: ";
+    private static final String ERROR_PROPERTIES_REQUIRED = "payloadbuilder.es.listIndices payload.properties must be an object";
+    private static final String ERROR_ENDPOINT_REQUIRED = "endpoint is required for payloadbuilder.es.listIndices";
+    private static final String ERROR_INTERRUPTED = "Interrupted while listing Elasticsearch indices";
+    private static final String ERROR_FAILED = "Failed to list Elasticsearch indices: ";
+    private static final String ERROR_STATUS = "Elasticsearch request failed with status ";
+    private static final String CATALOG_ID = "elasticsearch";
+
+    private static final String HEADER_ACCEPT = "Accept";
+    private static final String HEADER_AUTHORIZATION = "Authorization";
+    private static final String CONTENT_TYPE_JSON = "application/json";
+    private static final String AUTH_PREFIX_BASIC = "Basic ";
+    private static final String AUTH_TYPE_BASIC = "BASIC";
+
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
     private final ConfigService configService;
+    private final PayloadMapper payloadMapper;
 
-    public ElasticsearchCatalogProvider(ConfigService configService)
+    public ElasticsearchCatalogProvider(ConfigService configService, PayloadMapper payloadMapper)
     {
         this.configService = configService;
+        this.payloadMapper = payloadMapper;
     }
 
     /** Resolves connection properties from settings by connectionId and merges into the given properties map. */
@@ -61,7 +81,8 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
             {
                 continue;
             }
-            if (!connectionId.equals(stringValue(entry.get("connectionId"))))
+            if (!connectionId.equals(entry.get(KEY_CONNECTION_ID) instanceof String s ? trimToNull(s)
+                    : null))
             {
                 continue;
             }
@@ -73,7 +94,7 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
     @Override
     public String catalogId()
     {
-        return "elasticsearch";
+        return CATALOG_ID;
     }
 
     @Override
@@ -93,48 +114,44 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
     {
         if (!LIST_INDICES_ACTION.equals(action))
         {
-            throw new IllegalArgumentException("Unsupported payloadbuilder action: " + action);
+            throw new IllegalArgumentException(ERROR_UNSUPPORTED_ACTION + action);
         }
         return listIndices(payload);
     }
 
     private Object listIndices(Object payload)
     {
-        if (!(payload instanceof Map<?, ?> payloadMap))
+        EsListIndicesPayload params = payloadMapper.convert(payload, EsListIndicesPayload.class);
+        if (params.properties() == null)
         {
-            throw new IllegalArgumentException("payloadbuilder.es.listIndices payload must be an object");
-        }
-        Object propertiesObject = payloadMap.get("properties");
-        if (!(propertiesObject instanceof Map<?, ?> properties))
-        {
-            throw new IllegalArgumentException("payloadbuilder.es.listIndices payload.properties must be an object");
+            throw new IllegalArgumentException(ERROR_PROPERTIES_REQUIRED);
         }
 
         // Resolve connection from settings by connectionId if present
-        String connectionId = stringValue(properties.get("connectionId"));
-        @SuppressWarnings("unchecked")
+        String connectionId = trimToNull((String) params.properties()
+                .get(KEY_CONNECTION_ID));
         Map<String, Object> effectiveProperties = connectionId != null ? resolveConnection(connectionId)
-                : (Map<String, Object>) properties;
+                : params.properties();
 
         String endpoint = normalize(effectiveProperties.get(ESCatalog.ENDPOINT_KEY));
         if (endpoint.isEmpty())
         {
-            throw new IllegalArgumentException("endpoint is required for payloadbuilder.es.listIndices");
+            throw new IllegalArgumentException(ERROR_ENDPOINT_REQUIRED);
         }
 
         HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(resolveCatIndicesUri(endpoint))
                 .GET()
                 .timeout(Duration.ofSeconds(30))
-                .header("Accept", "application/json");
+                .header(HEADER_ACCEPT, CONTENT_TYPE_JSON);
 
         String authType = normalize(effectiveProperties.get(ESCatalog.AUTH_TYPE_KEY)).toUpperCase();
-        if ("BASIC".equals(authType))
+        if (AUTH_TYPE_BASIC.equals(authType))
         {
             String username = normalize(effectiveProperties.get(ESCatalog.AUTH_USERNAME_KEY));
             String password = normalize(effectiveProperties.get(ESCatalog.AUTH_PASSWORD_KEY));
             String token = Base64.getEncoder()
                     .encodeToString((username + ":" + password).getBytes(StandardCharsets.UTF_8));
-            requestBuilder.header("Authorization", "Basic " + token);
+            requestBuilder.header(HEADER_AUTHORIZATION, AUTH_PREFIX_BASIC + token);
         }
 
         HttpResponse<String> response;
@@ -146,20 +163,20 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
         {
             Thread.currentThread()
                     .interrupt();
-            throw new IllegalArgumentException("Interrupted while listing Elasticsearch indices", e);
+            throw new IllegalArgumentException(ERROR_INTERRUPTED, e);
         }
         catch (Exception e)
         {
-            throw new IllegalArgumentException("Failed to list Elasticsearch indices: " + e.getMessage(), e);
+            throw new IllegalArgumentException(ERROR_FAILED + e.getMessage(), e);
         }
 
         if (response.statusCode() >= 400)
         {
-            throw new IllegalArgumentException("Elasticsearch request failed with status " + response.statusCode());
+            throw new IllegalArgumentException(ERROR_STATUS + response.statusCode());
         }
 
         LinkedHashSet<String> indices = new LinkedHashSet<>(parseIndices(response.body()));
-        return Map.of("indices", List.copyOf(indices));
+        return Map.of(KEY_INDICES, List.copyOf(indices));
     }
 
     private static URI resolveCatIndicesUri(String endpoint)
@@ -191,14 +208,14 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
                 : "";
     }
 
-    private static String stringValue(Object value)
+    private static String trimToNull(String value)
     {
-        if (value instanceof String string)
+        if (value == null)
         {
-            String trimmed = string.trim();
-            return trimmed.isEmpty() ? null
-                    : trimmed;
+            return null;
         }
-        return null;
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null
+                : trimmed;
     }
 }

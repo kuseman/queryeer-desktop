@@ -13,4 +13,6 @@ public interface PluginHostServices
     EventBus events();
 
     SchedulerService scheduler();
+
+    PayloadMapper payloadMapper();
 }

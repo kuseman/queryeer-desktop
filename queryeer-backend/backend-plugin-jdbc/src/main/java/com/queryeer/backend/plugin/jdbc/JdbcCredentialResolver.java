@@ -3,6 +3,7 @@ package com.queryeer.backend.plugin.jdbc;
 import java.util.Map;
 
 import com.queryeer.backend.api.ConfigService;
+import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnectionProfile;
 
 /**
@@ -12,16 +13,18 @@ import com.queryeer.backend.queryengine.jdbc.JdbcConnectionProfile;
 final class JdbcCredentialResolver
 {
     private final ConfigService configService;
+    private final PayloadMapper payloadMapper;
 
-    JdbcCredentialResolver(ConfigService configService)
+    JdbcCredentialResolver(ConfigService configService, PayloadMapper payloadMapper)
     {
         this.configService = configService;
+        this.payloadMapper = payloadMapper;
     }
 
     JdbcConnectionProfile resolve(JdbcConnectionProfile profile)
     {
-        @SuppressWarnings("unchecked")
-        Map<String, Object> materialized = (Map<String, Object>) configService.materializeSecrets(profile.properties());
-        return new JdbcConnectionProfile(profile.connectionId(), profile.name(), profile.dialectId(), materialized);
+        Object materialized = configService.materializeSecrets(profile.properties());
+        Map<String, Object> map = payloadMapper.convert(materialized, Map.class);
+        return new JdbcConnectionProfile(profile.connectionId(), profile.name(), profile.dialectId(), map);
     }
 }

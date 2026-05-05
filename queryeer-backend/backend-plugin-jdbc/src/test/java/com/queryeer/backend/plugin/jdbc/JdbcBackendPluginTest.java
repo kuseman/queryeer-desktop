@@ -14,11 +14,13 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.BackendPluginContext;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.EventBus;
 import com.queryeer.backend.api.FileSessionHandlerRegistry;
 import com.queryeer.backend.api.LoggerService;
+import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.QueryPublisher;
@@ -627,6 +629,16 @@ class JdbcBackendPluginTest
         private final ConfigService configService;
         private final SchedulerService schedulerService;
         private final EventBus eventBus;
+        private final PayloadMapper payloadMapper = new PayloadMapper()
+        {
+            private final ObjectMapper objectMapper = new ObjectMapper();
+
+            @Override
+            public <T> T convert(Object fromValue, Class<T> toValueType)
+            {
+                return objectMapper.convertValue(fromValue, toValueType);
+            }
+        };
         private final String cacheDir = Path.of("target", "test-work", "jdbc-schema-cache", java.util.UUID.randomUUID()
                 .toString())
                 .toString();
@@ -720,6 +732,12 @@ class JdbcBackendPluginTest
         public SchedulerService scheduler()
         {
             return schedulerService;
+        }
+
+        @Override
+        public PayloadMapper payloadMapper()
+        {
+            return payloadMapper;
         }
     }
 }

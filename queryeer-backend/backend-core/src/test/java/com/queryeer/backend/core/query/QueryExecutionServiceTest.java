@@ -16,6 +16,7 @@ import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.EventBus;
 import com.queryeer.backend.api.FileSessionHandlerRegistry;
 import com.queryeer.backend.api.LoggerService;
+import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.QueryPublisher;
@@ -236,6 +237,16 @@ class QueryExecutionServiceTest
     private static final class JdbcPluginContext implements BackendPluginContext
     {
         private final QueryEngineRegistry registry;
+        private final PayloadMapper payloadMapper = new PayloadMapper()
+        {
+            private final ObjectMapper objectMapper = new ObjectMapper();
+
+            @Override
+            public <T> T convert(Object fromValue, Class<T> toValueType)
+            {
+                return objectMapper.convertValue(fromValue, toValueType);
+            }
+        };
 
         private JdbcPluginContext(QueryEngineRegistry registry)
         {
@@ -299,6 +310,12 @@ class QueryExecutionServiceTest
             {
                 task.run();
             };
+        }
+
+        @Override
+        public PayloadMapper payloadMapper()
+        {
+            return payloadMapper;
         }
     }
 }

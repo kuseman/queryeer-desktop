@@ -23,12 +23,12 @@ export function QuickCommandButton(): JSX.Element | null {
     <button
       type="button"
       className="quick-command-button"
-      aria-label="Quick Command (Ctrl+Shift+P)"
+      aria-label="Quick Command (Ctrl+P)"
       onClick={() => getQuickCommandService()?.open()}
     >
       <span className="quick-command-button-icon" aria-hidden="true">⌨</span>
       <span className="quick-command-button-label">Quick Command…</span>
-      <span className="quick-command-button-hint" aria-hidden="true">Ctrl+Shift+P</span>
+      <span className="quick-command-button-hint" aria-hidden="true">Ctrl+P</span>
     </button>
   );
 }

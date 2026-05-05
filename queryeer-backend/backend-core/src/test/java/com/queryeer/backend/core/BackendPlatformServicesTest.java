@@ -63,5 +63,7 @@ class BackendPlatformServicesTest
                 .events());
         assertNotNull(services.pluginContext()
                 .scheduler());
+        assertNotNull(services.pluginContext()
+                .payloadMapper());
     }
 }

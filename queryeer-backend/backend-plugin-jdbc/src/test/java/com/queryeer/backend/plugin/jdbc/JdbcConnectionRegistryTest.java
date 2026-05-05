@@ -10,8 +10,10 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.LoggerService;
+import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.SettingsModule;
 
 class JdbcConnectionRegistryTest
@@ -57,10 +59,21 @@ class JdbcConnectionRegistryTest
         }
     };
 
+    private static final PayloadMapper TEST_MAPPER = new PayloadMapper()
+    {
+        private final ObjectMapper objectMapper = new ObjectMapper();
+
+        @Override
+        public <T> T convert(Object fromValue, Class<T> toValueType)
+        {
+            return objectMapper.convertValue(fromValue, toValueType);
+        }
+    };
+
     @Test
     void getReturnsAdHocConnection()
     {
-        JdbcConnectionRegistry registry = new JdbcConnectionRegistry(CONFIG_WITH_CONNECTION, new JdbcSettingsConnectionSource(), SILENT_LOGGER);
+        JdbcConnectionRegistry registry = new JdbcConnectionRegistry(CONFIG_WITH_CONNECTION, new JdbcSettingsConnectionSource(TEST_MAPPER), SILENT_LOGGER);
         registry.upsert("adhoc-1", "AdHoc", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:adhoc"));
 
         Optional<JdbcConnectionRegistry.JdbcStoredConnection> result = registry.get("adhoc-1");
@@ -75,7 +88,7 @@ class JdbcConnectionRegistryTest
     @Test
     void getFallsBackToConfiguredConnection()
     {
-        JdbcConnectionRegistry registry = new JdbcConnectionRegistry(CONFIG_WITH_CONNECTION, new JdbcSettingsConnectionSource(), SILENT_LOGGER);
+        JdbcConnectionRegistry registry = new JdbcConnectionRegistry(CONFIG_WITH_CONNECTION, new JdbcSettingsConnectionSource(TEST_MAPPER), SILENT_LOGGER);
 
         Optional<JdbcConnectionRegistry.JdbcStoredConnection> result = registry.get("configured-1");
 
@@ -89,7 +102,7 @@ class JdbcConnectionRegistryTest
     @Test
     void getReturnsEmptyForUnknownConnection()
     {
-        JdbcConnectionRegistry registry = new JdbcConnectionRegistry(CONFIG_WITH_CONNECTION, new JdbcSettingsConnectionSource(), SILENT_LOGGER);
+        JdbcConnectionRegistry registry = new JdbcConnectionRegistry(CONFIG_WITH_CONNECTION, new JdbcSettingsConnectionSource(TEST_MAPPER), SILENT_LOGGER);
 
         Optional<JdbcConnectionRegistry.JdbcStoredConnection> result = registry.get("unknown");
 
@@ -99,7 +112,7 @@ class JdbcConnectionRegistryTest
     @Test
     void allMergesAdHocAndConfigured()
     {
-        JdbcConnectionRegistry registry = new JdbcConnectionRegistry(CONFIG_WITH_CONNECTION, new JdbcSettingsConnectionSource(), SILENT_LOGGER);
+        JdbcConnectionRegistry registry = new JdbcConnectionRegistry(CONFIG_WITH_CONNECTION, new JdbcSettingsConnectionSource(TEST_MAPPER), SILENT_LOGGER);
         registry.upsert("adhoc-1", "AdHoc", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:adhoc"));
 
         List<JdbcConnectionRegistry.JdbcStoredConnection> result = registry.all();
@@ -116,7 +129,7 @@ class JdbcConnectionRegistryTest
     @Test
     void adHocOverridesConfigured()
     {
-        JdbcConnectionRegistry registry = new JdbcConnectionRegistry(CONFIG_WITH_CONNECTION, new JdbcSettingsConnectionSource(), SILENT_LOGGER);
+        JdbcConnectionRegistry registry = new JdbcConnectionRegistry(CONFIG_WITH_CONNECTION, new JdbcSettingsConnectionSource(TEST_MAPPER), SILENT_LOGGER);
         registry.upsert("configured-1", "Overridden", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:override"));
 
         Optional<JdbcConnectionRegistry.JdbcStoredConnection> result = registry.get("configured-1");
