@@ -1,7 +1,7 @@
 package com.queryeer.backend.contract.engine;
 
-import java.util.Map;
+import com.queryeer.backend.contract.jdbc.JdbcSchemaTarget;
 
-public record JdbcSchemaRefreshPayload(String connectionId, String scope, Map<String, Object> target)
+public record JdbcSchemaRefreshPayload(String connectionId, String scope, JdbcSchemaTarget target)
 {
 }

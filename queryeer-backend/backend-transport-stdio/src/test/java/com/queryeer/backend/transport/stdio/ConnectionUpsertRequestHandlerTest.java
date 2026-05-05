@@ -14,6 +14,7 @@ import com.queryeer.backend.api.QueryPublisher;
 import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
+import com.queryeer.backend.contract.connection.ConnectionUpsertParams;
 
 class ConnectionUpsertRequestHandlerTest
 {
@@ -48,12 +49,12 @@ class ConnectionUpsertRequestHandlerTest
         Assertions.assertEquals(7, result.get("version"));
 
         Assertions.assertEquals("connection.upsert", provider.lastAction);
-        Assertions.assertInstanceOf(Map.class, provider.lastPayload);
-        Map<?, ?> payload = (Map<?, ?>) provider.lastPayload;
-        Assertions.assertEquals("conn-req-upsert-1", payload.get("connectionId"));
-        Assertions.assertEquals("jdbc", payload.get("engineId"));
-        Assertions.assertEquals("Local JDBC", payload.get("name"));
-        Assertions.assertEquals(connection, payload.get("connection"));
+        Assertions.assertInstanceOf(ConnectionUpsertParams.class, provider.lastPayload);
+        ConnectionUpsertParams payload = (ConnectionUpsertParams) provider.lastPayload;
+        Assertions.assertEquals("conn-req-upsert-1", payload.connectionId());
+        Assertions.assertEquals("jdbc", payload.engineId());
+        Assertions.assertEquals("Local JDBC", payload.name());
+        Assertions.assertEquals(connection, payload.connection());
     }
 
     @Test

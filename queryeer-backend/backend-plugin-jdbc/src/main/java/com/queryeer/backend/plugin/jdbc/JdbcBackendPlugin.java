@@ -51,10 +51,10 @@ public final class JdbcBackendPlugin implements BackendPlugin
         context.logger()
                 .info("Registered built-in generic JDBC dialect");
         dialectDiscovery.discoverAndRegister(registry, context.logger());
-        JdbcSettingsConnectionSource settingsSource = new JdbcSettingsConnectionSource();
+        JdbcSettingsConnectionSource settingsSource = new JdbcSettingsConnectionSource(context.payloadMapper());
         JdbcConnectionRegistry connections = new JdbcConnectionRegistry(context.config(), settingsSource, context.logger());
         JdbcConnectionResolver resolver = new JdbcConnectionResolver();
-        JdbcCredentialResolver credentialResolver = new JdbcCredentialResolver(context.config());
+        JdbcCredentialResolver credentialResolver = new JdbcCredentialResolver(context.config(), context.payloadMapper());
         JdbcSchemaStore schemaStore = new JdbcSchemaStore(resolveSchemaCacheDir(context.config()));
         JdbcSchemaCrawler schemaCrawler = new JdbcSchemaCrawler(registry, resolver, schemaStore, context.logger(), credentialResolver);
         JdbcSecuritySessionState securitySessionState = new JdbcSecuritySessionState();
@@ -67,7 +67,8 @@ public final class JdbcBackendPlugin implements BackendPlugin
         long reaperIntervalMs = parseDurationMs(context.config(), REAPER_INTERVAL_KEY, Math.max(1_000L, Math.min(idleTimeoutMs, TimeUnit.MINUTES.toMillis(5))));
         long schemaCrawlIntervalMs = parseDurationMs(context.config(), SCHEMA_CRAWL_INTERVAL_KEY, TimeUnit.MINUTES.toMillis(5));
         JdbcFileConnectionManager fileConnections = new JdbcFileConnectionManager(idleTimeoutMs);
-        JdbcQueryEngineProvider provider = new JdbcQueryEngineProvider(registry, connections, fileConnections, crawlCoordinator::onUsage, schemaStore, crawlCoordinator, credentialResolver);
+        JdbcQueryEngineProvider provider = new JdbcQueryEngineProvider(registry, connections, fileConnections, crawlCoordinator::onUsage, schemaStore, crawlCoordinator, credentialResolver,
+                context.payloadMapper());
 
         context.scheduler()
                 .schedule("jdbc.file-session-reaper", () -> startReaperThread(fileConnections, reaperIntervalMs));

@@ -8,8 +8,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.ErrorMessages;
+import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryPublisher;
+import com.queryeer.backend.contract.payloadbuilder.PayloadbuilderEngineState;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
 import se.kuseman.payloadbuilder.api.catalog.Column;
@@ -48,11 +50,13 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
     private final Map<String, QuerySession> activeSessions = new ConcurrentHashMap<>();
     private final PayloadbuilderCatalogProviderRegistry catalogProviders;
     private final ConfigService configService;
+    private final PayloadMapper payloadMapper;
 
-    public PayloadbuilderQueryEngineProvider(ConfigService configService)
+    public PayloadbuilderQueryEngineProvider(ConfigService configService, PayloadMapper payloadMapper)
     {
         this.configService = configService;
-        this.catalogProviders = PayloadbuilderCatalogProviderRegistry.defaults(configService);
+        this.payloadMapper = payloadMapper;
+        this.catalogProviders = PayloadbuilderCatalogProviderRegistry.defaults(configService, payloadMapper);
     }
 
     @Override
@@ -68,7 +72,8 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
         QuerySession session = null;
         try
         {
-            PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState catalogState = PayloadbuilderEngineStateSupport.parse(engineState);
+            PayloadbuilderEngineState typedState = payloadMapper.convert(engineState, PayloadbuilderEngineState.class);
+            PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState catalogState = PayloadbuilderEngineStateSupport.parse(typedState);
             catalogState = resolveCatalogConnections(catalogState);
             CatalogRegistry catalogRegistry = buildCatalogRegistry(catalogState);
             session = new QuerySession(catalogRegistry);

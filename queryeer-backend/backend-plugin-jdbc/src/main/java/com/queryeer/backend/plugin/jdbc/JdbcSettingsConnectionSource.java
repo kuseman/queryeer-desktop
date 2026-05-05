@@ -9,11 +9,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.LoggerService;
+import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.SettingsModule;
+import com.queryeer.backend.contract.settings.JdbcSettingsConnectionEntry;
+import com.queryeer.backend.contract.settings.JdbcSettingsModuleDocument;
+import com.queryeer.backend.contract.settings.JdbcSettingsModuleValues;
 
 final class JdbcSettingsConnectionSource
 {
@@ -22,7 +25,23 @@ final class JdbcSettingsConnectionSource
     private static final String JDBC_MODULE_FILE = "core.queryengine.jdbc.json";
     private static final String JDBC_CONNECTIONS_SETTING_ID = "core.queryengine.jdbc.connections";
 
+    private static final String KEY_VALUES = "values";
+    private static final String KEY_DIALECT_ID = "dialectId";
+    private static final String KEY_URL = "url";
+    private static final String KEY_USERNAME = "username";
+    private static final String KEY_PASSWORD = "password";
+    private static final String KEY_ENABLED = "enabled";
+    private static final String KEY_SECRET_REF = "secretRef";
+
+    private static final String DEFAULT_DIALECT_ID = "jdbc";
+
+    private final PayloadMapper payloadMapper;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    JdbcSettingsConnectionSource(PayloadMapper payloadMapper)
+    {
+        this.payloadMapper = payloadMapper;
+    }
 
     List<JdbcConfiguredConnection> load(ConfigService config, LoggerService logger)
     {
@@ -43,10 +62,8 @@ final class JdbcSettingsConnectionSource
 
         try
         {
-            Map<String, Object> moduleDocument = objectMapper.readValue(path.toFile(), new TypeReference<Map<String, Object>>()
-            {
-            });
-            return parseConnections(moduleDocument);
+            JdbcSettingsModuleDocument document = objectMapper.readValue(path.toFile(), JdbcSettingsModuleDocument.class);
+            return parseConnections(document);
         }
         catch (IOException e)
         {
@@ -56,39 +73,62 @@ final class JdbcSettingsConnectionSource
         }
     }
 
-    List<JdbcConfiguredConnection> parseConnections(Map<String, Object> values)
+    List<JdbcConfiguredConnection> parseConnections(Object values)
     {
         if (values == null)
         {
             return List.of();
         }
-        // Accept both a full module document (with "values" key) and bare values map
-        @SuppressWarnings("unchecked")
-        Map<String, Object> effective = values.get("values") instanceof Map<?, ?> raw ? (Map<String, Object>) raw
-                : values;
-        Object listRaw = effective.get(JDBC_CONNECTIONS_SETTING_ID);
-        if (!(listRaw instanceof List<?> list))
+
+        JdbcSettingsModuleValues moduleValues;
+        if (values instanceof Map<?, ?> map)
+        {
+            // Accept both a full module document (with "values" key) and bare values map
+            if (map.containsKey(KEY_VALUES))
+            {
+                moduleValues = payloadMapper.convert(values, JdbcSettingsModuleDocument.class)
+                        .values();
+            }
+            else
+            {
+                moduleValues = payloadMapper.convert(values, JdbcSettingsModuleValues.class);
+            }
+        }
+        else if (values instanceof JdbcSettingsModuleDocument document)
+        {
+            moduleValues = document.values();
+        }
+        else if (values instanceof JdbcSettingsModuleValues v)
+        {
+            moduleValues = v;
+        }
+        else
+        {
+            return List.of();
+        }
+
+        List<JdbcSettingsConnectionEntry> entries = moduleValues != null ? moduleValues.connections()
+                : null;
+        if (entries == null)
         {
             return List.of();
         }
 
         List<JdbcConfiguredConnection> result = new ArrayList<>();
         Set<String> seen = new java.util.LinkedHashSet<>();
-        for (Object item : list)
+        for (JdbcSettingsConnectionEntry entry : entries)
         {
-            if (!(item instanceof Map<?, ?> map))
-            {
-                continue;
-            }
-            String connectionId = text(map.get("connectionId"));
+            String connectionId = trimToNull(entry.connectionId());
             if (connectionId == null
                     || seen.contains(connectionId))
             {
                 continue;
             }
-            String dialectId = text(map.get("dialectId"));
-            String url = text(map.get("url"));
-            boolean hasStructuredProperties = map.get("properties") instanceof Map<?, ?>;
+            String dialectId = trimToNull(entry.dialectId());
+            String url = trimToNull(entry.url());
+            boolean hasStructuredProperties = entry.properties() != null
+                    && !entry.properties()
+                            .isEmpty();
 
             if (url == null
                     && !hasStructuredProperties)
@@ -98,33 +138,32 @@ final class JdbcSettingsConnectionSource
             seen.add(connectionId);
 
             Map<String, Object> connection = new LinkedHashMap<>();
-            connection.put("dialectId", dialectId == null ? "jdbc"
+            connection.put(KEY_DIALECT_ID, dialectId == null ? DEFAULT_DIALECT_ID
                     : dialectId);
 
             if (hasStructuredProperties)
             {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> props = (Map<String, Object>) map.get("properties");
-                connection.putAll(props);
+                connection.putAll(entry.properties());
             }
             else
             {
-                connection.put("url", url);
-                String username = text(map.get("username"));
+                connection.put(KEY_URL, url);
+                String username = trimToNull(entry.username());
                 if (username != null)
                 {
-                    connection.put("username", username);
+                    connection.put(KEY_USERNAME, username);
                 }
             }
 
-            Object password = normalizePassword(map.get("password"));
+            Object password = normalizePassword(entry.password());
             if (password != null)
             {
-                connection.put("password", password);
+                connection.put(KEY_PASSWORD, password);
             }
-            boolean enabled = boolOrDefault(map.get("enabled"), true);
-            connection.put("enabled", enabled);
-            result.add(new JdbcConfiguredConnection(connectionId, text(map.get("title")), connection));
+            boolean enabled = entry.enabled() != null ? entry.enabled()
+                    : true;
+            connection.put(KEY_ENABLED, enabled);
+            result.add(new JdbcConfiguredConnection(connectionId, trimToNull(entry.title()), connection));
         }
         return List.copyOf(result);
     }
@@ -143,12 +182,12 @@ final class JdbcSettingsConnectionSource
     {
         if (raw instanceof Map<?, ?> map)
         {
-            String secretRef = text(map.get("secretRef"));
+            String secretRef = text(map.get(KEY_SECRET_REF));
             if (secretRef == null)
             {
                 return null;
             }
-            return Map.of("secretRef", secretRef);
+            return Map.of(KEY_SECRET_REF, secretRef);
         }
         return text(raw);
     }

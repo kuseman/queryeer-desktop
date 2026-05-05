@@ -13,4 +13,6 @@ public interface BackendPluginContext
     EventBus events();
 
     SchedulerService scheduler();
+
+    PayloadMapper payloadMapper();
 }

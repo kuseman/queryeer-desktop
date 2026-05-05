@@ -6,6 +6,9 @@ import java.util.Map;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import com.queryeer.backend.contract.payloadbuilder.PayloadbuilderCatalogInstance;
+import com.queryeer.backend.contract.payloadbuilder.PayloadbuilderEngineState;
+
 import se.kuseman.payloadbuilder.core.catalog.CatalogRegistry;
 import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
@@ -14,7 +17,10 @@ class PayloadbuilderEngineStateSupportTest
     @Test
     void parseRejectsInvalidCatalogShape()
     {
-        Map<String, Object> invalidState = Map.of("payloadbuilder", Map.of("catalogs", Map.of("jdbc1", "bad")));
+        // When Jackson converts a Map to PayloadbuilderEngineState, a non-object catalog value becomes null
+        Map<String, PayloadbuilderCatalogInstance> catalogs = new LinkedHashMap<>();
+        catalogs.put("jdbc1", null);
+        PayloadbuilderEngineState invalidState = new PayloadbuilderEngineState(new PayloadbuilderEngineState.PayloadbuilderCatalogState(null, catalogs));
 
         IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class, () -> PayloadbuilderEngineStateSupport.parse(invalidState));
 
@@ -24,7 +30,8 @@ class PayloadbuilderEngineStateSupportTest
     @Test
     void parseRejectsMissingCatalogId()
     {
-        Map<String, Object> invalidState = Map.of("payloadbuilder", Map.of("catalogs", Map.of("jdbc1", Map.of("properties", Map.of("database", "appdb")))));
+        PayloadbuilderEngineState invalidState = new PayloadbuilderEngineState(
+                new PayloadbuilderEngineState.PayloadbuilderCatalogState(null, Map.of("jdbc1", new PayloadbuilderCatalogInstance(null, Map.of("database", "appdb")))));
 
         IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class, () -> PayloadbuilderEngineStateSupport.parse(invalidState));
 
@@ -34,7 +41,8 @@ class PayloadbuilderEngineStateSupportTest
     @Test
     void buildEngineStatePatchIncludesOnlyChangedProperties()
     {
-        Map<String, Object> engineState = Map.of("payloadbuilder", Map.of("catalogs", Map.of("jdbc1", Map.of("catalogId", "Jdbc", "properties", Map.of("database", "appdb", "schema", "public")))));
+        PayloadbuilderEngineState engineState = new PayloadbuilderEngineState(
+                new PayloadbuilderEngineState.PayloadbuilderCatalogState(null, Map.of("jdbc1", new PayloadbuilderCatalogInstance("Jdbc", Map.of("database", "appdb", "schema", "public")))));
         PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state = PayloadbuilderEngineStateSupport.parse(engineState);
         QuerySession session = new QuerySession(new CatalogRegistry());
 
@@ -52,7 +60,8 @@ class PayloadbuilderEngineStateSupportTest
         Map<String, Object> properties = new LinkedHashMap<>();
         properties.put("database", "appdb");
         properties.put("timeoutMs", null);
-        Map<String, Object> stateRoot = Map.of("payloadbuilder", Map.of("catalogs", Map.of("jdbc1", Map.of("catalogId", "Jdbc", "properties", properties))));
+        PayloadbuilderEngineState stateRoot = new PayloadbuilderEngineState(
+                new PayloadbuilderEngineState.PayloadbuilderCatalogState(null, Map.of("jdbc1", new PayloadbuilderCatalogInstance("Jdbc", properties))));
         PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state = PayloadbuilderEngineStateSupport.parse(stateRoot);
         QuerySession session = new QuerySession(new CatalogRegistry());
 
@@ -64,7 +73,8 @@ class PayloadbuilderEngineStateSupportTest
     @Test
     void parseRejectsUnknownDefaultCatalogAlias()
     {
-        Map<String, Object> invalidState = Map.of("payloadbuilder", Map.of("defaultCatalogAlias", "jdbc2", "catalogs", Map.of("jdbc1", Map.of("catalogId", "Jdbc", "properties", Map.of()))));
+        PayloadbuilderEngineState invalidState = new PayloadbuilderEngineState(
+                new PayloadbuilderEngineState.PayloadbuilderCatalogState("jdbc2", Map.of("jdbc1", new PayloadbuilderCatalogInstance("Jdbc", Map.of()))));
 
         IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class, () -> PayloadbuilderEngineStateSupport.parse(invalidState));
 
@@ -74,7 +84,8 @@ class PayloadbuilderEngineStateSupportTest
     @Test
     void applyToSessionSetsDefaultCatalogAlias()
     {
-        Map<String, Object> stateRoot = Map.of("payloadbuilder", Map.of("defaultCatalogAlias", "jdbc1", "catalogs", Map.of("jdbc1", Map.of("catalogId", "Jdbc", "properties", Map.of()))));
+        PayloadbuilderEngineState stateRoot = new PayloadbuilderEngineState(
+                new PayloadbuilderEngineState.PayloadbuilderCatalogState("jdbc1", Map.of("jdbc1", new PayloadbuilderCatalogInstance("Jdbc", Map.of()))));
         PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state = PayloadbuilderEngineStateSupport.parse(stateRoot);
         QuerySession session = new QuerySession(new CatalogRegistry());
 

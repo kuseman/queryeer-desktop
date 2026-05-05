@@ -1,7 +1,5 @@
 package com.queryeer.backend.transport.stdio;
 
-import java.util.Map;
-
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.contract.BackendEnvelope;
@@ -55,12 +53,14 @@ final class ConnectionUpsertRequestHandler implements RequestHandler
         }
 
         ConnectionUpsertParams paramsWithConnectionId = new ConnectionUpsertParams(connectionId, params.engineId(), params.name(), params.connection());
-        Object upsertPayload = codec.objectMapper()
-                .convertValue(paramsWithConnectionId, Map.class);
-        Object result = provider.invoke(null, "connection.upsert", upsertPayload);
+        Object result = provider.invoke(null, "connection.upsert", paramsWithConnectionId);
 
         long version = 1L;
-        if (result instanceof Map<?, ?> map
+        if (result instanceof ConnectionUpsertResult upsertResult)
+        {
+            version = upsertResult.version();
+        }
+        else if (result instanceof java.util.Map<?, ?> map
                 && map.get("version") instanceof Number number)
         {
             version = number.longValue();

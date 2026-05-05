@@ -10,9 +10,16 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.queryeer.backend.api.ErrorMessages;
 import com.queryeer.backend.api.FileSession;
 import com.queryeer.backend.api.FileSessionHandler;
+import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryPublisher;
 import com.queryeer.backend.api.SecuritySessionClosedException;
+import com.queryeer.backend.contract.connection.ConnectionUpsertParams;
+import com.queryeer.backend.contract.engine.JdbcSchemaRefreshPayload;
+import com.queryeer.backend.contract.jdbc.JdbcConnectionProperties;
+import com.queryeer.backend.contract.jdbc.JdbcEngineState;
+import com.queryeer.backend.contract.jdbc.JdbcSchemaFetchPayload;
+import com.queryeer.backend.contract.jdbc.JdbcSchemaSnapshotPayload;
 import com.queryeer.backend.queryengine.jdbc.CancellableJdbcQueryExecutor;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnectionFieldDefinition;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnectionFieldOption;
@@ -35,6 +42,40 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private static final String ACTION_SCHEMA_SNAPSHOT = "jdbc.schema.snapshot";
     private static final String ACTION_SCHEMA_REFRESH = "jdbc.schema.refresh";
     private static final String ACTION_SCHEMA_FETCH = "jdbc.schema.fetch";
+
+    private static final String ERROR_CODE_VALIDATION = "VALIDATION";
+    private static final String ERROR_CODE_CANCELLED = "CANCELLED";
+    private static final String ERROR_CODE_INTERNAL = "INTERNAL";
+
+    private static final String SQLSTATE_QUERY_CANCELLED = "57014";
+
+    private static final String FIELD_DIALECT_ID = "dialectId";
+    private static final String FIELD_URL = "url";
+    private static final String FIELD_USERNAME = "username";
+    private static final String FIELD_PASSWORD = "password";
+
+    private static final String SCOPE_TOP = "top";
+    private static final String SCOPE_DEEP = "deep";
+
+    private static final String OPTION_SCOPE = "scope";
+    private static final String OPTION_TARGET = "target";
+
+    private static final String KEY_OK = "ok";
+    private static final String KEY_MESSAGE = "message";
+    private static final String KEY_CONNECTION_ID = "connectionId";
+    private static final String KEY_VERSION = "version";
+    private static final String KEY_ACTIONS = "actions";
+
+    private static final String CONNECTION_TEST_EXECUTION_ID = "connection-test";
+    private static final String CONNECTION_TEST_QUERY = "select 1";
+
+    private static final String ERROR_SQL_TEXT_REQUIRED = "SQL text is required";
+    private static final String ERROR_FILE_ID_REQUIRED = "fileId is required for JDBC query execution";
+    private static final String ERROR_CANCELLED_MESSAGE = "Execution cancelled by client";
+    private static final String ERROR_CONNECTION_FAILED = "Connection failed: ";
+    private static final String ERROR_CONNECTION_ID_REQUIRED = "connectionId is required";
+    private static final String ERROR_TARGET_SCHEMA_REQUIRED = "target.schema is required for scope=deep";
+
     private final JdbcDialectRegistry registry;
     private final JdbcConnectionRegistry connections;
     private final JdbcFileConnectionManager fileConnections;
@@ -42,11 +83,12 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private final JdbcSchemaStore schemaStore;
     private final JdbcSchemaCrawlCoordinator crawlCoordinator;
     private final JdbcCredentialResolver credentialResolver;
+    private final PayloadMapper payloadMapper;
     private final Map<String, CancellableJdbcQueryExecutor> activeExecutors = new ConcurrentHashMap<>();
     private final Set<String> cancelledExecutionIds = ConcurrentHashMap.newKeySet();
 
     JdbcQueryEngineProvider(JdbcDialectRegistry registry, JdbcConnectionRegistry connections, JdbcFileConnectionManager fileConnections, JdbcConnectionUsageListener usageListener,
-            JdbcSchemaStore schemaStore, JdbcSchemaCrawlCoordinator crawlCoordinator, JdbcCredentialResolver credentialResolver)
+            JdbcSchemaStore schemaStore, JdbcSchemaCrawlCoordinator crawlCoordinator, JdbcCredentialResolver credentialResolver, PayloadMapper payloadMapper)
     {
         this.registry = registry;
         this.connections = connections;
@@ -55,6 +97,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         this.schemaStore = schemaStore;
         this.crawlCoordinator = crawlCoordinator;
         this.credentialResolver = credentialResolver;
+        this.payloadMapper = payloadMapper;
     }
 
     @Override
@@ -73,19 +116,20 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             if (text == null
                     || text.isBlank())
             {
-                throw new IllegalArgumentException("SQL text is required");
+                throw new IllegalArgumentException(ERROR_SQL_TEXT_REQUIRED);
             }
             if (fileId == null
                     || fileId.isBlank())
             {
-                throw new IllegalArgumentException("fileId is required for JDBC query execution");
+                throw new IllegalArgumentException(ERROR_FILE_ID_REQUIRED);
             }
             if (cancelledExecutionIds.contains(queryExecutionId))
             {
                 throw new QueryCancelledException();
             }
 
-            JdbcResolvedConnection resolved = JdbcResolvedConnection.fromEngineState(engineState, connections, registry);
+            JdbcEngineState state = payloadMapper.convert(engineState, JdbcEngineState.class);
+            JdbcResolvedConnection resolved = JdbcResolvedConnection.fromEngineState(state, connections, registry);
             JdbcConnectionProfile materializedProfile = credentialResolver.resolve(resolved.profile());
 
             Connection sessionConnection = resolved.dialect()
@@ -110,11 +154,11 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         }
         catch (IllegalArgumentException e)
         {
-            publisher.failed("VALIDATION", e.getMessage());
+            publisher.failed(ERROR_CODE_VALIDATION, e.getMessage());
         }
         catch (QueryCancelledException e)
         {
-            publisher.failed("CANCELLED", "Execution cancelled by client");
+            publisher.failed(ERROR_CODE_CANCELLED, ERROR_CANCELLED_MESSAGE);
         }
         catch (SecuritySessionClosedException e)
         {
@@ -125,11 +169,11 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             if (cancelledExecutionIds.contains(queryExecutionId)
                     || containsCancelledState(e))
             {
-                publisher.failed("CANCELLED", "Execution cancelled by client");
+                publisher.failed(ERROR_CODE_CANCELLED, ERROR_CANCELLED_MESSAGE);
             }
             else
             {
-                publisher.failed("INTERNAL", ErrorMessages.buildFailureMessage(e));
+                publisher.failed(ERROR_CODE_INTERNAL, ErrorMessages.buildFailureMessage(e));
             }
         }
         finally
@@ -169,71 +213,69 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
 
     private JdbcConnectionSetupDefinition connectionSetup()
     {
-        return new JdbcConnectionSetupDefinition(List.of(new JdbcConnectionFieldDefinition("dialectId", "Dialect", JdbcConnectionFieldType.SELECT, true, "Select JDBC dialect", registry.all()
+        return new JdbcConnectionSetupDefinition(List.of(new JdbcConnectionFieldDefinition(FIELD_DIALECT_ID, "Dialect", JdbcConnectionFieldType.SELECT, true, "Select JDBC dialect", registry.all()
                 .stream()
                 .map(metadata -> new JdbcConnectionFieldOption(metadata.id(), metadata.displayName()))
                 .toList(), ENGINE_ID, null),
-                new JdbcConnectionFieldDefinition("url", "JDBC URL", JdbcConnectionFieldType.TEXT, true, "Example: jdbc:postgresql://localhost:5432/appdb", List.of(), null, null),
-                new JdbcConnectionFieldDefinition("username", "Username", JdbcConnectionFieldType.TEXT, false, null, List.of(), null, null),
-                new JdbcConnectionFieldDefinition("password", "Password", JdbcConnectionFieldType.SECRET, false, "Stored in security vault", List.of(), null, null)));
+                new JdbcConnectionFieldDefinition(FIELD_URL, "JDBC URL", JdbcConnectionFieldType.TEXT, true, "Example: jdbc:postgresql://localhost:5432/appdb", List.of(), null, null),
+                new JdbcConnectionFieldDefinition(FIELD_USERNAME, "Username", JdbcConnectionFieldType.TEXT, false, null, List.of(), null, null),
+                new JdbcConnectionFieldDefinition(FIELD_PASSWORD, "Password", JdbcConnectionFieldType.SECRET, false, "Stored in security vault", List.of(), null, null)));
     }
 
     private Object connectionTest(Object payload)
     {
-        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromPayload(payload, registry);
+        JdbcConnectionProperties properties = payloadMapper.convert(payload, JdbcConnectionProperties.class);
+        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromProperties(properties, null, registry);
         JdbcConnectionProfile materializedProfile = credentialResolver.resolve(resolved.profile());
         try
         {
             resolved.dialect()
                     .queryExecutor()
-                    .execute(new JdbcQueryRequest("connection-test", null, "select 1", List.of(), materializedProfile, null), new NoopJdbcQueryEventListener());
-            return Map.of("ok", true, "message", "Connection successful");
+                    .execute(new JdbcQueryRequest(CONNECTION_TEST_EXECUTION_ID, null, CONNECTION_TEST_QUERY, List.of(), materializedProfile, null), new NoopJdbcQueryEventListener());
+            return Map.of(KEY_OK, true, KEY_MESSAGE, "Connection successful");
         }
         catch (RuntimeException e)
         {
-            throw new IllegalArgumentException("Connection failed: " + e.getMessage(), e);
+            throw new IllegalArgumentException(ERROR_CONNECTION_FAILED + e.getMessage(), e);
         }
     }
 
     private Object connectionUpsert(Object payload)
     {
-        Map<String, Object> value = asMap(payload);
-        String connectionId = stringValue(value.get("connectionId"));
-        if (connectionId == null
-                || connectionId.isBlank())
+        ConnectionUpsertParams params = payloadMapper.convert(payload, ConnectionUpsertParams.class);
+        String connectionId = trimToNull(params.connectionId());
+        if (connectionId == null)
         {
-            throw new IllegalArgumentException("connectionId is required");
+            throw new IllegalArgumentException(ERROR_CONNECTION_ID_REQUIRED);
         }
 
-        Map<String, Object> connection = asMap(value.get("connection"));
-        JdbcConnectionRegistry.JdbcStoredConnection stored = connections.upsert(connectionId, stringValue(value.get("name")), connection);
+        java.util.Map<String, Object> connection = payloadMapper.convert(params.connection(), java.util.Map.class);
+        JdbcConnectionRegistry.JdbcStoredConnection stored = connections.upsert(connectionId, trimToNull(params.name()), connection);
         crawlCoordinator.onConnectionUpsert(connectionId);
-        return Map.of("connectionId", stored.connectionId(), "version", stored.version()
+        return Map.of(KEY_CONNECTION_ID, stored.connectionId(), KEY_VERSION, stored.version()
                 .get());
     }
 
     private Object engineCapabilities()
     {
-        return Map.of("actions", List.of(ACTION_ENGINE_CAPABILITIES, ACTION_CONNECTION_UPSERT, ACTION_CONNECTION_SETUP, ACTION_CONNECTION_DIALECTS, ACTION_CONNECTION_TEST, ACTION_SCHEMA_SNAPSHOT,
+        return Map.of(KEY_ACTIONS, List.of(ACTION_ENGINE_CAPABILITIES, ACTION_CONNECTION_UPSERT, ACTION_CONNECTION_SETUP, ACTION_CONNECTION_DIALECTS, ACTION_CONNECTION_TEST, ACTION_SCHEMA_SNAPSHOT,
                 ACTION_SCHEMA_REFRESH, ACTION_SCHEMA_FETCH));
     }
 
     private Object schemaFetch(Object payload)
     {
-        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromRegistryWithOverrides(payload, connections, registry);
+        JdbcSchemaFetchPayload params = payloadMapper.convert(payload, JdbcSchemaFetchPayload.class);
+        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromRegistryWithOverrides(params, connections, registry);
         JdbcConnectionProfile materializedProfile = credentialResolver.resolve(resolved.profile());
 
-        Map<String, Object> value = asMap(payload);
-        String scope = stringValue(value.get("scope"));
-        Map<String, Object> targetMap = asMap(value.get("target"));
         Map<String, Object> options = new java.util.HashMap<>();
-        if (scope != null)
+        if (params.scope() != null)
         {
-            options.put("scope", scope);
+            options.put(OPTION_SCOPE, params.scope());
         }
-        if (!targetMap.isEmpty())
+        if (params.target() != null)
         {
-            options.put("target", targetMap);
+            options.put(OPTION_TARGET, params.target());
         }
         return resolved.dialect()
                 .schemaResolver()
@@ -242,75 +284,66 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
 
     private Object schemaSnapshot(Object payload)
     {
-        Map<String, Object> value = asMap(payload);
-        String connectionId = stringValue(value.get("connectionId"));
+        JdbcSchemaSnapshotPayload params = payloadMapper.convert(payload, JdbcSchemaSnapshotPayload.class);
+        String connectionId = trimToNull(params.connectionId());
         if (connectionId == null)
         {
-            throw new IllegalArgumentException("connectionId is required");
+            throw new IllegalArgumentException(ERROR_CONNECTION_ID_REQUIRED);
         }
-        String scope = stringValue(value.get("scope"));
-        JdbcSchemaCrawlScope crawlScope = "deep".equalsIgnoreCase(scope) ? JdbcSchemaCrawlScope.DEEP
+        String scope = trimToNull(params.scope());
+        JdbcSchemaCrawlScope crawlScope = SCOPE_DEEP.equalsIgnoreCase(scope) ? JdbcSchemaCrawlScope.DEEP
                 : JdbcSchemaCrawlScope.TOP;
         return schemaStore.latestSnapshot(connectionId, crawlScope);
     }
 
     private Object schemaRefresh(Object payload)
     {
-        Map<String, Object> value = asMap(payload);
-        String connectionId = stringValue(value.get("connectionId"));
+        JdbcSchemaRefreshPayload params = payloadMapper.convert(payload, JdbcSchemaRefreshPayload.class);
+        String connectionId = trimToNull(params.connectionId());
         if (connectionId == null)
         {
-            throw new IllegalArgumentException("connectionId is required");
+            throw new IllegalArgumentException(ERROR_CONNECTION_ID_REQUIRED);
         }
-        String scope = stringValue(value.get("scope"));
+        String scope = trimToNull(params.scope());
         JdbcSchemaCrawlScope crawlScope;
         if (scope == null
-                || "top".equalsIgnoreCase(scope))
+                || SCOPE_TOP.equalsIgnoreCase(scope))
         {
             crawlScope = JdbcSchemaCrawlScope.TOP;
         }
-        else if ("deep".equalsIgnoreCase(scope))
+        else if (SCOPE_DEEP.equalsIgnoreCase(scope))
         {
             crawlScope = JdbcSchemaCrawlScope.DEEP;
         }
         else
         {
-            throw new IllegalArgumentException("scope must be one of: top, deep");
+            throw new IllegalArgumentException("scope must be one of: " + SCOPE_TOP + ", " + SCOPE_DEEP);
         }
         JdbcSchemaTarget target = null;
         if (crawlScope == JdbcSchemaCrawlScope.DEEP)
         {
-            Map<String, Object> targetMap = asMap(value.get("target"));
-            String schema = stringValue(targetMap.get("schema"));
+            com.queryeer.backend.contract.jdbc.JdbcSchemaTarget t = params.target();
+            String schema = t != null ? trimToNull(t.schema())
+                    : null;
             if (schema == null)
             {
-                throw new IllegalArgumentException("target.schema is required for scope=deep");
+                throw new IllegalArgumentException(ERROR_TARGET_SCHEMA_REQUIRED);
             }
-            target = new JdbcSchemaTarget(stringValue(targetMap.get("database")), schema);
+            target = new JdbcSchemaTarget(t != null ? trimToNull(t.database())
+                    : null, schema);
         }
         return crawlCoordinator.refreshNow(connectionId, crawlScope, target);
     }
 
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> asMap(Object value)
+    private static String trimToNull(String value)
     {
-        if (!(value instanceof Map<?, ?> map))
+        if (value == null)
         {
-            return Map.of();
+            return null;
         }
-
-        return (Map<String, Object>) map;
-    }
-
-    private static String stringValue(Object value)
-    {
-        if (value instanceof String stringValue)
-        {
-            String trimmed = stringValue.trim();
-            return trimmed.isBlank() ? null
-                    : trimmed;
-        }
-        return null;
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null
+                : trimmed;
     }
 
     private static final class QueryCancelledException extends RuntimeException
@@ -364,7 +397,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         while (current != null)
         {
             if (current instanceof SQLException sqlException
-                    && "57014".equals(sqlException.getSQLState()))
+                    && SQLSTATE_QUERY_CANCELLED.equals(sqlException.getSQLState()))
             {
                 return true;
             }

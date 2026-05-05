@@ -16,6 +16,23 @@ import com.queryeer.backend.queryengine.jdbc.JdbcSchemaResolver;
 
 final class SqlServerSchemaResolver implements JdbcSchemaResolver
 {
+    private static final String OPTION_SCOPE = "scope";
+    private static final String OPTION_TARGET = "target";
+    private static final String SCOPE_TOP = "top";
+    private static final String SCOPE_TABLES = "tables";
+    private static final String SCOPE_COLUMNS = "columns";
+    private static final String KIND_DATABASE = "database";
+    private static final String KIND_SCHEMA = "schema";
+    private static final String KIND_TABLE = "table";
+    private static final String KIND_VIEW = "view";
+    private static final String KIND_COLUMN = "column";
+    private static final String KEY_TYPE = "type";
+    private static final String UNKNOWN_TYPE = "unknown";
+    private static final String KEY_DATABASE = "database";
+    private static final String KEY_SCHEMA = "schema";
+    private static final String KEY_TABLE = "table";
+    private static final String ERROR_SCHEMA_RESOLUTION = "Schema resolution failed: ";
+
     @Override
     public List<JdbcSchemaObject> resolveSchema(JdbcConnectionProfile connection)
     {
@@ -25,10 +42,9 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
     @Override
     public List<JdbcSchemaObject> resolveSchema(JdbcConnectionProfile connection, Map<String, Object> options)
     {
-        String scope = options.containsKey("scope") ? String.valueOf(options.get("scope"))
-                : "top";
-        Map<String, Object> target = options.containsKey("target") ? asMap(options.get("target"))
-                : Map.of();
+        String scope = options.containsKey(OPTION_SCOPE) ? String.valueOf(options.get(OPTION_SCOPE))
+                : SCOPE_TOP;
+        com.queryeer.backend.contract.jdbc.JdbcSchemaTarget target = extractTarget(options.get(OPTION_TARGET));
 
         String url = SqlServerUrlBuilder.buildUrl(connection.properties());
         Properties props = SqlServerUrlBuilder.buildConnectionProperties(connection.properties());
@@ -37,14 +53,14 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
         {
             return switch (scope)
             {
-                case "tables" -> resolveTablesScope(jdbcConnection, target);
-                case "columns" -> resolveColumnsScope(jdbcConnection, target);
+                case SCOPE_TABLES -> resolveTablesScope(jdbcConnection, target);
+                case SCOPE_COLUMNS -> resolveColumnsScope(jdbcConnection, target);
                 default -> resolveTopScope(jdbcConnection);
             };
         }
         catch (SQLException e)
         {
-            throw new RuntimeException("Schema resolution failed: " + e.getMessage(), e);
+            throw new RuntimeException(ERROR_SCHEMA_RESOLUTION + e.getMessage(), e);
         }
     }
 
@@ -57,17 +73,19 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
             while (catalogs.next())
             {
                 String catalog = catalogs.getString("TABLE_CAT");
-                databases.add(new JdbcSchemaObject(catalog, catalog, "database", null, Map.of()));
+                databases.add(new JdbcSchemaObject(catalog, catalog, KIND_DATABASE, null, Map.of()));
             }
         }
         return databases;
     }
 
-    private List<JdbcSchemaObject> resolveTablesScope(Connection connection, Map<String, Object> target) throws SQLException
+    private List<JdbcSchemaObject> resolveTablesScope(Connection connection, com.queryeer.backend.contract.jdbc.JdbcSchemaTarget target) throws SQLException
     {
         DatabaseMetaData meta = connection.getMetaData();
-        String catalog = text(target.get("database"));
-        String schema = text(target.get("schema"));
+        String catalog = target != null ? trimToNull(target.database())
+                : null;
+        String schema = target != null ? trimToNull(target.schema())
+                : null;
 
         List<JdbcSchemaObject> schemas = new ArrayList<>();
 
@@ -80,7 +98,7 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
                 while (rs.next())
                 {
                     String schemaName = rs.getString("TABLE_SCHEM");
-                    schemas.add(new JdbcSchemaObject(catalog + "." + schemaName, schemaName, "schema", null, Map.of()));
+                    schemas.add(new JdbcSchemaObject(catalog + "." + schemaName, schemaName, KIND_SCHEMA, null, Map.of()));
                 }
             }
             return schemas;
@@ -93,8 +111,8 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
             {
                 String tableName = rs.getString("TABLE_NAME");
                 String tableType = rs.getString("TABLE_TYPE");
-                String kind = "VIEW".equalsIgnoreCase(tableType) ? "view"
-                        : "table";
+                String kind = "VIEW".equalsIgnoreCase(tableType) ? KIND_VIEW
+                        : KIND_TABLE;
                 String id = (catalog != null ? catalog + "."
                         : "")
                         + (schema != null ? schema + "."
@@ -106,12 +124,15 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
         return tables;
     }
 
-    private List<JdbcSchemaObject> resolveColumnsScope(Connection connection, Map<String, Object> target) throws SQLException
+    private List<JdbcSchemaObject> resolveColumnsScope(Connection connection, com.queryeer.backend.contract.jdbc.JdbcSchemaTarget target) throws SQLException
     {
         DatabaseMetaData meta = connection.getMetaData();
-        String catalog = text(target.get("database"));
-        String schema = text(target.get("schema"));
-        String table = text(target.get("table"));
+        String catalog = target != null ? trimToNull(target.database())
+                : null;
+        String schema = target != null ? trimToNull(target.schema())
+                : null;
+        String table = target != null ? trimToNull(target.table())
+                : null;
 
         List<JdbcSchemaObject> columns = new ArrayList<>();
         try (ResultSet rs = meta.getColumns(catalog, schema, table, null))
@@ -127,31 +148,40 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
                         + (table != null ? table + "."
                                 : "")
                         + columnName;
-                columns.add(new JdbcSchemaObject(id, columnName, "column", null, Map.of("type", typeName == null ? "unknown"
+                columns.add(new JdbcSchemaObject(id, columnName, KIND_COLUMN, null, Map.of(KEY_TYPE, typeName == null ? UNKNOWN_TYPE
                         : typeName.toLowerCase())));
             }
         }
         return columns;
     }
 
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> asMap(Object value)
+    private static com.queryeer.backend.contract.jdbc.JdbcSchemaTarget extractTarget(Object value)
     {
+        if (value instanceof com.queryeer.backend.contract.jdbc.JdbcSchemaTarget t)
+        {
+            return t;
+        }
         if (value instanceof Map<?, ?> map)
         {
-            return (Map<String, Object>) map;
-        }
-        return Map.of();
-    }
-
-    private static String text(Object value)
-    {
-        if (value instanceof String s)
-        {
-            String trimmed = s.trim();
-            return trimmed.isBlank() ? null
-                    : trimmed;
+            String database = map.get(KEY_DATABASE) instanceof String s ? trimToNull(s)
+                    : null;
+            String schema = map.get(KEY_SCHEMA) instanceof String s ? trimToNull(s)
+                    : null;
+            String table = map.get(KEY_TABLE) instanceof String s ? trimToNull(s)
+                    : null;
+            return new com.queryeer.backend.contract.jdbc.JdbcSchemaTarget(database, schema, table);
         }
         return null;
+    }
+
+    private static String trimToNull(String value)
+    {
+        if (value == null)
+        {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isBlank() ? null
+                : trimmed;
     }
 }
