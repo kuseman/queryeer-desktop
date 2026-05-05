@@ -140,6 +140,10 @@ describe("JdbcNavigationTree", () => {
     await act(async () => {});
 
     expect(store.getNode("conn-a::__root__")?.isExpanded).toBe(true);
+    expect(mocks.invokeMock).toHaveBeenCalledWith(
+      expect.objectContaining({ engineId: "jdbc", action: "jdbc.schema.fetch" }),
+      expect.objectContaining({ silent: true })
+    );
   });
 
   it("does NOT auto-expand when linkToActiveFile is false", async () => {

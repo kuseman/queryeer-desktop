@@ -76,8 +76,33 @@
   min-height: 0;
 }
 
+.shell-divider-horizontal {
+  height: 1px;
+  cursor: row-resize;
+  background: var(--border);
+  position: relative;
+}
+
+.shell-divider-horizontal::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+}
+
+.shell-divider-horizontal:hover {
+  background: var(--accent-muted);
+}
+
 body.is-resizing-layout {
   cursor: col-resize;
+  user-select: none;
+}
+
+body.is-resizing-panel {
+  cursor: row-resize;
   user-select: none;
 }
 
@@ -91,5 +116,9 @@ body.is-resizing-layout {
     grid-template-columns: 1fr;
     padding: 8px;
     overflow: auto;
+  }
+
+  .shell-divider-horizontal {
+    display: none;
   }
 }

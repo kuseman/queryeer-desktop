@@ -139,6 +139,12 @@
   background: #252526;
 }
 
+.shell-sidebar-empty-state {
+  flex: 1;
+  min-height: 0;
+  pointer-events: none;
+}
+
 .shell-divider {
   width: 1px;
   cursor: col-resize;

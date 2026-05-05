@@ -71,6 +71,9 @@ export function Sidebar({
       aria-label={zone === "primarySidebar" ? "Primary sidebar" : "Secondary sidebar"}
       style={{ width: `${width}px` }}
     >
+      {views.length === 0 && (
+        <div className="shell-sidebar-empty-state" aria-hidden="true" />
+      )}
       {views.map((view, i) => {
         const prevView = views[i - 1];
         const prevIsFlexAndOpen =

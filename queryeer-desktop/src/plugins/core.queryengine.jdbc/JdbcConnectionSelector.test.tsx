@@ -134,6 +134,26 @@ describe("JdbcConnectionSelector", () => {
     expect(select?.value).toBe("conn-a");
   });
 
+  it("loads databases silently on initial render", async () => {
+    const file = makeFile({ engineBinding: { engineId: "jdbc", connectionId: "conn-a" } });
+    const filesRegistry = makeFilesRegistry(file);
+    const fileMediator = makeFileMediator(file);
+    mocks.invokeMock.mockResolvedValue([]);
+
+    await act(async () => {
+      root.render(
+        <JdbcConnectionSelector fileId="file-1" fileMediator={fileMediator} filesRegistry={filesRegistry} />
+      );
+    });
+
+    await act(async () => {});
+
+    expect(mocks.invokeMock).toHaveBeenCalledWith(
+      expect.objectContaining({ engineId: "jdbc", action: "jdbc.schema.fetch" }),
+      expect.objectContaining({ silent: true })
+    );
+  });
+
   it("calls bindEngine when connection dropdown changes", async () => {
     const file = makeFile({ engineBinding: { engineId: "jdbc", connectionId: "conn-a" } });
     const filesRegistry = makeFilesRegistry(file);
@@ -153,6 +173,29 @@ describe("JdbcConnectionSelector", () => {
     });
 
     expect(fileMediator.bindEngine).toHaveBeenCalledWith("file-1", "jdbc", "conn-b");
+  });
+
+  it("clears persisted selected database when connection changes", async () => {
+    const file = makeFile({ engineBinding: { engineId: "jdbc", connectionId: "conn-a" } });
+    const filesRegistry = makeFilesRegistry(file, {
+      [JDBC_NAV_DB_KEY]: { connectionId: "conn-a", database: "mydb" }
+    });
+    const fileMediator = makeFileMediator(file);
+    mocks.invokeMock.mockResolvedValue([]);
+
+    await act(async () => {
+      root.render(
+        <JdbcConnectionSelector fileId="file-1" fileMediator={fileMediator} filesRegistry={filesRegistry} />
+      );
+    });
+
+    const select = container.querySelector<HTMLSelectElement>("[data-testid='jdbc-connection-select']");
+    await act(async () => {
+      select!.value = "conn-b";
+      select!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    expect(filesRegistry.setEditorState).toHaveBeenCalledWith("file-1", JDBC_NAV_DB_KEY, undefined);
   });
 
   it("calls setEditorState when database dropdown changes", async () => {

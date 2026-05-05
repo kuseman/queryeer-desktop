@@ -331,11 +331,18 @@ export const coreFilesPlugin: Plugin = {
       handler: async () => {
         const activeId = context.fileMediator.getActiveFileId();
         const active = activeId ? context.files.getFile(activeId) : undefined;
-        const extension = fileExtensionForMimeType(active?.mimeType ?? "text/plain");
+        const configuredOptions = listConfiguredNewFileMimeTypeOptions(context);
+        const activeInConfigured =
+          active?.mimeType !== undefined &&
+          configuredOptions.some((option) => option.mimeType === active.mimeType);
+        const selectedMimeType = activeInConfigured
+          ? active?.mimeType
+          : (configuredOptions[0]?.mimeType ?? active?.mimeType ?? "text/plain");
+        const extension = fileExtensionForMimeType(selectedMimeType);
         await context.fileMediator.createUntitledFile({
           extension,
-          mimeType: active?.mimeType,
-          cloneFromFileId: active?.fileId ?? null
+          mimeType: selectedMimeType,
+          cloneFromFileId: activeInConfigured ? active?.fileId ?? null : null
         });
       }
     });

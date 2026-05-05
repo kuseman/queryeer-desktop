@@ -32,29 +32,22 @@ export function resolveOpenFileIds(params: {
     return { nextOpenFileIds: [...retained, ...added], addedFileIds: added };
   }
 
-  const fileById = new Map(params.nextFiles.map((file) => [file.fileId, file]));
-  const addedUntitled = added.filter((fileId) => fileById.get(fileId)?.uri.startsWith("untitled:") === true);
-  const addedRegular = added.filter((fileId) => !addedUntitled.includes(fileId));
-  const ordered = [...retained, ...addedRegular];
-
-  if (addedUntitled.length === 0) {
-    return { nextOpenFileIds: ordered, addedFileIds: added };
-  }
+  const ordered = [...retained];
 
   const activeIndex = params.activeFileId ? ordered.indexOf(params.activeFileId) : -1;
   if (activeIndex >= 0) {
-    ordered.splice(activeIndex + 1, 0, ...addedUntitled);
+    ordered.splice(activeIndex + 1, 0, ...added);
     return { nextOpenFileIds: ordered, addedFileIds: added };
   }
 
   const anchorId = [...params.activationQueue].reverse().find((queuedId) => ordered.includes(queuedId));
   const anchorIndex = anchorId ? ordered.indexOf(anchorId) : -1;
   if (anchorIndex >= 0) {
-    ordered.splice(anchorIndex + 1, 0, ...addedUntitled);
+    ordered.splice(anchorIndex + 1, 0, ...added);
     return { nextOpenFileIds: ordered, addedFileIds: added };
   }
 
-  return { nextOpenFileIds: [...ordered, ...addedUntitled], addedFileIds: added };
+  return { nextOpenFileIds: [...ordered, ...added], addedFileIds: added };
 }
 
 export function resolveActiveFileAfterRegistryUpdate(params: {
@@ -62,6 +55,7 @@ export function resolveActiveFileAfterRegistryUpdate(params: {
   nextOpenFileIds: string[];
   addedFileIds: string[];
   activationQueue: string[];
+  previousOpenFileIds?: string[];
 }): { nextActiveFileId: string | null; nextQueue: string[] } {
   if (params.addedFileIds.length > 0) {
     return {
@@ -74,7 +68,8 @@ export function resolveActiveFileAfterRegistryUpdate(params: {
     return resolveNextActiveTab({
       queue: params.activationQueue,
       openFileIds: params.nextOpenFileIds,
-      excludeFileId: params.previousActiveFileId
+      excludeFileId: params.previousActiveFileId,
+      previousOpenFileIds: params.previousOpenFileIds
     });
   }
 
@@ -96,6 +91,7 @@ export function resolveNextActiveTab(params: {
   queue: string[];
   openFileIds: string[];
   excludeFileId?: string;
+  previousOpenFileIds?: string[];
 }): { nextActiveFileId: string | null; nextQueue: string[] } {
   const openSet = new Set(params.openFileIds);
   const nextQueue = params.queue.filter((id) => {
@@ -114,6 +110,20 @@ export function resolveNextActiveTab(params: {
 
   if (params.openFileIds.length === 0) {
     return { nextActiveFileId: null, nextQueue };
+  }
+
+  if (params.previousOpenFileIds && params.excludeFileId) {
+    const closedIndex = params.previousOpenFileIds.indexOf(params.excludeFileId);
+    if (closedIndex >= 0) {
+      const rightNeighbor = params.previousOpenFileIds[closedIndex + 1];
+      if (rightNeighbor && openSet.has(rightNeighbor)) {
+        return { nextActiveFileId: rightNeighbor, nextQueue };
+      }
+      const leftNeighbor = params.previousOpenFileIds[closedIndex - 1];
+      if (leftNeighbor && openSet.has(leftNeighbor)) {
+        return { nextActiveFileId: leftNeighbor, nextQueue };
+      }
+    }
   }
 
   return {

@@ -382,6 +382,78 @@ describe("RendererWorkspaceService layout state", () => {
     ]);
     expect(persisted.layout?.sidebarWidths?.primary).toBe(250);
   });
+
+  it("restores and persists panelHeight", async () => {
+    const snapshot: WorkspaceSnapshot = {
+      schemaVersion: WORKSPACE_SCHEMA_VERSION,
+      savedAt: "t",
+      files: [],
+      layout: {
+        panelHeight: 350
+      }
+    };
+    const { service: restoreService } = makeHarness(snapshot);
+    await restoreService.hydrate();
+    expect(restoreService.restoredLayout()?.panelHeight).toBe(350);
+
+    const { service, saveMock } = makeHarness();
+    await service.hydrate();
+    saveMock.mockClear();
+
+    service.setLayout({
+      visibleZones: ["mainArea", "statusBar"],
+      panelHeight: 400
+    });
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    const persisted = saveMock.mock.calls[0]![0];
+    expect(persisted.layout?.panelHeight).toBe(400);
+  });
+
+  it("reorders persisted files via setOpenFileOrder", async () => {
+    const { service, mediator, saveMock } = makeHarness();
+    await service.hydrate();
+
+    const fileA = await mediator.openFile("file:///a.sql", { mimeType: "application/sql" });
+    const fileB = await mediator.openFile("file:///b.sql", { mimeType: "application/sql" });
+    saveMock.mockClear();
+
+    service.setOpenFileOrder([fileB.uri, fileA.uri]);
+    service.setLayout({ visibleZones: ["mainArea", "statusBar"] });
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    const persisted = saveMock.mock.calls[0]![0];
+    expect(persisted.files.map((f: { uri: string }) => f.uri)).toEqual(["file:///b.sql", "file:///a.sql"]);
+  });
+
+  it("round-trips file tab order across simulated restart", async () => {
+    const { service, mediator, saveMock } = makeHarness();
+    await service.hydrate();
+
+    const fileA = await mediator.openFile("file:///a.sql", { mimeType: "application/sql" });
+    const fileB = await mediator.openFile("file:///b.sql", { mimeType: "application/sql" });
+    const fileC = await mediator.openFile("file:///c.sql", { mimeType: "application/sql" });
+
+    service.setOpenFileOrder([fileB.uri, fileA.uri, fileC.uri]);
+    service.setLayout({ visibleZones: ["mainArea", "statusBar"] });
+    await service.flush();
+
+    const firstPersisted = saveMock.mock.calls[0]?.[0];
+    expect(firstPersisted?.files.map((f: { uri: string }) => f.uri)).toEqual([
+      "file:///b.sql",
+      "file:///a.sql",
+      "file:///c.sql"
+    ]);
+
+    const simulatedWorkspaceJson = JSON.parse(JSON.stringify(firstPersisted)) as WorkspaceSnapshot;
+    const restart = makeHarness(simulatedWorkspaceJson);
+    await restart.service.hydrate();
+
+    const restoredUris = restart.filesRegistry.listFiles().map((f) => f.uri);
+    expect(restoredUris).toEqual(["file:///b.sql", "file:///a.sql", "file:///c.sql"]);
+  });
 });
 
 describe("RendererWorkspaceService fileWatcher integration", () => {

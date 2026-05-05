@@ -74,7 +74,7 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
   // Load databases on mount when connection is already set
   useEffect(() => {
     if (connectionId) {
-      void loadDatabases(connectionId);
+      void loadDatabases(connectionId, { silent: true });
     }
   }, []);
 
@@ -106,6 +106,7 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
     setConnectionId(newConnId);
     setSelectedDatabase("");
     setDatabases([]);
+    filesRegistry.setEditorState(fileId, JDBC_NAV_DB_KEY, undefined);
     await fileMediator.bindEngine(fileId, "jdbc", newConnId || undefined);
     if (newConnId) {
       await loadDatabases(newConnId);

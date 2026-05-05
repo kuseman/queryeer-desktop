@@ -227,6 +227,29 @@ describe("core.queryengine.jdbc plugin integration", () => {
     });
   });
 
+  it("does not include database when persisted selection belongs to another connection", () => {
+    const context = createContext();
+    const file = context.files.getFile("file-1");
+    if (file) {
+      file.engineBinding = { engineId: "jdbc", connectionId: "conn-b" };
+      file.persistentViewState = {
+        "jdbc.navigation.selectedDatabase": { connectionId: "conn-a", database: "reporting" }
+      };
+    }
+
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[0] as
+      | ((params: { engineId: string; text: string; fileId?: string }) => unknown)
+      | undefined;
+    expect(provider).toBeTypeOf("function");
+
+    const patch = provider?.({ engineId: "jdbc", text: "select 1", fileId: "file-1" });
+    expect(patch).toEqual({
+      engineState: { connectionId: "conn-b" }
+    });
+  });
+
   it("applies completed engineState database back into editor state", () => {
     const context = createContext();
     const file = context.files.getFile("file-1");
