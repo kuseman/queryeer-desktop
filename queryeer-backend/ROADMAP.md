@@ -3,7 +3,6 @@
 Quick fixes
 - JDBC SqlWarnings
     - Print in text output
-- Icons on known mimes that show on tabs
 - Save to file output
     - Should not output anything to table/text only writing status to text
 
@@ -12,16 +11,18 @@ Large features in prio
     - CTRL 0-9 / ALT-0
     - Rule based (query file meta data. Payloadbuilder properties / jdbc properties)
     - Only active for queryexecutable
+- [ ] Tree sitter foundation
+    - [ ] Code parsing => wiggly lines in monaco
+    - [ ] Code complete => register completion provider in monaco
+        - Investigate LPS in backend if that simplifies things
+- [ ] Table query output settings
+    - [ ] Stacked result set / tab per result set
+- [ ] Payloadbuilder
+    - JDBC Catalog
+    - Kafka catalog
 - [ ] JDBC Tree component Context menu
     - Context menu items default + dialect spcific
-- [ ] Code parsing
-    - Treesitter + dialect
-- [ ] Code complete
-    - Treesitter + dialect
-- [ ] Action in JDBC navigation
-    - Rulebased actions based on node type etc
-        - SQLServer + Procedure => sp_helptext
-        - etc.
+    - New query on connection / database
 - [ ] Link actions in text editor
     - Queryengine specific
         - Payloadbuilder
@@ -34,32 +35,34 @@ Large features in prio
         - etc.
 - [ ] Hoover table / etc.
     - Show popup with schema
-- [ ] Outline plugin
-    - Sidebar contribution where current editor can provider outline if present
-    - Implement pattern based outline in editor that overrides
-        - Pattern in top 20 rows and then an outline item for each occurence in document
 - [ ] Parse errors
-    - Link in text output to editor lines
+    - Link in text output to editor lines (payloadbuilder supports reporting lines)
 - [ ] Core.themes
     - Themes support
-- [ ] Payloadbuilder
-    - JDBC Catalog
-    - Kafka catalog
-- [ ] About dialog
-    - Queryeer changelog
-    - Modules changelog (Payloadbuilder)
-- [ ] Panel contribution for JDBC connections
-    - See connection details, last used, which file is connected, force close action etc.
-    - Schema crawl status. Force re-crawl actions etc.
-- [ ] Tab file contribution for JDBC to show current session id (dialect specific)
-    - See status update from health /ping (this should be erased if session / connection was ended)
-- [ ] Status update from plugins via health / ping
-    - Jdbc can return status on files to property update ui for dead connections etc.
-    - Render a panel contribution with jdbc connections and their state
 - [ ] Graph visualization framework
     - Query plan
     - Procedure call tree
     - Schema
+- [ ] Action in JDBC navigation
+    - Rulebased actions based on node type etc
+        - SQLServer + Procedure => sp_helptext
+        - etc.
+- [ ] About dialog
+    - Queryeer changelog
+    - Modules changelog (Payloadbuilder)
+- [X] Tab file contribution for JDBC to show current session id (dialect specific)
+    - See status update from health /ping (this should be erased if session / connection was ended)
+- [X] Icons on known mimes that show on tabs
+- [X] Outline plugin
+    - Sidebar contribution where current editor can provider outline if present
+    - Implement pattern based outline in editor that overrides
+        - Pattern in top 20 rows and then an outline item for each occurence in document
+- [x] Status update from plugins via health / ping
+    - Jdbc can return status on files to property update ui for dead connections etc.
+    - Render a panel contribution with jdbc connections and their state
+- [X] Panel contribution for JDBC connections
+    - See connection details, last used, which file is connected, force close action etc.
+    - Schema crawl status. Force re-crawl actions etc.
 - [x] Quicksearch
     - Command pallette like VS Code in title bar
     - Contributed sources

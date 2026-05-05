@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+import com.queryeer.backend.contract.jdbc.JdbcSchemaTarget;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnectionProfile;
 import com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject;
 import com.queryeer.backend.queryengine.jdbc.JdbcSchemaResolver;
@@ -44,7 +45,7 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
     {
         String scope = options.containsKey(OPTION_SCOPE) ? String.valueOf(options.get(OPTION_SCOPE))
                 : SCOPE_TOP;
-        com.queryeer.backend.contract.jdbc.JdbcSchemaTarget target = extractTarget(options.get(OPTION_TARGET));
+        JdbcSchemaTarget target = extractTarget(options.get(OPTION_TARGET));
 
         String url = SqlServerUrlBuilder.buildUrl(connection.properties());
         Properties props = SqlServerUrlBuilder.buildConnectionProperties(connection.properties());
@@ -79,7 +80,7 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
         return databases;
     }
 
-    private List<JdbcSchemaObject> resolveTablesScope(Connection connection, com.queryeer.backend.contract.jdbc.JdbcSchemaTarget target) throws SQLException
+    private List<JdbcSchemaObject> resolveTablesScope(Connection connection, JdbcSchemaTarget target) throws SQLException
     {
         DatabaseMetaData meta = connection.getMetaData();
         String catalog = target != null ? trimToNull(target.database())

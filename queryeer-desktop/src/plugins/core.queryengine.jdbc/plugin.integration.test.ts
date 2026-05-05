@@ -7,7 +7,8 @@ const mocks = vi.hoisted(() => ({
   onQueryEventMock: vi.fn(),
   invokeMock: vi.fn(async (): Promise<unknown> => []),
   getConfiguredJdbcConnectionsMock: vi.fn(() => []),
-  loadConnectionRootsMock: vi.fn()
+  loadConnectionRootsMock: vi.fn(),
+  openQuickCommandMock: vi.fn()
 }));
 
 vi.mock("../core.queryengine/QueryEngineService", () => ({
@@ -29,6 +30,10 @@ vi.mock("./jdbc-settings", () => ({
   getConfiguredJdbcConnections: mocks.getConfiguredJdbcConnectionsMock,
   parseJdbcConnectionDefinitions: vi.fn((v: unknown[]) => v),
   JDBC_CONNECTIONS_SETTING_ID: "core.queryengine.jdbc.connections"
+}));
+
+vi.mock("../core.quickcommand/service", () => ({
+  getQuickCommandService: () => ({ open: mocks.openQuickCommandMock })
 }));
 
 import { coreQueryEngineJdbcPlugin } from "./plugin";
@@ -386,5 +391,56 @@ describe("core.queryengine.jdbc plugin integration", () => {
     const updated = context.files.getFile("file-1");
     expect(updated?.metadata?.["core.queryengine.jdbc.sessionId"]).toBe("session-1");
     expect(updated?.metadata?.["core.queryengine.jdbc.sessionConnectionId"]).toBe("conn-a");
+  });
+
+  it("registers a quick command provider with $ prefix", () => {
+    const context = createContext();
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const registerProviderMock = context.quickcommand.registerProvider as ReturnType<typeof vi.fn>;
+    const provider = registerProviderMock.mock.calls[0]?.[0];
+    expect(provider).toBeDefined();
+    expect(provider.prefix).toBe("$");
+    expect(provider.label).toBe("Select Database");
+    expect(provider.order).toBe(15);
+    expect(provider.when).toBe("activeFileMimeType == 'application/sql'");
+    expect(typeof provider.getItems).toBe("function");
+  });
+
+  it("registers F2 keybinding to open the database quick command", () => {
+    const context = createContext();
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const registerCommandMock = context.commands.registerCommand as ReturnType<typeof vi.fn>;
+    const commandCall = registerCommandMock.mock.calls.find(
+      (call: unknown[]) => (call[0] as { id?: string } | undefined)?.id === "core.quickcommand.open.jdbc.databases"
+    );
+    expect(commandCall).toBeDefined();
+    expect(commandCall![0].title).toBe("Select Database");
+    expect(commandCall![0].category).toBe("Quick Command");
+    expect(typeof commandCall![0].handler).toBe("function");
+
+    const registerKeybindingMock = context.keybindings.registerKeybinding as ReturnType<typeof vi.fn>;
+    const keybindingCall = registerKeybindingMock.mock.calls.find(
+      (call: unknown[]) => (call[0] as { id?: string } | undefined)?.id === "core.quickcommand.open.jdbc.databases"
+    );
+    expect(keybindingCall).toBeDefined();
+    expect(keybindingCall![0].commandId).toBe("core.quickcommand.open.jdbc.databases");
+    expect(keybindingCall![0].key).toBe("F2");
+    expect(keybindingCall![0].scope).toBe("global");
+  });
+
+  it("command handler passes when-expression to quick command service", () => {
+    const context = createContext();
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const registerCommandMock = context.commands.registerCommand as ReturnType<typeof vi.fn>;
+    const commandCall = registerCommandMock.mock.calls.find(
+      (call: unknown[]) => (call[0] as { id?: string } | undefined)?.id === "core.quickcommand.open.jdbc.databases"
+    );
+    const handler = commandCall![0].handler as () => void;
+    handler();
+
+    expect(mocks.openQuickCommandMock).toHaveBeenCalledWith("$", { when: "activeFileMimeType == 'application/sql'" });
   });
 });

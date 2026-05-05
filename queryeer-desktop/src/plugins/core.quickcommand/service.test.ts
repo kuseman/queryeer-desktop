@@ -59,6 +59,25 @@ describe("QuickCommandService.open / close", () => {
     svc.open();
     expect(listener).not.toHaveBeenCalled();
   });
+
+  it("opens when when-expression is true", () => {
+    const svc = new QuickCommandService([], () => ({ activeFileMimeType: "application/sql" }));
+    svc.open("$", { when: "activeFileMimeType == 'application/sql'" });
+    expect(svc.getState().open).toBe(true);
+    expect(svc.getState().query).toBe("$");
+  });
+
+  it("does not open when when-expression is false", () => {
+    const svc = new QuickCommandService([], () => ({ activeFileMimeType: "text/plain" }));
+    svc.open("$", { when: "activeFileMimeType == 'application/sql'" });
+    expect(svc.getState().open).toBe(false);
+  });
+
+  it("opens regardless of when-expression when no getContextValues is supplied", () => {
+    const svc = new QuickCommandService([]);
+    svc.open("$", { when: "activeFileMimeType == 'application/sql'" });
+    expect(svc.getState().open).toBe(true);
+  });
 });
 
 describe("QuickCommandService.resolveItems — prefix routing", () => {

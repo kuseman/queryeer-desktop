@@ -30,7 +30,7 @@ vi.mock("../../renderer/shell/backend-status-service", () => ({
 }));
 
 import { JdbcConnectionSelector } from "./JdbcConnectionSelector";
-import { JDBC_NAV_DB_KEY } from "./jdbc-navigation-types";
+import { resetJdbcDatabaseCacheForTests } from "./jdbc-database-cache";
 
 const connections: JdbcConnectionDefinition[] = [
   { connectionId: "conn-a", title: "DB Alpha", dialectId: "jdbc", url: "jdbc:h2:a", enabled: true },
@@ -108,6 +108,7 @@ describe("JdbcConnectionSelector", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
+    resetJdbcDatabaseCacheForTests();
     mocks.invokeMock.mockReset();
     mocks.backendStatusListeners.clear();
     mocks.getConfiguredJdbcConnectionsMock.mockReturnValue(connections);
@@ -149,157 +150,12 @@ describe("JdbcConnectionSelector", () => {
     await act(async () => {});
 
     expect(mocks.invokeMock).toHaveBeenCalledWith(
-      expect.objectContaining({ engineId: "jdbc", action: "jdbc.schema.fetch" }),
-      expect.objectContaining({ silent: true })
+      {
+        engineId: "jdbc",
+        action: "jdbc.schema.snapshot",
+        payload: { connectionId: "conn-a", scope: "top" }
+      },
+      { silent: true }
     );
-  });
-
-  it("calls bindEngine when connection dropdown changes", async () => {
-    const file = makeFile({ engineBinding: { engineId: "jdbc", connectionId: "conn-a" } });
-    const filesRegistry = makeFilesRegistry(file);
-    const fileMediator = makeFileMediator(file);
-    mocks.invokeMock.mockResolvedValue([]);
-
-    await act(async () => {
-      root.render(
-        <JdbcConnectionSelector fileId="file-1" fileMediator={fileMediator} filesRegistry={filesRegistry} />
-      );
-    });
-
-    const select = container.querySelector<HTMLSelectElement>("[data-testid='jdbc-connection-select']");
-    await act(async () => {
-      select!.value = "conn-b";
-      select!.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-
-    expect(fileMediator.bindEngine).toHaveBeenCalledWith("file-1", "jdbc", "conn-b");
-  });
-
-  it("clears persisted selected database when connection changes", async () => {
-    const file = makeFile({ engineBinding: { engineId: "jdbc", connectionId: "conn-a" } });
-    const filesRegistry = makeFilesRegistry(file, {
-      [JDBC_NAV_DB_KEY]: { connectionId: "conn-a", database: "mydb" }
-    });
-    const fileMediator = makeFileMediator(file);
-    mocks.invokeMock.mockResolvedValue([]);
-
-    await act(async () => {
-      root.render(
-        <JdbcConnectionSelector fileId="file-1" fileMediator={fileMediator} filesRegistry={filesRegistry} />
-      );
-    });
-
-    const select = container.querySelector<HTMLSelectElement>("[data-testid='jdbc-connection-select']");
-    await act(async () => {
-      select!.value = "conn-b";
-      select!.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-
-    expect(filesRegistry.setEditorState).toHaveBeenCalledWith("file-1", JDBC_NAV_DB_KEY, undefined);
-  });
-
-  it("calls setEditorState when database dropdown changes", async () => {
-    const file = makeFile({ engineBinding: { engineId: "jdbc", connectionId: "conn-a" } });
-    const filesRegistry = makeFilesRegistry(file);
-    const fileMediator = makeFileMediator(file);
-    mocks.invokeMock.mockResolvedValue([
-      { id: "db:mydb", name: "mydb", kind: "database", children: [], attributes: {} }
-    ]);
-
-    await act(async () => {
-      root.render(
-        <JdbcConnectionSelector fileId="file-1" fileMediator={fileMediator} filesRegistry={filesRegistry} />
-      );
-    });
-
-    // Wait for databases to load
-    await act(async () => {});
-
-    const dbSelect = container.querySelector<HTMLSelectElement>("[data-testid='jdbc-database-select']");
-    await act(async () => {
-      dbSelect!.value = "mydb";
-      dbSelect!.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-
-    expect(filesRegistry.setEditorState).toHaveBeenCalledWith("file-1", JDBC_NAV_DB_KEY, {
-      connectionId: "conn-a",
-      database: "mydb"
-    });
-  });
-
-  it("shows loading state while databases load", async () => {
-    const file = makeFile({ engineBinding: { engineId: "jdbc", connectionId: "conn-a" } });
-    const filesRegistry = makeFilesRegistry(file);
-    const fileMediator = makeFileMediator(file);
-    let resolveDb!: (v: unknown) => void;
-    mocks.invokeMock.mockReturnValue(new Promise((r) => (resolveDb = r)));
-
-    await act(async () => {
-      root.render(
-        <JdbcConnectionSelector fileId="file-1" fileMediator={fileMediator} filesRegistry={filesRegistry} />
-      );
-    });
-
-    expect(container.querySelector("[data-testid='jdbc-db-loading']")).not.toBeNull();
-
-    await act(async () => {
-      resolveDb([]);
-    });
-
-    expect(container.querySelector("[data-testid='jdbc-db-loading']")).toBeNull();
-  });
-
-  it("restores persisted database selection on initial render", async () => {
-    const file = makeFile({ engineBinding: { engineId: "jdbc", connectionId: "conn-a" } });
-    const filesRegistry = makeFilesRegistry(file, { [JDBC_NAV_DB_KEY]: { connectionId: "conn-a", database: "mydb" } });
-    const fileMediator = makeFileMediator(file);
-    mocks.invokeMock.mockResolvedValue([
-      { id: "db:mydb", name: "mydb", kind: "database", children: [], attributes: {} }
-    ]);
-
-    await act(async () => {
-      root.render(
-        <JdbcConnectionSelector fileId="file-1" fileMediator={fileMediator} filesRegistry={filesRegistry} />
-      );
-    });
-
-    await act(async () => {});
-
-    const dbSelect = container.querySelector<HTMLSelectElement>("[data-testid='jdbc-database-select']");
-    expect(dbSelect?.value).toBe("mydb");
-  });
-
-  it("reloads databases silently when backend becomes healthy", async () => {
-    const file = makeFile({ engineBinding: { engineId: "jdbc", connectionId: "conn-a" } });
-    const filesRegistry = makeFilesRegistry(file);
-    const fileMediator = makeFileMediator(file);
-    mocks.invokeMock.mockResolvedValue([]);
-
-    await act(async () => {
-      root.render(
-        <JdbcConnectionSelector fileId="file-1" fileMediator={fileMediator} filesRegistry={filesRegistry} />
-      );
-    });
-
-    await act(async () => {});
-    mocks.invokeMock.mockClear();
-    mocks.invokeMock.mockResolvedValue([
-      { id: "db:mydb", name: "mydb", kind: "database", children: [], attributes: {} }
-    ]);
-
-    await act(async () => {
-      for (const listener of mocks.backendStatusListeners) {
-        listener({ state: "healthy" });
-      }
-    });
-
-    await act(async () => {});
-
-    expect(mocks.invokeMock).toHaveBeenCalledWith(
-      expect.objectContaining({ engineId: "jdbc", action: "jdbc.schema.fetch" }),
-      expect.objectContaining({ silent: true })
-    );
-    const dbSelect = container.querySelector<HTMLSelectElement>("[data-testid='jdbc-database-select']");
-    expect(dbSelect?.querySelectorAll("option").length).toBeGreaterThan(1);
   });
 });

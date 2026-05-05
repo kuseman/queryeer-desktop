@@ -85,6 +85,22 @@ export async function bootstrapShell() {
     workspaceService?.handleFileChanged(file, text);
   };
 
+  const getCommandContextValues = (): Record<string, string | number | boolean | undefined> => {
+    const activeFileId = fileMediator?.getActiveFileId() ?? null;
+    const activeFile = activeFileId ? filesRegistry?.getFile(activeFileId) : undefined;
+    const isQueryExecutable = activeFile
+      ? filesRegistry?.capabilities.hasCapability(activeFile.mimeType, "queryexecutable") === true
+      : false;
+    const metadataContext = flattenContextObject("activeFileMetadata", activeFile?.metadata);
+    return {
+      ...chain.getEffectiveContext(),
+      hasActiveFile: activeFile != null,
+      activeFileMimeType: activeFile?.mimeType,
+      hasActiveQueryExecutableFile: isQueryExecutable,
+      ...metadataContext
+    };
+  };
+
   const host = new PluginHost({
     fileWatcher,
     backendSync,
@@ -94,19 +110,7 @@ export async function bootstrapShell() {
     muteFileWatcherPath: (uri, durationMs) => fileWatcher.mutePath(uri, durationMs),
     resolveFileContent,
     showSaveDialog: (options) => window.appShell.showDialogSave(options),
-    getCommandContextValues: () => {
-      const activeFileId = fileMediator?.getActiveFileId() ?? null;
-      const activeFile = activeFileId ? filesRegistry?.getFile(activeFileId) : undefined;
-      const isQueryExecutable = activeFile
-        ? filesRegistry?.capabilities.hasCapability(activeFile.mimeType, "queryexecutable") === true
-        : false;
-      const metadataContext = flattenContextObject("activeFileMetadata", activeFile?.metadata);
-      return {
-        ...chain.getEffectiveContext(),
-        hasActiveQueryExecutableFile: isQueryExecutable,
-        ...metadataContext
-      };
-    }
+    getCommandContextValues
   });
 
   filesRegistry = host.getFilesRegistry();
@@ -123,7 +127,7 @@ export async function bootstrapShell() {
   await host.start(discovery.manifests);
   host.setExternalLoadErrors(discovery.loadErrors);
 
-  initializeQuickCommandService(host.getQuickCommandProviders(), () => chain.getEffectiveContext());
+  initializeQuickCommandService(host.getQuickCommandProviders(), getCommandContextValues);
 
   const rebuildNativeMenu = async (): Promise<void> => {
     const extensions = host.getExtensions();
