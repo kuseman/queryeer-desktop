@@ -43,6 +43,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private static final String ACTION_SCHEMA_SNAPSHOT = "jdbc.schema.snapshot";
     private static final String ACTION_SCHEMA_REFRESH = "jdbc.schema.refresh";
     private static final String ACTION_SCHEMA_FETCH = "jdbc.schema.fetch";
+    private static final String ACTION_CONNECTION_SESSIONS = "jdbc.connection.sessions";
 
     private static final String ERROR_CODE_VALIDATION = "VALIDATION";
     private static final String ERROR_CODE_CANCELLED = "CANCELLED";
@@ -111,7 +112,6 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     public void execute(String queryExecutionId, String fileId, String text, Object engineState, QueryPublisher publisher)
     {
         long startedAt = System.currentTimeMillis();
-        long rowCount = 0L;
         try
         {
             if (text == null
@@ -133,9 +133,10 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             JdbcResolvedConnection resolved = JdbcResolvedConnection.fromEngineState(state, connections, registry);
             JdbcConnectionProfile materializedProfile = credentialResolver.resolve(resolved.profile());
 
-            Connection sessionConnection = resolved.dialect()
-                    .requiresExplicitUrl() ? fileConnections.acquire(fileId, materializedProfile)
-                            : null;
+            Connection sessionConnection = fileConnections.acquire(fileId, materializedProfile, resolved.dialect());
+
+            String sessionId = trimToNull(state.sessionId());
+            sessionId = fileConnections.resolveSessionId(fileId, materializedProfile, resolved, sessionId);
 
             JdbcQueryRequest request = new JdbcQueryRequest(queryExecutionId, fileId, text, List.of(), materializedProfile, sessionConnection, state.database(), resolved.dialect());
 
@@ -149,8 +150,20 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                     .queryExecutor()
                     .execute(request, new TransportJdbcQueryEventListener(publisher));
 
+            fileConnections.rememberSessionId(fileId, sessionId);
+            Map<String, Object> engineStatePatch = new java.util.LinkedHashMap<>();
+            if (result.engineState() != null)
+            {
+                engineStatePatch.putAll(result.engineState());
+            }
+            if (sessionId != null
+                    && !sessionId.isBlank())
+            {
+                engineStatePatch.put("sessionId", sessionId);
+            }
+
             usageListener.onUsage(resolved.connectionId());
-            publisher.completed(System.currentTimeMillis() - startedAt, result.rowCount(), result.engineState());
+            publisher.completed(System.currentTimeMillis() - startedAt, result.rowCount(), engineStatePatch);
         }
         catch (IllegalArgumentException e)
         {
@@ -205,6 +218,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             case ACTION_SCHEMA_SNAPSHOT -> schemaSnapshot(payload);
             case ACTION_SCHEMA_REFRESH -> schemaRefresh(payload);
             case ACTION_SCHEMA_FETCH -> schemaFetch(payload);
+            case ACTION_CONNECTION_SESSIONS -> connectionSessions();
             case ACTION_CONNECTION_UPSERT -> connectionUpsert(payload);
             case ACTION_ENGINE_CAPABILITIES -> engineCapabilities();
             default -> QueryEngineProvider.super.invoke(fileId, action, payload);
@@ -250,6 +264,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             throw new IllegalArgumentException(ERROR_CONNECTION_ID_REQUIRED);
         }
 
+        @SuppressWarnings("unchecked")
         java.util.Map<String, Object> connection = payloadMapper.convert(params.connection(), java.util.Map.class);
         JdbcConnectionRegistry.JdbcStoredConnection stored = connections.upsert(connectionId, trimToNull(params.name()), connection);
         crawlCoordinator.onConnectionUpsert(connectionId);
@@ -260,7 +275,12 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private Object engineCapabilities()
     {
         return Map.of(KEY_ACTIONS, List.of(ACTION_ENGINE_CAPABILITIES, ACTION_CONNECTION_UPSERT, ACTION_CONNECTION_SETUP, ACTION_CONNECTION_DIALECTS, ACTION_CONNECTION_TEST, ACTION_SCHEMA_SNAPSHOT,
-                ACTION_SCHEMA_REFRESH, ACTION_SCHEMA_FETCH));
+                ACTION_SCHEMA_REFRESH, ACTION_SCHEMA_FETCH, ACTION_CONNECTION_SESSIONS));
+    }
+
+    private Object connectionSessions()
+    {
+        return fileConnections.connectionSnapshots(System.currentTimeMillis());
     }
 
     private Object schemaFetch(Object payload)

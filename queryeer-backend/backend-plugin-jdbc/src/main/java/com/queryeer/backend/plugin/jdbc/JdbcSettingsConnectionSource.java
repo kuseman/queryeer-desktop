@@ -23,7 +23,6 @@ final class JdbcSettingsConnectionSource
     private static final String SETTINGS_DIR_KEY = "queryeer.settings.dir";
     private static final String JDBC_MODULE_ID = "core.queryengine.jdbc";
     private static final String JDBC_MODULE_FILE = "core.queryengine.jdbc.json";
-    private static final String JDBC_CONNECTIONS_SETTING_ID = "core.queryengine.jdbc.connections";
 
     private static final String KEY_VALUES = "values";
     private static final String KEY_DIALECT_ID = "dialectId";
@@ -210,15 +209,6 @@ final class JdbcSettingsConnectionSource
         String trimmed = value.trim();
         return trimmed.isBlank() ? null
                 : trimmed;
-    }
-
-    private static boolean boolOrDefault(Object value, boolean defaultValue)
-    {
-        if (value instanceof Boolean bool)
-        {
-            return bool;
-        }
-        return defaultValue;
     }
 
     record JdbcConfiguredConnection(String connectionId, String name, Map<String, Object> connection)

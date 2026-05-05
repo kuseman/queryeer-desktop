@@ -17,12 +17,10 @@ public final class QueryExecutionService
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private final Map<String, QueryEngineProvider> activeExecutions = new ConcurrentHashMap<>();
     private final QueryEngineRegistry engineRegistry;
-    private final SecretRefPayloadResolver secretResolver;
 
-    public QueryExecutionService(QueryEngineRegistry engineRegistry, SecretRefPayloadResolver secretResolver)
+    public QueryExecutionService(QueryEngineRegistry engineRegistry)
     {
         this.engineRegistry = engineRegistry;
-        this.secretResolver = secretResolver;
     }
 
     public void execute(String queryExecutionId, String engineId, String fileId, String text, Object engineState, QueryPublisher publisher)

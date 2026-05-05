@@ -13,17 +13,14 @@ final class JdbcSchemaCrawlCoordinator
     private final JdbcSchemaCrawler crawler;
     private final JdbcSchemaStore store;
     private final JdbcSchemaCrawlPolicy policy;
-    private final JdbcSecuritySessionState securitySessionState;
     private final LoggerService logger;
 
-    JdbcSchemaCrawlCoordinator(JdbcConnectionRegistry connections, JdbcSchemaCrawler crawler, JdbcSchemaStore store, JdbcSchemaCrawlPolicy policy, JdbcSecuritySessionState securitySessionState,
-            LoggerService logger)
+    JdbcSchemaCrawlCoordinator(JdbcConnectionRegistry connections, JdbcSchemaCrawler crawler, JdbcSchemaStore store, JdbcSchemaCrawlPolicy policy, LoggerService logger)
     {
         this.connections = connections;
         this.crawler = crawler;
         this.store = store;
         this.policy = policy;
-        this.securitySessionState = securitySessionState;
         this.logger = logger;
     }
 

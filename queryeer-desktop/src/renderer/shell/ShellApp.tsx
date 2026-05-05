@@ -293,6 +293,11 @@ export function ShellApp({
     [extensions.layout.tabHeaderStyles]
   );
 
+  const tabTitleContributions = useMemo(
+    () => [...extensions.layout.tabTitles],
+    [extensions.layout.tabTitles]
+  );
+
   const panels = useMemo(
     () => [...extensions.layout.panels].sort((a, b) => a.id.localeCompare(b.id)),
     [extensions.layout.panels]
@@ -624,6 +629,7 @@ export function ShellApp({
               tooltipContributions={tooltipContributions}
               tabContextMenus={tabContextMenus}
               tabHeaderStyleContributions={tabHeaderStyleContributions}
+              tabTitleContributions={tabTitleContributions}
               hasMimeCapability={(mimeType, capability) =>
                 filesRegistry.capabilities.hasCapability(mimeType, capability)
               }

@@ -61,6 +61,7 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
         long rowCount = 0L;
         List<String> statements = splitStatements(request.sql());
         String resolvedDatabase = null;
+        String resolvedSessionId = null;
 
         try
         {
@@ -90,6 +91,7 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
                         }
                     }
                     resolvedDatabase = resolveCurrentDatabaseIfPossible(request, jdbcConnection);
+                    resolvedSessionId = resolveSessionIdIfPossible(request, jdbcConnection);
                 }
             }
         }
@@ -106,6 +108,11 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
         if (resolvedDatabase != null)
         {
             engineState.put("database", resolvedDatabase);
+        }
+        if (resolvedSessionId != null
+                && !resolvedSessionId.isBlank())
+        {
+            engineState.put("sessionId", resolvedSessionId);
         }
         return new JdbcQueryResult(rowCount, engineState);
     }
@@ -132,6 +139,23 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
         {
             return request.dialect()
                     .resolveCurrentDatabase(connection);
+        }
+        catch (SQLException ignored)
+        {
+            return null;
+        }
+    }
+
+    private static String resolveSessionIdIfPossible(JdbcQueryRequest request, Connection connection)
+    {
+        if (request.dialect() == null)
+        {
+            return null;
+        }
+        try
+        {
+            return request.dialect()
+                    .resolveSessionId(connection);
         }
         catch (SQLException ignored)
         {

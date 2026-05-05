@@ -4,6 +4,7 @@ import type {
   LayoutShellDefaults,
   LayoutStatusItemContribution,
   LayoutToolbarContribution,
+  TabTitleContribution,
   TabHeaderStyleContribution,
   LayoutViewContribution,
   LayoutWelcomeContribution,
@@ -86,6 +87,7 @@ export type ExtensionSnapshot = {
     welcomes: LayoutWelcomeContribution[];
     tabContextMenus: TabContextMenuContribution[];
     tabHeaderStyles: TabHeaderStyleContribution[];
+    tabTitles: TabTitleContribution[];
     panels: LayoutPanelContribution[];
     shellDefaults: LayoutShellDefaults;
   };
@@ -198,6 +200,7 @@ export class ExtensionRegistry {
   private readonly layoutWelcomes = new Map<string, LayoutWelcomeContribution>();
   private readonly tabContextMenus = new Map<string, TabContextMenuContribution>();
   private readonly tabHeaderStyles = new Map<string, TabHeaderStyleContribution>();
+  private readonly tabTitles = new Map<string, TabTitleContribution>();
   private readonly layoutPanels = new Map<string, LayoutPanelContribution>();
   private readonly tooltipSections = new Map<string, TooltipSectionContribution>();
   private readonly settingsContributions = new Map<string, SettingsContribution>();
@@ -337,6 +340,9 @@ export class ExtensionRegistry {
       },
       registerTabHeaderStyle: (contribution) => {
         this.tabHeaderStyles.set(contribution.id, contribution);
+      },
+      registerTabTitle: (contribution) => {
+        this.tabTitles.set(contribution.id, contribution);
       },
       registerPanel: (contribution) => {
         this.layoutPanels.set(contribution.id, contribution);
@@ -531,6 +537,7 @@ menu: {
         welcomes: [...this.layoutWelcomes.values()],
         tabContextMenus: [...this.tabContextMenus.values()],
         tabHeaderStyles: [...this.tabHeaderStyles.values()],
+        tabTitles: [...this.tabTitles.values()],
         panels: [...this.layoutPanels.values()],
         shellDefaults: this.shellDefaults
       },

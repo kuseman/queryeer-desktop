@@ -58,7 +58,7 @@ public final class JdbcBackendPlugin implements BackendPlugin
         JdbcSchemaStore schemaStore = new JdbcSchemaStore(resolveSchemaCacheDir(context.config()));
         JdbcSchemaCrawler schemaCrawler = new JdbcSchemaCrawler(registry, resolver, schemaStore, context.logger(), credentialResolver);
         JdbcSecuritySessionState securitySessionState = new JdbcSecuritySessionState();
-        JdbcSchemaCrawlCoordinator crawlCoordinator = new JdbcSchemaCrawlCoordinator(connections, schemaCrawler, schemaStore, new JdbcSchemaCrawlPolicy(), securitySessionState, context.logger());
+        JdbcSchemaCrawlCoordinator crawlCoordinator = new JdbcSchemaCrawlCoordinator(connections, schemaCrawler, schemaStore, new JdbcSchemaCrawlPolicy(), context.logger());
         context.events()
                 .subscribe(EVENT_SECURITY_SESSION_OPENED, event -> securitySessionState.markOpen());
         context.events()

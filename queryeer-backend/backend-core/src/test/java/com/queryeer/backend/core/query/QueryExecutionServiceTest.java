@@ -21,8 +21,6 @@ import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.QueryPublisher;
 import com.queryeer.backend.api.SchedulerService;
-import com.queryeer.backend.core.security.SecretRefPayloadResolver;
-import com.queryeer.backend.core.security.SecuritySession;
 import com.queryeer.backend.plugin.jdbc.JdbcBackendPlugin;
 
 class QueryExecutionServiceTest
@@ -31,8 +29,7 @@ class QueryExecutionServiceTest
     void executePublishesJdbcResultToPublisher() throws Exception
     {
         QueryEngineRegistry registry = activateJdbcRegistry();
-        ObjectMapper objectMapper = new ObjectMapper();
-        QueryExecutionService service = new QueryExecutionService(registry, new SecretRefPayloadResolver(new SecuritySession(), objectMapper));
+        QueryExecutionService service = new QueryExecutionService(registry);
         RecordingQueryPublisher publisher = new RecordingQueryPublisher();
 
         service.execute("exec-jdbc-1", "jdbc", "file-1", "select 1 as one", Map.of("jdbc", Map.of("connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_qes_1;DB_CLOSE_DELAY=-1"))),
@@ -51,8 +48,7 @@ class QueryExecutionServiceTest
     void cancelWithoutActiveExecutionPublishesFailedToPublisher() throws Exception
     {
         QueryEngineRegistry registry = activateJdbcRegistry();
-        ObjectMapper objectMapper = new ObjectMapper();
-        QueryExecutionService service = new QueryExecutionService(registry, new SecretRefPayloadResolver(new SecuritySession(), objectMapper));
+        QueryExecutionService service = new QueryExecutionService(registry);
         RecordingQueryPublisher publisher = new RecordingQueryPublisher();
 
         service.cancel("missing-execution");
@@ -71,8 +67,7 @@ class QueryExecutionServiceTest
     {
         BlockingProvider provider = new BlockingProvider();
         QueryEngineRegistry registry = new SingleProviderRegistry(provider);
-        ObjectMapper objectMapper = new ObjectMapper();
-        QueryExecutionService service = new QueryExecutionService(registry, new SecretRefPayloadResolver(new SecuritySession(), objectMapper));
+        QueryExecutionService service = new QueryExecutionService(registry);
         RecordingQueryPublisher publisher = new RecordingQueryPublisher();
 
         service.execute("exec-cancel-1", "test", "file-1", "select 1", Map.of(), publisher);

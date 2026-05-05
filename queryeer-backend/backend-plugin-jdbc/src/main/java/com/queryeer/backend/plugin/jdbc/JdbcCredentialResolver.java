@@ -24,6 +24,7 @@ final class JdbcCredentialResolver
     JdbcConnectionProfile resolve(JdbcConnectionProfile profile)
     {
         Object materialized = configService.materializeSecrets(profile.properties());
+        @SuppressWarnings("unchecked")
         Map<String, Object> map = payloadMapper.convert(materialized, Map.class);
         return new JdbcConnectionProfile(profile.connectionId(), profile.name(), profile.dialectId(), map);
     }

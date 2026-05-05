@@ -19,7 +19,6 @@ record JdbcResolvedConnection(String connectionId, JdbcDialect dialect, JdbcConn
 
     private static final String ENGINE_ID = "jdbc";
 
-    private static final String KEY_CONNECTION_ID = "connectionId";
     private static final String KEY_DIALECT_ID = "dialectId";
     private static final String KEY_URL = "url";
     private static final String KEY_HOST = "host";
@@ -74,6 +73,20 @@ record JdbcResolvedConnection(String connectionId, JdbcDialect dialect, JdbcConn
         return fromProperties(toMap(props), connectionId, registry);
     }
 
+    private static JdbcResolvedConnection fromProperties(Map<String, Object> properties, String connectionId, JdbcDialectRegistry registry)
+    {
+        String dialectId = stringValue(properties.get(KEY_DIALECT_ID));
+        JdbcDialect dialect = registry.find(dialectId != null ? dialectId
+                : ENGINE_ID)
+                .orElseThrow(() -> new IllegalArgumentException(ERROR_UNSUPPORTED_DIALECT + (dialectId != null ? dialectId
+                        : ENGINE_ID)));
+
+        validateConnection(dialect, properties, connectionId);
+
+        return new JdbcResolvedConnection(connectionId, dialect, new JdbcConnectionProfile(connectionId, null, dialect.metadata()
+                .id(), properties));
+    }
+
     /** Resolves from a payload with connectionId + optional property overrides (used by schemaFetch). */
     static JdbcResolvedConnection fromRegistryWithOverrides(JdbcSchemaFetchPayload payload, JdbcConnectionRegistry connections, JdbcDialectRegistry registry)
     {
@@ -105,20 +118,6 @@ record JdbcResolvedConnection(String connectionId, JdbcDialect dialect, JdbcConn
 
         return new JdbcResolvedConnection(stored.connectionId(), dialect, new JdbcConnectionProfile(stored.connectionId(), stored.name(), dialect.metadata()
                 .id(), merged));
-    }
-
-    private static JdbcResolvedConnection fromProperties(Map<String, Object> properties, String connectionId, JdbcDialectRegistry registry)
-    {
-        String dialectId = stringValue(properties.get(KEY_DIALECT_ID));
-        JdbcDialect dialect = registry.find(dialectId != null ? dialectId
-                : ENGINE_ID)
-                .orElseThrow(() -> new IllegalArgumentException(ERROR_UNSUPPORTED_DIALECT + (dialectId != null ? dialectId
-                        : ENGINE_ID)));
-
-        validateConnection(dialect, properties, connectionId);
-
-        return new JdbcResolvedConnection(connectionId, dialect, new JdbcConnectionProfile(connectionId, null, dialect.metadata()
-                .id(), properties));
     }
 
     private static void validateConnection(JdbcDialect dialect, Map<String, Object> properties, String connectionId)

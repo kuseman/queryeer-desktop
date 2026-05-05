@@ -13,7 +13,6 @@ import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.contract.runtime.RuntimeStatusResult;
 import com.queryeer.backend.core.engine.EngineInvokeService;
 import com.queryeer.backend.core.query.QueryExecutionService;
-import com.queryeer.backend.core.security.SecretRefPayloadResolver;
 import com.queryeer.backend.core.security.SecuritySession;
 
 public final class StdioTransportModule
@@ -36,9 +35,8 @@ public final class StdioTransportModule
         EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
         ResponseWriter responseWriter = new ResponseWriter(output, codec);
         NotificationPublisher notificationPublisher = new NotificationPublisher(responseWriter);
-        SecretRefPayloadResolver secretResolver = new SecretRefPayloadResolver(securitySession, codec.objectMapper());
-        QueryExecutionService queryExecutionService = new QueryExecutionService(queryEngines, secretResolver);
-        EngineInvokeService engineInvokeService = new EngineInvokeService(queryEngines, secretResolver);
+        QueryExecutionService queryExecutionService = new QueryExecutionService(queryEngines);
+        EngineInvokeService engineInvokeService = new EngineInvokeService(queryEngines);
 
         List<RequestHandler> handlers = List.of(new HandshakeRequestHandler(responseWriter), new RuntimeStatusRequestHandler(responseWriter, codec, runtimeStatusSupplier),
                 new SecuritySessionOpenRequestHandler(responseWriter, codec, securitySession, events), new SecuritySessionCloseRequestHandler(responseWriter, securitySession, events),

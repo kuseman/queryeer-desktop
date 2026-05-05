@@ -97,6 +97,7 @@ function createContext(file: FileEntity): PluginContext {
       registerWelcome: vi.fn(),
       registerTabContextMenu: vi.fn(),
       registerTabHeaderStyle: vi.fn(),
+      registerTabTitle: vi.fn(),
       registerPanel: vi.fn(),
       setShellDefaults: vi.fn()
     },

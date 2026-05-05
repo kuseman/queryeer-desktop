@@ -142,6 +142,15 @@ export const coreLayoutPlugin: Plugin = {
       ]
     });
 
+    context.layout.registerTabTitle({
+      id: "core.layout.tabTitle.dirty",
+      order: 10,
+      render: ({ file }) => {
+        const isDirty = file.dirtyVsDisk || file.dirtyVsBackend;
+        return isDirty ? { prefix: "• " } : null;
+      }
+    });
+
     context.commands.registerCommand({
       id: "core.layout.tab.close",
       title: "Close Tab",

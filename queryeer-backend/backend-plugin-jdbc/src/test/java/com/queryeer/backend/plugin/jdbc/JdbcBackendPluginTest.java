@@ -54,7 +54,7 @@ class JdbcBackendPluginTest
 
         Map<String, Object> map = (Map<String, Object>) result;
         Assertions.assertEquals(List.of("engine.capabilities", "connection.upsert", "jdbc.connection.setup", "jdbc.connection.dialects", "jdbc.connection.test", "jdbc.schema.snapshot",
-                "jdbc.schema.refresh", "jdbc.schema.fetch"), map.get("actions"));
+                "jdbc.schema.refresh", "jdbc.schema.fetch", "jdbc.connection.sessions"), map.get("actions"));
     }
 
     @Test
@@ -526,6 +526,34 @@ class JdbcBackendPluginTest
         @SuppressWarnings("unchecked")
         Map<String, Object> es = (Map<String, Object>) publisher.engineState;
         Assertions.assertEquals("TEST_NO_DB", es.get("database"));
+    }
+
+    @Test
+    void connectionSessionsReportsAliveAndTransientDeadEntries()
+    {
+        JdbcBackendPlugin plugin = new JdbcBackendPlugin();
+        RecordingQueryEngineRegistry engines = new RecordingQueryEngineRegistry();
+        RecordingFileSessionHandlerRegistry fileSessions = new RecordingFileSessionHandlerRegistry();
+        plugin.activate(new TestPluginContext(engines, fileSessions));
+        QueryEngineProvider provider = engines.provider;
+
+        provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-live", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_sessions;DB_CLOSE_DELAY=-1")));
+        RecordingPublisher publisher = new RecordingPublisher();
+        provider.execute("exec-live-1", "file-live", "select 1", Map.of("connectionId", "jdbc-live"), publisher);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> beforeClose = (List<Map<String, Object>>) provider.invoke(null, "jdbc.connection.sessions", null);
+        Assertions.assertTrue(beforeClose.stream()
+                .anyMatch(entry -> "file-live".equals(entry.get("fileId"))
+                        && "alive".equals(entry.get("status"))));
+
+        fileSessions.handler.onClose(new com.queryeer.backend.api.FileSession("file-live", java.net.URI.create("file:///tmp.sql"), "text/sql", "jdbc", "jdbc-live", 1L));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> afterClose = (List<Map<String, Object>>) provider.invoke(null, "jdbc.connection.sessions", null);
+        Assertions.assertTrue(afterClose.stream()
+                .anyMatch(entry -> "file-live".equals(entry.get("fileId"))
+                        && "dead".equals(entry.get("status"))));
     }
 
     private QueryEngineProvider activateAndGetProvider()
