@@ -148,7 +148,7 @@ export class QueryEngineService {
     await window.appShell.cancelBackendQuery({ queryExecutionId });
   }
 
-  async invoke(params: EngineInvokeParams): Promise<unknown> {
+  async invoke(params: EngineInvokeParams, options?: { silent?: boolean }): Promise<unknown> {
     await ensureBackendHealthy();
     const response = await withVaultRetry(async () => {
       const resp = await window.appShell.invokeBackendEngine(params);
@@ -156,7 +156,7 @@ export class QueryEngineService {
         throw new Error(`SECURITY_SESSION_CLOSED: ${resp.error.message}`);
       }
       return resp;
-    });
+    }, { interactive: !options?.silent });
     if (response.error) {
       throw new Error(response.error.message);
     }
@@ -275,11 +275,11 @@ async function ensureBackendHealthy(): Promise<void> {
   throw new BackendNotReadyError();
 }
 
-async function withVaultRetry<T>(operation: () => Promise<T>): Promise<T> {
+async function withVaultRetry<T>(operation: () => Promise<T>, options?: { interactive?: boolean }): Promise<T> {
   const security = getCoreSecurityService();
   if (!security) {
     return operation();
   }
 
-  return security.withVaultRetry(operation, { interactive: true });
+  return security.withVaultRetry(operation, { interactive: options?.interactive ?? true });
 }

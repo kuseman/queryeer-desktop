@@ -569,6 +569,41 @@
 - Migration CI coexists with legacy workflows; overlap consolidation is still pending.
 - `PluginDescriptor` metadata still overlaps with manifest metadata in backend API/runtime path; ownership consolidation is documented but not yet fully implemented.
 
+## What changed in this session
+
+### Backend status subscription + JDBC navigation auto-recovery
+
+- Added `backend:status-changed` IPC channel from main process to renderer:
+  - `BackendStatusStore` now accepts an `onChange` callback and emits on every state change
+  - `BackendGateway` gained `setStatusChangedSink` callback, wired to the store
+  - `main/index.ts` sends `backend:status-changed` to renderer via `webContents.send`
+- Added `onBackendStatusChanged` to `ShellApi` / `AppShellApi` / preload bridge
+- Created `src/renderer/shell/backend-status-service.ts` — singleton wrapper around `window.appShell.onBackendStatusChanged` with `subscribe(listener)` and `getCurrentStatus()` APIs
+- Added `silent?: boolean` option to `QueryEngineService.invoke(...)`:
+  - When `silent: true`, `withVaultRetry` is called with `interactive: false`
+  - This prevents vault unlock dialogs from popping up for background/auto-recovery operations
+- Wired JDBC navigation components to auto-recover when backend becomes healthy:
+  - `JdbcConnectionSelector` subscribes to backend status and silently reloads databases when transitioning to healthy
+  - `JdbcNavigationTree` subscribes and re-expands the active connection root (and active database) when backend becomes healthy
+- Added `silent?: boolean` option to `JdbcNavigationStore.expandNode(...)`:
+  - When silent, all errors (including vault-locked and generic failures) are suppressed — no red error indicator on the tree node
+  - `fetchChildren` threads the `silent` flag through to `QueryEngineService.invoke`
+- Added tests:
+  - `backend-gateway.test.ts`: status emission via `statusChangedSink`
+  - `backend-status-service.test.ts`: subscription, notification, unsubscribe
+  - `QueryEngineService.test.ts`: `silent: true` passes `interactive: false` to `withVaultRetry`
+  - `jdbc-navigation-store.test.ts`: silent expand suppresses errors, silent option passed to `invoke`
+  - `JdbcConnectionSelector.test.tsx`: reloads databases silently on backend healthy
+  - `JdbcNavigationTree.test.tsx`: re-expands connection + database nodes silently on backend healthy
+
+### Validation
+
+- `npm run typecheck` passed
+- `npm run lint` passed
+- `npm run build` passed
+- `npx vitest run` — 643 passed, 10 skipped
+- `./mvnw -f queryeer-backend/pom.xml -DskipTests=true clean verify` — BUILD SUCCESS
+
 ## Validation commands
 
 - Desktop (from `queryeer-desktop`):

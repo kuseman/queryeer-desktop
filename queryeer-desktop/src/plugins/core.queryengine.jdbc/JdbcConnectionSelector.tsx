@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FileMediator } from "../../contracts/files/FileMediator";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
+import { getBackendStatusService } from "../../renderer/shell/backend-status-service";
 import { JDBC_NAV_DB_KEY, type JdbcSchemaObject, type JdbcSelectedDatabase } from "./jdbc-navigation-types";
 import { getConfiguredJdbcConnections } from "./jdbc-settings";
 
@@ -38,9 +39,10 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
   );
   const [databases, setDatabases] = useState<string[]>([]);
   const [loadingDatabases, setLoadingDatabases] = useState(false);
+  const prevBackendStateRef = useRef<string | null>(null);
 
   const loadDatabases = useCallback(
-    async (connId: string) => {
+    async (connId: string, options?: { silent?: boolean }) => {
       if (!connId) {
         setDatabases([]);
         return;
@@ -51,7 +53,7 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
           engineId: "jdbc",
           action: "jdbc.schema.fetch",
           payload: { connectionId: connId, scope: "top" }
-        })) as JdbcSchemaObject[];
+        }, { silent: options?.silent })) as JdbcSchemaObject[];
         const dbNames = result
           .filter((o) => o.kind === "database")
           .map((o) => o.name);
@@ -88,6 +90,17 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
       }
     });
   }, [filesRegistry, fileId]);
+
+  // Auto-recover: reload databases when backend becomes healthy
+  useEffect(() => {
+    const service = getBackendStatusService();
+    return service.subscribe((status) => {
+      if (status.state === "healthy" && prevBackendStateRef.current !== "healthy" && connectionId) {
+        void loadDatabases(connectionId, { silent: true });
+      }
+      prevBackendStateRef.current = status.state;
+    });
+  }, [connectionId, loadDatabases]);
 
   const handleConnectionChange = async (newConnId: string) => {
     setConnectionId(newConnId);

@@ -122,11 +122,14 @@ describe("JdbcNavigationStore", () => {
 
     await store.expandNode("conn-a::__root__");
 
-    expect(mocks.invokeMock).toHaveBeenCalledWith({
-      engineId: "jdbc",
-      action: "jdbc.schema.fetch",
-      payload: { connectionId: "conn-a", scope: "top" }
-    });
+    expect(mocks.invokeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        engineId: "jdbc",
+        action: "jdbc.schema.fetch",
+        payload: { connectionId: "conn-a", scope: "top" }
+      }),
+      expect.anything()
+    );
 
     const root = store.getNode("conn-a::__root__");
     expect(root?.isExpanded).toBe(true);
@@ -174,15 +177,18 @@ describe("JdbcNavigationStore", () => {
 
     await store.expandNode(schemaNodeId);
 
-    expect(mocks.invokeMock).toHaveBeenLastCalledWith({
-      engineId: "jdbc",
-      action: "jdbc.schema.fetch",
-      payload: {
-        connectionId: "conn-a",
-        scope: "tables",
-        target: { database: "mydb", schema: "public" }
-      }
-    });
+    expect(mocks.invokeMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        engineId: "jdbc",
+        action: "jdbc.schema.fetch",
+        payload: {
+          connectionId: "conn-a",
+          scope: "tables",
+          target: { database: "mydb", schema: "public" }
+        }
+      }),
+      expect.anything()
+    );
 
     const schemaNode = store.getNode(schemaNodeId)!;
     expect(schemaNode.isLoaded).toBe(true);
@@ -211,15 +217,18 @@ describe("JdbcNavigationStore", () => {
     const tableNode = store.getNode(tableNodeId)!;
     await store.expandNode(tableNodeId);
 
-    expect(mocks.invokeMock).toHaveBeenLastCalledWith({
-      engineId: "jdbc",
-      action: "jdbc.schema.fetch",
-      payload: {
-        connectionId: "conn-a",
-        scope: "columns",
-        target: { database: "mydb", schema: "public", table: tableNode.name }
-      }
-    });
+    expect(mocks.invokeMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        engineId: "jdbc",
+        action: "jdbc.schema.fetch",
+        payload: {
+          connectionId: "conn-a",
+          scope: "columns",
+          target: { database: "mydb", schema: "public", table: tableNode.name }
+        }
+      }),
+      expect.anything()
+    );
 
     const refreshedTable = store.getNode(tableNodeId)!;
     expect(refreshedTable.isLoaded).toBe(true);
@@ -320,5 +329,31 @@ describe("JdbcNavigationStore", () => {
     const dbNode = store.getNode(root!.childIds[0]);
     expect(dbNode?.name).toBe("mydb");
     expect(dbNode?.childIds).toHaveLength(0);
+  });
+
+  it("expandNode with silent:true suppresses error display on failure", async () => {
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
+    mocks.invokeMock.mockRejectedValue(new Error("Something went wrong"));
+    store.loadConnectionRoots();
+
+    await store.expandNode("conn-a::__root__", { silent: true });
+
+    const root = store.getNode("conn-a::__root__");
+    expect(root?.isLoading).toBe(false);
+    expect(root?.loadError).toBeUndefined();
+    expect(root?.isExpanded).toBe(false);
+  });
+
+  it("expandNode passes silent option through to service.invoke", async () => {
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
+    mocks.invokeMock.mockResolvedValue(topResult);
+    store.loadConnectionRoots();
+
+    await store.expandNode("conn-a::__root__", { silent: true });
+
+    expect(mocks.invokeMock).toHaveBeenCalledWith(
+      expect.objectContaining({ engineId: "jdbc", action: "jdbc.schema.fetch" }),
+      expect.objectContaining({ silent: true })
+    );
   });
 });

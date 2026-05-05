@@ -17,6 +17,11 @@ export class BackendStatusStore {
     backendLogs: [],
     tracePayloads: false
   };
+  private onChange?: (status: BackendGatewayStatus) => void;
+
+  public setOnChange(callback: (status: BackendGatewayStatus) => void): void {
+    this.onChange = callback;
+  }
 
   public initializeMode(mode: BackendGatewayMode): void {
     this.status = {
@@ -36,6 +41,7 @@ export class BackendStatusStore {
       error,
       javaDebugPort: state === "starting" ? undefined : this.status.javaDebugPort
     };
+    this.onChange?.(this.status);
   }
 
   public clearError(): void {
@@ -43,6 +49,7 @@ export class BackendStatusStore {
       ...this.status,
       error: undefined
     };
+    this.onChange?.(this.status);
   }
 
   public setHandshakeDetails(params: {
@@ -60,6 +67,7 @@ export class BackendStatusStore {
       handshakeAt: new Date().toISOString(),
       error: undefined
     };
+    this.onChange?.(this.status);
   }
 
   public setPingDetails(params: { timestamp: string; rttMs: number }): void {
@@ -70,6 +78,7 @@ export class BackendStatusStore {
       state: "healthy",
       error: undefined
     };
+    this.onChange?.(this.status);
   }
 
   public updateExecutions(params: {

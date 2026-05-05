@@ -66,11 +66,16 @@ export class BackendGateway {
   private startupPromise: Promise<void> | null = null;
   private pingIntervalHandle: NodeJS.Timeout | null = null;
   private rendererSink: ((method: string, params: unknown) => void) | null = null;
+  private statusChangedSink: ((status: BackendGatewayStatus) => void) | null = null;
   private transportDiedHook: (() => void) | null = null;
   private tracePayloads = false;
   private logFlowEnabled = true;
 
   public constructor(factory: BackendTransportFactory) {
+    this.statusStore.setOnChange((status) => {
+      this.statusChangedSink?.(status);
+    });
+
     const onDiagnostic = ({
       level,
       message,
@@ -121,6 +126,10 @@ export class BackendGateway {
 
   public setRendererSink(sink: (method: string, params: unknown) => void): void {
     this.rendererSink = sink;
+  }
+
+  public setStatusChangedSink(sink: ((status: BackendGatewayStatus) => void) | null): void {
+    this.statusChangedSink = sink;
   }
 
   public setOnTransportDiedHook(hook: (() => void) | null): void {

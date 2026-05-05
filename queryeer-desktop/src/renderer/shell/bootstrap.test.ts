@@ -97,6 +97,7 @@ describe("bootstrapShell diagnostics wiring", () => {
       onFileWatcherEvent: () => () => {},
       onMenuExecuteCommand: () => () => {},
       onQueryEvent: () => () => {},
+      onBackendStatusChanged: () => () => {},
       buildMenu: async () => ({ success: true }),
       rebuildMenu: async () => ({ success: true }),
       windowMinimize: () => {},

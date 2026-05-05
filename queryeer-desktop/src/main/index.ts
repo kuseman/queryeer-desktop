@@ -382,6 +382,11 @@ app.whenReady().then(() => {
         win.webContents.send("query:event", { method, params });
       }
     });
+    backendGateway.setStatusChangedSink((status) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send("backend:status-changed", status);
+      }
+    });
   }
 
   app.on("activate", () => {
