@@ -14,6 +14,9 @@ import { DatabaseIcon } from "./DatabaseIcon";
 import { getJdbcNavigationStore } from "./jdbc-navigation-store";
 import { JdbcNavigationView } from "./JdbcNavigationView";
 import { JDBC_NAV_DB_KEY, type JdbcSelectedDatabase } from "./jdbc-navigation-types";
+import { getQuickCommandService } from "../core.quickcommand/service";
+import { createJdbcDatabaseQuickCommandProvider } from "./jdbc-database-quick-command";
+import { getJdbcDatabaseCache } from "./jdbc-database-cache";
 
 const JDBC_SESSION_ID_METADATA_KEY = "core.queryengine.jdbc.sessionId";
 const JDBC_SESSION_CONNECTION_ID_METADATA_KEY = "core.queryengine.jdbc.sessionConnectionId";
@@ -110,7 +113,28 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       title: "Refresh JDBC Tree",
       handler: () => {
         getJdbcNavigationStore().loadConnectionRoots();
+        getJdbcDatabaseCache().invalidate();
       }
+    });
+
+    context.quickcommand.registerProvider(createJdbcDatabaseQuickCommandProvider(context));
+
+    context.commands.registerCommand({
+      id: "core.quickcommand.open.jdbc.databases",
+      title: "Select Database",
+      category: "Quick Command",
+      handler: () => {
+        getQuickCommandService()?.open("$", { when: "activeFileMimeType == 'application/sql'" });
+      }
+    });
+
+    context.keybindings.registerKeybinding({
+      id: "core.quickcommand.open.jdbc.databases",
+      commandId: "core.quickcommand.open.jdbc.databases",
+      key: "F2",
+      when: "global",
+      scope: "global",
+      order: 20
     });
 
     context.layout.registerView({

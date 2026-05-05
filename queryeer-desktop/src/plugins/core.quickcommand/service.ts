@@ -24,7 +24,13 @@ export class QuickCommandService {
     this.getContextValues = getContextValues;
   }
 
-  public open(prefillQuery = ""): void {
+  public open(prefillQuery = "", options?: { when?: string }): void {
+    if (options?.when && this.getContextValues) {
+      const ctx = this.getContextValues();
+      if (!evaluateWhenExpression(options.when, ctx)) {
+        return;
+      }
+    }
     this.setState({ open: true, query: prefillQuery });
   }
 

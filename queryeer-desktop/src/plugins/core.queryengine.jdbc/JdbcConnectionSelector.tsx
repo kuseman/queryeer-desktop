@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FileMediator } from "../../contracts/files/FileMediator";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
-import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import { getBackendStatusService } from "../../renderer/shell/backend-status-service";
-import { JDBC_NAV_DB_KEY, type JdbcSchemaObject, type JdbcSelectedDatabase } from "./jdbc-navigation-types";
+import { JDBC_NAV_DB_KEY, type JdbcSelectedDatabase } from "./jdbc-navigation-types";
 import { getConfiguredJdbcConnections } from "./jdbc-settings";
+import { getJdbcDatabaseCache } from "./jdbc-database-cache";
 
 function readSelectedDatabase(
   filesRegistry: FilesRegistry,
@@ -47,20 +47,15 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
         setDatabases([]);
         return;
       }
+      const cache = getJdbcDatabaseCache();
+      const cached = cache.get(connId);
+      if (cached !== undefined && options?.silent) {
+        setDatabases(cached);
+        return;
+      }
       setLoadingDatabases(true);
       try {
-        const result = (await getQueryEngineService().invoke({
-          engineId: "jdbc",
-          action: "jdbc.schema.fetch",
-          payload: { connectionId: connId, scope: "top" }
-        }, { silent: options?.silent })) as JdbcSchemaObject[];
-        const dbNames = result
-          .filter((o) => o.kind === "database")
-          .map((o) => o.name);
-        const names =
-          dbNames.length > 0
-            ? dbNames
-            : result.filter((o) => o.kind === "schema").map((o) => o.name);
+        const names = await cache.load(connId);
         setDatabases(names);
       } catch {
         setDatabases([]);
@@ -96,6 +91,7 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
     const service = getBackendStatusService();
     return service.subscribe((status) => {
       if (status.state === "healthy" && prevBackendStateRef.current !== "healthy" && connectionId) {
+        getJdbcDatabaseCache().invalidate(connectionId);
         void loadDatabases(connectionId, { silent: true });
       }
       prevBackendStateRef.current = status.state;
