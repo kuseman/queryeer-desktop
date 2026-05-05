@@ -2,7 +2,7 @@ export type JdbcSchemaObject = {
   id: string;
   name: string;
   kind: string;
-  children: JdbcSchemaObject[];
+  children?: JdbcSchemaObject[] | null;
   attributes: Record<string, unknown>;
 };
 

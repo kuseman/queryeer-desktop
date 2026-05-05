@@ -1,4 +1,4 @@
-import { getCoreSecurityService } from "../core.security/service";
+import { BackendNotReadyError } from "../../contracts/backend/BackendNotReadyError";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import { getConfiguredJdbcConnections } from "./jdbc-settings";
 import type {
@@ -85,26 +85,11 @@ export class JdbcNavigationStore {
     try {
       await this.doFetchAndApply(nodeId, node);
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      if (isSessionLockedMessage(message)) {
-        const unlocked =
-          (await getCoreSecurityService()?.ensureUnlockedForSecretAccess({ interactive: true })) ??
-          false;
-        if (unlocked) {
-          this.updateNode(nodeId, { isLoading: true, loadError: undefined });
-          try {
-            await this.doFetchAndApply(nodeId, node);
-          } catch (retryE) {
-            this.updateNode(nodeId, {
-              isLoading: false,
-              loadError: retryE instanceof Error ? retryE.message : String(retryE)
-            });
-          }
-        } else {
-          this.updateNode(nodeId, { isLoading: false });
-        }
+      if (e instanceof BackendNotReadyError) {
+        this.updateNode(nodeId, { isLoading: false });
         return;
       }
+      const message = e instanceof Error ? e.message : String(e);
       this.updateNode(nodeId, { isLoading: false, loadError: message });
     }
   }
@@ -224,9 +209,10 @@ export class JdbcNavigationStore {
       // database nodes are loaded because their schema children are inline from scope=top
       // schema nodes need a lazy load (tables not included in scope=top)
       const isLoaded = isLeaf || obj.kind === "database";
+      const children = obj.children ?? [];
       const childIds =
-        obj.children.length > 0
-          ? this.materializeNodes(connectionId, obj.children, nodeMap)
+        children.length > 0
+          ? this.materializeNodes(connectionId, children, nodeMap)
           : [];
       nodeMap.set(nodeId, {
         id: nodeId,
@@ -287,6 +273,4 @@ export function getJdbcNavigationStore(): JdbcNavigationStore {
   return instance;
 }
 
-function isSessionLockedMessage(message: string): boolean {
-  return message.toLowerCase().includes("session is locked");
-}
+

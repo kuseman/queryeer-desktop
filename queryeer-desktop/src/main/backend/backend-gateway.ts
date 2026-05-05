@@ -39,6 +39,15 @@ import { BackendStatusStore } from "./backend-status-store.js";
 import { WatchdogBackendTransport } from "./backend-transport-watchdog.js";
 import type { BackendTransport, BackendTransportFactory } from "./backend-transport.js";
 
+class BackendResponseError extends Error {
+  constructor(
+    public readonly code: string,
+    public readonly originalMessage: string
+  ) {
+    super(`${code}: ${originalMessage}`);
+  }
+}
+
 type GatewayLogLevel = "trace" | "debug" | "info" | "warn" | "error";
 
 const REQUIRED_SECURITY_CAPABILITIES = [
@@ -136,12 +145,7 @@ export class BackendGateway {
       return this.cancelQuery(params);
     });
     ipcMain.handle("backend:engine-invoke", async (_event, params: EngineInvokeParams) => {
-      try {
-        return await this.invokeEngine(params);
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        return { error: { code: "INVOKE_ERROR", message } };
-      }
+      return this.invokeEngine(params);
     });
     ipcMain.handle("backend:file-open", async (_event, params: FileOpenParams) => {
       return this.openFile(params);
@@ -235,13 +239,21 @@ export class BackendGateway {
     this.appendLog("debug", "gateway", `Sending request ${envelope.id} queryengine.invoke`);
     await this.waitUntilHealthy(30_000);
     if (this.statusStore.get().state !== "healthy") {
-      throw new Error(this.statusStore.get().error ?? "Backend is not healthy yet");
+      return { error: { code: "BACKEND_NOT_READY", message: this.statusStore.get().error ?? "Backend is not healthy yet" } };
     }
     if (this.tracePayloads) {
       this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
     }
-    const response = await this.sendRequest(envelope);
-    return (response.result ?? {}) as EngineInvokeResult;
+    try {
+      const response = await this.sendRequest(envelope);
+      return (response.result ?? {}) as EngineInvokeResult;
+    } catch (e) {
+      if (e instanceof BackendResponseError) {
+        return { error: { code: e.code, message: e.originalMessage } };
+      }
+      const message = e instanceof Error ? e.message : String(e);
+      return { error: { code: "INVOKE_ERROR", message } };
+    }
   }
 
   public async notifySecuritySessionOpen(params: SecuritySessionOpenParams): Promise<SecuritySessionOpenResult> {
@@ -566,7 +578,7 @@ export class BackendGateway {
               "gateway",
               `Request failed ${envelope.id} ${envelope.method}: ${errorDetail}`
             );
-            reject(new Error(`${response.error.code}: ${response.error.message}`));
+            reject(new BackendResponseError(response.error.code, response.error.message));
             return;
           }
           this.appendLog("debug", "gateway", `Response ok ${envelope.id} ${envelope.method}`);

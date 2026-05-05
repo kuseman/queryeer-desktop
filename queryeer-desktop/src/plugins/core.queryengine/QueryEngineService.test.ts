@@ -1,3 +1,4 @@
+import { BackendNotReadyError } from "../../contracts/backend/BackendNotReadyError";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryEngineService } from "./QueryEngineService";
 
@@ -44,6 +45,14 @@ describe("QueryEngineService backend readiness", () => {
       })
     ).rejects.toThrow("Backend is not up and running yet");
 
+    await expect(
+      service.invoke({
+        engineId: "payloadbuilder",
+        action: "test.action",
+        payload: {}
+      })
+    ).rejects.toBeInstanceOf(BackendNotReadyError);
+
     expect(invokeBackendEngine).not.toHaveBeenCalled();
   });
 
@@ -71,6 +80,93 @@ describe("QueryEngineService backend readiness", () => {
 
     expect(result).toEqual({ ok: true });
     expect(invokeBackendEngine).toHaveBeenCalledOnce();
+  });
+
+  it("retries invoke after vault unlock when backend returns SECURITY_SESSION_CLOSED", async () => {
+    const invokeBackendEngine = vi.fn(async () => {
+      const callCount = invokeBackendEngine.mock.calls.length;
+      if (callCount === 1) {
+        return { error: { code: "SECURITY_SESSION_CLOSED", message: "Security session is not open" } };
+      }
+      return { result: { ok: true } };
+    });
+    window.appShell = {
+      ...originalAppShell,
+      getBackendStatus: async () => ({
+        mode: "mock-stdio",
+        state: "healthy",
+        supportedCapabilities: [],
+        activeExecutionIds: [],
+        recentExecutions: [],
+        backendLogs: []
+      }),
+      invokeBackendEngine
+    };
+
+    const withVaultRetry = vi.fn(async (operation: () => Promise<unknown>) => {
+      try {
+        return await operation();
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("SECURITY_SESSION_CLOSED")) {
+          return await operation();
+        }
+        throw error;
+      }
+    });
+    securityMocks.getCoreSecurityServiceMock.mockReturnValue({
+      withVaultRetry
+    } as unknown as ReturnType<typeof securityMocks.getCoreSecurityServiceMock>);
+
+    const service = new QueryEngineService();
+    const result = await service.invoke({
+      engineId: "payloadbuilder",
+      action: "test.action",
+      payload: {}
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(invokeBackendEngine).toHaveBeenCalledTimes(2);
+  });
+
+  it("throws when vault unlock is cancelled during invoke SECURITY_SESSION_CLOSED", async () => {
+    const invokeBackendEngine = vi.fn(async () => ({
+      error: { code: "SECURITY_SESSION_CLOSED", message: "Security session is not open" }
+    }));
+    window.appShell = {
+      ...originalAppShell,
+      getBackendStatus: async () => ({
+        mode: "mock-stdio",
+        state: "healthy",
+        supportedCapabilities: [],
+        activeExecutionIds: [],
+        recentExecutions: [],
+        backendLogs: []
+      }),
+      invokeBackendEngine
+    };
+
+    const withVaultRetry = vi.fn(async (operation: () => Promise<unknown>) => {
+      try {
+        return await operation();
+      } catch {
+        throw new Error("Security vault is locked");
+      }
+    });
+    securityMocks.getCoreSecurityServiceMock.mockReturnValue({
+      withVaultRetry
+    } as unknown as ReturnType<typeof securityMocks.getCoreSecurityServiceMock>);
+
+    const service = new QueryEngineService();
+
+    await expect(
+      service.invoke({
+        engineId: "payloadbuilder",
+        action: "test.action",
+        payload: {}
+      })
+    ).rejects.toThrow("Security vault is locked");
+
+    expect(invokeBackendEngine).toHaveBeenCalledTimes(1);
   });
 
   it("emits queryengine.failed and clears state when unlock fails during execute", async () => {
