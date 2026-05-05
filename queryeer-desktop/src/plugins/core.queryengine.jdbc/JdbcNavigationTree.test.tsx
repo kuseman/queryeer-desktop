@@ -7,7 +7,8 @@ import type { JdbcConnectionDefinition } from "./jdbc-settings";
 
 const mocks = vi.hoisted(() => ({
   invokeMock: vi.fn(),
-  getConfiguredJdbcConnectionsMock: vi.fn<() => JdbcConnectionDefinition[]>(() => [])
+  getConfiguredJdbcConnectionsMock: vi.fn<() => JdbcConnectionDefinition[]>(() => []),
+  backendStatusListeners: new Set<(status: { state: string }) => void>()
 }));
 
 vi.mock("../core.queryengine/QueryEngineService", () => ({
@@ -16,6 +17,15 @@ vi.mock("../core.queryengine/QueryEngineService", () => ({
 
 vi.mock("./jdbc-settings", () => ({
   getConfiguredJdbcConnections: mocks.getConfiguredJdbcConnectionsMock
+}));
+
+vi.mock("../../renderer/shell/backend-status-service", () => ({
+  getBackendStatusService: () => ({
+    subscribe: vi.fn((listener: (status: { state: string }) => void) => {
+      mocks.backendStatusListeners.add(listener);
+      return () => mocks.backendStatusListeners.delete(listener);
+    })
+  })
 }));
 
 const connA: JdbcConnectionDefinition = {
@@ -56,6 +66,7 @@ describe("JdbcNavigationTree", () => {
     root = createRoot(container);
     store = new JdbcNavigationStore();
     mocks.invokeMock.mockReset();
+    mocks.backendStatusListeners.clear();
     mocks.getConfiguredJdbcConnectionsMock.mockReset();
   });
 
@@ -182,5 +193,46 @@ describe("JdbcNavigationTree", () => {
     });
 
     expect(container.querySelector("[data-testid='jdbc-tree-loading']")).toBeNull();
+  });
+
+  it("auto-expands active connection when backend becomes healthy", async () => {
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
+    mocks.invokeMock.mockResolvedValue(topResult);
+    store.loadConnectionRoots();
+
+    const expandSpy = vi.spyOn(store, "expandNode");
+
+    await act(async () => {
+      root.render(
+        <JdbcNavigationTree
+          store={store}
+          activeFileConnectionId="conn-a"
+          activeFileDatabase="mydb"
+        />
+      );
+    });
+
+    await act(async () => {});
+
+    // Clear spy calls from initial mount effect
+    expandSpy.mockClear();
+
+    // Simulate backend going down then healthy again
+    await act(async () => {
+      for (const listener of mocks.backendStatusListeners) {
+        listener({ state: "unavailable" });
+      }
+    });
+
+    await act(async () => {
+      for (const listener of mocks.backendStatusListeners) {
+        listener({ state: "healthy" });
+      }
+    });
+
+    await act(async () => {});
+
+    expect(expandSpy).toHaveBeenCalledWith("conn-a::__root__", { silent: true });
+    expect(expandSpy).toHaveBeenCalledWith("conn-a::database:mydb", { silent: true });
   });
 });

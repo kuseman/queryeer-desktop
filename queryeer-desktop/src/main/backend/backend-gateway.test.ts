@@ -782,4 +782,19 @@ describe("BackendGateway", () => {
 
     await gateway.stop();
   });
+
+  it("emits status changes via statusChangedSink", async () => {
+    const { gateway } = createGatewayWithTestTransport();
+    const statuses: { state: string }[] = [];
+    gateway.setStatusChangedSink((status) => {
+      statuses.push({ state: status.state });
+    });
+
+    await gateway.start();
+
+    expect(statuses.length).toBeGreaterThanOrEqual(1);
+    expect(statuses.some((s) => s.state === "healthy")).toBe(true);
+
+    await gateway.stop();
+  });
 });

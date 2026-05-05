@@ -8,7 +8,8 @@ import type { JdbcConnectionDefinition } from "./jdbc-settings";
 
 const mocks = vi.hoisted(() => ({
   invokeMock: vi.fn(),
-  getConfiguredJdbcConnectionsMock: vi.fn<() => JdbcConnectionDefinition[]>(() => [])
+  getConfiguredJdbcConnectionsMock: vi.fn<() => JdbcConnectionDefinition[]>(() => []),
+  backendStatusListeners: new Set<(status: { state: string }) => void>()
 }));
 
 vi.mock("../core.queryengine/QueryEngineService", () => ({
@@ -17,6 +18,15 @@ vi.mock("../core.queryengine/QueryEngineService", () => ({
 
 vi.mock("./jdbc-settings", () => ({
   getConfiguredJdbcConnections: mocks.getConfiguredJdbcConnectionsMock
+}));
+
+vi.mock("../../renderer/shell/backend-status-service", () => ({
+  getBackendStatusService: () => ({
+    subscribe: vi.fn((listener: (status: { state: string }) => void) => {
+      mocks.backendStatusListeners.add(listener);
+      return () => mocks.backendStatusListeners.delete(listener);
+    })
+  })
 }));
 
 import { JdbcConnectionSelector } from "./JdbcConnectionSelector";
@@ -96,6 +106,7 @@ describe("JdbcConnectionSelector", () => {
     document.body.appendChild(container);
     root = createRoot(container);
     mocks.invokeMock.mockReset();
+    mocks.backendStatusListeners.clear();
     mocks.getConfiguredJdbcConnectionsMock.mockReturnValue(connections);
   });
 
@@ -210,5 +221,39 @@ describe("JdbcConnectionSelector", () => {
 
     const dbSelect = container.querySelector<HTMLSelectElement>("[data-testid='jdbc-database-select']");
     expect(dbSelect?.value).toBe("mydb");
+  });
+
+  it("reloads databases silently when backend becomes healthy", async () => {
+    const file = makeFile({ engineBinding: { engineId: "jdbc", connectionId: "conn-a" } });
+    const filesRegistry = makeFilesRegistry(file);
+    const fileMediator = makeFileMediator(file);
+    mocks.invokeMock.mockResolvedValue([]);
+
+    await act(async () => {
+      root.render(
+        <JdbcConnectionSelector fileId="file-1" fileMediator={fileMediator} filesRegistry={filesRegistry} />
+      );
+    });
+
+    await act(async () => {});
+    mocks.invokeMock.mockClear();
+    mocks.invokeMock.mockResolvedValue([
+      { id: "db:mydb", name: "mydb", kind: "database", children: [], attributes: {} }
+    ]);
+
+    await act(async () => {
+      for (const listener of mocks.backendStatusListeners) {
+        listener({ state: "healthy" });
+      }
+    });
+
+    await act(async () => {});
+
+    expect(mocks.invokeMock).toHaveBeenCalledWith(
+      expect.objectContaining({ engineId: "jdbc", action: "jdbc.schema.fetch" }),
+      expect.objectContaining({ silent: true })
+    );
+    const dbSelect = container.querySelector<HTMLSelectElement>("[data-testid='jdbc-database-select']");
+    expect(dbSelect?.querySelectorAll("option").length).toBeGreaterThan(1);
   });
 });

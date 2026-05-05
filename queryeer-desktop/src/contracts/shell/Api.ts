@@ -1,4 +1,5 @@
 import type { BackendGatewayStatus } from "../backend/index.js";
+export type { BackendGatewayStatus };
 import type { WorkspaceSnapshot } from "../workspace/WorkspaceSnapshot.js";
 import type { UserKeybindingsDocument } from "../commands/Keybindings.js";
 import type { ExternalFrontendPluginManifest } from "../plugin/ExternalFrontendPluginManifest.js";
@@ -86,6 +87,7 @@ export interface ShellApi {
   onFileWatcherEvent: (listener: (params: { subscriptionId: string; event: FileWatcherEvent }) => void) => () => void;
   onMenuExecuteCommand: (listener: (commandId: string) => void) => () => void;
   onQueryEvent: (listener: (event: { method: string; params: unknown }) => void) => () => void;
+  onBackendStatusChanged: (listener: (status: BackendGatewayStatus) => void) => () => void;
   buildMenu: (menuItems: unknown[], commands: unknown[]) => Promise<{ success: boolean }>;
   rebuildMenu: () => Promise<{ success: boolean }>;
   windowMinimize: () => void;

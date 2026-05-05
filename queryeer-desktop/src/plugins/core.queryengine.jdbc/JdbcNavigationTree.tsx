@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { JdbcNavigationStore } from "./jdbc-navigation-store";
+import { getBackendStatusService } from "../../renderer/shell/backend-status-service";
 import { getNodeIcon } from "./jdbc-tree-contribution";
 
 type Props = {
@@ -10,6 +11,7 @@ type Props = {
 
 export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDatabase }: Props) {
   const [, setRevision] = useState(0);
+  const prevBackendStateRef = useRef<string | null>(null);
 
   useEffect(() => {
     return store.subscribe(() => setRevision((r) => r + 1));
@@ -34,6 +36,29 @@ export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDa
         break;
       }
     }
+  }, [store, activeFileConnectionId, activeFileDatabase]);
+
+  // Auto-recover: re-expand active connection/database when backend becomes healthy
+  useEffect(() => {
+    const service = getBackendStatusService();
+    return service.subscribe((status) => {
+      if (status.state === "healthy" && prevBackendStateRef.current !== "healthy" && store.getState().linkToActiveFile && activeFileConnectionId) {
+        const rootNodeId = `${activeFileConnectionId}::__root__`;
+        void store.expandNode(rootNodeId, { silent: true }).then(() => {
+          if (!activeFileDatabase) return;
+          const rootNode = store.getNode(rootNodeId);
+          if (!rootNode?.isLoaded) return;
+          for (const dbNodeId of rootNode.childIds) {
+            const dbNode = store.getNode(dbNodeId);
+            if (dbNode?.name === activeFileDatabase) {
+              void store.expandNode(dbNodeId, { silent: true });
+              break;
+            }
+          }
+        });
+      }
+      prevBackendStateRef.current = status.state;
+    });
   }, [store, activeFileConnectionId, activeFileDatabase]);
 
   const state = store.getState();

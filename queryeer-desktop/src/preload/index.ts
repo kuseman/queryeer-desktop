@@ -136,6 +136,7 @@ type AppShellApi = {
   ) => () => void;
   onMenuExecuteCommand: (listener: (commandId: string) => void) => () => void;
   onQueryEvent: (listener: (event: QueryEvent) => void) => () => void;
+  onBackendStatusChanged: (listener: (status: BackendGatewayStatus) => void) => () => void;
   showDialogMessage: (options: DialogShowMessageOptions) => Promise<{ action: string }>;
   showDialogOpen: (options: DialogShowOpenOptions) => Promise<{ canceled: boolean; filePaths: string[] }>;
   showOpenFolder: (options?: DialogShowFolderOptions) => Promise<{ canceled: boolean; folderPath?: string }>;
@@ -327,6 +328,16 @@ const appShellApi: AppShellApi = {
   onQueryEvent: (listener: (event: QueryEvent) => void) => {
     const channel = "query:event";
     const wrapped = (_event: Electron.IpcRendererEvent, payload: QueryEvent): void => {
+      listener(payload);
+    };
+    ipcRenderer.on(channel, wrapped);
+    return () => {
+      ipcRenderer.off(channel, wrapped);
+    };
+  },
+  onBackendStatusChanged: (listener: (status: BackendGatewayStatus) => void) => {
+    const channel = "backend:status-changed";
+    const wrapped = (_event: Electron.IpcRendererEvent, payload: BackendGatewayStatus): void => {
       listener(payload);
     };
     ipcRenderer.on(channel, wrapped);

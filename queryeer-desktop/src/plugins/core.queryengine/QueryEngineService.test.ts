@@ -169,6 +169,40 @@ describe("QueryEngineService backend readiness", () => {
     expect(invokeBackendEngine).toHaveBeenCalledTimes(1);
   });
 
+  it("passes interactive: false to withVaultRetry when invoke is called with silent: true", async () => {
+    const invokeBackendEngine = vi.fn(async () => ({ result: { ok: true } }));
+    window.appShell = {
+      ...originalAppShell,
+      getBackendStatus: async () => ({
+        mode: "mock-stdio",
+        state: "healthy",
+        supportedCapabilities: [],
+        activeExecutionIds: [],
+        recentExecutions: [],
+        backendLogs: []
+      }),
+      invokeBackendEngine
+    };
+
+    const withVaultRetry = vi.fn(async (operation: () => Promise<unknown>) => {
+      return operation();
+    });
+    securityMocks.getCoreSecurityServiceMock.mockReturnValue({
+      withVaultRetry
+    } as unknown as ReturnType<typeof securityMocks.getCoreSecurityServiceMock>);
+
+    const service = new QueryEngineService();
+    await service.invoke(
+      { engineId: "payloadbuilder", action: "test.action", payload: {} },
+      { silent: true }
+    );
+
+    expect(withVaultRetry).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ interactive: false })
+    );
+  });
+
   it("emits queryengine.failed and clears state when unlock fails during execute", async () => {
     const executeBackendQuery = vi.fn(async () => ({ accepted: true, queryExecutionId: "q-backend" }));
     window.appShell = {

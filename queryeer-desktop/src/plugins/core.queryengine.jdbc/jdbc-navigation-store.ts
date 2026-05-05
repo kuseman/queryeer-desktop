@@ -67,7 +67,7 @@ export class JdbcNavigationStore {
     this.notify();
   }
 
-  async expandNode(nodeId: string): Promise<void> {
+  async expandNode(nodeId: string, options?: { silent?: boolean }): Promise<void> {
     const node = this.state.nodeMap.get(nodeId);
     if (!node) return;
     if (node.isLoaded) {
@@ -83,9 +83,13 @@ export class JdbcNavigationStore {
 
     this.updateNode(nodeId, { isLoading: true, loadError: undefined });
     try {
-      await this.doFetchAndApply(nodeId, node);
+      await this.doFetchAndApply(nodeId, node, options);
     } catch (e) {
       if (e instanceof BackendNotReadyError) {
+        this.updateNode(nodeId, { isLoading: false });
+        return;
+      }
+      if (options?.silent) {
         this.updateNode(nodeId, { isLoading: false });
         return;
       }
@@ -94,8 +98,8 @@ export class JdbcNavigationStore {
     }
   }
 
-  private async doFetchAndApply(nodeId: string, node: JdbcTreeNode): Promise<void> {
-    const children = await this.fetchChildren(node);
+  private async doFetchAndApply(nodeId: string, node: JdbcTreeNode, options?: { silent?: boolean }): Promise<void> {
+    const children = await this.fetchChildren(node, options);
     const newNodeMap = new Map(this.state.nodeMap);
     const childIds = this.materializeNodes(node.connectionId, children, newNodeMap);
     newNodeMap.set(nodeId, {
@@ -155,7 +159,7 @@ export class JdbcNavigationStore {
       .filter((n): n is JdbcTreeNode => n !== undefined);
   }
 
-  private async fetchChildren(node: JdbcTreeNode): Promise<JdbcSchemaObject[]> {
+  private async fetchChildren(node: JdbcTreeNode, options?: { silent?: boolean }): Promise<JdbcSchemaObject[]> {
     const service = getQueryEngineService();
     if (node.kind === "connection") {
       return (await service.invoke({
@@ -165,7 +169,7 @@ export class JdbcNavigationStore {
           connectionId: node.connectionId,
           scope: "top"
         }
-      })) as JdbcSchemaObject[];
+      }, { silent: options?.silent })) as JdbcSchemaObject[];
     }
     if (node.kind === "schema") {
       return (await service.invoke({
@@ -176,7 +180,7 @@ export class JdbcNavigationStore {
           scope: "tables",
           target: { database: node.attributes.catalog as string, schema: node.name }
         }
-      })) as JdbcSchemaObject[];
+      }, { silent: options?.silent })) as JdbcSchemaObject[];
     }
     if (node.kind === "table" || node.kind === "view") {
       return (await service.invoke({
@@ -191,7 +195,7 @@ export class JdbcNavigationStore {
             table: node.name
           }
         }
-      })) as JdbcSchemaObject[];
+      }, { silent: options?.silent })) as JdbcSchemaObject[];
     }
     return [];
   }
