@@ -123,6 +123,7 @@ describe("Protocol fixture compatibility", () => {
     expect(request.method).toBe("queryengine.execute");
     const engineState = (request.params as Record<string, unknown>).engineState as Record<string, unknown>;
     expect(engineState?.connectionId).toBe("550e8400-e29b-41d4-a716-446655440010");
+    expect(engineState?.database).toBe("appdb");
   });
 
   it("Payloadbuilder engineState fixture", () => {

@@ -217,13 +217,13 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
     );
   });
 
-  it("applies completed engineStatePatch back into store for payloadbuilder", () => {
+  it("applies completed engineState back into store for payloadbuilder", () => {
     const context = createContext();
     coreQueryEnginePayloadbuilderPlugin.activate(context);
 
     const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
       | ((
-          event: { method: string; params?: { engineStatePatch?: unknown } },
+          event: { method: string; params?: { engineState?: unknown } },
           executeContext?: { engineId?: string; fileId?: string }
         ) => void)
       | undefined;
@@ -233,7 +233,7 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
       {
         method: "queryengine.completed",
         params: {
-          engineStatePatch: {
+          engineState: {
             payloadbuilder: {
               catalogs: {
                 jdbc1: {
@@ -262,16 +262,16 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
     });
 
     listener?.(
-      { method: "queryengine.completed", params: { engineStatePatch: { ignored: true } } },
+      { method: "queryengine.completed", params: { engineState: { ignored: true } } },
       { engineId: "jdbc", fileId: "file-1" }
     );
     listener?.({ method: "queryengine.completed", params: {} }, { engineId: "payloadbuilder", fileId: "file-1" });
     listener?.(
-      { method: "queryengine.completed", params: { engineStatePatch: { ignored: true } } },
+      { method: "queryengine.completed", params: { engineState: { ignored: true } } },
       { engineId: "payloadbuilder" }
     );
     listener?.(
-      { method: "queryengine.failed", params: { engineStatePatch: { ignored: true } } },
+      { method: "queryengine.failed", params: { engineState: { ignored: true } } },
       { engineId: "payloadbuilder", fileId: "file-1" }
     );
 

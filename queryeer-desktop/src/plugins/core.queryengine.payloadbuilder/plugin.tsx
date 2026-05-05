@@ -158,13 +158,13 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
       if (executeContext?.engineId !== "payloadbuilder" || !executeContext.fileId) {
         return;
       }
-      const params = event.params as { engineStatePatch?: unknown };
-      if (!params.engineStatePatch) {
+      const params = event.params as { engineState?: unknown };
+      if (!params.engineState) {
         return;
       }
       getPayloadbuilderCatalogStore().applyEngineStatePatch(
         executeContext.fileId,
-        params.engineStatePatch
+        params.engineState
       );
     });
   }

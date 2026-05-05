@@ -2,8 +2,25 @@ import { useCallback, useEffect, useState } from "react";
 import type { FileMediator } from "../../contracts/files/FileMediator";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
-import { JDBC_NAV_DB_KEY, type JdbcSchemaObject } from "./jdbc-navigation-types";
+import { JDBC_NAV_DB_KEY, type JdbcSchemaObject, type JdbcSelectedDatabase } from "./jdbc-navigation-types";
 import { getConfiguredJdbcConnections } from "./jdbc-settings";
+
+function readSelectedDatabase(
+  filesRegistry: FilesRegistry,
+  fileId: string
+): JdbcSelectedDatabase | undefined {
+  const raw = filesRegistry.getEditorState(fileId, JDBC_NAV_DB_KEY);
+  if (
+    raw !== null &&
+    typeof raw === "object" &&
+    !Array.isArray(raw) &&
+    typeof (raw as Record<string, unknown>).connectionId === "string" &&
+    typeof (raw as Record<string, unknown>).database === "string"
+  ) {
+    return raw as JdbcSelectedDatabase;
+  }
+  return undefined;
+}
 
 type Props = {
   fileId: string;
@@ -17,7 +34,7 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
     file?.engineBinding?.connectionId ?? ""
   );
   const [selectedDatabase, setSelectedDatabase] = useState<string>(
-    (filesRegistry.getEditorState(fileId, JDBC_NAV_DB_KEY) as string | undefined) ?? ""
+    readSelectedDatabase(filesRegistry, fileId)?.database ?? ""
   );
   const [databases, setDatabases] = useState<string[]>([]);
   const [loadingDatabases, setLoadingDatabases] = useState(false);
@@ -66,8 +83,8 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
       if (updated) {
         const newConnId = updated.engineBinding?.connectionId ?? "";
         setConnectionId(newConnId);
-        const persisted = (filesRegistry.getEditorState(fileId, JDBC_NAV_DB_KEY) as string | undefined) ?? "";
-        setSelectedDatabase(persisted);
+        const persisted = readSelectedDatabase(filesRegistry, fileId);
+        setSelectedDatabase(persisted?.database ?? "");
       }
     });
   }, [filesRegistry, fileId]);
@@ -84,7 +101,15 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
 
   const handleDatabaseChange = (db: string) => {
     setSelectedDatabase(db);
-    filesRegistry.setEditorState(fileId, JDBC_NAV_DB_KEY, db);
+    const currentConnId = connectionId;
+    if (currentConnId && db) {
+      filesRegistry.setEditorState(fileId, JDBC_NAV_DB_KEY, {
+        connectionId: currentConnId,
+        database: db
+      } satisfies JdbcSelectedDatabase);
+    } else {
+      filesRegistry.setEditorState(fileId, JDBC_NAV_DB_KEY, undefined);
+    }
   };
 
   const configuredConnections = getConfiguredJdbcConnections().filter((c) => c.enabled);

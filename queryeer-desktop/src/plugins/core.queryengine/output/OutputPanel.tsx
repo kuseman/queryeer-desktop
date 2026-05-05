@@ -176,7 +176,6 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
         <span>Rows fetched: {Math.max(0, rowCount).toLocaleString()}</span>
         <span>Elapsed: {elapsedMs != null ? `${elapsedMs}ms` : "-"}</span>
         {context.progress?.message && <span>{context.progress.message}</span>}
-        {context.state === "failed" && context.error && <span>[{context.error.code}] {context.error.message}</span>}
       </div>
     </div>
   );

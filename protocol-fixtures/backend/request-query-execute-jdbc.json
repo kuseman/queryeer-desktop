@@ -9,7 +9,8 @@
     "fileId": "file-fixture-1",
     "text": "SELECT * FROM users",
     "engineState": {
-      "connectionId": "550e8400-e29b-41d4-a716-446655440010"
+      "connectionId": "550e8400-e29b-41d4-a716-446655440010",
+      "database": "appdb"
     },
     "options": {
       "maxRows": 100,

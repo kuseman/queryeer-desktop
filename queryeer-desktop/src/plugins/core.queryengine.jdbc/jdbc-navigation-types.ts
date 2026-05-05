@@ -26,4 +26,9 @@ export type JdbcConnectionTreeEntry = {
   rootNodeId: string;
 };
 
+export type JdbcSelectedDatabase = {
+  connectionId: string;
+  database: string;
+};
+
 export const JDBC_NAV_DB_KEY = "jdbc.navigation.selectedDatabase";

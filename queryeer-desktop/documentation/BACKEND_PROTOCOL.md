@@ -255,6 +255,7 @@ Behavior:
 - Execution updates are sent via notifications (`queryengine.progress`, `queryengine.resultChunk`, `queryengine.completed`, `queryengine.failed`).
 - `engineState` is an engine-owned opaque blob. Core protocol forwards it without interpretation.
 - Payloadbuilder engine state may include `payloadbuilder.defaultCatalogAlias` to request session default catalog alias.
+- JDBC engine state carries `connectionId` and optionally `database`. When `database` is present, the backend switches the JDBC connection to that catalog (via dialect-specific `setCatalog`/`setSchema`) before executing statements. After execution, the backend reflects the current database back in `queryengine.completed.engineState.database` so the UI stays synchronized (for example after a `USE` statement).
 
 ## 5.4 `queryengine.cancel`
 

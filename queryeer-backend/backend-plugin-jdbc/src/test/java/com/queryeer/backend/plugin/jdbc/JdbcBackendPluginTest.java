@@ -492,6 +492,42 @@ class JdbcBackendPluginTest
         Assertions.fail("Condition was not met within timeout " + timeout);
     }
 
+    @Test
+    void executeWithDatabaseSwitchesCatalogAndReflectsItBackInEngineState()
+    {
+        QueryEngineProvider provider = activateAndGetProvider();
+
+        provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-db", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_db;DB_CLOSE_DELAY=-1")));
+
+        RecordingPublisher publisher = new RecordingPublisher();
+        provider.execute("exec-db-1", "file-1", "select 1", Map.of("connectionId", "jdbc-db", "database", "TEST_DB"), publisher);
+
+        Assertions.assertNull(publisher.errorCode, publisher.errorMessage);
+        Assertions.assertTrue(publisher.completed);
+        Assertions.assertNotNull(publisher.engineState);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> es = (Map<String, Object>) publisher.engineState;
+        Assertions.assertEquals("TEST_DB", es.get("database"));
+    }
+
+    @Test
+    void executeWithoutDatabaseReflectsCurrentCatalogInEngineState()
+    {
+        QueryEngineProvider provider = activateAndGetProvider();
+
+        provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-no-db", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_no_db;DB_CLOSE_DELAY=-1")));
+
+        RecordingPublisher publisher = new RecordingPublisher();
+        provider.execute("exec-no-db-1", "file-1", "select 1", Map.of("connectionId", "jdbc-no-db"), publisher);
+
+        Assertions.assertNull(publisher.errorCode, publisher.errorMessage);
+        Assertions.assertTrue(publisher.completed);
+        Assertions.assertNotNull(publisher.engineState);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> es = (Map<String, Object>) publisher.engineState;
+        Assertions.assertEquals("TEST_NO_DB", es.get("database"));
+    }
+
     private QueryEngineProvider activateAndGetProvider()
     {
         JdbcBackendPlugin plugin = new JdbcBackendPlugin();
@@ -526,6 +562,7 @@ class JdbcBackendPluginTest
         private String errorMessage;
         private boolean completed;
         private long rowCount;
+        private Object engineState;
         private final List<List<Object>> rows = new java.util.ArrayList<>();
 
         @Override
@@ -552,8 +589,11 @@ class JdbcBackendPluginTest
         }
 
         @Override
-        public void completed(long durationMs, long rowCount, Object engineStatePatch)
+        public void completed(long durationMs, long rowCount, Object engineState)
         {
+            this.completed = true;
+            this.rowCount = rowCount;
+            this.engineState = engineState;
         }
 
         @Override

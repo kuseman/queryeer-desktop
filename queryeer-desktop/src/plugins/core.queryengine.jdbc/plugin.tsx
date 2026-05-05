@@ -10,6 +10,7 @@ import {
 import { DatabaseIcon } from "./DatabaseIcon";
 import { getJdbcNavigationStore } from "./jdbc-navigation-store";
 import { JdbcNavigationView } from "./JdbcNavigationView";
+import { JDBC_NAV_DB_KEY, type JdbcSelectedDatabase } from "./jdbc-navigation-types";
 
 export const coreQueryEngineJdbcPlugin: Plugin = {
   manifest: {
@@ -130,9 +131,47 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
         return undefined;
       }
 
-      return {
-        engineState: { connectionId }
-      };
+      const raw = context.files.getEditorState(params.fileId, JDBC_NAV_DB_KEY);
+      const selectedDatabase: JdbcSelectedDatabase | undefined =
+        raw !== null &&
+        typeof raw === "object" &&
+        !Array.isArray(raw) &&
+        typeof (raw as Record<string, unknown>).connectionId === "string" &&
+        typeof (raw as Record<string, unknown>).database === "string"
+          ? (raw as JdbcSelectedDatabase)
+          : undefined;
+
+      const engineState: Record<string, unknown> = { connectionId };
+      if (selectedDatabase?.database) {
+        engineState.database = selectedDatabase.database;
+      }
+
+      return { engineState };
+    });
+
+    getQueryEngineService().onQueryEvent((event, executeContext) => {
+      if (event.method !== "queryengine.completed") {
+        return;
+      }
+      if (executeContext?.engineId !== "jdbc" || !executeContext.fileId) {
+        return;
+      }
+      const params = event.params as { engineState?: unknown };
+      const es = params.engineState;
+      if (es !== null && typeof es === "object" && !Array.isArray(es)) {
+        const record = es as Record<string, unknown>;
+        const database = record.database;
+        if (typeof database === "string") {
+          const file = context.files.getFile(executeContext.fileId);
+          const connectionId = file?.engineBinding?.connectionId;
+          if (connectionId) {
+            context.files.setEditorState(executeContext.fileId, JDBC_NAV_DB_KEY, {
+              connectionId,
+              database
+            } satisfies JdbcSelectedDatabase);
+          }
+        }
+      }
     });
   }
 };

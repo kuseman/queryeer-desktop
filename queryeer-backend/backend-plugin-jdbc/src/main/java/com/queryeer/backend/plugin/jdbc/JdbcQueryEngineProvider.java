@@ -29,6 +29,7 @@ import com.queryeer.backend.queryengine.jdbc.JdbcConnectionSetupDefinition;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
 import com.queryeer.backend.queryengine.jdbc.JdbcQueryEventListener;
 import com.queryeer.backend.queryengine.jdbc.JdbcQueryRequest;
+import com.queryeer.backend.queryengine.jdbc.JdbcQueryResult;
 import com.queryeer.backend.queryengine.jdbc.JdbcResultColumn;
 
 final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionHandler
@@ -136,7 +137,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                     .requiresExplicitUrl() ? fileConnections.acquire(fileId, materializedProfile)
                             : null;
 
-            JdbcQueryRequest request = new JdbcQueryRequest(queryExecutionId, fileId, text, List.of(), materializedProfile, sessionConnection);
+            JdbcQueryRequest request = new JdbcQueryRequest(queryExecutionId, fileId, text, List.of(), materializedProfile, sessionConnection, state.database(), resolved.dialect());
 
             if (resolved.dialect()
                     .queryExecutor() instanceof CancellableJdbcQueryExecutor cancellable)
@@ -144,13 +145,12 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                 activeExecutors.put(queryExecutionId, cancellable);
             }
 
-            rowCount = resolved.dialect()
+            JdbcQueryResult result = resolved.dialect()
                     .queryExecutor()
-                    .execute(request, new TransportJdbcQueryEventListener(publisher))
-                    .rowCount();
+                    .execute(request, new TransportJdbcQueryEventListener(publisher));
 
             usageListener.onUsage(resolved.connectionId());
-            publisher.completed(System.currentTimeMillis() - startedAt, rowCount);
+            publisher.completed(System.currentTimeMillis() - startedAt, result.rowCount(), result.engineState());
         }
         catch (IllegalArgumentException e)
         {
@@ -231,7 +231,8 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         {
             resolved.dialect()
                     .queryExecutor()
-                    .execute(new JdbcQueryRequest(CONNECTION_TEST_EXECUTION_ID, null, CONNECTION_TEST_QUERY, List.of(), materializedProfile, null), new NoopJdbcQueryEventListener());
+                    .execute(new JdbcQueryRequest(CONNECTION_TEST_EXECUTION_ID, null, CONNECTION_TEST_QUERY, List.of(), materializedProfile, null, null, resolved.dialect()),
+                            new NoopJdbcQueryEventListener());
             return Map.of(KEY_OK, true, KEY_MESSAGE, "Connection successful");
         }
         catch (RuntimeException e)

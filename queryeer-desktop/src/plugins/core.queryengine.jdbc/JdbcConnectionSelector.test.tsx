@@ -164,7 +164,10 @@ describe("JdbcConnectionSelector", () => {
       dbSelect!.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
-    expect(filesRegistry.setEditorState).toHaveBeenCalledWith("file-1", JDBC_NAV_DB_KEY, "mydb");
+    expect(filesRegistry.setEditorState).toHaveBeenCalledWith("file-1", JDBC_NAV_DB_KEY, {
+      connectionId: "conn-a",
+      database: "mydb"
+    });
   });
 
   it("shows loading state while databases load", async () => {
@@ -191,7 +194,7 @@ describe("JdbcConnectionSelector", () => {
 
   it("restores persisted database selection on initial render", async () => {
     const file = makeFile({ engineBinding: { engineId: "jdbc", connectionId: "conn-a" } });
-    const filesRegistry = makeFilesRegistry(file, { [JDBC_NAV_DB_KEY]: "mydb" });
+    const filesRegistry = makeFilesRegistry(file, { [JDBC_NAV_DB_KEY]: { connectionId: "conn-a", database: "mydb" } });
     const fileMediator = makeFileMediator(file);
     mocks.invokeMock.mockResolvedValue([
       { id: "db:mydb", name: "mydb", kind: "database", children: [], attributes: {} }
