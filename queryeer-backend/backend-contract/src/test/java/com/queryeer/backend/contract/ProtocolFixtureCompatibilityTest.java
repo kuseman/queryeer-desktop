@@ -125,14 +125,18 @@ class ProtocolFixtureCompatibilityTest
         BackendEnvelope request = readFixture("request-query-execute-jdbc.json");
 
         QueryExecuteParams params = objectMapper.convertValue(request.params(), QueryExecuteParams.class);
-        Assertions.assertEquals("550e8400-e29b-41d4-a716-446655440010", objectMapper.convertValue(params.engineState(), Map.class)
-                .get("connectionId"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> engineState = objectMapper.convertValue(params.engineState(), Map.class);
+        Assertions.assertEquals("550e8400-e29b-41d4-a716-446655440010", engineState.get("connectionId"));
+        Assertions.assertEquals("appdb", engineState.get("database"));
 
         // Round-trip: serialize back and verify
         BackendEnvelope roundTripped = objectMapper.readValue(objectMapper.writeValueAsString(request), BackendEnvelope.class);
         QueryExecuteParams roundParams = objectMapper.convertValue(roundTripped.params(), QueryExecuteParams.class);
-        Assertions.assertEquals("550e8400-e29b-41d4-a716-446655440010", objectMapper.convertValue(roundParams.engineState(), Map.class)
-                .get("connectionId"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> roundEngineState = objectMapper.convertValue(roundParams.engineState(), Map.class);
+        Assertions.assertEquals("550e8400-e29b-41d4-a716-446655440010", roundEngineState.get("connectionId"));
+        Assertions.assertEquals("appdb", roundEngineState.get("database"));
     }
 
     @Test

@@ -60,12 +60,14 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
     {
         long rowCount = 0L;
         List<String> statements = splitStatements(request.sql());
+        String resolvedDatabase = null;
 
         try
         {
             Connection sessionConnection = request.sessionConnection();
             if (sessionConnection != null)
             {
+                applyDatabaseIfRequested(request, sessionConnection);
                 for (String sql : statements)
                 {
                     try (Statement statement = sessionConnection.createStatement())
@@ -73,11 +75,13 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
                         rowCount += runStatement(sql, request.queryExecutionId(), eventListener, statement);
                     }
                 }
+                resolvedDatabase = resolveCurrentDatabaseIfPossible(request, sessionConnection);
             }
             else
             {
                 try (Connection jdbcConnection = openConnection(request.connection()))
                 {
+                    applyDatabaseIfRequested(request, jdbcConnection);
                     for (String sql : statements)
                     {
                         try (Statement statement = jdbcConnection.createStatement())
@@ -85,6 +89,7 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
                             rowCount += runStatement(sql, request.queryExecutionId(), eventListener, statement);
                         }
                     }
+                    resolvedDatabase = resolveCurrentDatabaseIfPossible(request, jdbcConnection);
                 }
             }
         }
@@ -97,7 +102,41 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
             activeStatements.remove(request.queryExecutionId());
         }
 
-        return new JdbcQueryResult(rowCount, Map.of());
+        java.util.Map<String, Object> engineState = new java.util.LinkedHashMap<>();
+        if (resolvedDatabase != null)
+        {
+            engineState.put("database", resolvedDatabase);
+        }
+        return new JdbcQueryResult(rowCount, engineState);
+    }
+
+    private static void applyDatabaseIfRequested(JdbcQueryRequest request, Connection connection) throws SQLException
+    {
+        if (request.database() != null
+                && !request.database()
+                        .isBlank()
+                && request.dialect() != null)
+        {
+            request.dialect()
+                    .applyDatabase(connection, request.database());
+        }
+    }
+
+    private static String resolveCurrentDatabaseIfPossible(JdbcQueryRequest request, Connection connection)
+    {
+        if (request.dialect() == null)
+        {
+            return null;
+        }
+        try
+        {
+            return request.dialect()
+                    .resolveCurrentDatabase(connection);
+        }
+        catch (SQLException ignored)
+        {
+            return null;
+        }
     }
 
     @Override
