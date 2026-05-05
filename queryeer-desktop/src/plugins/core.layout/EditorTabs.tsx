@@ -4,7 +4,8 @@ import type {
   LayoutEditorContribution,
   TabContextMenuContribution,
   TabContextMenuAction,
-  TabHeaderStyleContribution
+  TabHeaderStyleContribution,
+  TabTitleContribution
 } from "../../contracts/extensions/LayoutExtension";
 import type { TooltipSectionContribution } from "../../contracts/extensions/TooltipExtension";
 import type { MimeCapability, MimeIconProps } from "../../contracts/files/FilesRegistry";
@@ -26,6 +27,7 @@ type EditorTabsProps = {
   tooltipContributions?: TooltipSectionContribution[];
   tabContextMenus?: TabContextMenuContribution[];
   tabHeaderStyleContributions?: TabHeaderStyleContribution[];
+  tabTitleContributions?: TabTitleContribution[];
   hasMimeCapability?: (mimeType: string, capability: MimeCapability) => boolean;
   getMimeIcon?: (mimeType: string) => ((props: MimeIconProps) => JSX.Element) | undefined;
   onTabContextMenuAction?: (actionId: string, file: FileEntity) => void;
@@ -42,6 +44,7 @@ export function EditorTabs({
   tooltipContributions = [],
   tabContextMenus = [],
   tabHeaderStyleContributions = [],
+  tabTitleContributions = [],
   hasMimeCapability,
   getMimeIcon,
   onTabContextMenuAction,
@@ -68,16 +71,6 @@ export function EditorTabs({
     return null;
   }
 
-  const tabTitle = (file: FileEntity, editor: LayoutEditorContribution | undefined) => {
-    if (file.uri.startsWith("file://")) {
-      return file.uri.split("/").pop() ?? file.uri;
-    }
-    if (file.uri.startsWith("untitled:")) {
-      return file.uri.slice(8);
-    }
-    return editor?.title ?? file.uri;
-  };
-
   const tooltipProps = hoveredTab
     ? buildTabTooltip(
         openFiles.find((f) => f.fileId === hoveredTab.fileId),
@@ -91,6 +84,10 @@ export function EditorTabs({
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
   const orderedTabHeaderStyleContributions = [...tabHeaderStyleContributions].sort(
+    (a, b) => (a.order ?? 0) - (b.order ?? 0)
+  );
+
+  const orderedTabTitleContributions = [...tabTitleContributions].sort(
     (a, b) => (a.order ?? 0) - (b.order ?? 0)
   );
 
@@ -117,8 +114,13 @@ export function EditorTabs({
     <div ref={tabsRef} className="shell-editor-tabs">
       {openFiles.map((file) => {
         const editor = file.editorId ? editorsById.get(file.editorId) : undefined;
-        const title = tabTitle(file, editor);
-        const dirtyMark = file.dirtyVsDisk || file.dirtyVsBackend ? " •" : "";
+        const title = composeTabTitle({
+          file,
+          editor,
+          tabTitleContributions: orderedTabTitleContributions,
+          hasMimeCapability,
+          isActive: activeFileId === file.fileId
+        });
 
         let titleClassName = "shell-editor-tab-title";
         const styleContext = {
@@ -170,7 +172,7 @@ export function EditorTabs({
                 const IconComponent = icon ?? DocumentIcon;
                 return <IconComponent className="shell-editor-tab-icon" />;
               })()}
-              <span className={titleClassName}>{`${title}${dirtyMark}`}</span>
+              <span className={titleClassName}>{title}</span>
             </div>
             <span
               role="button"
@@ -220,4 +222,57 @@ export function EditorTabs({
       )}
     </div>
   );
+}
+
+type ComposeTabTitleParams = {
+  file: FileEntity;
+  editor: LayoutEditorContribution | undefined;
+  tabTitleContributions: TabTitleContribution[];
+  hasMimeCapability?: (mimeType: string, capability: MimeCapability) => boolean;
+  isActive: boolean;
+};
+
+export function composeTabTitle({
+  file,
+  editor,
+  tabTitleContributions,
+  hasMimeCapability,
+  isActive
+}: ComposeTabTitleParams): string {
+  const baseTitle = resolveBaseTabTitle(file, editor);
+  let main = baseTitle;
+  let prefix = "";
+  let suffix = "";
+  const hasCapability = (capability: MimeCapability) => hasMimeCapability?.(file.mimeType, capability) ?? false;
+  for (const contribution of tabTitleContributions) {
+    const value = contribution.render({
+      file,
+      isActive,
+      hasCapability,
+      baseTitle
+    });
+    if (!value) {
+      continue;
+    }
+    if (typeof value.mainOverride === "string") {
+      main = value.mainOverride;
+    }
+    if (typeof value.prefix === "string") {
+      prefix += value.prefix;
+    }
+    if (typeof value.suffix === "string") {
+      suffix += value.suffix;
+    }
+  }
+  return `${prefix}${main}${suffix}`;
+}
+
+function resolveBaseTabTitle(file: FileEntity, editor: LayoutEditorContribution | undefined): string {
+  if (file.uri.startsWith("file://")) {
+    return file.uri.split("/").pop() ?? file.uri;
+  }
+  if (file.uri.startsWith("untitled:")) {
+    return file.uri.slice(8);
+  }
+  return editor?.title ?? file.uri;
 }

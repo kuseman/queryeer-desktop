@@ -49,12 +49,10 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
     private final Set<String> cancelledExecutionIds = ConcurrentHashMap.newKeySet();
     private final Map<String, QuerySession> activeSessions = new ConcurrentHashMap<>();
     private final PayloadbuilderCatalogProviderRegistry catalogProviders;
-    private final ConfigService configService;
     private final PayloadMapper payloadMapper;
 
     public PayloadbuilderQueryEngineProvider(ConfigService configService, PayloadMapper payloadMapper)
     {
-        this.configService = configService;
         this.payloadMapper = payloadMapper;
         this.catalogProviders = PayloadbuilderCatalogProviderRegistry.defaults(configService, payloadMapper);
     }

@@ -255,7 +255,7 @@ Behavior:
 - Execution updates are sent via notifications (`queryengine.progress`, `queryengine.resultChunk`, `queryengine.completed`, `queryengine.failed`).
 - `engineState` is an engine-owned opaque blob. Core protocol forwards it without interpretation.
 - Payloadbuilder engine state may include `payloadbuilder.defaultCatalogAlias` to request session default catalog alias.
-- JDBC engine state carries `connectionId` and optionally `database`. When `database` is present, the backend switches the JDBC connection to that catalog (via dialect-specific `setCatalog`/`setSchema`) before executing statements. After execution, the backend reflects the current database back in `queryengine.completed.engineState.database` so the UI stays synchronized (for example after a `USE` statement).
+- JDBC engine state carries `connectionId`, optional `database`, and optional `sessionId`. When `database` is present, the backend switches the JDBC connection to that catalog (via dialect-specific `setCatalog`/`setSchema`) before executing statements. After execution, the backend reflects the current database back in `queryengine.completed.engineState.database` and the active RDBMS session in `queryengine.completed.engineState.sessionId` so the UI stays synchronized.
 
 ## 5.4 `queryengine.cancel`
 
@@ -676,6 +676,7 @@ Current Java stdio scaffold implementation status:
 - `backend.runtimeStatus` implemented
 - `connection.upsert` request handling scaffolded
 - JDBC provider actions include `jdbc.schema.snapshot` (latest cached snapshot by `connectionId` and optional `scope`) and `jdbc.schema.refresh` (synchronous refresh + cache persist with scope-aware behavior)
+- JDBC provider action `jdbc.connection.sessions` returns file-scoped JDBC session metadata (`fileId`, `connectionId`, optional `sessionId`, optional `lastAccessTimeMs`, `status=alive|dead`) for UI session badges and connection health views.
 - `file.open` / `file.close` request handlers implemented against `DefaultFileRegistry`; JDBC provider registers `FileSessionHandler` for file-scoped connection lifecycle and cleanup. `file.bind` has been removed — backend auto-upserts on `queryengine.execute`.
 - `file.change` notification handler implemented
 
@@ -683,6 +684,7 @@ JDBC file-session cleanup configuration:
 
 - `queryeer.jdbc.fileSession.idleTimeoutMs` (default: `1800000`) controls idle lifetime before a file-scoped JDBC session is evicted.
 - `queryeer.jdbc.fileSession.reaperIntervalMs` (default: min(idleTimeoutMs, 300000)) controls how often idle sessions are scanned.
+- Evicted sessions are exposed as transient `status=dead` entries in `jdbc.connection.sessions` and automatically removed after a short TTL.
 - `queryeer.jdbc.schemaCrawl.intervalMs` (default: `300000`) controls periodic schema crawl loop interval when security session is open.
 
 Backend bootstrap configuration (desktop -> backend process env -> backend config service):

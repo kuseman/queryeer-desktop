@@ -157,6 +157,28 @@ export type JdbcSchemaRefreshPayload = {
   };
 };
 
+export type JdbcEngineState = {
+  connectionId?: string;
+  database?: string;
+  sessionId?: string;
+  jdbc?: {
+    connection?: Record<string, unknown>;
+  };
+  dialectId?: string;
+  url?: string;
+  properties?: Record<string, unknown>;
+};
+
+export type JdbcConnectionSessionStatus = "alive" | "dead";
+
+export type JdbcConnectionSessionEntry = {
+  fileId: string;
+  connectionId: string;
+  sessionId?: string;
+  lastAccessTimeMs?: number;
+  status: JdbcConnectionSessionStatus;
+};
+
 export type ConnectionUpsertParams = {
   connectionId?: string;
   engineId: string;

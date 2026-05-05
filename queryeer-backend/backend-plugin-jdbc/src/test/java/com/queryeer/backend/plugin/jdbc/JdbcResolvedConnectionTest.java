@@ -22,7 +22,7 @@ class JdbcResolvedConnectionTest
         JdbcConnectionRegistry connections = new JdbcConnectionRegistry();
         connections.upsert("prod-db", "Production", java.util.Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test", "username", "sa", "password", "secret"));
 
-        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromEngineState(new JdbcEngineState("prod-db", null, null, null, null, null), connections, registry);
+        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromEngineState(new JdbcEngineState("prod-db", null, null, null, null, null, null), connections, registry);
 
         assertEquals("prod-db", resolved.connectionId());
         assertNotNull(resolved.dialect());
@@ -38,7 +38,7 @@ class JdbcResolvedConnectionTest
         registry.register(new BasicJdbcDialect());
         JdbcConnectionRegistry connections = new JdbcConnectionRegistry();
 
-        assertThrows(IllegalArgumentException.class, () -> JdbcResolvedConnection.fromEngineState(new JdbcEngineState("unknown", null, null, null, null, null), connections, registry));
+        assertThrows(IllegalArgumentException.class, () -> JdbcResolvedConnection.fromEngineState(new JdbcEngineState("unknown", null, null, null, null, null, null), connections, registry));
     }
 
     @Test
@@ -94,7 +94,7 @@ class JdbcResolvedConnectionTest
         JdbcConnectionRegistry connections = new JdbcConnectionRegistry();
         connections.upsert("prod-db", "Production", java.util.Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test", "password", java.util.Map.of("secretRef", "db-pw")));
 
-        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromEngineState(new JdbcEngineState("prod-db", null, null, null, null, null), connections, registry);
+        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromEngineState(new JdbcEngineState("prod-db", null, null, null, null, null, null), connections, registry);
 
         assertEquals(java.util.Map.of("secretRef", "db-pw"), resolved.profile()
                 .properties()
@@ -123,7 +123,7 @@ class JdbcResolvedConnectionTest
         JdbcConnectionRegistry connections = new JdbcConnectionRegistry();
         connections.upsert("no-url", "Test", java.util.Map.of("dialectId", "jdbc"));
 
-        assertThrows(IllegalArgumentException.class, () -> JdbcResolvedConnection.fromEngineState(new JdbcEngineState("no-url", null, null, null, null, null), connections, registry));
+        assertThrows(IllegalArgumentException.class, () -> JdbcResolvedConnection.fromEngineState(new JdbcEngineState("no-url", null, null, null, null, null, null), connections, registry));
     }
 
     @Test
@@ -134,7 +134,7 @@ class JdbcResolvedConnectionTest
         JdbcConnectionRegistry connections = new JdbcConnectionRegistry();
         connections.upsert("flat-conn", "Flat", java.util.Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:flat"));
 
-        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromEngineState(new JdbcEngineState("flat-conn", null, null, null, null, null), connections, registry);
+        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromEngineState(new JdbcEngineState("flat-conn", null, null, null, null, null, null), connections, registry);
 
         assertEquals("flat-conn", resolved.connectionId());
     }
@@ -147,7 +147,7 @@ class JdbcResolvedConnectionTest
         JdbcConnectionRegistry connections = new JdbcConnectionRegistry();
         connections.upsert("no-pw", "No PW", java.util.Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test", "username", "user"));
 
-        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromEngineState(new JdbcEngineState("no-pw", null, null, null, null, null), connections, registry);
+        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromEngineState(new JdbcEngineState("no-pw", null, null, null, null, null, null), connections, registry);
 
         assertEquals("no-pw", resolved.connectionId());
         assertEquals("user", resolved.profile()
@@ -175,7 +175,7 @@ class JdbcResolvedConnectionTest
         JdbcConnectionRegistry connections = new JdbcConnectionRegistry();
         connections.upsert("bad-dialect", "Bad", java.util.Map.of("dialectId", "nonexistent", "url", "jdbc:h2:mem:test"));
 
-        assertThrows(IllegalArgumentException.class, () -> JdbcResolvedConnection.fromEngineState(new JdbcEngineState("bad-dialect", null, null, null, null, null), connections, registry));
+        assertThrows(IllegalArgumentException.class, () -> JdbcResolvedConnection.fromEngineState(new JdbcEngineState("bad-dialect", null, null, null, null, null, null), connections, registry));
     }
 
     @Test
@@ -185,7 +185,7 @@ class JdbcResolvedConnectionTest
         registry.register(new BasicJdbcDialect());
         JdbcConnectionRegistry connections = new JdbcConnectionRegistry();
 
-        assertThrows(IllegalArgumentException.class, () -> JdbcResolvedConnection.fromEngineState(new JdbcEngineState(null, null, null, null, null, null), connections, registry));
+        assertThrows(IllegalArgumentException.class, () -> JdbcResolvedConnection.fromEngineState(new JdbcEngineState(null, null, null, null, null, null, null), connections, registry));
         assertThrows(IllegalArgumentException.class, () -> JdbcResolvedConnection.fromRegistryWithOverrides(new JdbcSchemaFetchPayload(null, null, null, null), connections, registry));
     }
 
@@ -197,7 +197,7 @@ class JdbcResolvedConnectionTest
         JdbcConnectionRegistry connections = new JdbcConnectionRegistry();
         connections.upsert("conn", "Connection", java.util.Map.of("url", "jdbc:h2:mem:test"));
 
-        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromEngineState(new JdbcEngineState("conn", null, null, null, null, null), connections, registry);
+        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromEngineState(new JdbcEngineState("conn", null, null, null, null, null, null), connections, registry);
 
         assertEquals("jdbc", resolved.profile()
                 .dialectId());

@@ -163,6 +163,25 @@ export type TabHeaderStyleContribution = {
   render: (context: TabHeaderStyleContext) => TabHeaderStyle | null;
 };
 
+export type TabTitleContext = {
+  file: FileEntity;
+  isActive: boolean;
+  hasCapability: (capability: MimeCapability) => boolean;
+  baseTitle: string;
+};
+
+export type TabTitleContribution = {
+  id: string;
+  order?: number;
+  render: (context: TabTitleContext) =>
+    | {
+        prefix?: string;
+        suffix?: string;
+        mainOverride?: string;
+      }
+    | null;
+};
+
 export type LayoutPanelTab = {
   id: string;
   title: string;
@@ -196,6 +215,7 @@ export type LayoutRegistry = {
   registerWelcome: (contribution: LayoutWelcomeContribution) => void;
   registerTabContextMenu: (contribution: TabContextMenuContribution) => void;
   registerTabHeaderStyle: (contribution: TabHeaderStyleContribution) => void;
+  registerTabTitle: (contribution: TabTitleContribution) => void;
   registerPanel: (contribution: LayoutPanelContribution) => void;
   setShellDefaults: (defaults: LayoutShellDefaults) => void;
 };

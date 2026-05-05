@@ -1,5 +1,12 @@
 package com.queryeer.backend.plugin.jdbc.sqlserver;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.Properties;
+
 import com.queryeer.backend.queryengine.jdbc.JdbcConnectionSetupDefinition;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialect;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectMetadata;
@@ -41,5 +48,37 @@ public final class SqlServerDialect implements JdbcDialect
     public boolean requiresExplicitUrl()
     {
         return false;
+    }
+
+    @Override
+    public String resolveSessionId(Connection connection) throws SQLException
+    {
+        try (Statement statement = connection.createStatement(); ResultSet rs = statement.executeQuery("select @@SPID"))
+        {
+            if (!rs.next())
+            {
+                return "";
+            }
+            Object value = rs.getObject(1);
+            if (value == null)
+            {
+                return "";
+            }
+            String text = String.valueOf(value)
+                    .trim();
+            return text;
+        }
+        catch (SQLException ignored)
+        {
+            return "";
+        }
+    }
+
+    @Override
+    public Connection openSessionConnection(com.queryeer.backend.queryengine.jdbc.JdbcConnectionProfile profile) throws SQLException
+    {
+        String url = SqlServerUrlBuilder.buildUrl(profile.properties());
+        Properties jdbcProps = SqlServerUrlBuilder.buildConnectionProperties(profile.properties());
+        return DriverManager.getConnection(url, jdbcProps);
     }
 }

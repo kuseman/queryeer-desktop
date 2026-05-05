@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   registerExecutionContextProviderMock: vi.fn(),
   registerEngineResolverMock: vi.fn(),
   onQueryEventMock: vi.fn(),
+  invokeMock: vi.fn(async (): Promise<unknown> => []),
   getConfiguredJdbcConnectionsMock: vi.fn(() => []),
   loadConnectionRootsMock: vi.fn()
 }));
@@ -13,7 +14,8 @@ vi.mock("../core.queryengine/QueryEngineService", () => ({
   getQueryEngineService: () => ({
     registerExecutionContextProvider: mocks.registerExecutionContextProviderMock,
     registerEngineResolver: mocks.registerEngineResolverMock,
-    onQueryEvent: mocks.onQueryEventMock
+    onQueryEvent: mocks.onQueryEventMock,
+    invoke: mocks.invokeMock
   })
 }));
 
@@ -131,6 +133,7 @@ function createContext(): PluginContext {
       registerWelcome: vi.fn(),
       registerTabContextMenu: vi.fn(),
       registerTabHeaderStyle: vi.fn(),
+      registerTabTitle: vi.fn(),
       registerPanel: vi.fn(),
       setShellDefaults: vi.fn()
     },
@@ -177,6 +180,8 @@ describe("core.queryengine.jdbc plugin integration", () => {
     mocks.registerExecutionContextProviderMock.mockReset();
     mocks.registerEngineResolverMock.mockReset();
     mocks.onQueryEventMock.mockReset();
+    mocks.invokeMock.mockReset();
+    mocks.invokeMock.mockResolvedValue([]);
     mocks.loadConnectionRootsMock.mockReset();
     mocks.getConfiguredJdbcConnectionsMock.mockReset();
   });
@@ -205,6 +210,55 @@ describe("core.queryengine.jdbc plugin integration", () => {
 
     const otherEnginePatch = provider?.({ engineId: "payloadbuilder", text: "select 1", fileId: "file-1" });
     expect(otherEnginePatch).toBeUndefined();
+  });
+
+  it("includes sessionId from runtime metadata in JDBC engineState", () => {
+    const context = createContext();
+    mocks.invokeMock.mockResolvedValueOnce([
+      { fileId: "file-1", connectionId: "conn-a", sessionId: "s-99", status: "alive" }
+    ]);
+    const file = context.files.getFile("file-1");
+    if (file) {
+      file.engineBinding = { engineId: "jdbc", connectionId: "conn-a" };
+      file.metadata = {
+        "core.queryengine.jdbc.sessionId": "s-99",
+        "core.queryengine.jdbc.sessionConnectionId": "conn-a"
+      };
+    }
+
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[0] as
+      | ((params: { engineId: string; text: string; fileId?: string }) => unknown)
+      | undefined;
+
+    const patch = provider?.({ engineId: "jdbc", text: "select 1", fileId: "file-1" });
+    expect(patch).toEqual({
+      engineState: { connectionId: "conn-a", sessionId: "s-99" }
+    });
+  });
+
+  it("does not include sessionId when it belongs to another connection", () => {
+    const context = createContext();
+    const file = context.files.getFile("file-1");
+    if (file) {
+      file.engineBinding = { engineId: "jdbc", connectionId: "conn-b" };
+      file.metadata = {
+        "core.queryengine.jdbc.sessionId": "s-99",
+        "core.queryengine.jdbc.sessionConnectionId": "conn-a"
+      };
+    }
+
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[0] as
+      | ((params: { engineId: string; text: string; fileId?: string }) => unknown)
+      | undefined;
+
+    const patch = provider?.({ engineId: "jdbc", text: "select 1", fileId: "file-1" });
+    expect(patch).toEqual({
+      engineState: { connectionId: "conn-b" }
+    });
   });
 
   it("wires JDBC engineState with only connectionId when no database selected", () => {
@@ -301,5 +355,36 @@ describe("core.queryengine.jdbc plugin integration", () => {
     );
 
     expect(context.files.setEditorState).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies completed engineState sessionId into runtime metadata", () => {
+    const context = createContext();
+    const file = context.files.getFile("file-1");
+    if (file) {
+      file.engineBinding = { engineId: "jdbc", connectionId: "conn-a" };
+    }
+
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+      | ((
+          event: { method: string; params?: { engineState?: unknown } },
+          executeContext?: { engineId?: string; fileId?: string }
+        ) => void)
+      | undefined;
+
+    listener?.(
+      {
+        method: "queryengine.completed",
+        params: {
+          engineState: { sessionId: "session-1" }
+        }
+      },
+      { engineId: "jdbc", fileId: "file-1" }
+    );
+
+    const updated = context.files.getFile("file-1");
+    expect(updated?.metadata?.["core.queryengine.jdbc.sessionId"]).toBe("session-1");
+    expect(updated?.metadata?.["core.queryengine.jdbc.sessionConnectionId"]).toBe("conn-a");
   });
 });

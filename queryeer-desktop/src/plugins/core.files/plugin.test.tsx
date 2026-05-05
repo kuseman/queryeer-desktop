@@ -125,6 +125,7 @@ function createHarness(): Harness {
       registerWelcome: vi.fn(),
       registerTabContextMenu: vi.fn(),
       registerTabHeaderStyle: vi.fn(),
+      registerTabTitle: vi.fn(),
       registerPanel: vi.fn(),
       setShellDefaults: vi.fn()
     },

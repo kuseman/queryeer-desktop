@@ -14,8 +14,6 @@ import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.core.engine.EngineInvokeService;
-import com.queryeer.backend.core.security.SecretRefPayloadResolver;
-import com.queryeer.backend.core.security.SecuritySession;
 
 class EngineInvokeRequestHandlerTest
 {
@@ -51,8 +49,7 @@ class EngineInvokeRequestHandlerTest
             }
         });
 
-        SecretRefPayloadResolver secretResolver = new SecretRefPayloadResolver(new SecuritySession(), objectMapper);
-        EngineInvokeRequestHandler handler = new EngineInvokeRequestHandler(responseWriter, codec, new EngineInvokeService(registry, secretResolver));
+        EngineInvokeRequestHandler handler = new EngineInvokeRequestHandler(responseWriter, codec, new EngineInvokeService(registry));
 
         handler.handle(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-invoke-1", null, "queryengine.invoke",
                 Map.of("engineId", "payloadbuilder", "fileId", "file-1", "action", "payloadbuilder.echo", "payload", Map.of("x", 1)), null, null));
@@ -80,8 +77,7 @@ class EngineInvokeRequestHandlerTest
         ResponseWriter responseWriter = new ResponseWriter(output, codec);
         QueryEngineRegistry registry = new SingleProviderRegistry(null);
 
-        SecretRefPayloadResolver secretResolver = new SecretRefPayloadResolver(new SecuritySession(), objectMapper);
-        EngineInvokeRequestHandler handler = new EngineInvokeRequestHandler(responseWriter, codec, new EngineInvokeService(registry, secretResolver));
+        EngineInvokeRequestHandler handler = new EngineInvokeRequestHandler(responseWriter, codec, new EngineInvokeService(registry));
 
         handler.handle(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-invoke-2", null, "queryengine.invoke", Map.of("engineId", "missing", "action", "payloadbuilder.echo"),
                 null, null));

@@ -5,13 +5,19 @@ import { getCoreSettingsService } from "../core.settings/service";
 import { JdbcConnectionsSettingsEditor } from "./JdbcConnectionsSettingsEditor";
 import {
   JDBC_CONNECTIONS_SETTING_ID,
+  getConfiguredJdbcConnections,
   parseJdbcConnectionDefinitions
 } from "./jdbc-settings";
+import { getJdbcSessionStore } from "./jdbc-session-store";
+import { JdbcConnectionsPanel } from "./JdbcConnectionsPanel";
 import { DatabaseIcon } from "./DatabaseIcon";
 import { getJdbcNavigationStore } from "./jdbc-navigation-store";
 import { JdbcNavigationView } from "./JdbcNavigationView";
 import { JDBC_NAV_DB_KEY, type JdbcSelectedDatabase } from "./jdbc-navigation-types";
 
+const JDBC_SESSION_ID_METADATA_KEY = "core.queryengine.jdbc.sessionId";
+const JDBC_SESSION_CONNECTION_ID_METADATA_KEY = "core.queryengine.jdbc.sessionConnectionId";
+const JDBC_SESSION_STATE_METADATA_KEY = "core.queryengine.jdbc.sessionState";
 export const coreQueryEngineJdbcPlugin: Plugin = {
   manifest: {
     id: "core.queryengine.jdbc",
@@ -94,6 +100,11 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
 
     getJdbcNavigationStore().loadConnectionRoots();
 
+    const resolveConnectionTitle = (connectionId: string): string => {
+      const match = getConfiguredJdbcConnections().find((entry) => entry.connectionId === connectionId);
+      return match?.title?.trim() || connectionId;
+    };
+
     context.commands.registerCommand({
       id: "core.queryengine.jdbc.navigation.refresh",
       title: "Refresh JDBC Tree",
@@ -148,6 +159,16 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       if (selectedDatabase?.connectionId === connectionId && selectedDatabase.database) {
         engineState.database = selectedDatabase.database;
       }
+      const sessionId = file?.metadata?.[JDBC_SESSION_ID_METADATA_KEY];
+      const sessionConnectionId = file?.metadata?.[JDBC_SESSION_CONNECTION_ID_METADATA_KEY];
+      if (
+        typeof sessionId === "string" &&
+        sessionId.length > 0 &&
+        typeof sessionConnectionId === "string" &&
+        sessionConnectionId === connectionId
+      ) {
+        engineState.sessionId = sessionId;
+      }
 
       return { engineState };
     });
@@ -164,6 +185,26 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       if (es !== null && typeof es === "object" && !Array.isArray(es)) {
         const record = es as Record<string, unknown>;
         const database = record.database;
+        const sessionId = record.sessionId;
+        if (typeof sessionId === "string") {
+          const file = context.files.getFile(executeContext.fileId);
+          if (file) {
+            const metadata = { ...(file.metadata ?? {}) };
+            const connectionId = file.engineBinding?.connectionId;
+            if (sessionId.length > 0) {
+              metadata[JDBC_SESSION_ID_METADATA_KEY] = sessionId;
+              metadata[JDBC_SESSION_STATE_METADATA_KEY] = "alive";
+              if (typeof connectionId === "string" && connectionId.length > 0) {
+                metadata[JDBC_SESSION_CONNECTION_ID_METADATA_KEY] = connectionId;
+              }
+            } else {
+              delete metadata[JDBC_SESSION_ID_METADATA_KEY];
+              delete metadata[JDBC_SESSION_CONNECTION_ID_METADATA_KEY];
+              metadata[JDBC_SESSION_STATE_METADATA_KEY] = "dead";
+            }
+            context.files.updateFile(executeContext.fileId, { metadata });
+          }
+        }
         if (typeof database === "string") {
           const file = context.files.getFile(executeContext.fileId);
           const connectionId = file?.engineBinding?.connectionId;
@@ -174,6 +215,186 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
             } satisfies JdbcSelectedDatabase);
           }
         }
+      }
+    });
+
+    const sessionStore = getJdbcSessionStore();
+    const sessionSyncStartedAtMs = Date.now();
+    sessionStore.startPolling(5000);
+    sessionStore.subscribe((state) => {
+      if (state.updatedAtMs <= 0 || state.updatedAtMs < sessionSyncStartedAtMs) {
+        return;
+      }
+      const byFileId = new Map(state.entries.map((entry) => [entry.fileId, entry]));
+      for (const file of context.files.listFiles()) {
+        if (file.engineBinding?.engineId !== "jdbc") {
+          continue;
+        }
+        const metadata = { ...(file.metadata ?? {}) };
+        const existingSessionId = metadata[JDBC_SESSION_ID_METADATA_KEY];
+        const existingSessionConnectionId = metadata[JDBC_SESSION_CONNECTION_ID_METADATA_KEY];
+        const boundConnectionId = file.engineBinding?.connectionId;
+        const match = byFileId.get(file.fileId);
+        const nextSessionId =
+          match?.status === "alive" &&
+          typeof boundConnectionId === "string" &&
+          match.connectionId === boundConnectionId
+            ? match.sessionId
+            : undefined;
+        if (typeof nextSessionId === "string" && nextSessionId.length > 0) {
+          if (existingSessionId !== nextSessionId || existingSessionConnectionId !== boundConnectionId) {
+            metadata[JDBC_SESSION_ID_METADATA_KEY] = nextSessionId;
+            metadata[JDBC_SESSION_STATE_METADATA_KEY] = "alive";
+            if (boundConnectionId) {
+              metadata[JDBC_SESSION_CONNECTION_ID_METADATA_KEY] = boundConnectionId;
+            }
+            context.files.updateFile(file.fileId, { metadata });
+          }
+          continue;
+        }
+        if (existingSessionId !== undefined || existingSessionConnectionId !== undefined) {
+          delete metadata[JDBC_SESSION_ID_METADATA_KEY];
+          delete metadata[JDBC_SESSION_CONNECTION_ID_METADATA_KEY];
+          metadata[JDBC_SESSION_STATE_METADATA_KEY] = match?.status === "dead" ? "dead" : "none";
+          context.files.updateFile(file.fileId, { metadata });
+        }
+      }
+    });
+
+    context.layout.registerPanel({
+      id: "core.queryengine.jdbc.panel",
+      tabs: [
+        {
+          id: "core.queryengine.jdbc.panel.sessions",
+          title: "JDBC Sessions",
+          order: 20,
+          render: () => <JdbcConnectionsPanel files={context.files} fileMediator={context.fileMediator} />
+        }
+      ],
+      defaultHeight: 220,
+      minHeight: 120,
+      maxHeight: 420
+    });
+
+    context.layout.registerTabTitle({
+      id: "core.queryengine.jdbc.tabTitle.session",
+      order: 20,
+      render: ({ file, hasCapability }) => {
+        if (!hasCapability("queryexecutable") || file.engineBinding?.engineId !== "jdbc") {
+          return null;
+        }
+        const sessionId = file.metadata?.[JDBC_SESSION_ID_METADATA_KEY];
+        const sessionConnectionId = file.metadata?.[JDBC_SESSION_CONNECTION_ID_METADATA_KEY];
+        if (
+          typeof sessionId !== "string" ||
+          sessionId.length === 0 ||
+          typeof sessionConnectionId !== "string" ||
+          sessionConnectionId !== file.engineBinding?.connectionId
+        ) {
+          return null;
+        }
+        return { prefix: `(${sessionId}) ` };
+      }
+    });
+
+    context.tooltip.registerTooltipSection({
+      id: "core.queryengine.jdbc.tooltip.connection",
+      order: 21,
+      render: ({ file }) => {
+        if (file.engineBinding?.engineId !== "jdbc") {
+          return null;
+        }
+        const connectionId = file.engineBinding.connectionId;
+        if (!connectionId) {
+          return null;
+        }
+        return {
+          label: "Connection",
+          value: resolveConnectionTitle(connectionId)
+        };
+      }
+    });
+
+    context.tooltip.registerTooltipSection({
+      id: "core.queryengine.jdbc.tooltip.session",
+      order: 22,
+      render: ({ file }) => {
+        if (file.engineBinding?.engineId !== "jdbc") {
+          return null;
+        }
+        const sessionId = file.metadata?.[JDBC_SESSION_ID_METADATA_KEY];
+        const sessionConnectionId = file.metadata?.[JDBC_SESSION_CONNECTION_ID_METADATA_KEY];
+        if (
+          typeof sessionId !== "string" ||
+          sessionId.length === 0 ||
+          typeof sessionConnectionId !== "string" ||
+          sessionConnectionId !== file.engineBinding?.connectionId
+        ) {
+          return null;
+        }
+        return {
+          label: "Session",
+          value: sessionId
+        };
+      }
+    });
+
+    context.tooltip.registerTooltipSection({
+      id: "core.queryengine.jdbc.tooltip.state",
+      order: 23,
+      render: ({ file }) => {
+        if (file.engineBinding?.engineId !== "jdbc") {
+          return null;
+        }
+        const sessionId = file.metadata?.[JDBC_SESSION_ID_METADATA_KEY];
+        const state = file.metadata?.[JDBC_SESSION_STATE_METADATA_KEY];
+        if (state === "dead") {
+          return {
+            label: "State",
+            value: "dead",
+            severity: "warning"
+          };
+        }
+        if (typeof sessionId !== "string" || sessionId.length === 0) {
+          return null;
+        }
+        return {
+          label: "State",
+          value: "alive"
+        };
+      }
+    });
+
+    context.tooltip.registerTooltipSection({
+      id: "core.queryengine.jdbc.tooltip.database",
+      order: 24,
+      render: ({ file }) => {
+        if (file.engineBinding?.engineId !== "jdbc") {
+          return null;
+        }
+        const raw = context.files.getEditorState(file.fileId, JDBC_NAV_DB_KEY);
+        const selectedDatabase: JdbcSelectedDatabase | undefined =
+          raw !== null &&
+          typeof raw === "object" &&
+          !Array.isArray(raw) &&
+          typeof (raw as Record<string, unknown>).connectionId === "string" &&
+          typeof (raw as Record<string, unknown>).database === "string"
+            ? (raw as JdbcSelectedDatabase)
+            : undefined;
+
+        const connectionId = file.engineBinding?.connectionId;
+        if (
+          !connectionId ||
+          selectedDatabase?.connectionId !== connectionId ||
+          !selectedDatabase.database
+        ) {
+          return null;
+        }
+
+        return {
+          label: "Database",
+          value: selectedDatabase.database
+        };
       }
     });
   }

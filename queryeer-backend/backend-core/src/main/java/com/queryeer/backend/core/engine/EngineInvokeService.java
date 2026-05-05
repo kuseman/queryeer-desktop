@@ -11,12 +11,10 @@ import com.queryeer.backend.core.security.SecretRefPayloadResolver;
 public final class EngineInvokeService
 {
     private final QueryEngineRegistry engineRegistry;
-    private final SecretRefPayloadResolver secretResolver;
 
-    public EngineInvokeService(QueryEngineRegistry engineRegistry, SecretRefPayloadResolver secretResolver)
+    public EngineInvokeService(QueryEngineRegistry engineRegistry)
     {
         this.engineRegistry = engineRegistry;
-        this.secretResolver = secretResolver;
     }
 
     public Object invoke(EngineInvokeParams params)

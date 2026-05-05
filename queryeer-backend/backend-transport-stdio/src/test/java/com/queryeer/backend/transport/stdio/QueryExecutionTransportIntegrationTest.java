@@ -17,8 +17,6 @@ import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.core.query.QueryExecutionService;
-import com.queryeer.backend.core.security.SecretRefPayloadResolver;
-import com.queryeer.backend.core.security.SecuritySession;
 
 class QueryExecutionTransportIntegrationTest
 {
@@ -32,7 +30,7 @@ class QueryExecutionTransportIntegrationTest
         NotificationPublisher notifications = new NotificationPublisher(responseWriter);
 
         QueryEngineRegistry registry = new SingleProviderRegistry(new FakeQueryProvider());
-        QueryExecutionService queryExecutionService = new QueryExecutionService(registry, new SecretRefPayloadResolver(new SecuritySession(), objectMapper));
+        QueryExecutionService queryExecutionService = new QueryExecutionService(registry);
         QueryExecuteRequestHandler handler = new QueryExecuteRequestHandler(responseWriter, codec, queryExecutionService, notifications);
 
         handler.handle(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-exec-1", null, "queryengine.execute",

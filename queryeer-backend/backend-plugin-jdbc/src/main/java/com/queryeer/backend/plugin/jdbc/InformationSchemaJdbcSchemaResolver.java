@@ -29,9 +29,9 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
     private static final String SCOPE_TOP = "top";
     private static final String SCOPE_TABLES = "tables";
     private static final String SCOPE_COLUMNS = "columns";
-    private static final String KEY_DATABASE = "database";
+    // private static final String KEY_DATABASE = "database";
     private static final String KEY_SCHEMA = "schema";
-    private static final String KEY_TABLE = "table";
+    // private static final String KEY_TABLE = "table";
     private static final String KEY_CATALOG = "catalog";
     private static final String KIND_SCHEMA = "schema";
     private static final String KIND_TABLE = "table";
