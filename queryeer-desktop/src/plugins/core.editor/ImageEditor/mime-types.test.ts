@@ -18,8 +18,13 @@ describe("image editor mime type registrations", () => {
       registerMimeResolver,
       capabilities: {
         registerCapabilities,
+        registerLabel: vi.fn(),
+        registerPreferredNewFileMimeType: vi.fn(),
+        listPreferredNewFileMimeTypes: vi.fn(() => []),
+        getLabel: vi.fn(),
         registerContentCategory,
         hasCapability: vi.fn(),
+        listMimeTypesByCapability: vi.fn(() => []),
         getContentCategory: vi.fn()
       },
       mimeIcons: {

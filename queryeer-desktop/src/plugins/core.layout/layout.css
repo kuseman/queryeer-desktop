@@ -78,6 +78,46 @@
   opacity: 0.45;
 }
 
+.shell-toolbar-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.shell-toolbar-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 220px;
+  max-height: 300px;
+  overflow: auto;
+  z-index: 1200;
+  display: grid;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--titlebar-dropdown-bg);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.shell-toolbar-menu-item {
+  border: none;
+  background: transparent;
+  color: var(--text-0);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  border-radius: 4px;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: var(--ui-font-size-xs);
+}
+
+.shell-toolbar-menu-item:hover {
+  background: var(--titlebar-hover);
+}
+
 .shell-toolbar-icon {
   width: 16px;
   height: 16px;

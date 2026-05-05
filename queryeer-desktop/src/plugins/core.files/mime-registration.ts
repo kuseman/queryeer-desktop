@@ -6,6 +6,7 @@ import type {
 
 export type MimeTypeRegistration = {
   mimeType: string;
+  label?: string;
   extensions: string[];
   contentCategory: ContentCategory;
   capabilities: MimeCapability[];
@@ -38,6 +39,9 @@ export function registerMimeTypeBundle(
 
   for (const registration of registrations) {
     files.capabilities.registerCapabilities(registration.mimeType, registration.capabilities);
+    if (registration.label && files.capabilities.registerLabel) {
+      files.capabilities.registerLabel(registration.mimeType, registration.label);
+    }
     files.capabilities.registerContentCategory(registration.mimeType, registration.contentCategory);
   }
 }

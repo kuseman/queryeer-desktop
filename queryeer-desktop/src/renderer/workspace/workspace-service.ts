@@ -63,6 +63,21 @@ const DEFAULT_DEBOUNCE_MS = 250;
 const DEFAULT_BACKUP_DEBOUNCE_MS = 3_000;
 const DEFAULT_BACKUP_MAX_INTERVAL_MS = 30_000;
 
+function deriveUntitledCounter(snapshot: WorkspaceSnapshot): number {
+  let maxFromFiles = 0;
+  for (const entry of snapshot.files) {
+    const match = /^untitled:Untitled(\d+)\./i.exec(entry.uri);
+    if (!match) {
+      continue;
+    }
+    const parsed = Number.parseInt(match[1] ?? "0", 10);
+    if (Number.isFinite(parsed) && parsed > maxFromFiles) {
+      maxFromFiles = parsed;
+    }
+  }
+  return maxFromFiles;
+}
+
 function stableBackupIdForUri(uri: string): string {
   let hash = 2166136261;
   for (let i = 0; i < uri.length; i += 1) {
@@ -117,6 +132,7 @@ export class RendererWorkspaceService {
 
   public async hydrate(): Promise<void> {
     const snapshot = await this.bridge.getWorkspace();
+    this.fileMediator.setUntitledCounter(deriveUntitledCounter(snapshot));
 
     const fileEntities = await Promise.all(
       snapshot.files.map((entry) =>

@@ -159,6 +159,46 @@ describe("FileMediator.openFile", () => {
   });
 });
 
+describe("FileMediator.createUntitledFile", () => {
+  it("creates Untitled<n> using current counter and extension", async () => {
+    const { mediator } = setupHarness();
+
+    const first = await mediator.createUntitledFile({ extension: "sql", mimeType: "application/sql" });
+    const second = await mediator.createUntitledFile({ extension: "sql", mimeType: "application/sql" });
+
+    expect(first.uri).toBe("untitled:Untitled1.sql");
+    expect(second.uri).toBe("untitled:Untitled2.sql");
+    expect(mediator.getUntitledCounter()).toBe(2);
+  });
+
+  it("clones engine binding and persistent view state from source file", async () => {
+    const { mediator } = setupHarness();
+    const source = await mediator.openFile("file:///source.plbsql", {
+      mimeType: "application/plbsql",
+      engineBinding: { engineId: "payloadbuilder", connectionId: "conn-1" },
+      persistentViewState: { "monaco.editor": { lineNumber: 5 } }
+    });
+
+    const created = await mediator.createUntitledFile({ cloneFromFileId: source.fileId });
+
+    expect(created.uri).toBe("untitled:Untitled1.plbsql");
+    expect(created.engineBinding).toEqual({ engineId: "payloadbuilder", connectionId: "conn-1" });
+    expect(created.persistentViewState).toEqual({ "monaco.editor": { lineNumber: 5 } });
+    expect(created.engineBinding).not.toBe(source.engineBinding);
+    expect(created.persistentViewState).not.toBe(source.persistentViewState);
+  });
+
+  it("respects externally restored untitled counter", async () => {
+    const { mediator } = setupHarness();
+    mediator.setUntitledCounter(12);
+
+    const created = await mediator.createUntitledFile({ extension: "plbsql", mimeType: "application/plbsql" });
+
+    expect(created.uri).toBe("untitled:Untitled13.plbsql");
+    expect(mediator.getUntitledCounter()).toBe(13);
+  });
+});
+
 describe("FileMediator.closeFile", () => {
   it("rejects closing a dirty file without discardDirty", async () => {
     const { mediator, registry } = setupHarness();

@@ -29,6 +29,9 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       mimeTypes: ["application/sql"]
     });
 
+    context.files.capabilities.registerLabel?.("application/sql", "Jdbc");
+    context.files.capabilities.registerPreferredNewFileMimeType?.("application/sql", 10);
+
     context.files.mimeIcons.registerMimeIcon({
       moduleId: "core.queryengine.jdbc",
       mimeType: "application/sql",

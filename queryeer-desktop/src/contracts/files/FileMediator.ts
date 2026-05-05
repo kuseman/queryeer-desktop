@@ -16,6 +16,13 @@ export type FileCloseOptions = {
 
 export type FileMediator = {
   openFile: (uri: string, hint?: FileOpenHint) => Promise<FileEntity>;
+  createUntitledFile: (options?: {
+    extension?: string;
+    mimeType?: string;
+    cloneFromFileId?: string | null;
+  }) => Promise<FileEntity>;
+  getUntitledCounter: () => number;
+  setUntitledCounter: (counter: number) => void;
   closeFile: (fileId: string, opts?: FileCloseOptions) => Promise<void>;
   saveFile: (fileId: string) => Promise<void>;
   setActiveFileId: (fileId: string | null) => void;

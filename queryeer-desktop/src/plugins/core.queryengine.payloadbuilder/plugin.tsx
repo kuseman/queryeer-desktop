@@ -34,6 +34,9 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
       mimeTypes: ["application/plbsql"]
     });
 
+    context.files.capabilities.registerLabel?.("application/plbsql", "Payloadbuilder");
+    context.files.capabilities.registerPreferredNewFileMimeType?.("application/plbsql", 20);
+
     context.files.mimeIcons.registerMimeIcon({
       moduleId: "core.queryengine.payloadbuilder",
       mimeType: "application/plbsql",

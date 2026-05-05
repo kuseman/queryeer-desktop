@@ -1,11 +1,13 @@
 import type {
   LayoutActionIconRenderer,
   LayoutToolbarContribution,
+  LayoutToolbarMenuContribution,
   LayoutToolbarSelectContribution,
   LayoutZone
 } from "../../contracts/extensions/LayoutExtension";
 import { GenericActionIcon, layoutToolbarIconMap } from "../../renderer/icons/LayoutIcons";
 import type { CommandExecutionResult } from "../../contracts/plugin/Plugin";
+import { useEffect, useState } from "react";
 
 type ToolbarProps = {
   toolbarActions: LayoutToolbarContribution[];
@@ -32,6 +34,21 @@ export function Toolbar({
   getCommandTitle,
   getCommandAccelerator
 }: ToolbarProps) {
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onMouseDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest(".shell-toolbar-menu-wrap")) {
+        return;
+      }
+      setOpenMenuId(null);
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+    };
+  }, []);
   const isZoneVisible = (zone: LayoutZone) => visibleZones.has(zone);
   const westActions = toolbarActions.filter((action) => (action.alignment ?? "west") === "west");
   const eastActions = toolbarActions.filter((action) => (action.alignment ?? "west") === "east");
@@ -78,6 +95,58 @@ export function Toolbar({
     );
   };
 
+  const renderMenu = (contribution: LayoutToolbarMenuContribution) => {
+    if (contribution.isVisible && !contribution.isVisible()) {
+      return null;
+    }
+    const items = contribution.getItems();
+    const disabled =
+      typeof contribution.disabled === "function"
+        ? contribution.disabled()
+        : (contribution.disabled ?? false);
+    const isOpen = openMenuId === contribution.id;
+
+    return (
+      <div key={contribution.id} className="shell-toolbar-menu-wrap">
+        <button
+          type="button"
+          className="shell-toolbar-action"
+          title={contribution.title}
+          aria-haspopup="menu"
+          aria-expanded={isOpen}
+          disabled={disabled || items.length === 0}
+          onMouseDown={(event) => {
+            event.preventDefault();
+          }}
+          onClick={() => {
+            setOpenMenuId((current) => (current === contribution.id ? null : contribution.id));
+          }}
+        >
+          {renderIcon(contribution.icon)}
+          <span>{contribution.title ?? "Menu"}</span>
+        </button>
+        {isOpen && items.length > 0 ? (
+          <div className="shell-toolbar-menu" role="menu">
+            {items.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                className="shell-toolbar-menu-item"
+                onClick={() => {
+                  contribution.onSelect(item.value);
+                  setOpenMenuId(null);
+                }}
+              >
+                {renderIcon(item.icon)}
+                {item.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
   const renderAction = (action: LayoutToolbarContribution) => {
     if (action.type === "separator") {
       return <span key={action.id} className="shell-toolbar-separator" role="separator" aria-hidden="true" />;
@@ -85,6 +154,10 @@ export function Toolbar({
 
     if (action.type === "select") {
       return renderSelect(action);
+    }
+
+    if (action.type === "menu") {
+      return renderMenu(action);
     }
 
     const zoneToggle = zoneToggleByCommand[action.commandId];

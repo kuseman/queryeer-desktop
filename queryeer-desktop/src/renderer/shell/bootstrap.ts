@@ -136,6 +136,7 @@ export async function bootstrapShell() {
       parentId: item.parentId,
       when: item.when,
       icon: item.icon,
+      mimeType: item.mimeType,
       accelerator: item.accelerator,
       role: item.role
     }));

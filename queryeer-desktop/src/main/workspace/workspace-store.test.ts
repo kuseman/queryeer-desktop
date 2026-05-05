@@ -56,6 +56,22 @@ describe("WorkspaceStore.read", () => {
     expect(snapshot.activeFileUri).toBe("file:///a.txt");
     expect(snapshot.files).toHaveLength(1);
   });
+
+  it("ignores legacy persisted untitledCounter when present", async () => {
+    const { store, path } = makeStore();
+    writeFileSync(
+      path,
+      JSON.stringify({
+        schemaVersion: WORKSPACE_SCHEMA_VERSION,
+        savedAt: "2026-04-21T00:00:00.000Z",
+        untitledCounter: 17,
+        files: []
+      }),
+      "utf8"
+    );
+    const snapshot = await store.read();
+    expect(snapshot).not.toHaveProperty("untitledCounter");
+  });
 });
 
 describe("WorkspaceStore.scheduleSave + flush", () => {
@@ -100,6 +116,20 @@ describe("WorkspaceStore.scheduleSave + flush", () => {
 
     const persisted = JSON.parse(readFileSync(path, "utf8"));
     expect(persisted.savedAt).toBe("t1");
+  });
+
+  it("does not persist untitledCounter on save", async () => {
+    const { store, path } = makeStore(10_000);
+    store.scheduleSave({
+      schemaVersion: WORKSPACE_SCHEMA_VERSION,
+      savedAt: "t1",
+      files: []
+    });
+
+    await store.flush();
+
+    const persisted = JSON.parse(readFileSync(path, "utf8"));
+    expect(persisted).not.toHaveProperty("untitledCounter");
   });
 
   it("dispose cancels pending timer without writing", () => {

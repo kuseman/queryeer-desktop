@@ -39,7 +39,12 @@ function createContext(file?: FileEntity) {
     files: {
       capabilities: {
         registerCapabilities: vi.fn(),
+        registerLabel: vi.fn(),
+        registerPreferredNewFileMimeType: vi.fn(),
+        listPreferredNewFileMimeTypes: vi.fn(() => []),
+        getLabel: vi.fn(),
         hasCapability: vi.fn(() => true),
+        listMimeTypesByCapability: vi.fn(() => []),
         registerContentCategory: vi.fn(),
         getContentCategory: vi.fn(() => "text" as const)
       },
@@ -64,6 +69,9 @@ function createContext(file?: FileEntity) {
     },
     fileMediator: {
       openFile: vi.fn(),
+      createUntitledFile: vi.fn(),
+      getUntitledCounter: vi.fn(() => 0),
+      setUntitledCounter: vi.fn(),
       closeFile,
       saveFile: vi.fn(),
       setActiveFileId: vi.fn(),

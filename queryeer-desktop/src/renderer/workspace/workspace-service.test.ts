@@ -104,6 +104,8 @@ function makeHarness(
       }
     }
   });
+  const setUntitledCounterSpy = vi.spyOn(mediator, "setUntitledCounter");
+  const getUntitledCounterSpy = vi.spyOn(mediator, "getUntitledCounter");
   const reloadSpy = vi.spyOn(mediator, "reloadFile");
   const saveMock = vi.fn<WorkspaceBridge["saveWorkspace"]>(async () => ({ accepted: true }));
   const bridge: WorkspaceBridge = {
@@ -145,6 +147,8 @@ function makeHarness(
     service,
     filesRegistry,
     mediator,
+    setUntitledCounterSpy,
+    getUntitledCounterSpy,
     reloadSpy,
     saveMock,
     backupMock,
@@ -178,6 +182,35 @@ describe("RendererWorkspaceService.hydrate", () => {
     const activeFileId = service.restoredActiveFileId();
     expect(activeFileId).not.toBeNull();
     expect(filesRegistry.getFile(activeFileId!)?.uri).toBe("file:///b.txt");
+  });
+
+  it("restores untitled counter from snapshot", async () => {
+    const snapshot: WorkspaceSnapshot = {
+      schemaVersion: WORKSPACE_SCHEMA_VERSION,
+      savedAt: "t",
+      files: []
+    };
+    const { service, setUntitledCounterSpy, mediator } = makeHarness(snapshot);
+
+    await service.hydrate();
+
+    expect(setUntitledCounterSpy).toHaveBeenCalledWith(0);
+    expect(mediator.getUntitledCounter()).toBe(0);
+  });
+
+  it("derives untitled counter from existing untitled files", async () => {
+    const snapshot: WorkspaceSnapshot = {
+      schemaVersion: WORKSPACE_SCHEMA_VERSION,
+      savedAt: "t",
+      files: [
+        { uri: "untitled:Untitled11.sql", mimeType: "application/sql" }
+      ]
+    };
+    const { service, mediator } = makeHarness(snapshot);
+
+    await service.hydrate();
+
+    expect(mediator.getUntitledCounter()).toBe(11);
   });
 
   it("hasRestoredFiles is false when no files persisted", async () => {
@@ -218,6 +251,18 @@ describe("RendererWorkspaceService snapshot push", () => {
     await service.flush();
 
     expect(saveMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not persist untitled counter in workspace snapshot", async () => {
+    const { service, mediator, saveMock } = makeHarness();
+    await service.hydrate();
+    mediator.setUntitledCounter(9);
+
+    await service.flush();
+
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    const persisted = saveMock.mock.calls[0]?.[0];
+    expect(persisted).not.toHaveProperty("untitledCounter");
   });
 
 it("persists untitled files in the snapshot", async () => {

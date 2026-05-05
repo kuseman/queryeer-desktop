@@ -112,6 +112,10 @@ export function resolveTextEditorMimeType(extension: string | undefined): string
   return resolveMimeTypeByExtension(extension);
 }
 
+export function listTextEditorMimeTypeRegistrations(): readonly TextMimeTypeRegistration[] {
+  return TEXT_EDITOR_MIME_TYPES;
+}
+
 export function resolveMonacoLanguageId(mimeType: string): string {
   return MIME_TYPE_TO_LANGUAGE.get(mimeType) ?? "plaintext";
 }
