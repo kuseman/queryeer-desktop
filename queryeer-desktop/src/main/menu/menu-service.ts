@@ -94,7 +94,12 @@ export class MenuService {
 
       return new MenuItem({
         label: contribution.label,
-        submenu
+        submenu,
+        click: () => {
+          if (contribution.commandId) {
+            void this.executeCommand(contribution.commandId);
+          }
+        }
       });
     }
 

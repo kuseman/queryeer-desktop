@@ -2,8 +2,12 @@ import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { MimeCapability } from "../../contracts/files/FilesRegistry";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import { fileUriToPath } from "../../contracts/files/Resolvers";
-import { getCoreSettingsService } from "../core.settings/service";
+import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../core.settings/service";
 import { DocumentIcon } from "./DocumentIcon";
+import { NewFileMimeTypesSettingsEditor } from "./NewFileMimeTypesSettingsEditor";
+
+const NEW_FILE_MIME_TYPES_SETTING_ID = "core.files.newFileMimeTypes";
+const NEW_FILE_OPEN_LAST_SETTING_ID = "core.files.openNewFilesLast";
 
 const ALL_MIME_CAPABILITIES: MimeCapability[] = [
   "backupable",
@@ -11,6 +15,27 @@ const ALL_MIME_CAPABILITIES: MimeCapability[] = [
   "viewable",
   "queryexecutable"
 ];
+
+const MIME_EXTENSION_OVERRIDES: Record<string, string> = {
+  "application/plbsql": "plbsql",
+  "application/sql": "sql",
+  "application/json": "json",
+  "application/xml": "xml",
+  "application/yaml": "yaml",
+  "text/markdown": "md",
+  "text/plain": "txt",
+  "text/html": "html",
+  "text/css": "css",
+  "text/javascript": "js",
+  "text/typescript": "ts"
+};
+
+type NewFileMimeTypeOption = {
+  mimeType: string;
+  extension: string;
+  label: string;
+  icon: (props: { className?: string }) => JSX.Element;
+};
 
 function toFileUri(filePath: string): string {
   const normalized = filePath.replace(/\\/g, "/");
@@ -73,6 +98,71 @@ function renderUnsupportedEditorView(
   );
 }
 
+function fileExtensionForMimeType(mimeType: string): string {
+  return MIME_EXTENSION_OVERRIDES[mimeType] ?? "txt";
+}
+
+function toMimeLabel(mimeType: string): string {
+  const [major, minor] = mimeType.split("/");
+  if (!major || !minor) {
+    return mimeType;
+  }
+  if (major === "application") {
+    return minor.toUpperCase();
+  }
+  return `${major} ${minor}`;
+}
+
+function listNewFileMimeTypeOptions(context: Parameters<Plugin["activate"]>[0]): NewFileMimeTypeOption[] {
+  const mimeTypes = context.files.capabilities.listMimeTypesByCapability("editable");
+  return mimeTypes.map((mimeType) => ({
+    mimeType,
+    extension: fileExtensionForMimeType(mimeType),
+    label: context.files.capabilities.getLabel?.(mimeType) ?? toMimeLabel(mimeType),
+    icon: context.files.mimeIcons.getMimeIcon(mimeType) ?? DocumentIcon
+  }));
+}
+
+function listConfiguredNewFileMimeTypeOptions(
+  context: Parameters<Plugin["activate"]>[0]
+): NewFileMimeTypeOption[] {
+  const options = listNewFileMimeTypeOptions(context);
+  const optionByMimeType = new Map(options.map((option) => [option.mimeType, option]));
+  const settings = getCoreSettingsService();
+  const configured = settings?.getValue(NEW_FILE_MIME_TYPES_SETTING_ID);
+  if (!Array.isArray(configured)) {
+    return options;
+  }
+  if (configured.length === 0) {
+    return options;
+  }
+  const sorted: NewFileMimeTypeOption[] = [];
+  for (const entry of configured) {
+    if (typeof entry !== "string") {
+      continue;
+    }
+    const option = optionByMimeType.get(entry);
+    if (!option) {
+      continue;
+    }
+    sorted.push(option);
+    optionByMimeType.delete(entry);
+  }
+  return sorted;
+}
+
+async function createNewFileFromMimeType(
+  context: Parameters<Plugin["activate"]>[0],
+  mimeType: string
+): Promise<void> {
+  const extension = fileExtensionForMimeType(mimeType);
+  await context.fileMediator.createUntitledFile({
+    mimeType,
+    extension,
+    cloneFromFileId: null
+  });
+}
+
 async function maybeFormatBeforeSave(
   fileId: string,
   editors: { getActiveEditor(): { fileId: string | null; format?: { format(): Promise<void> } } | null }
@@ -104,10 +194,38 @@ export const coreFilesPlugin: Plugin = {
     description: "Owns the frontend file registry and file entity lifecycle"
   },
   activate: (context) => {
+    const availableNewMimeTypes = listNewFileMimeTypeOptions(context).map((option) => option.mimeType);
+    const preferredNewMimeTypes =
+      context.files.capabilities.listPreferredNewFileMimeTypes
+        ? context.files.capabilities
+            .listPreferredNewFileMimeTypes()
+            .filter((mimeType) => availableNewMimeTypes.includes(mimeType))
+        : [];
+    const defaultNewMimeTypes = [
+      ...preferredNewMimeTypes,
+      ...availableNewMimeTypes.filter((mimeType) => !preferredNewMimeTypes.includes(mimeType))
+    ];
+
     context.files.mimeIcons.registerMimeIcon({
       moduleId: "core.files",
       mimeType: "application/octet-stream",
       icon: DocumentIcon
+    });
+
+    context.settings.registerAdvancedRenderer({
+      id: "core.files.newFileMimeTypes.renderer",
+      render: ({ value, setValue, readonly }) => (
+        <NewFileMimeTypesSettingsEditor
+          value={value}
+          setValue={setValue}
+          readonly={readonly}
+          options={listNewFileMimeTypeOptions(context).map((option) => ({
+            mimeType: option.mimeType,
+            label: option.label,
+            icon: option.icon
+          }))}
+        />
+      )
     });
 
     context.settings.registerSettings({
@@ -115,6 +233,16 @@ export const coreFilesPlugin: Plugin = {
       title: "Files",
       order: 20,
       settings: [
+        {
+          id: NEW_FILE_OPEN_LAST_SETTING_ID,
+          moduleId: "core.files",
+          title: "Open new files last",
+          description: "If true, new tabs open at the end. Otherwise they open after the active tab.",
+          sectionPath: ["Files", "New"],
+          tags: ["files", "new", "tabs", "order"],
+          type: "boolean",
+          defaultValue: true
+        },
         {
           id: "core.files.recentFilesMaxCount",
           moduleId: "core.files",
@@ -125,8 +253,49 @@ export const coreFilesPlugin: Plugin = {
           type: "number",
           defaultValue: 100,
           constraints: { min: 10, max: 500 }
+        },
+        {
+          id: NEW_FILE_MIME_TYPES_SETTING_ID,
+          moduleId: "core.files",
+          title: "New File MIME Types",
+          description:
+            "Controls which editable MIME types are shown in New dropdowns and their order.",
+          sectionPath: ["Files", "New"],
+          tags: ["files", "new", "mime", "order"],
+          type: "json",
+          defaultValue: defaultNewMimeTypes,
+          advanced: {
+            rendererId: "core.files.newFileMimeTypes.renderer"
+          }
         }
       ]
+    });
+
+    const settingsService = getCoreSettingsService();
+    if (settingsService) {
+      settingsService.refreshSchemaFromRegistry();
+      void settingsService.syncRegistryModules();
+    }
+
+    let lastMenuOptionsKey = listConfiguredNewFileMimeTypeOptions(context)
+      .map((option) => option.mimeType)
+      .join("|");
+
+    const maybeRebuildMenu = () => {
+      const nextKey = listConfiguredNewFileMimeTypeOptions(context)
+        .map((option) => option.mimeType)
+        .join("|");
+      if (nextKey === lastMenuOptionsKey) {
+        return;
+      }
+      lastMenuOptionsKey = nextKey;
+      void context.menu.rebuildMenu();
+    };
+
+    onCoreSettingsServiceInitialized((service) => {
+      service.subscribe(() => {
+        maybeRebuildMenu();
+      });
     });
 
     context.layout.registerEditor({
@@ -160,7 +329,38 @@ export const coreFilesPlugin: Plugin = {
       id: "core.files.new",
       title: "New File",
       handler: async () => {
-        console.log("New file command executed");
+        const activeId = context.fileMediator.getActiveFileId();
+        const active = activeId ? context.files.getFile(activeId) : undefined;
+        const extension = fileExtensionForMimeType(active?.mimeType ?? "text/plain");
+        await context.fileMediator.createUntitledFile({
+          extension,
+          mimeType: active?.mimeType,
+          cloneFromFileId: active?.fileId ?? null
+        });
+      }
+    });
+
+    const mimeTypeOptions = listNewFileMimeTypeOptions(context);
+    for (const option of mimeTypeOptions) {
+      const commandId = `core.files.new.fromMime.${option.mimeType}`;
+      context.commands.registerCommand({
+        id: commandId,
+        title: `New ${option.label}`,
+        handler: async () => {
+          await createNewFileFromMimeType(context, option.mimeType);
+        }
+      });
+    }
+
+    context.commands.registerCommand({
+      id: "core.files.new.fromToolbar",
+      title: "New File (From Toolbar)",
+      handler: async () => {
+        const option = listConfiguredNewFileMimeTypeOptions(context)[0];
+        if (!option) {
+          return;
+        }
+        await createNewFileFromMimeType(context, option.mimeType);
       }
     });
 
@@ -179,8 +379,10 @@ export const coreFilesPlugin: Plugin = {
           const uri = toFileUri(filePath);
           await context.fileMediator.openFile(uri);
           try {
-            const settingsService = getCoreSettingsService();
-            const maxCount = settingsService?.getValue("core.files.recentFilesMaxCount") as number | undefined;
+            const settings = getCoreSettingsService();
+            const maxCount = settings?.getValue("core.files.recentFilesMaxCount") as
+              | number
+              | undefined;
             await window.appShell.addRecentFile(uri, maxCount);
           } catch {
             // best effort - recent files may fail
@@ -188,7 +390,7 @@ export const coreFilesPlugin: Plugin = {
         }
       }
     });
-    
+
     context.layout.registerToolbarAction({
       id: "core.files.toolbar.open",
       order: 20,
@@ -197,10 +399,23 @@ export const coreFilesPlugin: Plugin = {
     });
 
     context.layout.registerToolbarAction({
-      id: "core.files.toolbar.new",
+      id: "core.files.toolbar.new.menu",
       order: 30,
-      commandId: "core.files.new",
-      icon: "file-new"
+      type: "menu",
+      title: "New",
+      icon: "file-new",
+      getItems: () => {
+        return listConfiguredNewFileMimeTypeOptions(context).map((option) => ({
+          value: option.mimeType,
+          label: option.label,
+          icon: option.icon
+        }));
+      },
+      onSelect: (mimeType) => {
+        void createNewFileFromMimeType(context, mimeType);
+      },
+      disabled: () => listConfiguredNewFileMimeTypeOptions(context).length === 0,
+      isVisible: () => listConfiguredNewFileMimeTypeOptions(context).length > 0
     });
 
     context.commands.registerCommand({
@@ -218,9 +433,7 @@ export const coreFilesPlugin: Plugin = {
     context.commands.registerCommand({
       id: "core.files.saveAs",
       title: "Save As",
-      handler: async () => {
-        console.log("Save as command executed");
-      }
+      handler: async () => {}
     });
 
     context.layout.registerToolbarAction({
@@ -267,10 +480,33 @@ export const coreFilesPlugin: Plugin = {
     context.menu.registerMenuItem({
       id: "core.files.menu.new",
       label: "New",
+      type: "submenu",
       order: 11,
       parentId: "core.menu.file",
       commandId: "core.files.new",
-      icon: "file-new"
+      icon: "file-new",
+      dynamicItems: async () => {
+        const options = listConfiguredNewFileMimeTypeOptions(context);
+        if (options.length === 0) {
+          return [
+            {
+              id: "core.files.menu.new.mime.empty",
+              label: "No MIME types configured",
+              order: 0,
+              parentId: "core.files.menu.new",
+              type: "normal" as const
+            }
+          ];
+        }
+        return options.map((option, index) => ({
+          id: `core.files.menu.new.mime.${option.mimeType}`,
+          label: option.label,
+          order: index,
+          parentId: "core.files.menu.new",
+          commandId: `core.files.new.fromMime.${option.mimeType}`,
+          mimeType: option.mimeType
+        }));
+      }
     });
 
     context.menu.registerMenuItem({
@@ -340,8 +576,10 @@ export const coreFilesPlugin: Plugin = {
 
           await context.fileMediator.openFile(entry.uri);
           try {
-            const settingsService = getCoreSettingsService();
-            const maxCount = settingsService?.getValue("core.files.recentFilesMaxCount") as number | undefined;
+            const settings = getCoreSettingsService();
+            const maxCount = settings?.getValue("core.files.recentFilesMaxCount") as
+              | number
+              | undefined;
             await window.appShell.addRecentFile(entry.uri, maxCount);
           } catch {
             // best effort

@@ -40,6 +40,8 @@ export class FileRegistry {
   private readonly mimeResolvers: MimeResolver[] = [];
   private readonly editorResolvers: EditorResolver[] = [];
   private readonly mimeCapabilities = new Map<string, Set<MimeCapability>>();
+  private readonly mimeLabels = new Map<string, string>();
+  private readonly preferredNewFileMimeTypes = new Map<string, number>();
   private readonly mimeContentCategories = new Map<string, ContentCategory>();
   private readonly mimeIcons = new Map<string, MimeIconContribution>();
   private readonly getEditors: () => LayoutEditorContribution[];
@@ -114,6 +116,29 @@ export class FileRegistry {
       hasCapability: (mimeType, capability) => {
         const set = this.mimeCapabilities.get(mimeType);
         return set?.has(capability) ?? false;
+      },
+      listMimeTypesByCapability: (capability) => {
+        const matches: string[] = [];
+        for (const [mimeType, capabilities] of this.mimeCapabilities.entries()) {
+          if (capabilities.has(capability)) {
+            matches.push(mimeType);
+          }
+        }
+        return matches;
+      },
+      registerLabel: (mimeType, label) => {
+        this.mimeLabels.set(mimeType, label);
+      },
+      getLabel: (mimeType) => {
+        return this.mimeLabels.get(mimeType);
+      },
+      registerPreferredNewFileMimeType: (mimeType, order = 0) => {
+        this.preferredNewFileMimeTypes.set(mimeType, order);
+      },
+      listPreferredNewFileMimeTypes: () => {
+        return [...this.preferredNewFileMimeTypes.entries()]
+          .sort((a, b) => a[1] - b[1])
+          .map((entry) => entry[0]);
       },
       registerContentCategory: (mimeType, category) => {
         this.mimeContentCategories.set(mimeType, category);

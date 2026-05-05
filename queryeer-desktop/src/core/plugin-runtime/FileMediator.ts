@@ -39,7 +39,44 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
 
   let activeFileId: string | null = null;
   let contextFileId: string | null = null;
+  let untitledCounter = 0;
   const activeFileListeners: Array<(fileId: string | null) => void> = [];
+
+  function nextUntitledCounter(): number {
+    untitledCounter += 1;
+    return untitledCounter;
+  }
+
+  function normalizeExtension(extension: string | undefined): string {
+    if (!extension) {
+      return "txt";
+    }
+    const trimmed = extension.trim().toLowerCase();
+    if (!trimmed) {
+      return "txt";
+    }
+    return trimmed.startsWith(".") ? trimmed.slice(1) : trimmed;
+  }
+
+  function extensionFromMimeType(mimeType: string | undefined): string {
+    if (!mimeType) {
+      return "txt";
+    }
+    const mapping: Record<string, string> = {
+      "application/plbsql": "plbsql",
+      "application/sql": "sql",
+      "application/json": "json",
+      "application/xml": "xml",
+      "application/yaml": "yaml",
+      "text/markdown": "md",
+      "text/plain": "txt",
+      "text/html": "html",
+      "text/css": "css",
+      "text/javascript": "js",
+      "text/typescript": "ts"
+    };
+    return mapping[mimeType] ?? "txt";
+  }
 
   function notifyActiveFileChanged(fileId: string | null): void {
     for (const listener of activeFileListeners) {
@@ -127,6 +164,46 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
       if (activeFileId === fileId) {
         activeFileId = null;
       }
+    },
+
+    async createUntitledFile(createOptions) {
+      const cloneFromFile = createOptions?.cloneFromFileId
+        ? filesRegistry.getFile(createOptions.cloneFromFileId)
+        : undefined;
+      const counter = nextUntitledCounter();
+      const extension = normalizeExtension(
+        createOptions?.extension ?? extensionFromMimeType(createOptions?.mimeType ?? cloneFromFile?.mimeType)
+      );
+      const uri = `untitled:Untitled${counter}.${extension}`;
+      const mimeType =
+        createOptions?.mimeType ??
+        cloneFromFile?.mimeType ??
+        filesRegistry.classifyUri(uri, { extension });
+
+      const file = await this.openFile(uri, {
+        mimeType,
+        extension,
+        engineBinding: cloneFromFile?.engineBinding
+          ? { ...cloneFromFile.engineBinding }
+          : undefined,
+        persistentViewState: cloneFromFile?.persistentViewState
+          ? { ...cloneFromFile.persistentViewState }
+          : undefined
+      });
+
+      return file;
+    },
+
+    getUntitledCounter() {
+      return untitledCounter;
+    },
+
+    setUntitledCounter(counter) {
+      if (!Number.isFinite(counter)) {
+        untitledCounter = 0;
+        return;
+      }
+      untitledCounter = Math.max(0, Math.floor(counter));
     },
 
     async saveFile(fileId) {

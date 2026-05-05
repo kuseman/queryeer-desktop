@@ -24,7 +24,16 @@ import { filterToolbarActions } from "./toolbar-action-filter";
 import { resolveFirstAcceleratorsByCommand } from "./accelerator-utils";
 import { subscribeOpenPanelRequests } from "./layout-panel-events";
 import { getOutlineRegistry } from "../../core/plugin-runtime/ExtensionRegistry";
+import { getCoreSettingsService } from "../../plugins/core.settings/service";
+import {
+  recordTabActivation,
+  resolveActiveFileAfterRegistryUpdate,
+  resolveNextActiveTab,
+  resolveOpenFileIds
+} from "./tab-activation-queue";
 import "./shell-app.css";
+
+const OPEN_NEW_FILES_LAST_SETTING_ID = "core.files.openNewFilesLast";
 
 type ShellAppProps = {
   extensions: ExtensionSnapshot;
@@ -103,6 +112,11 @@ export function ShellApp({
   const [activeFileId, setActiveFileId] = useState<string | null>(
     () => workspaceService.restoredActiveFileId() ?? filesRegistry.listFiles()[0]?.fileId ?? null
   );
+  const [tabActivationQueue, setTabActivationQueue] = useState<string[]>(() => {
+    const restored = workspaceService.restoredActiveFileId();
+    return restored ? [restored] : [];
+  });
+  const tabActivationQueueRef = useRef<string[]>(tabActivationQueue);
   const activeFileIdRef = useRef<string | null>(activeFileId);
   const [, setCommandContextVersion] = useState(0);
   const layoutRef = useRef<HTMLElement | null>(null);
@@ -112,6 +126,14 @@ export function ShellApp({
 
   useEffect(() => {
     activeFileIdRef.current = activeFileId;
+  }, [activeFileId]);
+
+  useEffect(() => {
+    tabActivationQueueRef.current = tabActivationQueue;
+  }, [tabActivationQueue]);
+
+  useEffect(() => {
+    setTabActivationQueue((previous) => recordTabActivation(previous, activeFileId));
   }, [activeFileId]);
 
   useEffect(() => {
@@ -344,8 +366,24 @@ export function ShellApp({
     const performClose = () => {
       setOpenFileIds((prev) => {
         const next = prev.filter((id) => id !== fileId);
-        if (activeFileId === fileId) {
-          setActiveFileId(next.length > 0 ? next[next.length - 1]! : null);
+        if (activeFileIdRef.current === fileId) {
+          setTabActivationQueue((previousQueue) => {
+            const resolution = resolveNextActiveTab({
+              queue: previousQueue,
+              openFileIds: next,
+              excludeFileId: fileId
+            });
+            tabActivationQueueRef.current = resolution.nextQueue;
+            activeFileIdRef.current = resolution.nextActiveFileId;
+            setActiveFileId(resolution.nextActiveFileId);
+            return resolution.nextQueue;
+          });
+        } else {
+          setTabActivationQueue((previousQueue) => {
+            const nextQueue = previousQueue.filter((queuedId) => queuedId !== fileId);
+            tabActivationQueueRef.current = nextQueue;
+            return nextQueue;
+          });
         }
         return next;
       });
@@ -366,9 +404,8 @@ export function ShellApp({
   };
 
   const selectFile = (fileId: string) => {
+    activeFileIdRef.current = fileId;
     setActiveFileId(fileId);
-    workspaceService.setActiveFileId(fileId);
-    fileMediator.setActiveFileId(fileId);
   };
 
   useEffect(() => {
@@ -378,6 +415,7 @@ export function ShellApp({
 
   useEffect(() => {
     return fileMediator.onActiveFileChanged((fileId) => {
+      activeFileIdRef.current = fileId;
       setActiveFileId(fileId);
       workspaceService.setActiveFileId(fileId);
     });
@@ -405,25 +443,40 @@ export function ShellApp({
 
   useEffect(() => {
     return filesRegistry.subscribe((next) => {
+      let nextOpenFileIds: string[] = [];
       let addedFileIds: string[] = [];
       setFiles(next);
+      setTabActivationQueue((previousQueue) => {
+        const nextSet = new Set(next.map((file) => file.fileId));
+        const nextQueue = previousQueue.filter((queuedId) => nextSet.has(queuedId));
+        tabActivationQueueRef.current = nextQueue;
+        return nextQueue;
+      });
       setOpenFileIds((prev) => {
-        const nextIds = new Set(next.map((file) => file.fileId));
-        const retained = prev.filter((id) => nextIds.has(id));
-        const added = next
-          .filter((file) => !prev.includes(file.fileId))
-          .map((file) => file.fileId);
-        addedFileIds = added;
-        return [...retained, ...added];
+        const settings = getCoreSettingsService();
+        const openNewFilesLast = settings?.getValue(OPEN_NEW_FILES_LAST_SETTING_ID) !== false;
+        const resolution = resolveOpenFileIds({
+          previousOpenFileIds: prev,
+          nextFiles: next.map((file) => ({ fileId: file.fileId, uri: file.uri })),
+          openNewFilesLast,
+          activeFileId: activeFileIdRef.current,
+          activationQueue: tabActivationQueueRef.current
+        });
+        nextOpenFileIds = resolution.nextOpenFileIds;
+        addedFileIds = resolution.addedFileIds;
+        return resolution.nextOpenFileIds;
       });
       setActiveFileId((prev) => {
-        if (addedFileIds.length > 0) {
-          return addedFileIds[addedFileIds.length - 1] ?? null;
-        }
-        if (prev && next.some((file) => file.fileId === prev)) {
-          return prev;
-        }
-        return next.length > 0 ? next[next.length - 1]!.fileId : null;
+        const resolution = resolveActiveFileAfterRegistryUpdate({
+          previousActiveFileId: prev,
+          nextOpenFileIds,
+          addedFileIds,
+          activationQueue: tabActivationQueueRef.current
+        });
+        tabActivationQueueRef.current = resolution.nextQueue;
+        setTabActivationQueue(resolution.nextQueue);
+        activeFileIdRef.current = resolution.nextActiveFileId;
+        return resolution.nextActiveFileId;
       });
     });
   }, [filesRegistry, setActiveFileId]);
@@ -474,6 +527,7 @@ export function ShellApp({
         keybindings={extensions.keybindings}
         executeCommand={executeCommand}
         canExecuteCommand={canExecuteCommand}
+        getMimeIcon={filesRegistry.mimeIcons.getMimeIcon}
       />
       {visibleZones.has("toolBar") && (
         <Toolbar

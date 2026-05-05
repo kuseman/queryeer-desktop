@@ -175,7 +175,12 @@ describe("QueryEditorComponent execution state across tab switches", () => {
 const filesRegistry = {
       capabilities: {
         registerCapabilities: vi.fn(),
+        registerLabel: vi.fn(),
+        registerPreferredNewFileMimeType: vi.fn(),
+        listPreferredNewFileMimeTypes: vi.fn(() => []),
+        getLabel: vi.fn(),
         hasCapability: vi.fn(() => true),
+        listMimeTypesByCapability: vi.fn(() => []),
         registerContentCategory: vi.fn(),
         getContentCategory: vi.fn(() => "text" as ContentCategory)
       },

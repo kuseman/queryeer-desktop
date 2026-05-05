@@ -191,7 +191,12 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
     const mockFilesRegistry: FilesRegistry = {
       capabilities: {
         registerCapabilities: vi.fn(),
+        registerLabel: vi.fn(),
+        registerPreferredNewFileMimeType: vi.fn(),
+        listPreferredNewFileMimeTypes: vi.fn(() => []),
+        getLabel: vi.fn(),
         hasCapability: vi.fn(() => false),
+        listMimeTypesByCapability: vi.fn(() => []),
         registerContentCategory: vi.fn(),
         getContentCategory: vi.fn()
       },

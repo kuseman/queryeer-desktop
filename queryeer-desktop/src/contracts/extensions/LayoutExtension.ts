@@ -55,10 +55,31 @@ export type LayoutToolbarSelectContribution = {
   isVisible?: () => boolean;
 };
 
+export type LayoutToolbarMenuItem = {
+  value: string;
+  label: string;
+  icon?: string | LayoutActionIconRenderer;
+};
+
+export type LayoutToolbarMenuContribution = {
+  id: string;
+  type: "menu";
+  title?: string;
+  order?: number;
+  alignment?: "west" | "east";
+  icon?: string | LayoutActionIconRenderer;
+  when?: string;
+  getItems: () => LayoutToolbarMenuItem[];
+  onSelect: (value: string) => void;
+  disabled?: boolean | (() => boolean);
+  isVisible?: () => boolean;
+};
+
 export type LayoutToolbarContribution =
   | LayoutToolbarActionContribution
   | LayoutToolbarSeparatorContribution
-  | LayoutToolbarSelectContribution;
+  | LayoutToolbarSelectContribution
+  | LayoutToolbarMenuContribution;
 
 export type LayoutPanelAction = {
   id: string;

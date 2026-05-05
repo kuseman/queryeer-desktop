@@ -242,4 +242,16 @@ describe("FileRegistry dirtyVsDisk initialization", () => {
 
     expect(file.dirtyVsDisk).toBe(false);
   });
+
+  it("lists mime types by capability in insertion order", () => {
+    const registry = new FileRegistry().createFilesRegistry();
+    registry.capabilities.registerCapabilities("application/zzz", ["editable"]);
+    registry.capabilities.registerCapabilities("application/aaa", ["editable"]);
+
+    const editable = registry.capabilities.listMimeTypesByCapability("editable");
+
+    expect(editable).toContain("application/zzz");
+    expect(editable).toContain("application/aaa");
+    expect(editable.indexOf("application/zzz")).toBeLessThan(editable.indexOf("application/aaa"));
+  });
 });

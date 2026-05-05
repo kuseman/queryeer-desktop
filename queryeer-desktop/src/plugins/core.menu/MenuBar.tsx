@@ -14,6 +14,7 @@ type CoreMenuBarProps = {
   keybindings: KeybindingContribution[];
   executeCommand: (commandId: string) => Promise<unknown>;
   canExecuteCommand: (commandId: string) => boolean;
+  getMimeIcon?: (mimeType: string) => ((props: { className?: string }) => JSX.Element) | undefined;
 };
 
 function isTextInputTarget(target: EventTarget | null): boolean {
@@ -27,7 +28,13 @@ function isTextInputTarget(target: EventTarget | null): boolean {
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 }
 
-export function CoreMenuBar({ menuItems, keybindings, executeCommand, canExecuteCommand }: CoreMenuBarProps): JSX.Element {
+export function CoreMenuBar({
+  menuItems,
+  keybindings,
+  executeCommand,
+  canExecuteCommand,
+  getMimeIcon
+}: CoreMenuBarProps): JSX.Element {
   const [openPath, setOpenPath] = useState<string[]>([]);
   const [focusPath, setFocusPath] = useState<string[]>([]);
   const [menuBarFocused, setMenuBarFocused] = useState(false);
@@ -83,6 +90,23 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand, canExecute
 
   const getChildren = (id: string): MenuItemContribution[] => {
     return childrenByParent.get(id) ?? [];
+  };
+
+  const renderIcon = (icon: string | undefined, mimeType?: string): JSX.Element => {
+    if (!icon) {
+      if (mimeType && getMimeIcon) {
+        const MimeIcon = getMimeIcon(mimeType);
+        if (MimeIcon) {
+          return <MimeIcon className="shell-titlebar-dropdown-icon" />;
+        }
+      }
+      return <span className="shell-titlebar-dropdown-icon shell-titlebar-dropdown-icon-empty" aria-hidden="true" />;
+    }
+    const IconComponent = layoutToolbarIconMap[icon];
+    if (!IconComponent) {
+      return <span className="shell-titlebar-dropdown-icon shell-titlebar-dropdown-icon-empty" aria-hidden="true" />;
+    }
+    return <IconComponent className="shell-titlebar-dropdown-icon" />;
   };
 
   const getFocusableChildren = (id: string): MenuItemContribution[] => {
@@ -365,6 +389,10 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand, canExecute
                   setOpenPath((previous) => previous.slice(0, depth));
                 }}
                 onClick={() => {
+                  if (hasChildren && item.commandId) {
+                    executeItem(item.id);
+                    return;
+                  }
                   if (hasChildren) {
                     const children = getFocusableChildren(item.id);
                     setOpenPath((previous) => [...previous.slice(0, depth), item.id]);
@@ -377,7 +405,7 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand, canExecute
                 }}
               >
                 <span className="shell-titlebar-dropdown-label-wrap">
-                  {renderIcon(item.icon)}
+                  {renderIcon(item.icon, item.mimeType)}
                   <span className="shell-titlebar-dropdown-label">{item.label}</span>
                 </span>
                 <span className="shell-titlebar-dropdown-tail">
@@ -415,6 +443,10 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand, canExecute
                 }`}
                 disabled={item.commandId ? !canExecuteCommand(item.commandId) : false}
                 onClick={() => {
+                  if (hasChildren && item.commandId) {
+                    executeItem(item.id);
+                    return;
+                  }
                   if (!hasChildren) {
                     executeItem(item.id);
                     return;
@@ -492,13 +524,3 @@ export function CoreMenuBar({ menuItems, keybindings, executeCommand, canExecute
     </header>
   );
 }
-  const renderIcon = (icon: string | undefined): JSX.Element => {
-    if (!icon) {
-      return <span className="shell-titlebar-dropdown-icon shell-titlebar-dropdown-icon-empty" aria-hidden="true" />;
-    }
-    const IconComponent = layoutToolbarIconMap[icon];
-    if (!IconComponent) {
-      return <span className="shell-titlebar-dropdown-icon shell-titlebar-dropdown-icon-empty" aria-hidden="true" />;
-    }
-    return <IconComponent className="shell-titlebar-dropdown-icon" />;
-  };

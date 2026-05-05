@@ -384,6 +384,87 @@
   background: var(--surface-overlay-weak);
 }
 
+.settings-mime-grid {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-overlay-weak);
+  overflow: hidden;
+}
+
+.settings-mime-grid-header,
+.settings-mime-grid-row {
+  display: grid;
+  grid-template-columns: 54px minmax(240px, 1fr) minmax(160px, 180px) auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+}
+
+.settings-mime-grid-header {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-overlay-soft);
+  font-size: var(--ui-font-size-xs);
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.settings-mime-grid-body {
+  display: grid;
+}
+
+.settings-mime-grid-row {
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-mime-grid-row:last-child {
+  border-bottom: none;
+}
+
+.settings-mime-grid-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-mime-grid-code {
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  color: var(--text-1);
+  font-size: var(--ui-font-size-xs);
+}
+
+.settings-mime-grid-label {
+  color: var(--text-0);
+  font-size: var(--ui-font-size-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-mime-grid-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--text-1);
+  flex-shrink: 0;
+}
+
+.settings-mime-grid-order {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-mime-grid-position {
+  color: var(--text-2);
+  font-size: var(--ui-font-size-xs);
+  min-width: 56px;
+  text-align: right;
+}
+
+.settings-mime-grid-position.is-hidden {
+  opacity: 0.8;
+}
+
 @media (max-width: 920px) {
   .settings-modal {
     width: calc(100vw - 18px);
@@ -402,5 +483,14 @@
 
   .settings-list-editor {
     grid-template-columns: 1fr;
+  }
+
+  .settings-mime-grid-header,
+  .settings-mime-grid-row {
+    grid-template-columns: 46px minmax(120px, 1fr) minmax(90px, 1fr) auto;
+  }
+
+  .settings-mime-grid-position {
+    display: none;
   }
 }

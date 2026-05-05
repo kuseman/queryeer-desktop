@@ -22,14 +22,20 @@ describe("text editor mime type registrations", () => {
   it("registers resolver, capabilities and text categories", () => {
     const registerMimeResolver = vi.fn();
     const registerCapabilities = vi.fn();
+    const registerLabel = vi.fn();
     const registerContentCategory = vi.fn();
 
     const files = {
       registerMimeResolver,
       capabilities: {
         registerCapabilities,
+        registerLabel,
+        registerPreferredNewFileMimeType: vi.fn(),
+        listPreferredNewFileMimeTypes: vi.fn(() => []),
+        getLabel: vi.fn(),
         registerContentCategory,
         hasCapability: vi.fn(),
+        listMimeTypesByCapability: vi.fn(() => []),
         getContentCategory: vi.fn()
       },
       mimeIcons: {
@@ -48,5 +54,6 @@ describe("text editor mime type registrations", () => {
       "viewable"
     ]);
     expect(registerContentCategory).toHaveBeenCalledWith("application/sql", "text");
+    expect(registerLabel).not.toHaveBeenCalled();
   });
 });

@@ -14,6 +14,7 @@ export type MenuItemContribution = {
   accelerator?: string;
   dynamicItems?: () => Promise<MenuItemContribution[]>;
   _generatedBy?: string;
+  mimeType?: string;
 };
 
 export type MenuRegistry = {

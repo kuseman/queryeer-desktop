@@ -173,6 +173,52 @@ describe("Toolbar", () => {
 
     expect(rootElement.querySelector("select.shell-toolbar-select")).toBeNull();
   });
+
+  it("renders menu contribution and executes selected item", async () => {
+    const onSelect = vi.fn();
+
+    act(() => {
+      root.render(
+        <Toolbar
+          toolbarActions={[
+            {
+              id: "new-menu",
+              type: "menu",
+              title: "New",
+              getItems: () => [
+                { value: "application/sql", label: "SQL" },
+                { value: "application/json", label: "JSON" }
+              ],
+              onSelect
+            }
+          ]}
+          visibleZones={new Set(["mainArea"])}
+          onToggleZone={vi.fn()}
+          canExecuteCommand={() => true}
+          executeCommand={vi.fn(async () => ({ commandId: "noop", executed: true }))}
+          getCommandTitle={() => undefined}
+          getCommandAccelerator={() => undefined}
+        />
+      );
+    });
+
+    const trigger = rootElement.querySelector("button.shell-toolbar-action") as HTMLButtonElement;
+    expect(trigger).toBeTruthy();
+
+    act(() => {
+      trigger.click();
+    });
+
+    const menuItemButtons = rootElement.querySelectorAll("button.shell-toolbar-menu-item");
+    expect(menuItemButtons).toHaveLength(2);
+
+    await act(async () => {
+      (menuItemButtons[1] as HTMLButtonElement).click();
+    });
+
+    expect(onSelect).toHaveBeenCalledWith("application/json");
+    expect(rootElement.querySelector(".shell-toolbar-menu")).toBeNull();
+  });
 });
 
 void React;
