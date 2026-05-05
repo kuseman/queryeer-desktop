@@ -2,6 +2,7 @@ import { describe, expect, it, vi, type Mock } from "vitest";
 import {
   BACKEND_PROTOCOL_VERSION,
   type BackendError,
+  type BackendErrorCode,
   type BackendEnvelope,
   type BackendNotificationEnvelope,
   type BackendRequestEnvelope,
@@ -34,6 +35,7 @@ type TransportBehavior = {
   dropExecute?: boolean;
   failExecuteSend?: boolean;
   failPingAfterStart?: boolean;
+  failInvokeWithError?: { code: BackendErrorCode; message: string };
 };
 
 const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
@@ -113,6 +115,10 @@ const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
       }
 
       if (envelope.method === "queryengine.invoke") {
+        if (behavior.failInvokeWithError) {
+          respondError(envelope.id, behavior.failInvokeWithError);
+          return;
+        }
         const params = envelope.params as {
           engineId: string;
           fileId?: string;
@@ -644,6 +650,25 @@ describe("BackendGateway", () => {
         }
       }
     });
+
+    await gateway.stop();
+  });
+
+  it("preserves backend error code on invokeEngine failure", async () => {
+    const { gateway } = createGatewayWithTestTransport({
+      failInvokeWithError: { code: "SECURITY_SESSION_CLOSED", message: "Security session is not open" }
+    });
+    await gateway.start();
+
+    const result = await gateway.invokeEngine({
+      engineId: "jdbc",
+      action: "jdbc.schema.fetch",
+      payload: { connectionId: "conn-1", scope: "top" }
+    });
+
+    expect(result.error).toBeDefined();
+    expect(result.error?.code).toBe("SECURITY_SESSION_CLOSED");
+    expect(result.error?.message).toBe("Security session is not open");
 
     await gateway.stop();
   });

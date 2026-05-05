@@ -145,6 +145,7 @@ export type EngineInvokeParams = {
 
 export type EngineInvokeResult = {
   result?: unknown;
+  error?: { code: string; message: string };
 };
 
 export type JdbcSchemaRefreshPayload = {

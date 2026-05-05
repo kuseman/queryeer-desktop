@@ -1,3 +1,4 @@
+export * from "./BackendNotReadyError.js";
 export * from "./Envelope.js";
 export * from "./ErrorCode.js";
 export * from "./Capabilities.js";

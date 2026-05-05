@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BackendNotReadyError } from "../../contracts/backend/BackendNotReadyError";
 import type { JdbcConnectionDefinition } from "./jdbc-settings";
 
 const mocks = vi.hoisted(() => ({
@@ -282,5 +283,42 @@ describe("JdbcNavigationStore", () => {
 
     expect(store.getNode("conn-a::__root__")?.isExpanded).toBe(false);
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("expandNode silently drops out when backend is not started", async () => {
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
+    mocks.invokeMock.mockRejectedValue(new BackendNotReadyError());
+    store.loadConnectionRoots();
+
+    await store.expandNode("conn-a::__root__");
+
+    const root = store.getNode("conn-a::__root__");
+    expect(root?.isLoading).toBe(false);
+    expect(root?.loadError).toBeUndefined();
+    expect(root?.isExpanded).toBe(false);
+  });
+
+  it("expandNode handles null children from backend without crashing", async () => {
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
+    mocks.invokeMock.mockResolvedValue([
+      {
+        id: "database:mydb",
+        name: "mydb",
+        kind: "database",
+        children: null,
+        attributes: {}
+      }
+    ]);
+    store.loadConnectionRoots();
+
+    await store.expandNode("conn-a::__root__");
+
+    const root = store.getNode("conn-a::__root__");
+    expect(root?.isExpanded).toBe(true);
+    expect(root?.childIds).toHaveLength(1);
+
+    const dbNode = store.getNode(root!.childIds[0]);
+    expect(dbNode?.name).toBe("mydb");
+    expect(dbNode?.childIds).toHaveLength(0);
   });
 });

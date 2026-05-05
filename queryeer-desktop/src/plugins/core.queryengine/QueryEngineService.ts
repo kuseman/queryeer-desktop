@@ -1,3 +1,4 @@
+import { BackendNotReadyError } from "../../contracts/backend/BackendNotReadyError";
 import { getCoreSecurityService } from "../core.security/service";
 
 type QueryEvent = { method: string; params: unknown };
@@ -150,7 +151,11 @@ export class QueryEngineService {
   async invoke(params: EngineInvokeParams): Promise<unknown> {
     await ensureBackendHealthy();
     const response = await withVaultRetry(async () => {
-      return window.appShell.invokeBackendEngine(params);
+      const resp = await window.appShell.invokeBackendEngine(params);
+      if (resp.error?.code === "SECURITY_SESSION_CLOSED") {
+        throw new Error(`SECURITY_SESSION_CLOSED: ${resp.error.message}`);
+      }
+      return resp;
     });
     if (response.error) {
       throw new Error(response.error.message);
@@ -267,7 +272,7 @@ async function ensureBackendHealthy(): Promise<void> {
   if (status.state === "healthy") {
     return;
   }
-  throw new Error("Backend is not up and running yet. Please wait a moment and try again.");
+  throw new BackendNotReadyError();
 }
 
 async function withVaultRetry<T>(operation: () => Promise<T>): Promise<T> {
