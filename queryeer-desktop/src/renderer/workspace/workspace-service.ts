@@ -113,6 +113,7 @@ export class RendererWorkspaceService {
   private readonly lastDirtyAtByFileId = new Map<string, number>();
   private readonly externalPromptRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private activeFileSnapshotProvider: (() => string | null) | null = null;
+  private openFileOrderUris: string[] | null = null;
 
   public constructor(options: RendererWorkspaceServiceOptions) {
     this.bridge = options.bridge;
@@ -134,26 +135,25 @@ export class RendererWorkspaceService {
     const snapshot = await this.bridge.getWorkspace();
     this.fileMediator.setUntitledCounter(deriveUntitledCounter(snapshot));
 
-    const fileEntities = await Promise.all(
-      snapshot.files.map((entry) =>
-        this.fileMediator.openFile(entry.uri, {
-          mimeType: entry.mimeType,
-          editorId: entry.editorId,
-          engineBinding: entry.engineBinding,
-          persistentViewState: entry.persistentViewState
-        })
-      )
-    );
+    const fileEntities: FileEntity[] = [];
+    for (const entry of snapshot.files) {
+      const entity = await this.fileMediator.openFile(entry.uri, {
+        mimeType: entry.mimeType,
+        editorId: entry.editorId,
+        engineBinding: entry.engineBinding,
+        persistentViewState: entry.persistentViewState
+      });
+      fileEntities.push(entity);
+    }
 
-    await Promise.all(
-      snapshot.files.map((entry, i) => {
-        if (!entry.backupFileId) {
-          return Promise.resolve();
-        }
-        this.backupFileIdByFileId.set(fileEntities[i].fileId, entry.backupFileId);
-        return this.restoreFileContentFromBackup(fileEntities[i].fileId, entry.backupFileId);
-      })
-    );
+    for (let i = 0; i < snapshot.files.length; i += 1) {
+      const entry = snapshot.files[i];
+      if (!entry?.backupFileId) {
+        continue;
+      }
+      this.backupFileIdByFileId.set(fileEntities[i].fileId, entry.backupFileId);
+      await this.restoreFileContentFromBackup(fileEntities[i].fileId, entry.backupFileId);
+    }
 
     if (snapshot.activeFileUri) {
       const entity = fileEntities.find((f) => f.uri === snapshot.activeFileUri);
@@ -231,6 +231,10 @@ export class RendererWorkspaceService {
 
   public setActiveFileSnapshotProvider(provider: () => string | null): void {
     this.activeFileSnapshotProvider = provider;
+  }
+
+  public setOpenFileOrder(uris: string[]): void {
+    this.openFileOrderUris = [...uris];
   }
 
   private getFileName(file: FileEntity): string {
@@ -660,17 +664,28 @@ export class RendererWorkspaceService {
     }, this.debounceMs);
   }
 
+  private resolveFileOrder(files: FileEntity[]): FileEntity[] {
+    if (!this.openFileOrderUris) {
+      return files;
+    }
+    const byUri = new Map(files.map((f) => [f.uri, f]));
+    const ordered = this.openFileOrderUris
+      .map((uri) => byUri.get(uri))
+      .filter((f): f is FileEntity => Boolean(f));
+    const remaining = files.filter((f) => !ordered.includes(f));
+    return [...ordered, ...remaining];
+  }
+
   private async pushSnapshot(): Promise<void> {
-    const files: PersistedFileEntry[] = this.filesRegistry
-      .listFiles()
-      .map((file) => ({
-        uri: file.uri,
-        mimeType: file.mimeType,
-        editorId: file.editorId,
-        engineBinding: file.engineBinding,
-        backupFileId: this.backupFileIdByFileId.get(file.fileId),
-        persistentViewState: file.persistentViewState
-      }));
+    const orderedFiles = this.resolveFileOrder(this.filesRegistry.listFiles());
+    const files: PersistedFileEntry[] = orderedFiles.map((file) => ({
+      uri: file.uri,
+      mimeType: file.mimeType,
+      editorId: file.editorId,
+      engineBinding: file.engineBinding,
+      backupFileId: this.backupFileIdByFileId.get(file.fileId),
+      persistentViewState: file.persistentViewState
+    }));
 
     let activeFileUri: string | undefined;
     if (this.activeFileId) {

@@ -21,7 +21,7 @@ export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDa
   useEffect(() => {
     if (!store.getState().linkToActiveFile || !activeFileConnectionId) return;
     const rootNodeId = `${activeFileConnectionId}::__root__`;
-    void store.expandNode(rootNodeId);
+    void store.expandNode(rootNodeId, { silent: true });
   }, [store, activeFileConnectionId]);
 
   // Auto-expand to active file database when linkToActiveFile is on
@@ -32,7 +32,7 @@ export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDa
     for (const dbNodeId of rootNode.childIds) {
       const dbNode = store.getNode(dbNodeId);
       if (dbNode?.name === activeFileDatabase) {
-        void store.expandNode(dbNodeId);
+        void store.expandNode(dbNodeId, { silent: true });
         break;
       }
     }

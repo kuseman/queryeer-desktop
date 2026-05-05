@@ -145,7 +145,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
           : undefined;
 
       const engineState: Record<string, unknown> = { connectionId };
-      if (selectedDatabase?.database) {
+      if (selectedDatabase?.connectionId === connectionId && selectedDatabase.database) {
         engineState.database = selectedDatabase.database;
       }
 

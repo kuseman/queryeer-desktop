@@ -222,6 +222,36 @@ describe("core.files plugin", () => {
     );
   });
 
+  it("ctrl+n uses first configured mime type when active mime type is not configured", async () => {
+    const harness = createHarness();
+    harness.filesById.set("active-file", {
+      fileId: "active-file",
+      version: 1,
+      uri: "file:///notes.txt",
+      mimeType: "text/plain",
+      engineBinding: { engineId: "payloadbuilder", connectionId: "pb-1" },
+      persistentViewState: { "monaco.editor": { lineNumber: 3 } },
+      dirtyVsBackend: false,
+      dirtyVsDisk: false,
+      diskState: "inSync",
+      openedAt: new Date().toISOString()
+    });
+
+    coreFilesPlugin.activate(harness.context);
+    const handler = harness.commands.get("core.files.new");
+    expect(handler).toBeTypeOf("function");
+
+    await handler?.();
+
+    expect(harness.createUntitledFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mimeType: "application/plbsql",
+        extension: "plbsql",
+        cloneFromFileId: null
+      })
+    );
+  });
+
   it("registers toolbar new menu with configured mime type order", () => {
     const harness = createHarness();
 

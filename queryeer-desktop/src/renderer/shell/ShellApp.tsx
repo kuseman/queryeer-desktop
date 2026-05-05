@@ -103,7 +103,11 @@ export function ShellApp({
       workspaceService.restoredLayout()?.sidebarPanelHeights ??
       {}
   );
-  const [panelHeight, setPanelHeight] = useState<number>(200);
+  const [panelHeight, setPanelHeight] = useState<number>(
+    () =>
+      workspaceService.restoredLayout()?.panelHeight ??
+      200
+  );
   const [activePanelTab, setActivePanelTab] = useState<string | null>(null);
   const [files, setFiles] = useState<FileEntity[]>(() => filesRegistry.listFiles());
   const [openFileIds, setOpenFileIds] = useState<string[]>(() =>
@@ -371,7 +375,8 @@ export function ShellApp({
             const resolution = resolveNextActiveTab({
               queue: previousQueue,
               openFileIds: next,
-              excludeFileId: fileId
+              excludeFileId: fileId,
+              previousOpenFileIds: prev
             });
             tabActivationQueueRef.current = resolution.nextQueue;
             activeFileIdRef.current = resolution.nextActiveFileId;
@@ -404,6 +409,11 @@ export function ShellApp({
   };
 
   const selectFile = (fileId: string) => {
+    setTabActivationQueue((previousQueue) => {
+      const nextQueue = recordTabActivation(previousQueue, fileId);
+      tabActivationQueueRef.current = nextQueue;
+      return nextQueue;
+    });
     activeFileIdRef.current = fileId;
     setActiveFileId(fileId);
   };
@@ -415,6 +425,9 @@ export function ShellApp({
 
   useEffect(() => {
     return fileMediator.onActiveFileChanged((fileId) => {
+      const nextQueue = recordTabActivation(tabActivationQueueRef.current, fileId);
+      tabActivationQueueRef.current = nextQueue;
+      setTabActivationQueue(nextQueue);
       activeFileIdRef.current = fileId;
       setActiveFileId(fileId);
       workspaceService.setActiveFileId(fileId);
@@ -437,14 +450,16 @@ export function ShellApp({
         secondary: secondarySidebarWidth
       },
       sidebarPanelStates: panelStates,
-      sidebarPanelHeights: panelHeights
+      sidebarPanelHeights: panelHeights,
+      panelHeight
     });
-  }, [visibleZones, primarySidebarWidth, secondarySidebarWidth, panelStates, panelHeights, workspaceService]);
+  }, [visibleZones, primarySidebarWidth, secondarySidebarWidth, panelStates, panelHeights, panelHeight, workspaceService]);
 
   useEffect(() => {
     return filesRegistry.subscribe((next) => {
       let nextOpenFileIds: string[] = [];
       let addedFileIds: string[] = [];
+      let previousOpenFileIdsForActivation: string[] = [];
       setFiles(next);
       setTabActivationQueue((previousQueue) => {
         const nextSet = new Set(next.map((file) => file.fileId));
@@ -453,6 +468,7 @@ export function ShellApp({
         return nextQueue;
       });
       setOpenFileIds((prev) => {
+        previousOpenFileIdsForActivation = prev;
         const settings = getCoreSettingsService();
         const openNewFilesLast = settings?.getValue(OPEN_NEW_FILES_LAST_SETTING_ID) !== false;
         const resolution = resolveOpenFileIds({
@@ -464,11 +480,18 @@ export function ShellApp({
         });
         nextOpenFileIds = resolution.nextOpenFileIds;
         addedFileIds = resolution.addedFileIds;
+        const uriByFileId = new Map(next.map((file) => [file.fileId, file.uri]));
+        workspaceService.setOpenFileOrder(
+          resolution.nextOpenFileIds
+            .map((fileId) => uriByFileId.get(fileId))
+            .filter((uri): uri is string => Boolean(uri))
+        );
         return resolution.nextOpenFileIds;
       });
       setActiveFileId((prev) => {
         const resolution = resolveActiveFileAfterRegistryUpdate({
           previousActiveFileId: prev,
+          previousOpenFileIds: previousOpenFileIdsForActivation,
           nextOpenFileIds,
           addedFileIds,
           activationQueue: tabActivationQueueRef.current
@@ -509,7 +532,26 @@ export function ShellApp({
     document.addEventListener("mouseup", onMouseUp);
   };
 
-  const showPrimarySidebar = visibleZones.has("primarySidebar") && primaryViews.length > 0;
+  const beginResizePanel = (startY: number) => {
+    const startHeight = panelHeight;
+    const onMouseMove = (event: MouseEvent) => {
+      const deltaY = startY - event.clientY;
+      const nextHeight = Math.max(100, Math.min(600, startHeight + deltaY));
+      setPanelHeight(nextHeight);
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.classList.remove("is-resizing-panel");
+    };
+
+    document.body.classList.add("is-resizing-panel");
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  };
+
+  const showPrimarySidebar = visibleZones.has("primarySidebar");
   const showSecondarySidebar = visibleZones.has("secondarySidebar") && secondaryViews.length > 0;
   const shellGridTemplateColumns =
     showPrimarySidebar && showSecondarySidebar
@@ -626,6 +668,16 @@ export function ShellApp({
           />
         )}
       </main>
+
+      {visibleZones.has("panel") && panelTabs.length > 0 && (
+        <div
+          className="shell-divider-horizontal"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize panel"
+          onMouseDown={(event) => beginResizePanel(event.clientY)}
+        />
+      )}
 
       {visibleZones.has("panel") && panelTabs.length > 0 && (
         <section className="shell-panel" style={{ height: panelHeight }}>
