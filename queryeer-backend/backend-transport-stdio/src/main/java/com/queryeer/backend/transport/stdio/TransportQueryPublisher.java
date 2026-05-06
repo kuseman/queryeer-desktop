@@ -3,6 +3,7 @@ package com.queryeer.backend.transport.stdio;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.queryeer.backend.api.OutputEvent;
 import com.queryeer.backend.api.QueryPublisher;
 import com.queryeer.backend.contract.BackendError;
 import com.queryeer.backend.contract.BackendErrorCode;
@@ -50,7 +51,25 @@ final class TransportQueryPublisher implements QueryPublisher
     @Override
     public void resultSetRows(List<List<Object>> rows)
     {
-        notificationPublisher.publishForQuery(executionId, "queryengine.chunkRows", new QueryChunkRowsNotification(executionId, currentResultSetIndex, rows));
+        resultSetRows(rows, null);
+    }
+
+    @Override
+    public void resultSetRows(List<List<Object>> rows, List<OutputEvent> messages)
+    {
+        List<QueryChunkRowsNotification.MessagePayload> payloads = null;
+        if (messages != null
+                && !messages.isEmpty())
+        {
+            payloads = new ArrayList<>(messages.size());
+            for (OutputEvent event : messages)
+            {
+                payloads.add(new QueryChunkRowsNotification.MessagePayload(event.severity()
+                        .name()
+                        .toLowerCase(), event.message(), event.details()));
+            }
+        }
+        notificationPublisher.publishForQuery(executionId, "queryengine.chunkRows", new QueryChunkRowsNotification(executionId, currentResultSetIndex, rows, payloads));
     }
 
     @Override
@@ -68,6 +87,12 @@ final class TransportQueryPublisher implements QueryPublisher
     @Override
     public void failed(String errorCode, String errorMessage)
     {
+        failed(errorCode, errorMessage, null);
+    }
+
+    @Override
+    public void failed(String errorCode, String errorMessage, java.util.Map<String, Object> details)
+    {
         BackendErrorCode code;
         try
         {
@@ -77,6 +102,6 @@ final class TransportQueryPublisher implements QueryPublisher
         {
             code = BackendErrorCode.INTERNAL;
         }
-        notificationPublisher.publishForQuery(executionId, "queryengine.failed", new QueryFailedNotification(executionId, new BackendError(code, errorMessage, null)));
+        notificationPublisher.publishForQuery(executionId, "queryengine.failed", new QueryFailedNotification(executionId, new BackendError(code, errorMessage, details)));
     }
 }

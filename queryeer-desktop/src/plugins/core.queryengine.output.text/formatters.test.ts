@@ -6,6 +6,7 @@ function makeContext(overrides: Partial<OutputContext>): OutputContext {
   return {
     state: "completed",
     resultSets: [],
+    output: [],
     features: ["rows"],
     metrics: null,
     error: null,
@@ -27,8 +28,7 @@ describe("text output formatters", () => {
         error: { code: "FAILED", message: "Something broke" }
       })
     );
-    expect(lines).toContain("[FAILED]");
-    expect(lines).toContain("Something broke");
+    expect(lines).toEqual(["\x1b[31mSomething broke\x1b[0m"]);
   });
 
   it("shows failed message even when rows were streamed before failure", () => {
@@ -47,7 +47,7 @@ describe("text output formatters", () => {
         error: { code: "FAILED", message: "Rich backend failure details" }
       })
     );
-    expect(lines).toEqual(["[FAILED]", "Rich backend failure details"]);
+    expect(lines).toEqual(["\x1b[31mRich backend failure details\x1b[0m"]);
   });
 
   it("formats rows in json formatter", () => {

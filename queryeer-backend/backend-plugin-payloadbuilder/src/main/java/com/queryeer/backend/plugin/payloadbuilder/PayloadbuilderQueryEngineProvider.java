@@ -1,5 +1,6 @@
 package com.queryeer.backend.plugin.payloadbuilder;
 
+import java.io.Writer;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -9,6 +10,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.ErrorMessages;
+import com.queryeer.backend.api.OutputEvent;
+import com.queryeer.backend.api.OutputSeverity;
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryPublisher;
@@ -75,6 +78,7 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
     {
         long startMs = System.currentTimeMillis();
         QuerySession session = null;
+        AccumulatingOutputWriter outputWriter = new AccumulatingOutputWriter();
         try
         {
             PayloadbuilderEngineState typedState = payloadMapper.convert(engineState, PayloadbuilderEngineState.class);
@@ -87,6 +91,9 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
             activeSessions.put(queryExecutionId, session);
 
             PayloadbuilderEngineStateSupport.applyToSession(session, catalogState);
+
+            session.setPrintWriter(outputWriter);
+            session.setExceptionHandler(e -> outputWriter.addError(ErrorMessages.buildFailureMessage(e)));
 
             RawQueryResult result = Payloadbuilder.compile(session, text)
                     .executeRaw(session);
@@ -107,6 +114,10 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
                     @Override
                     public boolean consume(TupleVector tupleVector)
                     {
+                        // Flush any accumulated messages (from print statements, etc.)
+                        // before processing the next batch of rows
+                        outputWriter.flushMessages(publisher);
+
                         // Always use the runtime schema here
                         if (!started)
                         {
@@ -126,11 +137,13 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
                 });
                 rowCount += rowCounter.value;
             }
+            outputWriter.flushMessages(publisher);
             Object engineStatePatch = PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, catalogState);
             publisher.completed(System.currentTimeMillis() - startMs, rowCount, engineStatePatch);
         }
         catch (IllegalArgumentException e)
         {
+            outputWriter.flushMessages(publisher);
             publisher.failed("VALIDATION", e.getMessage());
         }
         catch (com.queryeer.backend.api.SecuritySessionClosedException e)
@@ -139,6 +152,7 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
         }
         catch (Exception e)
         {
+            outputWriter.flushMessages(publisher);
             if (cancelledExecutionIds.contains(queryExecutionId))
             {
                 publisher.failed("CANCELLED", "Execution cancelled by client");
@@ -212,7 +226,6 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
         return new PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState(state.defaultCatalogAlias(), state.selectedEnvironmentId(), resolved);
     }
 
-    @SuppressWarnings("unchecked")
     private Map<String, Object> resolveEnvironmentVariables(String selectedEnvironmentId)
     {
         if (selectedEnvironmentId == null)
@@ -617,6 +630,69 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
     static final class RowCountCollector
     {
         long value;
+    }
+
+    static final class AccumulatingOutputWriter extends Writer
+    {
+        private final StringBuilder buffer = new StringBuilder();
+        private final List<OutputEvent> messages = new ArrayList<>();
+
+        AccumulatingOutputWriter()
+        {
+        }
+
+        @Override
+        public void write(char[] cbuf, int off, int len)
+        {
+            buffer.append(cbuf, off, len);
+            flushLines();
+        }
+
+        @Override
+        public void flush()
+        {
+            flushLines();
+        }
+
+        @Override
+        public void close()
+        {
+            flushLines();
+        }
+
+        void addError(String message)
+        {
+            messages.add(new OutputEvent(OutputSeverity.ERROR, message));
+        }
+
+        void flushMessages(QueryPublisher publisher)
+        {
+            flushLines();
+            if (!messages.isEmpty())
+            {
+                List<OutputEvent> batch = List.copyOf(messages);
+                messages.clear();
+                publisher.resultSetRows(List.of(), batch);
+            }
+        }
+
+        private void flushLines()
+        {
+            String content = buffer.toString();
+            int idx;
+            while ((idx = content.indexOf('\n')) >= 0)
+            {
+                String line = content.substring(0, idx)
+                        .stripTrailing();
+                if (!line.isEmpty())
+                {
+                    messages.add(new OutputEvent(OutputSeverity.INFO, line));
+                }
+                content = content.substring(idx + 1);
+            }
+            buffer.setLength(0);
+            buffer.append(content);
+        }
     }
 
 }

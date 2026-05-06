@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { TextEditorComponent } from "../core.editor/texteditor/TextEditorComponent";
 import { OutputPanel } from "./output/OutputPanel";
-import type { OutputContext, ResultSet, ColumnType } from "../../contracts/extensions/OutputExtension";
+import type { OutputContext, OutputMessage, ResultSet, ColumnType } from "../../contracts/extensions/OutputExtension";
 import { IDLE_OUTPUT_CONTEXT, DEFAULT_OUTPUT_LIMITS } from "../../contracts/extensions/OutputExtension";
 import { getQueryEngineService } from "./QueryEngineService";
 import { getOutputRegistry } from "./output/OutputRegistry";
@@ -195,11 +195,28 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
               };
             });
           } else if (event.method === "queryengine.chunkRows") {
-            const p = event.params as { resultSetIndex: number; rows: unknown[][] };
+            const p = event.params as { resultSetIndex: number; rows: unknown[][]; messages?: Array<{ severity: string; message: string }> };
             const registry = getOutputRegistry();
 
             const currentCtx = getFileStateRegistry().get(targetFileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT;
             const rowsTargetPrimaryId = currentCtx.rowsTargetPrimaryId;
+
+            // Handle output messages (info/warnings/errors from the engine)
+            if (p.messages && p.messages.length > 0) {
+              const outputMessages: OutputMessage[] = p.messages.map((m) => ({
+                severity: m.severity as "info" | "error",
+                message: m.message
+              }));
+              updateOutputContextForFile(targetFileId, (prev) => ({
+                ...prev,
+                output: [...prev.output, ...outputMessages]
+              }));
+            }
+
+            // Message-only chunks (no rows) skip row processing
+            if (p.rows.length === 0) {
+              return;
+            }
 
             updateOutputContextForFile(targetFileId, (prev) => ({
               ...prev,

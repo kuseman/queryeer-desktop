@@ -10,6 +10,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.queryeer.backend.api.ErrorMessages;
 import com.queryeer.backend.api.FileSession;
 import com.queryeer.backend.api.FileSessionHandler;
+import com.queryeer.backend.api.OutputEvent;
+import com.queryeer.backend.api.OutputSeverity;
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryPublisher;
@@ -115,6 +117,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     public void execute(String queryExecutionId, String fileId, String text, Object engineState, QueryPublisher publisher)
     {
         long startedAt = System.currentTimeMillis();
+        String sessionId = null;
         try
         {
             if (text == null
@@ -138,8 +141,9 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
 
             Connection sessionConnection = fileConnections.acquire(fileId, materializedProfile, resolved.dialect());
 
-            String sessionId = trimToNull(state.sessionId());
+            sessionId = trimToNull(state.sessionId());
             sessionId = fileConnections.resolveSessionId(fileId, materializedProfile, resolved, sessionId);
+            fileConnections.rememberSessionId(fileId, sessionId);
 
             JdbcQueryRequest request = new JdbcQueryRequest(queryExecutionId, fileId, text, List.of(), materializedProfile, sessionConnection, state.database(), resolved.dialect());
 
@@ -153,7 +157,6 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                     .queryExecutor()
                     .execute(request, new TransportJdbcQueryEventListener(publisher));
 
-            fileConnections.rememberSessionId(fileId, sessionId);
             Map<String, Object> engineStatePatch = new java.util.LinkedHashMap<>();
             if (result.engineState() != null)
             {
@@ -189,7 +192,8 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             }
             else
             {
-                publisher.failed(ERROR_CODE_INTERNAL, ErrorMessages.buildFailureMessage(e));
+                publisher.failed(ERROR_CODE_INTERNAL, ErrorMessages.buildFailureMessage(e), sessionId != null ? Map.of("sessionId", sessionId)
+                        : null);
             }
         }
         finally
@@ -591,6 +595,12 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         public void onRows(List<List<Object>> rows)
         {
             publisher.resultSetRows(rows);
+        }
+
+        @Override
+        public void onOutput(String message)
+        {
+            publisher.resultSetRows(List.of(), List.of(new OutputEvent(OutputSeverity.INFO, message)));
         }
     }
 

@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.SQLWarning;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
@@ -76,6 +77,8 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
                         rowCount += runStatement(sql, request.queryExecutionId(), eventListener, statement);
                     }
                 }
+                forwardWarnings(sessionConnection.getWarnings(), eventListener);
+                sessionConnection.clearWarnings();
                 resolvedDatabase = resolveCurrentDatabaseIfPossible(request, sessionConnection);
             }
             else
@@ -90,6 +93,8 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
                             rowCount += runStatement(sql, request.queryExecutionId(), eventListener, statement);
                         }
                     }
+                    forwardWarnings(jdbcConnection.getWarnings(), eventListener);
+                    jdbcConnection.clearWarnings();
                     resolvedDatabase = resolveCurrentDatabaseIfPossible(request, jdbcConnection);
                     resolvedSessionId = resolveSessionIdIfPossible(request, jdbcConnection);
                 }
@@ -115,6 +120,15 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
             engineState.put("sessionId", resolvedSessionId);
         }
         return new JdbcQueryResult(rowCount, engineState);
+    }
+
+    private void forwardWarnings(SQLWarning warning, JdbcQueryEventListener eventListener)
+    {
+        while (warning != null)
+        {
+            eventListener.onOutput(warning.getMessage());
+            warning = warning.getNextWarning();
+        }
     }
 
     private static void applyDatabaseIfRequested(JdbcQueryRequest request, Connection connection) throws SQLException
@@ -185,31 +199,40 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
         activeStatements.put(queryExecutionId, statement);
         long rowCount = 0L;
         boolean hasResultSet = statement.execute(sql);
-        while (true)
+        try
         {
-            if (hasResultSet)
+            while (true)
             {
-                try (ResultSet resultSet = statement.getResultSet())
+                if (hasResultSet)
                 {
-                    rowCount += publishResultSet(resultSet, eventListener);
+                    try (ResultSet resultSet = statement.getResultSet())
+                    {
+                        rowCount += publishResultSet(resultSet, eventListener);
+                    }
                 }
-            }
-            else
-            {
-                int updateCount = statement.getUpdateCount();
-                if (updateCount < 0)
+                else
+                {
+                    int updateCount = statement.getUpdateCount();
+                    if (updateCount < 0)
+                    {
+                        break;
+                    }
+                    rowCount += Math.max(0, updateCount);
+                    eventListener.onOutput(updateCount + " Row(s) affected");
+                }
+
+                hasResultSet = statement.getMoreResults();
+                if (!hasResultSet
+                        && statement.getUpdateCount() < 0)
                 {
                     break;
                 }
-                rowCount += Math.max(0, updateCount);
             }
-
-            hasResultSet = statement.getMoreResults();
-            if (!hasResultSet
-                    && statement.getUpdateCount() < 0)
-            {
-                break;
-            }
+        }
+        finally
+        {
+            forwardWarnings(statement.getWarnings(), eventListener);
+            statement.clearWarnings();
         }
         return rowCount;
     }

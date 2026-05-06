@@ -38,7 +38,7 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
     private static final String KIND_SCHEMA = "schema";
     private static final String KIND_TABLE = "table";
     private static final String KIND_VIEW = "view";
-    private static final String KIND_COLUMN = "column";
+    // private static final String KIND_COLUMN = "column";
     private static final String KIND_DATABASE = "database";
     private static final String KIND_PRIMARY_KEY = "primary_key";
     private static final String KIND_FOREIGN_KEY = "foreign_key";
@@ -47,7 +47,7 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
     private static final String DEFAULT_CATALOG_NAME = "default";
     private static final String ERROR_RESOLVE_SCHEMA = "Failed to resolve JDBC schema";
 
-    private static final String KEY_NULLABLE = "nullable";
+    // private static final String KEY_NULLABLE = "nullable";
     private static final String KEY_ORDINAL = "ordinal";
     private static final String KEY_COLUMN = "column";
     private static final String KEY_REFERENCES_TABLE = "referencesTable";

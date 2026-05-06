@@ -13,6 +13,12 @@ public interface QueryPublisher
     /** Called one or more times after {@link #resultSetStart} to stream row batches. */
     void resultSetRows(List<List<Object>> rows);
 
+    /** Called one or more times after {@link #resultSetStart} to stream row batches with accompanying output messages (info, warnings, errors). */
+    default void resultSetRows(List<List<Object>> rows, List<OutputEvent> messages)
+    {
+        resultSetRows(rows);
+    }
+
     void completed(long durationMs, long rowCount);
 
     default void completed(long durationMs, long rowCount, Object engineState)
@@ -22,4 +28,12 @@ public interface QueryPublisher
 
     /** errorCode should match a {@code BackendErrorCode} name, falls back to INTERNAL */
     void failed(String errorCode, String errorMessage);
+
+    /**
+     * Failed with additional details (e.g. engineState, line/column info).
+     */
+    default void failed(String errorCode, String errorMessage, java.util.Map<String, Object> details)
+    {
+        failed(errorCode, errorMessage);
+    }
 }

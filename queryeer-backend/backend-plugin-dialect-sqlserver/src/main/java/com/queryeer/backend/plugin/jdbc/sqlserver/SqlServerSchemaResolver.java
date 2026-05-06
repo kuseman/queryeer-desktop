@@ -29,7 +29,7 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
     private static final String KIND_SCHEMA = "schema";
     private static final String KIND_TABLE = "table";
     private static final String KIND_VIEW = "view";
-    private static final String KIND_COLUMN = "column";
+    // private static final String KIND_COLUMN = "column";
     private static final String KEY_CATALOG = "catalog";
     private static final String KEY_DATABASE = "database";
     private static final String KEY_SCHEMA = "schema";
