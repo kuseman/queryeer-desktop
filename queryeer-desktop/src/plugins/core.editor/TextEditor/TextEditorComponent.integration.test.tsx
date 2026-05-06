@@ -197,6 +197,7 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
         getLabel: vi.fn(),
         hasCapability: vi.fn(() => false),
         listMimeTypesByCapability: vi.fn(() => []),
+        listAllMimeTypes: vi.fn(() => []),
         registerContentCategory: vi.fn(),
         getContentCategory: vi.fn()
       },

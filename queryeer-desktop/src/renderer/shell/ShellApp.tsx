@@ -24,7 +24,7 @@ import { filterToolbarActions } from "./toolbar-action-filter";
 import { resolveFirstAcceleratorsByCommand } from "./accelerator-utils";
 import { subscribeOpenPanelRequests } from "./layout-panel-events";
 import { getOutlineRegistry } from "../../core/plugin-runtime/ExtensionRegistry";
-import { getCoreSettingsService } from "../../plugins/core.settings/service";
+import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../../plugins/core.settings/service";
 import {
   recordTabActivation,
   resolveActiveFileAfterRegistryUpdate,
@@ -35,7 +35,7 @@ import "./shell-app.css";
 
 const OPEN_NEW_FILES_LAST_SETTING_ID = "core.files.openNewFilesLast";
 
-type ShellAppProps = {
+export type ShellAppProps = {
   extensions: ExtensionSnapshot;
   filesRegistry: FilesRegistry;
   fileMediator: FileMediator;
@@ -123,6 +123,7 @@ export function ShellApp({
   const tabActivationQueueRef = useRef<string[]>(tabActivationQueue);
   const activeFileIdRef = useRef<string | null>(activeFileId);
   const [, setCommandContextVersion] = useState(0);
+  const [, setSettingsVersion] = useState(0);
   const layoutRef = useRef<HTMLElement | null>(null);
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const visibleZonesRef = useRef(visibleZones);
@@ -157,6 +158,16 @@ export function ShellApp({
       setCommandContextVersion((version) => version + 1);
     });
   }, [onCommandContextChanged]);
+
+  useEffect(() => {
+    let unsub: (() => void) | undefined;
+    onCoreSettingsServiceInitialized((service) => {
+      unsub = service.subscribe(() => {
+        setSettingsVersion((version) => version + 1);
+      });
+    });
+    return () => unsub?.();
+  }, []);
 
   const toggleZone = (zone: LayoutZone) => {
     setVisibleZones((previous) => {
@@ -636,6 +647,11 @@ export function ShellApp({
               getMimeIcon={filesRegistry.mimeIcons.getMimeIcon}
               onTabContextMenuAction={handleTabContextMenuAction}
               onTabContextMenuOpen={handleTabContextMenuOpen}
+              tabBackgroundOpacity={(() => {
+                const settings = getCoreSettingsService();
+                const raw = settings?.getValue("core.files.tabBackgroundOpacity");
+                return typeof raw === "number" && !Number.isNaN(raw) ? raw : undefined;
+              })()}
             />
 
             <EditorPane

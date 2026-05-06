@@ -4,10 +4,16 @@ import type { FileEntity } from "../../contracts/files/FileEntity";
 import { fileUriToPath } from "../../contracts/files/Resolvers";
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../core.settings/service";
 import { DocumentIcon } from "./DocumentIcon";
-import { NewFileMimeTypesSettingsEditor } from "./NewFileMimeTypesSettingsEditor";
+import { MimeTypesSettingsEditor } from "./MimeTypesSettingsEditor";
 
-const NEW_FILE_MIME_TYPES_SETTING_ID = "core.files.newFileMimeTypes";
+const MIME_TYPES_SETTING_ID = "core.files.mimeTypes";
 const NEW_FILE_OPEN_LAST_SETTING_ID = "core.files.openNewFilesLast";
+
+type MimeTypeConfigItem = {
+  mimeType: string;
+  enableForNew: boolean;
+  color?: string;
+};
 
 const ALL_MIME_CAPABILITIES: MimeCapability[] = [
   "backupable",
@@ -129,7 +135,7 @@ function listConfiguredNewFileMimeTypeOptions(
   const options = listNewFileMimeTypeOptions(context);
   const optionByMimeType = new Map(options.map((option) => [option.mimeType, option]));
   const settings = getCoreSettingsService();
-  const configured = settings?.getValue(NEW_FILE_MIME_TYPES_SETTING_ID);
+  const configured = settings?.getValue(MIME_TYPES_SETTING_ID);
   if (!Array.isArray(configured)) {
     return options;
   }
@@ -138,15 +144,20 @@ function listConfiguredNewFileMimeTypeOptions(
   }
   const sorted: NewFileMimeTypeOption[] = [];
   for (const entry of configured) {
-    if (typeof entry !== "string") {
+    if (!entry || typeof entry !== "object") {
       continue;
     }
-    const option = optionByMimeType.get(entry);
+    const item = entry as Record<string, unknown>;
+    const mimeType = String(item.mimeType ?? "");
+    if (!item.enableForNew) {
+      continue;
+    }
+    const option = optionByMimeType.get(mimeType);
     if (!option) {
       continue;
     }
     sorted.push(option);
-    optionByMimeType.delete(entry);
+    optionByMimeType.delete(mimeType);
   }
   return sorted;
 }
@@ -194,17 +205,24 @@ export const coreFilesPlugin: Plugin = {
     description: "Owns the frontend file registry and file entity lifecycle"
   },
   activate: (context) => {
-    const availableNewMimeTypes = listNewFileMimeTypeOptions(context).map((option) => option.mimeType);
-    const preferredNewMimeTypes =
-      context.files.capabilities.listPreferredNewFileMimeTypes
-        ? context.files.capabilities
-            .listPreferredNewFileMimeTypes()
-            .filter((mimeType) => availableNewMimeTypes.includes(mimeType))
-        : [];
-    const defaultNewMimeTypes = [
-      ...preferredNewMimeTypes,
-      ...availableNewMimeTypes.filter((mimeType) => !preferredNewMimeTypes.includes(mimeType))
+    const allMimeTypes = context.files.capabilities.listAllMimeTypes();
+    const editableMimeTypes = new Set(
+      context.files.capabilities.listMimeTypesByCapability("editable")
+    );
+    const preferredNewMimeTypes = context.files.capabilities.listPreferredNewFileMimeTypes?.() ?? [];
+    const preferredSet = new Set(preferredNewMimeTypes);
+
+    const orderedAllMimeTypes = [
+      ...preferredNewMimeTypes.filter((m) => allMimeTypes.includes(m)),
+      ...allMimeTypes.filter((m) => !preferredSet.has(m) && editableMimeTypes.has(m)),
+      ...allMimeTypes.filter((m) => !editableMimeTypes.has(m))
     ];
+
+    const defaultMimeTypes: MimeTypeConfigItem[] = orderedAllMimeTypes.map((mimeType) => ({
+      mimeType,
+      enableForNew: editableMimeTypes.has(mimeType),
+      color: undefined
+    }));
 
     context.files.mimeIcons.registerMimeIcon({
       moduleId: "core.files",
@@ -212,20 +230,51 @@ export const coreFilesPlugin: Plugin = {
       icon: DocumentIcon
     });
 
+    const allMimeTypeOptions = allMimeTypes.map((mimeType) => ({
+      mimeType,
+      extension: fileExtensionForMimeType(mimeType),
+      label: context.files.capabilities.getLabel?.(mimeType) ?? toMimeLabel(mimeType),
+      icon: context.files.mimeIcons.getMimeIcon(mimeType) ?? DocumentIcon
+    }));
+
     context.settings.registerAdvancedRenderer({
-      id: "core.files.newFileMimeTypes.renderer",
+      id: "core.files.mimeTypes.renderer",
       render: ({ value, setValue, readonly }) => (
-        <NewFileMimeTypesSettingsEditor
+        <MimeTypesSettingsEditor
           value={value}
           setValue={setValue}
           readonly={readonly}
-          options={listNewFileMimeTypeOptions(context).map((option) => ({
+          options={allMimeTypeOptions.map((option) => ({
             mimeType: option.mimeType,
             label: option.label,
             icon: option.icon
           }))}
         />
       )
+    });
+
+    context.layout.registerTabHeaderStyle({
+      id: "core.files.tabHeaderStyle.mimeColor",
+      order: 50,
+      render: ({ file }) => {
+        const settings = getCoreSettingsService();
+        const configured = settings?.getValue(MIME_TYPES_SETTING_ID);
+        if (!Array.isArray(configured)) {
+          return null;
+        }
+        const item = configured.find(
+          (entry: unknown) =>
+            entry &&
+            typeof entry === "object" &&
+            (entry as Record<string, unknown>).mimeType === file.mimeType
+        ) as MimeTypeConfigItem | undefined;
+        if (!item?.color) {
+          return null;
+        }
+        return {
+          style: { backgroundColor: item.color }
+        };
+      }
     });
 
     context.settings.registerSettings({
@@ -238,7 +287,7 @@ export const coreFilesPlugin: Plugin = {
           moduleId: "core.files",
           title: "Open new files last",
           description: "If true, new tabs open at the end. Otherwise they open after the active tab.",
-          sectionPath: ["Files", "New"],
+          sectionPath: ["Files", "General"],
           tags: ["files", "new", "tabs", "order"],
           type: "boolean",
           defaultValue: true
@@ -248,24 +297,35 @@ export const coreFilesPlugin: Plugin = {
           moduleId: "core.files",
           title: "Recent Files",
           description: "Maximum number of recently opened files to remember.",
-          sectionPath: ["Files", "Recent"],
+          sectionPath: ["Files", "General"],
           tags: ["recent", "files", "history"],
           type: "number",
           defaultValue: 100,
           constraints: { min: 10, max: 500 }
         },
         {
-          id: NEW_FILE_MIME_TYPES_SETTING_ID,
+          id: "core.files.tabBackgroundOpacity",
           moduleId: "core.files",
-          title: "New File MIME Types",
+          title: "Tab Background Opacity",
+          description: "Opacity (0-1) applied to tab background colors from MIME type and connection settings.",
+          sectionPath: ["Files", "General"],
+          tags: ["files", "tabs", "opacity", "color"],
+          type: "number",
+          defaultValue: 0.08,
+          constraints: { min: 0, max: 1 }
+        },
+        {
+          id: MIME_TYPES_SETTING_ID,
+          moduleId: "core.files",
+          title: "MIME Types",
           description:
-            "Controls which editable MIME types are shown in New dropdowns and their order.",
-          sectionPath: ["Files", "New"],
-          tags: ["files", "new", "mime", "order"],
+            "Controls visibility in New dropdowns, order, and tab background colors for MIME types.",
+          sectionPath: ["Files", "Mimetype"],
+          tags: ["files", "mime", "order", "color"],
           type: "json",
-          defaultValue: defaultNewMimeTypes,
+          defaultValue: defaultMimeTypes,
           advanced: {
-            rendererId: "core.files.newFileMimeTypes.renderer"
+            rendererId: "core.files.mimeTypes.renderer"
           }
         }
       ]

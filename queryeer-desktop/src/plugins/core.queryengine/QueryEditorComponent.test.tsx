@@ -181,6 +181,7 @@ const filesRegistry = {
         getLabel: vi.fn(),
         hasCapability: vi.fn(() => true),
         listMimeTypesByCapability: vi.fn(() => []),
+        listAllMimeTypes: vi.fn(() => []),
         registerContentCategory: vi.fn(),
         getContentCategory: vi.fn(() => "text" as ContentCategory)
       },

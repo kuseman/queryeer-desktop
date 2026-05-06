@@ -37,7 +37,6 @@ export const coreMenuPlugin: Plugin = {
       parentId: "core.menu.edit",
       commandId: "core.edit.undo",
       role: "undo",
-      accelerator: "CmdOrCtrl+Z"
     });
     context.menu.registerMenuItem({
       id: "core.menu.edit.redo.item",
@@ -46,7 +45,6 @@ export const coreMenuPlugin: Plugin = {
       parentId: "core.menu.edit",
       commandId: "core.edit.redo",
       role: "redo",
-      accelerator: "CmdOrCtrl+Y"
     });
 
     context.menu.registerMenuItem({
@@ -56,7 +54,6 @@ export const coreMenuPlugin: Plugin = {
       parentId: "core.menu.edit",
       commandId: "core.edit.cut",
       role: "cut",
-      accelerator: "CmdOrCtrl+X"
     });
     context.menu.registerMenuItem({
       id: "core.menu.edit.copy.item",
@@ -65,7 +62,6 @@ export const coreMenuPlugin: Plugin = {
       parentId: "core.menu.edit",
       commandId: "core.edit.copy",
       role: "copy",
-      accelerator: "CmdOrCtrl+C"
     });
     context.menu.registerMenuItem({
       id: "core.menu.edit.paste.item",
@@ -74,7 +70,6 @@ export const coreMenuPlugin: Plugin = {
       parentId: "core.menu.edit",
       commandId: "core.edit.paste",
       role: "paste",
-      accelerator: "CmdOrCtrl+V"
     });
 
     context.menu.registerMenuItem({
@@ -84,7 +79,6 @@ export const coreMenuPlugin: Plugin = {
       parentId: "core.menu.selection",
       commandId: "core.edit.selectAll",
       role: "selectAll",
-      accelerator: "CmdOrCtrl+A"
     });
 
     context.commands.registerCommand({
@@ -137,7 +131,6 @@ export const coreMenuPlugin: Plugin = {
       parentId: "core.menu.tools.dev",
       commandId: "core.commands.reloadWindow",
       role: "reload",
-      accelerator: "CmdOrCtrl+R"
     });
     context.menu.registerMenuItem({
       id: "core.menu.tools.dev.forceReload",
@@ -146,7 +139,6 @@ export const coreMenuPlugin: Plugin = {
       parentId: "core.menu.tools.dev",
       commandId: "core.commands.forceReloadWindow",
       role: "forceReload",
-      accelerator: "CmdOrCtrl+Shift+R"
     });
     context.menu.registerMenuItem({
       id: "core.menu.view.appearance",
@@ -161,7 +153,6 @@ export const coreMenuPlugin: Plugin = {
       parentId: "core.menu.view.appearance",
       commandId: "core.commands.zoomIn",
       role: "zoomIn",
-      accelerator: "CmdOrCtrl++"
     });
     context.menu.registerMenuItem({
       id: "core.menu.view.appearance.zoomOut",
@@ -170,7 +161,6 @@ export const coreMenuPlugin: Plugin = {
       parentId: "core.menu.view.appearance",
       commandId: "core.commands.zoomOut",
       role: "zoomOut",
-      accelerator: "CmdOrCtrl+-"
     });
     context.menu.registerMenuItem({
       id: "core.menu.view.appearance.zoomReset",
@@ -179,7 +169,6 @@ export const coreMenuPlugin: Plugin = {
       parentId: "core.menu.view.appearance",
       commandId: "core.commands.zoomReset",
       role: "resetZoom",
-      accelerator: "CmdOrCtrl+Numpad0"
     });
     context.menu.registerMenuItem({
       id: "core.menu.view.appearance.toggleFullScreen",
@@ -232,7 +221,6 @@ export const coreMenuPlugin: Plugin = {
       parentId: "core.menu.tools.dev",
       commandId: "core.commands.toggleDevTools",
       role: "toggleDevTools",
-      accelerator: "F12"
     });
 
     context.menu.registerMenuItem({
@@ -242,7 +230,6 @@ export const coreMenuPlugin: Plugin = {
       parentId: "core.menu.window",
       commandId: "core.commands.windowMinimize",
       role: "minimize",
-      accelerator: "CmdOrCtrl+M"
     });
     context.menu.registerMenuItem({
       id: "core.menu.window.zoom",
@@ -264,7 +251,6 @@ export const coreMenuPlugin: Plugin = {
       order: 40,
       parentId: "core.menu.window",
       commandId: "core.commands.windowClose",
-      accelerator: "CmdOrCtrl+Shift+W"
     });
 
     context.menu.registerMenuItem({
@@ -273,7 +259,6 @@ export const coreMenuPlugin: Plugin = {
       order: 15,
       parentId: "core.menu.file",
       commandId: "core.closeActive",
-      accelerator: "CmdOrCtrl+W"
     });
 
     context.menu.registerMenuItem({

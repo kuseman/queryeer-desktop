@@ -1,30 +1,42 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
+import type { ShellAppProps } from "./shell/ShellApp";
 import { ShellApp } from "./shell/ShellApp";
 import { bootstrapShell } from "./shell/bootstrap";
 import "./styles/base.css";
 
+type BootstrapResult = Awaited<ReturnType<typeof bootstrapShell>>;
+
+function App({
+  bootstrap,
+  ...shellProps
+}: {
+  bootstrap: BootstrapResult;
+} & Omit<ShellAppProps, "extensions">) {
+  const [extensions, setExtensions] = useState(bootstrap.extensions);
+
+  useEffect(() => {
+    bootstrap.onMenuRebuild(() => {
+      setExtensions(bootstrap.getExtensions());
+    });
+  }, [bootstrap]);
+
+  return <ShellApp {...shellProps} extensions={extensions} />;
+}
+
 async function startApp(): Promise<void> {
-  const {
-    extensions,
-    filesRegistry,
-    fileMediator,
-    workspaceService,
-    executeCommand,
-    canExecuteCommand,
-    onCommandContextChanged
-  } = await bootstrapShell();
+  const bootstrap = await bootstrapShell();
 
   createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
-      <ShellApp
-        extensions={extensions}
-        filesRegistry={filesRegistry}
-        fileMediator={fileMediator}
-        workspaceService={workspaceService}
-        executeCommand={executeCommand}
-        canExecuteCommand={canExecuteCommand}
-        onCommandContextChanged={onCommandContextChanged}
+      <App
+        bootstrap={bootstrap}
+        filesRegistry={bootstrap.filesRegistry}
+        fileMediator={bootstrap.fileMediator}
+        workspaceService={bootstrap.workspaceService}
+        executeCommand={bootstrap.executeCommand}
+        canExecuteCommand={bootstrap.canExecuteCommand}
+        onCommandContextChanged={bootstrap.onCommandContextChanged}
       />
     </React.StrictMode>
   );

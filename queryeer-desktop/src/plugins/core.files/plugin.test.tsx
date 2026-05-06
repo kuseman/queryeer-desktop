@@ -72,6 +72,11 @@ function createHarness(): Harness {
           }
           return ["application/sql", "application/plbsql", "application/json"];
         }),
+        listAllMimeTypes: vi.fn(() => [
+          "application/sql",
+          "application/plbsql",
+          "application/json"
+        ]),
         registerContentCategory: vi.fn(),
         getContentCategory: vi.fn(() => "text" as const)
       },
@@ -186,8 +191,11 @@ describe("core.files plugin", () => {
     settingsServiceMock.refreshSchemaFromRegistry.mockClear();
     settingsServiceMock.syncRegistryModules.mockClear();
     settingsServiceMock.getValue.mockImplementation((settingId) => {
-      if (settingId === "core.files.newFileMimeTypes") {
-        return ["application/plbsql", "application/sql"];
+      if (settingId === "core.files.mimeTypes") {
+        return [
+          { mimeType: "application/plbsql", enableForNew: true },
+          { mimeType: "application/sql", enableForNew: true }
+        ];
       }
       return undefined;
     });
@@ -280,7 +288,7 @@ describe("core.files plugin", () => {
   it("uses all editable mime types when setting is empty", async () => {
     const harness = createHarness();
     settingsServiceMock.getValue.mockImplementation((settingId) => {
-      if (settingId === "core.files.newFileMimeTypes") {
+      if (settingId === "core.files.mimeTypes") {
         return [];
       }
       return undefined;
@@ -320,5 +328,75 @@ describe("core.files plugin", () => {
     const dynamicItems = await newItem?.dynamicItems?.();
     expect(dynamicItems?.length).toBeGreaterThan(0);
     expect(dynamicItems?.every((item) => item.parentId === "core.files.menu.new")).toBe(true);
+  });
+
+  it("applies tab background color from mime type setting", () => {
+    const harness = createHarness();
+    settingsServiceMock.getValue.mockImplementation((settingId) => {
+      if (settingId === "core.files.mimeTypes") {
+        return [
+          { mimeType: "application/sql", enableForNew: true, color: "#ff0000" }
+        ];
+      }
+      return undefined;
+    });
+
+    coreFilesPlugin.activate(harness.context);
+
+    const calls = (harness.context.layout.registerTabHeaderStyle as ReturnType<typeof vi.fn>).mock
+      .calls as Array<[{ id: string; render: (ctx: { file: FileEntity; isActive: boolean; hasCapability: (cap: string) => boolean }) => unknown }]>;
+    const tabHeaderStyle = calls.find((call) => call[0].id === "core.files.tabHeaderStyle.mimeColor");
+    expect(tabHeaderStyle).toBeDefined();
+    const result = tabHeaderStyle![0].render({
+      file: {
+        fileId: "f-1",
+        version: 0,
+        uri: "untitled:Untitled1.sql",
+        mimeType: "application/sql",
+        dirtyVsBackend: false,
+        dirtyVsDisk: false,
+        diskState: "inSync",
+        openedAt: new Date().toISOString()
+      },
+      isActive: false,
+      hasCapability: () => true
+    });
+    expect(result).toEqual({
+      style: { backgroundColor: "#ff0000" }
+    });
+  });
+
+  it("returns no tab style when mime type has no color", () => {
+    const harness = createHarness();
+    settingsServiceMock.getValue.mockImplementation((settingId) => {
+      if (settingId === "core.files.mimeTypes") {
+        return [
+          { mimeType: "application/sql", enableForNew: true }
+        ];
+      }
+      return undefined;
+    });
+
+    coreFilesPlugin.activate(harness.context);
+
+    const calls = (harness.context.layout.registerTabHeaderStyle as ReturnType<typeof vi.fn>).mock
+      .calls as Array<[{ id: string; render: (ctx: { file: FileEntity; isActive: boolean; hasCapability: (cap: string) => boolean }) => unknown }]>;
+    const tabHeaderStyle = calls.find((call) => call[0].id === "core.files.tabHeaderStyle.mimeColor");
+    expect(tabHeaderStyle).toBeDefined();
+    const result = tabHeaderStyle![0].render({
+      file: {
+        fileId: "f-1",
+        version: 0,
+        uri: "untitled:Untitled1.sql",
+        mimeType: "application/sql",
+        dirtyVsBackend: false,
+        dirtyVsDisk: false,
+        diskState: "inSync",
+        openedAt: new Date().toISOString()
+      },
+      isActive: false,
+      hasCapability: () => true
+    });
+    expect(result).toBeNull();
   });
 });

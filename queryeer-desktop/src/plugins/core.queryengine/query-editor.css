@@ -116,31 +116,30 @@
 }
 
 .queryengine-tab-state-running .shell-editor-tab-button {
-  background: rgba(18, 90, 58, 0.42);
   color: #d8fbe8;
 }
 
 .shell-editor-tab.queryengine-tab-state-running.is-active .shell-editor-tab-button {
-  background: rgba(18, 90, 58, 0.52);
   color: #e8fff2;
 }
 
-.queryengine-tab-state-running .shell-editor-tab-button:hover {
-  background: rgba(21, 112, 70, 0.52);
-}
-
 .queryengine-tab-state-failed .shell-editor-tab-button {
-  background: rgba(126, 32, 32, 0.38);
   color: #ffd6d6;
 }
 
 .shell-editor-tab.queryengine-tab-state-failed.is-active .shell-editor-tab-button {
-  background: rgba(148, 36, 36, 0.5);
   color: #ffe3e3;
 }
 
-.queryengine-tab-state-failed .shell-editor-tab-button:hover {
-  background: rgba(148, 36, 36, 0.48);
+.queryengine-tab-state-failed::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #e55;
+  z-index: 2;
 }
 
 .queryengine-tab-indicator-running {

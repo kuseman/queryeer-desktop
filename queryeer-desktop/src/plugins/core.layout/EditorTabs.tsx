@@ -32,7 +32,17 @@ type EditorTabsProps = {
   getMimeIcon?: (mimeType: string) => ((props: MimeIconProps) => JSX.Element) | undefined;
   onTabContextMenuAction?: (actionId: string, file: FileEntity) => void;
   onTabContextMenuOpen?: (file: FileEntity | null) => void;
+  tabBackgroundOpacity?: number;
 };
+
+function applyOpacityToHex(hex: string, alpha: number): string {
+  const sanitized = hex.replace("#", "");
+  const bigint = parseInt(sanitized, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 export function EditorTabs({
   openFiles,
@@ -48,7 +58,8 @@ export function EditorTabs({
   hasMimeCapability,
   getMimeIcon,
   onTabContextMenuAction,
-  onTabContextMenuOpen
+  onTabContextMenuOpen,
+  tabBackgroundOpacity = 0.08
 }: EditorTabsProps) {
   const [hoveredTab, setHoveredTab] = useState<HoveredTab | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: FileEntity } | null>(null);
@@ -136,10 +147,17 @@ export function EditorTabs({
           .reduce(
             (acc, style) => ({
               className: [acc.className, style.className].filter(Boolean).join(" "),
-              indicatorClassName: [acc.indicatorClassName, style.indicatorClassName].filter(Boolean).join(" ")
+              indicatorClassName: [acc.indicatorClassName, style.indicatorClassName].filter(Boolean).join(" "),
+              style: { ...acc.style, ...style.style }
             }),
-            { className: "", indicatorClassName: "" }
+            { className: "", indicatorClassName: "", style: undefined as React.CSSProperties | undefined }
           );
+
+        let finalStyle = tabHeaderStyle.style;
+        const bg = finalStyle?.backgroundColor;
+        if (typeof bg === "string" && bg.startsWith("#")) {
+          finalStyle = { ...finalStyle, backgroundColor: applyOpacityToHex(bg, tabBackgroundOpacity) };
+        }
 
         if (file.diskState === "deletedOnDisk") {
           titleClassName += " is-deleted";
@@ -152,6 +170,7 @@ export function EditorTabs({
             key={file.fileId}
             data-file-id={file.fileId}
             className={`shell-editor-tab ${activeFileId === file.fileId ? "is-active" : ""} ${tabHeaderStyle.className}`.trim()}
+            style={finalStyle}
             onContextMenu={(e) => handleContextMenu(e, file)}
             onMouseEnter={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();
