@@ -229,10 +229,20 @@ export type QueryChunkStartNotification = {
   };
 };
 
+export type OutputSeverity = "info" | "error";
+
+export type MessagePayload = {
+  severity: OutputSeverity;
+  message: string;
+  line?: number;
+  column?: number;
+};
+
 export type QueryChunkRowsNotification = {
   queryExecutionId: string;
   resultSetIndex: number;
   rows: unknown[][];
+  messages?: MessagePayload[];
 };
 
 export type QueryCompletedNotification = {

@@ -43,21 +43,23 @@ function formatRowsPlain(context: OutputContext): string[] {
 }
 
 function formatRowSets(context: OutputContext, rowsFormatter: (context: OutputContext) => string[]): string[] {
+  const outputLines = getOutputLines(context);
   const statusLines = getStatusLines(context);
   if (context.state === "failed") {
-    return statusLines;
+    return outputLines.length > 0 ? [...outputLines, "", ...statusLines] : statusLines;
   }
   const rowLines = rowsFormatter(context);
+  const allLines = outputLines.length > 0 ? [...outputLines, ""] : [];
   if (context.state === "idle" && rowLines.length > 0) {
-    return rowLines;
+    return [...allLines, ...rowLines];
   }
   if (statusLines.length === 0) {
-    return rowLines;
+    return [...allLines, ...rowLines];
   }
   if (rowLines.length === 0) {
-    return statusLines;
+    return [...allLines, ...statusLines];
   }
-  return [...statusLines, "", ...rowLines];
+  return [...allLines, ...statusLines, "", ...rowLines];
 }
 
 function formatRowsJson(context: OutputContext): string[] {
@@ -89,10 +91,19 @@ function formatRowsCsv(context: OutputContext): string[] {
   return lines;
 }
 
+const ANSI_RED = "\x1b[31m";
+const ANSI_RESET = "\x1b[0m";
+
+function getOutputLines(context: OutputContext): string[] {
+  return (context.output ?? []).map((msg) =>
+    msg.severity === "error" ? `${ANSI_RED}Error: ${msg.message}${ANSI_RESET}` : msg.message
+  );
+}
+
 function getStatusLines(context: OutputContext): string[] {
   const lines: string[] = [];
   if (context.state === "failed" && context.error) {
-    lines.push(`[${context.error.code}]`, context.error.message);
+    lines.push(`${ANSI_RED}${context.error.message}${ANSI_RESET}`);
     return lines;
   }
   if (context.state === "completed") {

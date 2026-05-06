@@ -1,22 +1,25 @@
 # Queryeer Roadmap
 
 Quick fixes
-- JDBC SqlWarnings
-    - Print in text output
 - Save to file output
     - Should not output anything to table/text only writing status to text
+- [ ] Table query output settings
+    - [ ] Stacked result set / tab per result set
+- [ ] Parse errors
+    - Link in text output to editor lines (payloadbuilder supports reporting lines)
+    - JDBC Dialects can catch known exceptions and extract
+    - Links in xterm.js
+    - Remember selection start upon exeuction to correctly link to corresponding line
 
 Large features in prio
 - [ ] Query shortcuts
     - CTRL 0-9 / ALT-0
     - Rule based (query file meta data. Payloadbuilder properties / jdbc properties)
-    - Only active for queryexecutable
+    - Only active for queryexecutable && has text editor
 - [ ] Tree sitter foundation
     - [ ] Code parsing => wiggly lines in monaco
     - [ ] Code complete => register completion provider in monaco
         - Investigate LPS in backend if that simplifies things
-- [ ] Table query output settings
-    - [ ] Stacked result set / tab per result set
 - [ ] Payloadbuilder
     - [X] Environments
     - [ ] JDBC Catalog
@@ -34,23 +37,30 @@ Large features in prio
         - Describe (sqlserver SP_HELP)
         - Count
         - etc.
-- [ ] Hoover table / etc.
-    - Show popup with schema
-- [ ] Parse errors
-    - Link in text output to editor lines (payloadbuilder supports reporting lines)
-- [ ] Core.themes
-    - Themes support
+- [ ] Keybindings settings dialog
+    - See conflicts
+    - Specify new ones
+    - Turn off existing ones
 - [ ] Graph visualization framework
     - Query plan
     - Procedure call tree
     - Schema
+- [ ] Hoover table / etc.
+    - Show popup with schema
 - [ ] Action in JDBC navigation
     - Rulebased actions based on node type etc
         - SQLServer + Procedure => sp_helptext
         - etc.
+- [ ] Core.themes
+    - Themes support
 - [ ] About dialog
     - Queryeer changelog
     - Modules changelog (Payloadbuilder)
+- [X] Warnings/Prints
+    - JDBC SQLWarnings -> Print in text output
+                       -> Exceptions errors (red)
+    - Payloadbuilder session.setPrintWriter() -> Print in text output
+                       -> session.setExceptionHandler() -> Errors (red)
 - [X] Tab file contribution for JDBC to show current session id (dialect specific)
     - See status update from health /ping (this should be erased if session / connection was ended)
 - [X] Icons on known mimes that show on tabs

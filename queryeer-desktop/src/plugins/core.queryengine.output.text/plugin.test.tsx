@@ -86,6 +86,7 @@ function makeContext(overrides: Partial<OutputContext> = {}): OutputContext {
   return {
     state: "running",
     resultSets: [],
+    output: [],
     features: ["rows"],
     metrics: null,
     error: null,

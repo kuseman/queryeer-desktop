@@ -1,3 +1,4 @@
+import type { OutputSeverity } from "../backend/Types.js";
 import type { ReactNode } from "react";
 
 export type ExecutionState = "idle" | "running" | "completed" | "failed" | "cancelled";
@@ -37,9 +38,18 @@ export type ResultSet = {
   exportPath?: string;
 };
 
+export type OutputMessage = {
+  severity: OutputSeverity;
+  message: string;
+  line?: number;
+  column?: number;
+};
+
 export type OutputContext = {
   state: ExecutionState;
   resultSets: ResultSet[];
+  /** Output messages (info, warnings, errors) displayed in text output. */
+  output: OutputMessage[];
   /**
    * null     = features not yet known (query still running)
    * string[] = resolved from backend on queryengine.completed
@@ -102,6 +112,7 @@ export const DEFAULT_OUTPUT_LIMITS: OutputLimits = { maxRows: 100_000 };
 export const IDLE_OUTPUT_CONTEXT: OutputContext = {
   state: "idle",
   resultSets: [],
+  output: [],
   features: null,
   metrics: null,
   error: null,

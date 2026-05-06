@@ -264,6 +264,21 @@ class JdbcBackendPluginTest
                 .get(0)).intValue());
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    void executeFailureEmitsSessionIdInErrorDetails()
+    {
+        QueryEngineProvider provider = activateAndGetProvider();
+        provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-session-fail", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_session_fail;DB_CLOSE_DELAY=-1")));
+
+        RecordingPublisher publisher = new RecordingPublisher();
+        provider.execute("exec-fail-1", "file-fail", "select invalid_sql", Map.of("connectionId", "jdbc-session-fail", "sessionId", "my-session-456"), publisher);
+
+        Assertions.assertEquals("INTERNAL", publisher.errorCode);
+        Assertions.assertNotNull(publisher.errorDetails);
+        Assertions.assertEquals("my-session-456", publisher.errorDetails.get("sessionId"));
+    }
+
     @Test
     void rebindingConnectionClosesPreviousSessionStateImmediately()
     {
@@ -627,6 +642,7 @@ class JdbcBackendPluginTest
     {
         private String errorCode;
         private String errorMessage;
+        private Map<String, Object> errorDetails;
         private boolean completed;
         private long rowCount;
         private Object engineState;
@@ -668,6 +684,14 @@ class JdbcBackendPluginTest
         {
             this.errorCode = errorCode;
             this.errorMessage = errorMessage;
+        }
+
+        @Override
+        public void failed(String errorCode, String errorMessage, Map<String, Object> details)
+        {
+            this.errorCode = errorCode;
+            this.errorMessage = errorMessage;
+            this.errorDetails = details;
         }
     }
 
