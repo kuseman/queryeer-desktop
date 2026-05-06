@@ -34,6 +34,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
   const [selectedPrimaryId, setSelectedPrimaryId] = useState<string | null>(null);
 
   const activeExecutionByFileIdRef = useRef(new Map<string, ActiveExecution>());
+  const securityRetryCountByFileIdRef = useRef(new Map<string, number>());
   const executionPrimaryOverrideByFileIdRef = useRef(new Map<string, string | null>());
   const handleExecuteRef = useRef<() => void>(() => {});
   const handleCancelRef = useRef<() => void>(() => {});
@@ -133,6 +134,9 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     const run = async () => {
       const targetFileId = file?.fileId;
       if (!targetFileId) return;
+      if (!securityRetryCountByFileIdRef.current.has(targetFileId)) {
+        securityRetryCountByFileIdRef.current.set(targetFileId, 0);
+      }
 
       // Cancel any existing execution for this file before starting a new one
       const existingExecution = activeExecutionByFileIdRef.current.get(targetFileId);
@@ -238,6 +242,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
           } else if (event.method === "queryengine.completed") {
             const p = event.params as { metrics?: { durationMs?: number; rowCount?: number }; features?: string[] };
             activeExecutionByFileIdRef.current.delete(targetFileId);
+            securityRetryCountByFileIdRef.current.delete(targetFileId);
             updateOutputContextForFile(targetFileId, (prev) => ({
               ...prev,
               state: "completed",
@@ -272,12 +277,15 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
                 const security = getCoreSecurityService();
                 if (security) {
                   const accepted = await security.ensureUnlockedForSecretAccess({ interactive: true });
-                  if (accepted) {
+                  const retryCount = securityRetryCountByFileIdRef.current.get(targetFileId) ?? 0;
+                  if (accepted && retryCount < 1) {
+                    securityRetryCountByFileIdRef.current.set(targetFileId, retryCount + 1);
                     handleExecuteRef.current();
                     return;
                   }
                 }
                 activeExecutionByFileIdRef.current.delete(targetFileId);
+                securityRetryCountByFileIdRef.current.delete(targetFileId);
                 updateOutputContextForFile(targetFileId, (prev) => ({
                   ...prev,
                   state: "failed",
@@ -306,6 +314,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
         activeExecutionByFileIdRef.current.set(targetFileId, { executionId, unsubscribe });
       } catch (error) {
         activeExecutionByFileIdRef.current.delete(targetFileId);
+        securityRetryCountByFileIdRef.current.delete(targetFileId);
         updateOutputContextForFile(targetFileId, () => ({
           ...IDLE_OUTPUT_CONTEXT,
           state: "failed",
@@ -335,6 +344,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       .cancel(execution.executionId)
       .catch(() => {});
     activeExecutionByFileIdRef.current.delete(targetFileId);
+    securityRetryCountByFileIdRef.current.delete(targetFileId);
     updateOutputContextForFile(targetFileId, (prev) => ({
       ...prev,
       state: "cancelled",
@@ -368,6 +378,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
         execution.unsubscribe();
       }
       activeExecutionByFileIdRef.current.clear();
+      securityRetryCountByFileIdRef.current.clear();
     };
   }, []);
 

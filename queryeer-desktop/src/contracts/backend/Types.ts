@@ -169,6 +169,14 @@ export type JdbcEngineState = {
   properties?: Record<string, unknown>;
 };
 
+export type PayloadbuilderEngineState = {
+  payloadbuilder?: {
+    defaultCatalogAlias?: string;
+    selectedEnvironmentId?: string;
+    catalogs?: Record<string, { catalogId: string; properties?: Record<string, unknown> }>;
+  };
+};
+
 export type JdbcConnectionSessionStatus = "alive" | "dead";
 
 export type JdbcConnectionSessionEntry = {

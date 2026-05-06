@@ -267,4 +267,28 @@ describe("payloadbuilder catalog store", () => {
       index: "logs-*"
     });
   });
+
+  it("persists selected environment id in file view state", () => {
+    const filesRegistry = new FileRegistry().createFilesRegistry();
+    const store = getPayloadbuilderCatalogStore();
+    store.initialize(filesRegistry);
+    const file = filesRegistry.openFile({
+      uri: "untitled:file-env",
+      mimeType: "application/sql"
+    });
+
+    store.setSelectedEnvironmentId(file.fileId, "prod");
+
+    expect(store.buildEngineState(file.fileId)).toEqual({
+      payloadbuilder: {
+        selectedEnvironmentId: "prod",
+        defaultCatalogAlias: undefined,
+        catalogs: {}
+      }
+    });
+    const persisted = filesRegistry.getFile(file.fileId)?.persistentViewState?.[
+      PAYLOADBUILDER_CATALOGS_VIEW_STATE_KEY
+    ] as { selectedEnvironmentId?: string };
+    expect(persisted.selectedEnvironmentId).toBe("prod");
+  });
 });

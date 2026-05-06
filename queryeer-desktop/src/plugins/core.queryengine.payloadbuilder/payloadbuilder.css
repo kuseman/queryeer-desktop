@@ -37,6 +37,13 @@
   cursor: not-allowed;
 }
 
+.payloadbuilder-environment-selector-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px;
+}
+
 .payloadbuilder-catalog-empty {
   font-size: var(--ui-font-size-sm);
   color: var(--text-1);
@@ -101,4 +108,33 @@
 .payloadbuilder-settings-actions {
   display: inline-flex;
   gap: 4px;
+}
+
+.payloadbuilder-environment-grid {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.payloadbuilder-environment-grid th,
+.payloadbuilder-environment-grid td {
+  text-align: left;
+  vertical-align: top;
+  padding: 4px;
+}
+
+.payloadbuilder-environment-grid .settings-field-input {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.payloadbuilder-environment-grid .settings-password-actions {
+  margin-top: 4px;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.payloadbuilder-environment-grid .settings-setting-id {
+  font-size: 11px;
 }

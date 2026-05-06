@@ -131,8 +131,10 @@ describe("Protocol fixture compatibility", () => {
     assertEnvelopeBase(request);
     expect(request.method).toBe("queryengine.execute");
     const engineState = (request.params as Record<string, unknown>).engineState as Record<string, unknown>;
-    expect(engineState?.defaultAlias).toBe("es1");
-    const catalogs = engineState?.catalogs as Record<string, Record<string, unknown>>;
+    const payloadbuilder = engineState?.payloadbuilder as Record<string, unknown>;
+    expect(payloadbuilder?.selectedEnvironmentId).toBe("test");
+    expect(payloadbuilder?.defaultCatalogAlias).toBe("es1");
+    const catalogs = payloadbuilder?.catalogs as Record<string, Record<string, unknown>>;
     expect(catalogs?.es1?.catalogId).toBe("elasticsearch");
     expect((catalogs?.es1?.properties as Record<string, unknown>)?.connectionId).toBe("550e8400-e29b-41d4-a716-446655440020");
   });

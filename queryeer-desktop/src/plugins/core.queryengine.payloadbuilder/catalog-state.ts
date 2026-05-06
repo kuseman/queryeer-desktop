@@ -14,6 +14,7 @@ export type PayloadbuilderCatalogInstance = {
 export type PayloadbuilderCatalogsDocument = {
   schemaVersion: number;
   defaultCatalogAlias?: string;
+  selectedEnvironmentId?: string;
   instancesByAlias: Record<string, { catalogId: string; properties?: Record<string, unknown> }>;
 };
 
@@ -37,6 +38,7 @@ export function emptyCatalogDocument(): PayloadbuilderCatalogsDocument {
   return {
     schemaVersion: SCHEMA_VERSION,
     defaultCatalogAlias: undefined,
+    selectedEnvironmentId: undefined,
     instancesByAlias: {}
   };
 }
@@ -52,6 +54,10 @@ export function parseCatalogDocument(raw: unknown): PayloadbuilderCatalogsDocume
     defaultCatalogAlias:
       typeof raw.defaultCatalogAlias === "string" && raw.defaultCatalogAlias.trim()
         ? raw.defaultCatalogAlias.trim()
+        : undefined,
+    selectedEnvironmentId:
+      typeof raw.selectedEnvironmentId === "string" && raw.selectedEnvironmentId.trim()
+        ? raw.selectedEnvironmentId.trim()
         : undefined,
     instancesByAlias: {}
   };
@@ -98,11 +104,14 @@ export function readDocumentFromFile(file: FileEntity | undefined): Payloadbuild
 }
 
 export function toEngineState(document: PayloadbuilderCatalogsDocument): unknown {
-  if (Object.keys(document.instancesByAlias).length === 0) {
+  if (!document.selectedEnvironmentId && Object.keys(document.instancesByAlias).length === 0) {
     return undefined;
   }
   return {
     payloadbuilder: {
+      ...(document.selectedEnvironmentId
+        ? { selectedEnvironmentId: document.selectedEnvironmentId }
+        : {}),
       catalogs: document.instancesByAlias
     }
   };
@@ -127,6 +136,7 @@ export function applyEngineStatePatch(
   const merged: PayloadbuilderCatalogsDocument = {
     schemaVersion: SCHEMA_VERSION,
     defaultCatalogAlias: document.defaultCatalogAlias,
+    selectedEnvironmentId: document.selectedEnvironmentId,
     instancesByAlias: {
       ...document.instancesByAlias
     }
@@ -178,6 +188,7 @@ export function upsertInstance(
   return {
     schemaVersion: SCHEMA_VERSION,
     defaultCatalogAlias: document.defaultCatalogAlias,
+    selectedEnvironmentId: document.selectedEnvironmentId,
     instancesByAlias: {
       ...document.instancesByAlias,
       [alias]: {
@@ -199,6 +210,7 @@ export function removeInstance(
     schemaVersion: SCHEMA_VERSION,
     defaultCatalogAlias:
       document.defaultCatalogAlias === normalizedAlias ? undefined : document.defaultCatalogAlias,
+    selectedEnvironmentId: document.selectedEnvironmentId,
     instancesByAlias: next
   };
 }
@@ -221,6 +233,7 @@ export function setInstanceProperty(
   return {
     schemaVersion: SCHEMA_VERSION,
     defaultCatalogAlias: document.defaultCatalogAlias,
+    selectedEnvironmentId: document.selectedEnvironmentId,
     instancesByAlias: {
       ...document.instancesByAlias,
       [normalizedAlias]: {
@@ -231,5 +244,15 @@ export function setInstanceProperty(
         }
       }
     }
+  };
+}
+
+export function setSelectedEnvironmentId(
+  document: PayloadbuilderCatalogsDocument,
+  selectedEnvironmentId: string | undefined
+): PayloadbuilderCatalogsDocument {
+  return {
+    ...document,
+    selectedEnvironmentId: selectedEnvironmentId?.trim() || undefined
   };
 }

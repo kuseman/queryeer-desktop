@@ -14,8 +14,10 @@ const mocks = vi.hoisted(() => {
   }> = [];
   const setPropertyMock = vi.fn();
   const setDefaultCatalogAliasMock = vi.fn();
+  const openModalForSettingMock = vi.fn();
   let defaultCatalogAlias = "";
   let hasPanel = true;
+  let environments: Array<{ id: string; title: string }> = [];
   const renderPanelMock = vi.fn((params: { alias: string; catalogId: string }) => (
     <div data-testid={`panel-${params.alias}`}>{params.alias + ":" + params.catalogId}</div>
   ));
@@ -45,6 +47,10 @@ const mocks = vi.hoisted(() => {
     setHasPanel: (value: boolean) => {
       hasPanel = value;
     },
+    setEnvironments: (value: Array<{ id: string; title: string }>) => {
+      environments = value;
+    },
+    getEnvironments: () => environments,
     getContribution: () =>
       hasPanel
         ? {
@@ -79,18 +85,22 @@ const mocks = vi.hoisted(() => {
       listInstances: () => instances,
       setProperty: setPropertyMock,
       setDefaultCatalogAlias: setDefaultCatalogAliasMock,
+      setSelectedEnvironmentId: vi.fn(),
       buildEngineState: () => ({ payloadbuilder: { defaultCatalogAlias } })
     },
     setPropertyMock,
     setDefaultCatalogAliasMock,
     renderPanelMock,
+    openModalForSettingMock,
     reset: () => {
       activeFileId = null;
       instances = [];
       setPropertyMock.mockReset();
       setDefaultCatalogAliasMock.mockReset();
+      openModalForSettingMock.mockReset();
       renderPanelMock.mockClear();
       defaultCatalogAlias = "";
+      environments = [];
       hasPanel = true;
       editorListeners.clear();
     }
@@ -109,7 +119,15 @@ vi.mock("./catalog-contributions", () => ({
   getPayloadbuilderCatalogContribution: () => mocks.getContribution()
 }));
 
+vi.mock("./environment-settings", () => ({
+  PAYLOADBUILDER_ENVIRONMENTS_SETTING_ID: "core.queryengine.payloadbuilder.environments.values",
+  getPayloadbuilderEnvironments: () => mocks.getEnvironments()
+}));
+
 vi.mock("../core.settings/service", () => ({
+  getCoreSettingsService: () => ({
+    openModalForSetting: mocks.openModalForSettingMock
+  }),
   onCoreSettingsServiceInitialized: () => () => {}
 }));
 
@@ -240,5 +258,44 @@ describe("PayloadbuilderCatalogSidebar", () => {
 
     expect(rootElement.textContent).toContain("No configurable catalog panels for this file.");
     expect(rootElement.querySelector(".panel-card")).toBeNull();
+  });
+
+  it("renders environment selector and persists selected environment", async () => {
+    mocks.setActiveFileId("file-4");
+    mocks.setEnvironments([
+      { id: "test", title: "Test" },
+      { id: "prod", title: "Production" }
+    ]);
+
+    await act(async () => {
+      root.render(<PayloadbuilderCatalogSidebar editorRegistryHost={mocks.editorRegistryHost} />);
+      await flush();
+    });
+
+    const select = rootElement.querySelector("select.payloadbuilder-catalog-select") as HTMLSelectElement;
+    expect(select).toBeTruthy();
+
+    await act(async () => {
+      select.value = "prod";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      await flush();
+    });
+
+    expect((mocks.store.setSelectedEnvironmentId as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(
+      "file-4",
+      "prod"
+    );
+
+    const settingsButton = rootElement.querySelector(
+      'button[aria-label="Open environment settings"]'
+    ) as HTMLButtonElement;
+    expect(settingsButton).toBeTruthy();
+    await act(async () => {
+      settingsButton.click();
+      await flush();
+    });
+    expect(mocks.openModalForSettingMock).toHaveBeenCalledWith(
+      "core.queryengine.payloadbuilder.environments.values"
+    );
   });
 });

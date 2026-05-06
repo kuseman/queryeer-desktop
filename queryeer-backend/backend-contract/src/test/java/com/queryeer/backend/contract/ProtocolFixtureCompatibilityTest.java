@@ -147,10 +147,14 @@ class ProtocolFixtureCompatibilityTest
         QueryExecuteParams params = objectMapper.convertValue(request.params(), QueryExecuteParams.class);
         @SuppressWarnings("unchecked")
         Map<String, Object> engineState = objectMapper.convertValue(params.engineState(), Map.class);
-        Assertions.assertEquals("es1", engineState.get("defaultAlias"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> payloadbuilder = (Map<String, Object>) engineState.get("payloadbuilder");
+        Assertions.assertNotNull(payloadbuilder);
+        Assertions.assertEquals("test", payloadbuilder.get("selectedEnvironmentId"));
+        Assertions.assertEquals("es1", payloadbuilder.get("defaultCatalogAlias"));
 
         @SuppressWarnings("unchecked")
-        Map<String, Object> catalogs = (Map<String, Object>) engineState.get("catalogs");
+        Map<String, Object> catalogs = (Map<String, Object>) payloadbuilder.get("catalogs");
         Assertions.assertNotNull(catalogs);
         @SuppressWarnings("unchecked")
         Map<String, Object> es1 = (Map<String, Object>) catalogs.get("es1");
