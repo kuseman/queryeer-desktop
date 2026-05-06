@@ -14,8 +14,10 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Collectors;
 
+import com.queryeer.backend.queryengine.jdbc.JdbcColumnDefinition;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnectionProfile;
 import com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject;
+import com.queryeer.backend.queryengine.jdbc.JdbcSchemaObjectFactory;
 import com.queryeer.backend.queryengine.jdbc.JdbcSchemaResolver;
 
 final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
@@ -45,7 +47,6 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
     private static final String DEFAULT_CATALOG_NAME = "default";
     private static final String ERROR_RESOLVE_SCHEMA = "Failed to resolve JDBC schema";
 
-    private static final String KEY_TYPE = "type";
     private static final String KEY_NULLABLE = "nullable";
     private static final String KEY_ORDINAL = "ordinal";
     private static final String KEY_COLUMN = "column";
@@ -130,8 +131,8 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
                 List<ColumnRow> columns = columnsByTable.getOrDefault(key(table.tableCatalog(), table.tableSchema(), table.tableName()), List.of());
                 List<JdbcSchemaObject> columnObjects = columns.stream()
                         .sorted(Comparator.comparingInt(ColumnRow::ordinalPosition))
-                        .map(column -> new JdbcSchemaObject("column:" + schemaKey + ":" + table.tableName() + ":" + column.columnName(), column.columnName(), KIND_COLUMN, List.of(),
-                                Map.of(KEY_TYPE, column.dataType(), KEY_NULLABLE, column.nullable(), KEY_ORDINAL, column.ordinalPosition())))
+                        .map(column -> JdbcSchemaObjectFactory.column("column:" + schemaKey + ":" + table.tableName() + ":" + column.columnName(),
+                                new JdbcColumnDefinition(column.columnName(), column.dataType(), column.nullable(), column.ordinalPosition(), column.size(), column.precision(), column.scale())))
                         .toList();
                 List<JdbcSchemaObject> children = new ArrayList<>(columnObjects);
                 children.addAll(readPrimaryKeyObjects(metadata, table));
@@ -252,8 +253,8 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
                     String dataType = resultSet.getString(2);
                     String nullable = resultSet.getString(3);
                     int ordinal = resultSet.getInt(4);
-                    children.add(new JdbcSchemaObject("column:" + schemaKey + ":" + tableName + ":" + colName, colName, KIND_COLUMN, List.of(),
-                            Map.of(KEY_TYPE, nullToEmpty(dataType), KEY_NULLABLE, nullToEmpty(nullable), KEY_ORDINAL, ordinal)));
+                    children.add(JdbcSchemaObjectFactory.column("column:" + schemaKey + ":" + tableName + ":" + colName,
+                            new JdbcColumnDefinition(colName, nullToEmpty(dataType), nullToEmpty(nullable), ordinal, null, null, null)));
                 }
             }
         }
@@ -383,7 +384,7 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
     private List<ColumnRow> readColumns(Connection jdbc) throws SQLException
     {
         String sql = """
-                select table_catalog, table_schema, table_name, column_name, data_type, is_nullable, ordinal_position
+                select table_catalog, table_schema, table_name, column_name, data_type, is_nullable, ordinal_position, character_maximum_length, numeric_precision, numeric_scale
                 from information_schema.columns
                 where table_schema is not null
                 order by table_catalog, table_schema, table_name, ordinal_position
@@ -394,10 +395,19 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
             while (resultSet.next())
             {
                 rows.add(new ColumnRow(resultSet.getString(1), resultSet.getString(2), resultSet.getString(3), resultSet.getString(4), resultSet.getString(5), resultSet.getString(6),
-                        resultSet.getInt(7)));
+                        resultSet.getInt(7), toNullableInteger(resultSet.getObject(8)), toNullableInteger(resultSet.getObject(9)), toNullableInteger(resultSet.getObject(10))));
             }
             return rows;
         }
+    }
+
+    private static Integer toNullableInteger(Object value)
+    {
+        if (value instanceof Number n)
+        {
+            return n.intValue();
+        }
+        return null;
     }
 
     private static String key(String... values)
@@ -439,7 +449,8 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
     {
     }
 
-    private record ColumnRow(String tableCatalog, String tableSchema, String tableName, String columnName, String dataType, String nullable, int ordinalPosition)
+    private record ColumnRow(String tableCatalog, String tableSchema, String tableName, String columnName, String dataType, String nullable, int ordinalPosition, Integer size, Integer precision,
+            Integer scale)
     {
     }
 }

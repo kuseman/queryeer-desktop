@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { JdbcNavigationStore } from "./jdbc-navigation-store";
 import { getBackendStatusService } from "../../renderer/shell/backend-status-service";
 import { getNodeIcon } from "./jdbc-tree-contribution";
+import type { JdbcTreeNode } from "./jdbc-navigation-types";
 
 type Props = {
   store: JdbcNavigationStore;
@@ -115,6 +116,7 @@ function TreeNodeRow({ nodeId, store, depth, dialectId, onNodeClick }: NodeRowPr
   const hasChildren = node.childIds.length > 0 || (!node.isLoaded && node.kind !== "column" && node.kind !== "primary_key" && node.kind !== "foreign_key" && node.kind !== "index");
   const chevron = hasChildren ? (node.isExpanded ? "▼" : "▶") : "  ";
   const icon = getNodeIcon(node.kind, node.attributes, dialectId);
+  const label = formatNodeLabel(node);
 
   return (
     <>
@@ -128,7 +130,7 @@ function TreeNodeRow({ nodeId, store, depth, dialectId, onNodeClick }: NodeRowPr
       >
         <span className="jdbc-nav-node-chevron">{chevron}</span>
         <span className="jdbc-nav-node-icon">{icon}</span>
-        <span className="jdbc-nav-node-name">{node.name}</span>
+        <span className="jdbc-nav-node-name">{label}</span>
         {node.isLoading && (
           <span data-testid="jdbc-tree-loading" className="jdbc-nav-node-loading">…</span>
         )}
@@ -148,4 +150,42 @@ function TreeNodeRow({ nodeId, store, depth, dialectId, onNodeClick }: NodeRowPr
       ))}
     </>
   );
+}
+
+function formatNodeLabel(node: JdbcTreeNode): string {
+  if (node.kind !== "column") {
+    return node.name;
+  }
+  const type = typeof node.attributes.type === "string" ? node.attributes.type : "unknown";
+  const size = typeof node.attributes.size === "number" ? node.attributes.size : undefined;
+  const precision = typeof node.attributes.precision === "number" ? node.attributes.precision : undefined;
+  const scale = typeof node.attributes.scale === "number" ? node.attributes.scale : undefined;
+  const qualifiedType = formatQualifiedType(type, size, precision, scale);
+  const nullableRaw = typeof node.attributes.nullable === "string" ? node.attributes.nullable.trim().toLowerCase() : "";
+  const nullable = nullableRaw === "no" || nullableRaw === "false" || nullableRaw === "not null" ? "not null" : "null";
+  return `${node.name} ${qualifiedType} ${nullable}`;
+}
+
+function formatQualifiedType(type: string, size?: number, precision?: number, scale?: number): string {
+  const t = type.toLowerCase();
+  const isNumeric = t === "decimal" || t === "numeric";
+  const isSized = t.includes("char") || t.includes("binary");
+
+  if (isNumeric && precision !== undefined && precision > 0) {
+    if (scale !== undefined && scale > 0) {
+      return `${type}(${precision},${scale})`;
+    }
+    return `${type}(${precision})`;
+  }
+
+  if (isSized && size !== undefined) {
+    if (size < 0) {
+      return `${type}(max)`;
+    }
+    if (size > 0) {
+      return `${type}(${size})`;
+    }
+  }
+
+  return type;
 }

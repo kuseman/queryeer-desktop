@@ -86,6 +86,26 @@ describe("JdbcDatabaseCache", () => {
     expect(dbs).toEqual([]);
   });
 
+  it("falls back to jdbc.schema.fetch when snapshot is empty", async () => {
+    mocks.invokeMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: "sch:dbo", name: "dbo", kind: "schema", children: [], attributes: {} }]);
+
+    const cache = getJdbcDatabaseCache();
+    const dbs = await cache.load("conn-a");
+
+    expect(dbs).toEqual(["dbo"]);
+    expect(mocks.invokeMock).toHaveBeenNthCalledWith(
+      2,
+      {
+        engineId: "jdbc",
+        action: "jdbc.schema.fetch",
+        payload: { connectionId: "conn-a", scope: "top" }
+      },
+      { silent: true }
+    );
+  });
+
   it("deduplicates concurrent loads for the same connection", async () => {
     let resolveFetch!: (value: unknown) => void;
     mocks.invokeMock.mockReturnValue(new Promise((r) => (resolveFetch = r)));

@@ -76,11 +76,6 @@ export class JdbcNavigationStore {
     }
     if (node.isLoading) return;
 
-    if (node.kind === "database") {
-      this.updateNode(nodeId, { isExpanded: true });
-      return;
-    }
-
     this.updateNode(nodeId, { isLoading: true, loadError: undefined });
     try {
       await this.doFetchAndApply(nodeId, node, options);
@@ -182,6 +177,17 @@ export class JdbcNavigationStore {
         }
       }, { silent: options?.silent })) as JdbcSchemaObject[];
     }
+    if (node.kind === "database") {
+      return (await service.invoke({
+        engineId: "jdbc",
+        action: "jdbc.schema.fetch",
+        payload: {
+          connectionId: node.connectionId,
+          scope: "tables",
+          target: { database: node.name }
+        }
+      }, { silent: options?.silent })) as JdbcSchemaObject[];
+    }
     if (node.kind === "table" || node.kind === "view") {
       return (await service.invoke({
         engineId: "jdbc",
@@ -210,9 +216,9 @@ export class JdbcNavigationStore {
       const nodeId = `${connectionId}::${obj.id}`;
       const isLeaf = obj.kind === "column" || obj.kind === "primary_key" || obj.kind === "foreign_key" || obj.kind === "index";
       const isTableOrView = obj.kind === "table" || obj.kind === "view";
-      // database nodes are loaded because their schema children are inline from scope=top
-      // schema nodes need a lazy load (tables not included in scope=top)
-      const isLoaded = isLeaf || obj.kind === "database";
+      // some dialects return database->schema inline on top scope, others return only databases
+      const hasInlineChildren = (obj.children ?? []).length > 0;
+      const isLoaded = isLeaf || (obj.kind === "database" && hasInlineChildren);
       const children = obj.children ?? [];
       const childIds =
         children.length > 0

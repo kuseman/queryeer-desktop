@@ -56,7 +56,7 @@
 .jdbc-nav-tree {
   flex: 1;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
 }
 
 .jdbc-nav-tree-header {
@@ -85,6 +85,8 @@
 
 .jdbc-nav-tree-body {
   padding: 2px 0;
+  width: max-content;
+  min-width: 100%;
 }
 
 .jdbc-nav-node {
@@ -126,9 +128,7 @@
 }
 
 .jdbc-nav-node-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: 0 0 auto;
 }
 
 .jdbc-nav-node-loading {

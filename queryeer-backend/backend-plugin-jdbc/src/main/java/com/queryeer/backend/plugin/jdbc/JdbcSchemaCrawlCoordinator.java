@@ -28,6 +28,8 @@ final class JdbcSchemaCrawlCoordinator
     {
         Thread thread = new Thread(() -> loop(intervalMs), "jdbc-schema-crawl-loop");
         thread.setDaemon(true);
+        thread.setContextClassLoader(getClass().getClassLoader());
+        thread.setUncaughtExceptionHandler((t, e) -> logger.error("JDBC schema crawl loop crashed", e));
         thread.start();
     }
 
@@ -76,10 +78,17 @@ final class JdbcSchemaCrawlCoordinator
         while (!Thread.currentThread()
                 .isInterrupted())
         {
-            List<JdbcConnectionRegistry.JdbcStoredConnection> current = connections.all();
-            for (JdbcConnectionRegistry.JdbcStoredConnection connection : current)
+            try
             {
-                crawlOneSilent(connection, JdbcSchemaCrawlScope.TOP, false, null, Instant.now());
+                List<JdbcConnectionRegistry.JdbcStoredConnection> current = connections.all();
+                for (JdbcConnectionRegistry.JdbcStoredConnection connection : current)
+                {
+                    crawlOneSilent(connection, JdbcSchemaCrawlScope.TOP, false, null, Instant.now());
+                }
+            }
+            catch (RuntimeException e)
+            {
+                logger.warn("Schema crawl loop iteration failed: " + e.getMessage());
             }
             sleepQuietly(Math.max(500L, intervalMs));
         }

@@ -40,7 +40,7 @@ class JdbcDatabaseCache {
 
   private async fetchAndStore(connectionId: string): Promise<string[]> {
     try {
-      const result = (await getQueryEngineService().invoke(
+      const snapshot = (await getQueryEngineService().invoke(
         {
           engineId: "jdbc",
           action: "jdbc.schema.snapshot",
@@ -49,8 +49,18 @@ class JdbcDatabaseCache {
         { silent: true }
       )) as JdbcSchemaObject[];
 
-      const dbNames = result.filter((o) => o.kind === "database").map((o) => o.name);
-      const databases = dbNames.length > 0 ? dbNames : result.filter((o) => o.kind === "schema").map((o) => o.name);
+      let databases = extractDatabaseNames(snapshot);
+      if (databases.length === 0) {
+        const live = (await getQueryEngineService().invoke(
+          {
+            engineId: "jdbc",
+            action: "jdbc.schema.fetch",
+            payload: { connectionId, scope: "top" }
+          },
+          { silent: true }
+        )) as JdbcSchemaObject[];
+        databases = extractDatabaseNames(live);
+      }
 
       this.entries.set(connectionId, { databases, fetchedAtMs: Date.now() });
       this.notify(connectionId, databases);
@@ -82,6 +92,11 @@ class JdbcDatabaseCache {
       listener(connectionId, databases);
     }
   }
+}
+
+function extractDatabaseNames(result: JdbcSchemaObject[]): string[] {
+  const dbNames = result.filter((o) => o.kind === "database").map((o) => o.name);
+  return dbNames.length > 0 ? dbNames : result.filter((o) => o.kind === "schema").map((o) => o.name);
 }
 
 let instance: JdbcDatabaseCache | undefined;
