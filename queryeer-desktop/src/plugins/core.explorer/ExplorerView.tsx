@@ -1,9 +1,16 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import type { PluginContext } from "../../contracts/plugin/Plugin";
 import type { ExplorerFolder, ExplorerTreeNode, ExplorerFolderNode, ExplorerFileNode } from "./types";
 import { ExplorerStore } from "./store";
+import { getCoreSettingsService } from "../core.settings/service";
+import { buildTabTooltip, TabTooltip } from "../core.layout/TabTooltip";
+import { TRACKED_FOLDERS_SETTING_ID, WORKSPACE_OPEN_FILES_ORDER_SETTING_ID } from "./plugin";
+import { orderWorkspaceFiles, type WorkspaceOpenFilesOrder } from "./workspace-ordering";
+
+const WORKSPACE_ROOT_ID = "workspace-root";
+const WORKSPACE_SELECTED_PREFIX = "workspace-file:";
 
 export type ExplorerFileItem = {
   name: string;
@@ -22,14 +29,86 @@ type ExplorerViewProps = {
   readDir?: ExplorerReadDirFn;
 };
 
+type HoveredWorkspaceRow = {
+  fileId: string;
+  rect: DOMRect;
+};
+
+function getFileName(uri: string): string {
+  const normalized = uri.replace(/\\/g, "/");
+  return normalized.split("/").pop() ?? uri;
+}
+
+function resolveWorkspaceOrderSetting(): WorkspaceOpenFilesOrder {
+  const value = getCoreSettingsService()?.getValue(WORKSPACE_OPEN_FILES_ORDER_SETTING_ID);
+  if (value === "alphabetical" || value === "lastUsed") {
+    return value;
+  }
+  return "tabOrder";
+}
+
+function applyOpacityToHex(hex: string, alpha: number): string {
+  const sanitized = hex.replace("#", "");
+  const bigint = parseInt(sanitized, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function fileBackgroundStyle(file: FileEntity): React.CSSProperties | undefined {
+  const settings = getCoreSettingsService();
+  const configured = settings?.getValue("core.files.mimeTypes");
+  if (!Array.isArray(configured)) {
+    return undefined;
+  }
+  const item = configured.find(
+    (entry: unknown) =>
+      entry &&
+      typeof entry === "object" &&
+      (entry as Record<string, unknown>).mimeType === file.mimeType
+  ) as { color?: string } | undefined;
+  if (!item?.color || !item.color.startsWith("#")) {
+    return undefined;
+  }
+  const opacityRaw = settings?.getValue("core.files.tabBackgroundOpacity");
+  const opacity = typeof opacityRaw === "number" && !Number.isNaN(opacityRaw) ? opacityRaw : 0.08;
+  return {
+    backgroundColor: applyOpacityToHex(item.color, opacity)
+  };
+}
+
 export function ExplorerView({ context, filesRegistry, store, readDir }: ExplorerViewProps) {
   const [folders, setFolders] = useState<ExplorerFolder[]>(store.getFolders());
   const [openFiles, setOpenFiles] = useState<FileEntity[]>([]);
-  const [activeFileId, setActiveFileId] = useState<string | null>(
-    context.fileMediator.getActiveFileId()
+  const [activeFileId, setActiveFileId] = useState<string | null>(context.fileMediator.getActiveFileId());
+  const [workspaceOrder, setWorkspaceOrder] = useState<WorkspaceOpenFilesOrder>(() =>
+    resolveWorkspaceOrderSetting()
   );
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [hoveredWorkspaceRow, setHoveredWorkspaceRow] = useState<HoveredWorkspaceRow | null>(null);
   const [, setForceUpdate] = useState(0);
   const loadedRef = useRef<Set<string>>(new Set());
+  const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
+  const mruCounterRef = useRef(0);
+  const mruRankByFileIdRef = useRef(new Map<string, number>());
+
+  const tooltipContributions = useMemo(() => {
+    const all = context.tooltip.listTooltipSections?.() ?? [];
+    return [...all].sort((a, b) => a.order - b.order);
+  }, [context.tooltip]);
+
+  const orderedWorkspaceFiles = useMemo(
+    () => orderWorkspaceFiles(openFiles, workspaceOrder, mruRankByFileIdRef.current),
+    [openFiles, workspaceOrder]
+  );
+
+  const hoveredTooltipProps = hoveredWorkspaceRow
+    ? buildTabTooltip(
+        openFiles.find((file) => file.fileId === hoveredWorkspaceRow.fileId),
+        tooltipContributions
+      )
+    : { sections: [] };
 
   useEffect(() => {
     const unsubscribe = store.subscribe(() => {
@@ -45,14 +124,48 @@ export function ExplorerView({ context, filesRegistry, store, readDir }: Explore
       for (const file of files) {
         store.markFileOpen(file.fileId, true);
       }
+      const existing = new Set(files.map((f) => f.fileId));
+      for (const key of [...mruRankByFileIdRef.current.keys()]) {
+        if (!existing.has(key)) {
+          mruRankByFileIdRef.current.delete(key);
+        }
+      }
     });
     return unsubscribe;
   }, [filesRegistry, store]);
 
   useEffect(() => {
-    const currentActive = context.fileMediator.getActiveFileId();
-    setActiveFileId(currentActive);
-  }, [context.fileMediator]);
+    setWorkspaceOrder(resolveWorkspaceOrderSetting());
+  }, []);
+
+  useEffect(() => {
+    const onMouseDown = (event: MouseEvent) => {
+      if (!workspaceMenuOpen) {
+        return;
+      }
+      const target = event.target as Node;
+      if (!workspaceMenuRef.current?.contains(target)) {
+        setWorkspaceMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [workspaceMenuOpen]);
+
+  useEffect(() => {
+    const unsubscribe = context.fileMediator.onActiveFileChanged((fileId) => {
+      setActiveFileId(fileId);
+      if (!fileId) {
+        return;
+      }
+      mruCounterRef.current += 1;
+      mruRankByFileIdRef.current.set(fileId, mruCounterRef.current);
+      if (workspaceOrder === "lastUsed") {
+        setForceUpdate((n) => n + 1);
+      }
+    });
+    return unsubscribe;
+  }, [context.fileMediator, workspaceOrder]);
 
   const loadChildren = useCallback(
     async (folderId: string, folderUri: string) => {
@@ -67,6 +180,23 @@ export function ExplorerView({ context, filesRegistry, store, readDir }: Explore
         return;
       }
       const children: ExplorerTreeNode[] = [];
+      const treeNodes = store.getTreeNodes();
+      const foldersNow = store.getFolders();
+      let rootFolderId = folderId;
+      let cursor = treeNodes.get(folderId);
+      while (cursor && cursor.type === "folder" && cursor.parentId) {
+        rootFolderId = cursor.parentId;
+        cursor = treeNodes.get(cursor.parentId);
+      }
+      const rootFolder = foldersNow.find((folder) => folder.id === rootFolderId);
+      let filterRegex: RegExp | null = null;
+      if (rootFolder?.filterRegex) {
+        try {
+          filterRegex = new RegExp(rootFolder.filterRegex, "i");
+        } catch {
+          filterRegex = null;
+        }
+      }
       let idx = 0;
       for (const item of result.items) {
         if (!item.isDirectory && !item.isFile) {
@@ -87,6 +217,9 @@ export function ExplorerView({ context, filesRegistry, store, readDir }: Explore
             loaded: false
           } as ExplorerFolderNode);
         } else {
+          if (filterRegex && !filterRegex.test(item.name)) {
+            continue;
+          }
           children.push({
             type: "file",
             id: nodeId,
@@ -96,7 +229,7 @@ export function ExplorerView({ context, filesRegistry, store, readDir }: Explore
             isOpen: false
           });
         }
-        idx++;
+        idx += 1;
       }
       children.sort((a, b) => {
         if (a.type !== b.type) {
@@ -126,18 +259,18 @@ export function ExplorerView({ context, filesRegistry, store, readDir }: Explore
 
   const handleFileClick = useCallback(
     async (uri: string, isDoubleClick: boolean) => {
-      // Find the file node ID for this URI
       const treeNodes = store.getTreeNodes();
       const fileNode = Array.from(treeNodes.values()).find(
         (n) => n.type === "file" && n.uri === uri
       ) as ExplorerFileNode | undefined;
-      
+
       if (fileNode) {
         store.setSelectedItemId(fileNode.id);
       }
 
       const existingFile = openFiles.find((f) => f.uri === uri);
       if (existingFile) {
+        store.setSelectedItemId(`${WORKSPACE_SELECTED_PREFIX}${existingFile.fileId}`);
         context.fileMediator.setActiveFileId(existingFile.fileId);
         setActiveFileId(existingFile.fileId);
         return;
@@ -152,17 +285,102 @@ export function ExplorerView({ context, filesRegistry, store, readDir }: Explore
     [context.fileMediator, openFiles, store]
   );
 
-  if (folders.length === 0) {
-    return (
-      <div className="explorer-empty">
-        <p>No folders added</p>
-      </div>
-    );
-  }
+  const setWorkspaceOrderValue = useCallback(async (nextOrder: WorkspaceOpenFilesOrder) => {
+    setWorkspaceOrder(nextOrder);
+    setWorkspaceMenuOpen(false);
+    const service = getCoreSettingsService();
+    if (service) {
+      await service.setValue(WORKSPACE_OPEN_FILES_ORDER_SETTING_ID, nextOrder);
+    }
+  }, []);
 
   return (
     <div className="explorer-view">
       <div className="explorer-tree">
+        <div className="explorer-folder explorer-workspace-folder">
+          <div
+            className={`explorer-folder-header explorer-workspace-header ${store.getSelectedItemId() === WORKSPACE_ROOT_ID ? "is-selected" : ""}`}
+            onClick={() => store.setSelectedItemId(WORKSPACE_ROOT_ID)}
+          >
+            <span className="explorer-chevron expanded">▶</span>
+            <span className="explorer-folder-icon">🧩</span>
+            <span className="explorer-folder-name">Workspace</span>
+            <div className="explorer-workspace-menu" ref={workspaceMenuRef}>
+              <button
+                className="explorer-workspace-menu-button"
+                type="button"
+                aria-label="Workspace file order options"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setWorkspaceMenuOpen((open) => !open);
+                }}
+              >
+                ...
+              </button>
+              {workspaceMenuOpen && (
+                <div className="explorer-workspace-menu-list" role="menu">
+                  <button
+                    type="button"
+                    className={`explorer-workspace-menu-item ${workspaceOrder === "tabOrder" ? "is-selected" : ""}`}
+                    onClick={() => {
+                      void setWorkspaceOrderValue("tabOrder");
+                    }}
+                  >
+                    Current tab order
+                  </button>
+                  <button
+                    type="button"
+                    className={`explorer-workspace-menu-item ${workspaceOrder === "alphabetical" ? "is-selected" : ""}`}
+                    onClick={() => {
+                      void setWorkspaceOrderValue("alphabetical");
+                    }}
+                  >
+                    Alphabetical
+                  </button>
+                  <button
+                    type="button"
+                    className={`explorer-workspace-menu-item ${workspaceOrder === "lastUsed" ? "is-selected" : ""}`}
+                    onClick={() => {
+                      void setWorkspaceOrderValue("lastUsed");
+                    }}
+                  >
+                    Most recently used
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="explorer-folder-content">
+            {orderedWorkspaceFiles.map((file) => {
+              const isActive = file.fileId === activeFileId;
+              const selectedItemId = store.getSelectedItemId();
+              const isSelected = selectedItemId === `${WORKSPACE_SELECTED_PREFIX}${file.fileId}`;
+              const isDirty = file.dirtyVsDisk || file.dirtyVsBackend;
+              return (
+                <div
+                  key={file.fileId}
+                  className={`explorer-file explorer-workspace-file ${isActive ? "active" : ""} ${isSelected ? "is-selected" : ""} ${isDirty ? "dirty" : ""}`}
+                  style={fileBackgroundStyle(file)}
+                  onClick={() => {
+                    store.setSelectedItemId(`${WORKSPACE_SELECTED_PREFIX}${file.fileId}`);
+                    context.fileMediator.setActiveFileId(file.fileId);
+                    setActiveFileId(file.fileId);
+                  }}
+                  onMouseEnter={(event) => {
+                    setHoveredWorkspaceRow({
+                      fileId: file.fileId,
+                      rect: event.currentTarget.getBoundingClientRect()
+                    });
+                  }}
+                  onMouseLeave={() => setHoveredWorkspaceRow(null)}
+                >
+                  <span className="explorer-file-icon">📄</span>
+                  <span className="explorer-file-name">{getFileName(file.uri)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
         {folders.map((folder) => (
           <FolderTreeItem
             key={folder.id}
@@ -174,9 +392,53 @@ export function ExplorerView({ context, filesRegistry, store, readDir }: Explore
             onToggle={handleToggleFolder}
             onFileClick={handleFileClick}
             onLoadChildren={loadChildren}
+            onRemoveFolder={(folderId) => {
+              void (async () => {
+                const folder = store.getFolders().find((item) => item.id === folderId);
+                const result = await context.dialog.showMessage({
+                  title: "Remove Folder",
+                  message: `Are you sure you want to remove "${folder?.name ?? "this folder"}" from Explorer?`,
+                  severity: "warning",
+                  options: [
+                    { label: "Remove", value: "remove" },
+                    { label: "Cancel", value: "cancel" }
+                  ]
+                });
+                if (result.action !== "remove") {
+                  return;
+                }
+                store.removeFolder(folderId);
+                if (store.getSelectedItemId() === folderId) {
+                  store.setSelectedItemId(null);
+                }
+                const settings = getCoreSettingsService();
+                if (settings) {
+                  await settings.setValue(
+                    TRACKED_FOLDERS_SETTING_ID,
+                    store.getFolders().map((item) => ({
+                      uri: item.uri,
+                      name: item.name,
+                      filterRegex: item.filterRegex
+                    }))
+                  );
+                }
+              })();
+            }}
+            canRemove
           />
         ))}
       </div>
+      {hoveredWorkspaceRow && hoveredTooltipProps.sections.length > 0 && (
+        <div
+          className="shell-tab-tooltip explorer-workspace-tooltip"
+          style={{
+            left: hoveredWorkspaceRow.rect.left - 8,
+            top: hoveredWorkspaceRow.rect.bottom + 4
+          }}
+        >
+          <TabTooltip {...hoveredTooltipProps} />
+        </div>
+      )}
     </div>
   );
 }
@@ -190,6 +452,8 @@ type FolderTreeItemProps = {
   onToggle: (folderId: string) => void;
   onFileClick: (uri: string, isDoubleClick: boolean) => void;
   onLoadChildren: (folderId: string, folderUri: string) => Promise<void>;
+  onRemoveFolder: (folderId: string) => void;
+  canRemove?: boolean;
 };
 
 function FolderTreeItem({
@@ -200,7 +464,9 @@ function FolderTreeItem({
   selectedItemId,
   onToggle,
   onFileClick,
-  onLoadChildren
+  onLoadChildren,
+  onRemoveFolder,
+  canRemove = false
 }: FolderTreeItemProps) {
   const treeNodes = store.getTreeNodes();
   const folderNode = treeNodes.get(folder.id);
@@ -209,25 +475,39 @@ function FolderTreeItem({
 
   useEffect(() => {
     if (isExpanded && !isLoaded) {
-      onLoadChildren(folder.id, folder.uri);
+      void onLoadChildren(folder.id, folder.uri);
     }
   }, [isExpanded, isLoaded, folder.id, folder.uri, onLoadChildren]);
 
-  const childNodes = folderNode?.type === "folder"
-    ? folderNode.children.map((id) => treeNodes.get(id)).filter(Boolean)
-    : [];
+  const childNodes =
+    folderNode?.type === "folder"
+      ? folderNode.children.map((id) => treeNodes.get(id)).filter(Boolean)
+      : [];
 
   return (
     <div className="explorer-folder">
       <div
         className={`explorer-folder-header ${selectedItemId === folder.id ? "is-selected" : ""}`}
-        onClick={() => onToggle(folder.id)}
+        onClick={() => {
+          void onToggle(folder.id);
+        }}
       >
-        <span className={`explorer-chevron ${isExpanded ? "expanded" : ""}`}>
-          ▶
-        </span>
+        <span className={`explorer-chevron ${isExpanded ? "expanded" : ""}`}>▶</span>
         <span className="explorer-folder-icon">📁</span>
         <span className="explorer-folder-name">{folder.name}</span>
+        {canRemove && (
+          <button
+            type="button"
+            className="explorer-remove"
+            aria-label={`Remove ${folder.name}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onRemoveFolder(folder.id);
+            }}
+          >
+            ×
+          </button>
+        )}
       </div>
       {isExpanded && (
         <div className="explorer-folder-content">
@@ -237,7 +517,7 @@ function FolderTreeItem({
               return (
                 <FolderTreeItem
                   key={node.id}
-                  folder={{ id: node.id, uri: node.uri, name: node.name }}
+                  folder={{ id: node.id, uri: node.uri, name: node.name, filterRegex: folder.filterRegex }}
                   store={store}
                   openFiles={openFiles}
                   activeFileId={activeFileId}
@@ -245,6 +525,8 @@ function FolderTreeItem({
                   onToggle={onToggle}
                   onFileClick={onFileClick}
                   onLoadChildren={onLoadChildren}
+                  onRemoveFolder={onRemoveFolder}
+                  canRemove={false}
                 />
               );
             }
@@ -258,8 +540,12 @@ function FolderTreeItem({
               <div
                 key={fileNode.id}
                 className={`explorer-file ${isActive ? "active" : ""} ${isSelected ? "is-selected" : ""} ${isDirty ? "dirty" : ""}`}
-                onClick={() => onFileClick(fileNode.uri, false)}
-                onDoubleClick={() => onFileClick(fileNode.uri, true)}
+                onClick={() => {
+                  void onFileClick(fileNode.uri, false);
+                }}
+                onDoubleClick={() => {
+                  void onFileClick(fileNode.uri, true);
+                }}
               >
                 <span className="explorer-file-icon">📄</span>
                 <span className="explorer-file-name">{fileNode.name}</span>

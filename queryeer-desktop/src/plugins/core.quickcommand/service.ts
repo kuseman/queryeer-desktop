@@ -121,7 +121,17 @@ export class QuickCommandService {
       merged.push(...scored.map((s) => s.item));
     }
 
-    return merged;
+    const seenIds = new Set<string>();
+    const deduped: QuickCommandItem[] = [];
+    for (const item of merged) {
+      if (seenIds.has(item.id)) {
+        continue;
+      }
+      seenIds.add(item.id);
+      deduped.push(item);
+    }
+
+    return deduped;
   }
 
   private setState(next: PanelState): void {

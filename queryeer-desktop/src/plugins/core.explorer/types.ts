@@ -4,6 +4,7 @@ export type ExplorerFolder = {
   id: string;
   uri: string;
   name: string;
+  filterRegex: string;
 };
 
 export type ExplorerTreeNode =

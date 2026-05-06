@@ -476,6 +476,9 @@ export class ExtensionRegistry {
     return {
       registerTooltipSection: (contribution: TooltipSectionContribution) => {
         this.tooltipSections.set(contribution.id, contribution);
+      },
+      listTooltipSections: () => {
+        return [...this.tooltipSections.values()];
       }
     };
   }

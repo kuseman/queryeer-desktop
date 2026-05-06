@@ -44,12 +44,13 @@ export class ExplorerStore {
     }
   }
 
-  public addFolder(uri: string, name: string): void {
+  public addFolder(uri: string, name: string, filterRegex: string): void {
     const folderId = `folder-${Date.now().toString(36)}-${this.state.folders.length}`;
     const folder: ExplorerFolder = {
       id: folderId,
       uri,
-      name
+      name,
+      filterRegex
     };
 
     const rootNode: ExplorerFolderNode = {
@@ -67,6 +68,39 @@ export class ExplorerStore {
       ...this.state,
       folders: [...this.state.folders, folder],
       treeNodes: new Map([...this.state.treeNodes, [folderId, rootNode]])
+    };
+    this.emit();
+  }
+
+  public replaceFolders(folders: Array<{ uri: string; name: string; filterRegex: string }>): void {
+    const nextFolders: ExplorerFolder[] = [];
+    const treeNodes = new Map<string, ExplorerTreeNode>();
+    const expandedFolders = new Set<string>();
+    folders.forEach((folder, index) => {
+      const folderId = `folder-restored-${index}`;
+      nextFolders.push({
+        id: folderId,
+        uri: folder.uri,
+        name: folder.name,
+        filterRegex: folder.filterRegex
+      });
+      treeNodes.set(folderId, {
+        type: "folder",
+        id: folderId,
+        name: folder.name,
+        uri: folder.uri,
+        parentId: null,
+        isExpanded: false,
+        children: [],
+        loaded: false
+      });
+    });
+    this.state = {
+      ...this.state,
+      folders: nextFolders,
+      treeNodes,
+      expandedFolders,
+      selectedItemId: null
     };
     this.emit();
   }

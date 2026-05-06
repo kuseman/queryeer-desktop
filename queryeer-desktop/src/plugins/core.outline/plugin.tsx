@@ -18,7 +18,7 @@ export const coreOutlinePlugin: Plugin = {
       id: "core.outline.view",
       title: "Outline",
       defaultZone: "secondarySidebar",
-      order: 0,
+      order: 20,
       canMoveZones: false,
       canCollapse: true,
       isOpen: false,

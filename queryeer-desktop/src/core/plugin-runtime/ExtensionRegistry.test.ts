@@ -22,4 +22,19 @@ describe("ExtensionRegistry settings registration", () => {
       })
     ).not.toThrow();
   });
+
+  it("lists registered tooltip sections", () => {
+    const extensionRegistry = new ExtensionRegistry();
+    const tooltipRegistry = extensionRegistry.createTooltipRegistry();
+
+    tooltipRegistry.registerTooltipSection({
+      id: "test.tooltip.section",
+      order: 10,
+      render: () => ({ label: "Path", value: "file:///tmp/a.sql" })
+    });
+
+    const sections = tooltipRegistry.listTooltipSections?.();
+
+    expect(sections?.map((section) => section.id)).toEqual(["test.tooltip.section"]);
+  });
 });
