@@ -767,7 +767,7 @@ describe("BackendGateway", () => {
     const { gateway, transport } = createGatewayWithTestTransport();
     await gateway.start();
 
-    gateway.notifySettingsModuleChanged({ moduleId: "core.editor", version: 5 });
+    gateway.notifySettingsModuleChanged({ moduleId: "core.editor.texteditor", version: 5 });
 
     const notification = transport.sendEnvelope.mock.calls
       .map((call: [BackendEnvelope]) => call[0])
@@ -777,7 +777,7 @@ describe("BackendGateway", () => {
       );
 
     expect(notification).toBeDefined();
-    expect((notification?.params as { moduleId: string; version: number }).moduleId).toBe("core.editor");
+    expect((notification?.params as { moduleId: string; version: number }).moduleId).toBe("core.editor.texteditor");
     expect((notification?.params as { moduleId: string; version: number }).version).toBe(5);
 
     await gateway.stop();

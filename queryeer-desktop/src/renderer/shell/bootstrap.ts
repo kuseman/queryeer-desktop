@@ -11,7 +11,7 @@ import { createKeybindingService } from "../../plugins/core.commands/keybinding-
 import {
   resolveKeybindingState
 } from "../../plugins/core.commands/keybinding-resolver";
-import { setTextEditorContextChain } from "../../plugins/core.editor/TextEditor/TextEditorRegistry";
+import { setTextEditorContextChain } from "../../plugins/core.editor/texteditor/TextEditorRegistry";
 import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegistry";
 import { createBackendCommandContext } from "./backend-command-context";
 import { filterMenuItemsByWhen } from "../../plugins/core.menu/menu-item-filter";

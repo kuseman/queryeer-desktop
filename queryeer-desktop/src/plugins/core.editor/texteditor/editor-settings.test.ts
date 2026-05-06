@@ -25,16 +25,16 @@ describe("editor settings mapping", () => {
   it("maps valid configured settings", () => {
     const resolved = resolveEditorSettings(
       reader({
-        "core.editor.fontSize": 16,
-        "core.editor.fontFamily": "Fira Code",
-        "core.editor.wordWrap": "on",
-        "core.editor.tabSize": 2,
-        "core.editor.insertSpaces": false,
-        "core.editor.lineNumbers": "relative",
-        "core.editor.minimap.enabled": false,
-        "core.editor.renderWhitespace": "all",
-        "core.editor.cursorBlinking": "smooth",
-        "core.editor.formatOnSave": true
+        "core.editor.texteditor.fontSize": 16,
+        "core.editor.texteditor.fontFamily": "Fira Code",
+        "core.editor.texteditor.wordWrap": "on",
+        "core.editor.texteditor.tabSize": 2,
+        "core.editor.texteditor.insertSpaces": false,
+        "core.editor.texteditor.lineNumbers": "relative",
+        "core.editor.texteditor.minimap.enabled": false,
+        "core.editor.texteditor.renderWhitespace": "all",
+        "core.editor.texteditor.cursorBlinking": "smooth",
+        "core.editor.texteditor.formatOnSave": true
       })
     );
 
@@ -55,11 +55,11 @@ describe("editor settings mapping", () => {
   it("falls back for invalid values", () => {
     const resolved = resolveEditorSettings(
       reader({
-        "core.editor.fontSize": 100,
-        "core.editor.wordWrap": "invalid",
-        "core.editor.lineNumbers": "everywhere",
-        "core.editor.renderWhitespace": "random",
-        "core.editor.cursorBlinking": "beep"
+        "core.editor.texteditor.fontSize": 100,
+        "core.editor.texteditor.wordWrap": "invalid",
+        "core.editor.texteditor.lineNumbers": "everywhere",
+        "core.editor.texteditor.renderWhitespace": "random",
+        "core.editor.texteditor.cursorBlinking": "beep"
       })
     );
 
@@ -72,9 +72,9 @@ describe("editor settings mapping", () => {
 
   it("builds monaco options for create and update", () => {
     const source = reader({
-      "core.editor.wordWrap": "wordWrapColumn",
-      "core.editor.minimap.enabled": false,
-      "core.editor.tabSize": 8
+      "core.editor.texteditor.wordWrap": "wordWrapColumn",
+      "core.editor.texteditor.minimap.enabled": false,
+      "core.editor.texteditor.tabSize": 8
     });
 
     const createOptions = buildMonacoCreateOptions(source);
