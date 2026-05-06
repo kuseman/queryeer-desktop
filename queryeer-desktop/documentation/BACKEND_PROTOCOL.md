@@ -697,11 +697,13 @@ JDBC startup preload behavior:
 
 - On plugin activation, backend JDBC reads module settings from `queryeer.settings.path` (if present) or `${queryeer.settings.dir}/core.queryengine.jdbc.json`.
 - Backend loads `values["core.queryengine.jdbc.connections"]`, applies the same normalization rules as desktop (required `connectionId`/`url`, default `dialectId="jdbc"`, default `enabled=true`, duplicate IDs dropped), and preloads enabled connections into backend runtime registry.
+- Unknown per-connection settings fields (for example `color`) are ignored by backend contract deserialization.
 - JDBC crawl subsystem starts at plugin activation, but crawl execution is gated until backend receives `security.session.open` from desktop main.
 - On `security.session.close`, schema crawl loop pauses until a new `security.session.open` arrives.
 - `jdbc.schema.refresh` requires an open security session; otherwise backend returns a validation error.
 - `jdbc.schema.refresh` supports `scope=top|deep` (`top` default). `scope=deep` requires `target.schema` (`target.database` optional).
 - Active connections are background-crawled on `top` scope (databases/schemas) while `deep` scope (tables/columns) is refreshed only on explicit triggers.
+- For JDBC schema trees, `column` nodes include normalized attributes from foundation mapping: `type` (lowercase fallback `unknown`), optional `nullable`, optional `ordinal`, and optional type qualifiers `size`, `precision`, `scale` when applicable for the dialect/type.
 
 Current integration notes:
 

@@ -55,6 +55,33 @@ const topResult = [
   }
 ];
 
+const tablesResult = [
+  {
+    id: "table:mydb|public:users",
+    name: "users",
+    kind: "table",
+    children: [],
+    attributes: { catalog: "mydb", schema: "public" }
+  }
+];
+
+const columnsResult = [
+  {
+    id: "column:mydb|public:users:id",
+    name: "id",
+    kind: "column",
+    children: [],
+    attributes: { type: "decimal", nullable: "NO", ordinal: 1, precision: 18, scale: 2 }
+  },
+  {
+    id: "column:mydb|public:users:name",
+    name: "name",
+    kind: "column",
+    children: [],
+    attributes: { type: "varchar", nullable: "YES", ordinal: 2, size: -1, precision: 0, scale: 0 }
+  }
+];
+
 describe("JdbcNavigationTree", () => {
   let container: HTMLElement;
   let root: Root;
@@ -238,5 +265,42 @@ describe("JdbcNavigationTree", () => {
 
     expect(expandSpy).toHaveBeenCalledWith("conn-a::__root__", { silent: true });
     expect(expandSpy).toHaveBeenCalledWith("conn-a::database:mydb", { silent: true });
+  });
+
+  it("renders column label with type and nullability", async () => {
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
+    mocks.invokeMock
+      .mockResolvedValueOnce(topResult)
+      .mockResolvedValueOnce(tablesResult)
+      .mockResolvedValueOnce(columnsResult);
+    store.loadConnectionRoots();
+
+    await act(async () => {
+      root.render(
+        <JdbcNavigationTree
+          store={store}
+          activeFileConnectionId={undefined}
+          activeFileDatabase={undefined}
+        />
+      );
+    });
+
+    const rows = () => container.querySelectorAll<HTMLElement>("[data-testid='jdbc-tree-node']");
+    await act(async () => {
+      rows()[0]!.click();
+    });
+    await act(async () => {
+      rows()[1]!.click();
+    });
+    await act(async () => {
+      rows()[2]!.click();
+    });
+    await act(async () => {
+      const usersRow = Array.from(rows()).find((r) => r.textContent?.includes("users"));
+      usersRow?.click();
+    });
+
+    expect(container.textContent).toContain("id decimal(18,2) not null");
+    expect(container.textContent).toContain("name varchar(max) null");
   });
 });

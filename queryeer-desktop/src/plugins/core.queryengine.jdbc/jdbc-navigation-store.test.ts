@@ -58,6 +58,16 @@ const topResult = [
   }
 ];
 
+const topResultWithoutSchemaChildren = [
+  {
+    id: "database:mydb",
+    name: "mydb",
+    kind: "database",
+    children: [],
+    attributes: {}
+  }
+];
+
 const tablesResult = [
   {
     id: "table:mydb|public:users",
@@ -148,7 +158,7 @@ describe("JdbcNavigationStore", () => {
     expect(schemaNode?.isLoaded).toBe(false);
   });
 
-  it("expandNode on database node does NOT call backend — children already loaded", async () => {
+  it("expandNode on database node does NOT call backend when schemas are inline", async () => {
     mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
     mocks.invokeMock.mockResolvedValue(topResult);
     store.loadConnectionRoots();
@@ -161,6 +171,39 @@ describe("JdbcNavigationStore", () => {
 
     expect(mocks.invokeMock).not.toHaveBeenCalled();
     expect(store.getNode(dbNodeId)?.isExpanded).toBe(true);
+  });
+
+  it("expandNode on database node calls jdbc.schema.fetch scope=tables when schemas are not inline", async () => {
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
+    mocks.invokeMock.mockResolvedValueOnce(topResultWithoutSchemaChildren).mockResolvedValueOnce([
+      {
+        id: "schema:mydb|dbo",
+        name: "dbo",
+        kind: "schema",
+        children: [],
+        attributes: { catalog: "mydb" }
+      }
+    ]);
+    store.loadConnectionRoots();
+    await store.expandNode("conn-a::__root__");
+    const root = store.getNode("conn-a::__root__")!;
+
+    const dbNodeId = root.childIds[0];
+    await store.expandNode(dbNodeId);
+
+    expect(mocks.invokeMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        engineId: "jdbc",
+        action: "jdbc.schema.fetch",
+        payload: {
+          connectionId: "conn-a",
+          scope: "tables",
+          target: { database: "mydb" }
+        }
+      }),
+      expect.anything()
+    );
+    expect(store.getNode(dbNodeId)?.childIds.length).toBe(1);
   });
 
   it("expandNode on schema node calls jdbc.schema.fetch scope=tables with correct target", async () => {

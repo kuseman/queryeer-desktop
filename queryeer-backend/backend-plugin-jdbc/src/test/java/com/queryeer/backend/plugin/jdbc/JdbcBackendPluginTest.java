@@ -112,6 +112,45 @@ class JdbcBackendPluginTest
 
     @SuppressWarnings("unchecked")
     @Test
+    void schemaSnapshotTopTriggersRefreshWhenCacheIsEmpty() throws Exception
+    {
+        QueryEngineProvider provider = activateAndGetProvider();
+        String jdbcUrl = "jdbc:h2:mem:test_snapshot_backfill;DB_CLOSE_DELAY=-1";
+        provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-snapshot-backfill", "connection", Map.of("dialectId", "jdbc", "url", jdbcUrl)));
+
+        try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
+        {
+            statement.execute("create table snapshot_visible(id int)");
+        }
+
+        List<Object> snapshot = (List<Object>) provider.invoke(null, "jdbc.schema.snapshot", Map.of("connectionId", "jdbc-snapshot-backfill", "scope", "top"));
+        Assertions.assertFalse(snapshot.isEmpty());
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void schemaFetchTablesAppendsIntoDeepSnapshotCache() throws Exception
+    {
+        QueryEngineProvider provider = activateAndGetProvider();
+        String jdbcUrl = "jdbc:h2:mem:test_fetch_deep_append;DB_CLOSE_DELAY=-1";
+        provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-fetch-deep", "connection", Map.of("dialectId", "jdbc", "url", jdbcUrl)));
+
+        try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
+        {
+            statement.execute("create table fetch_deep_visible(id int)");
+        }
+
+        Object fetched = provider.invoke(null, "jdbc.schema.fetch", Map.of("connectionId", "jdbc-fetch-deep", "scope", "tables", "target", Map.of("schema", "PUBLIC")));
+        Assertions.assertNotNull(fetched);
+
+        List<Object> deepSnapshot = (List<Object>) provider.invoke(null, "jdbc.schema.snapshot", Map.of("connectionId", "jdbc-fetch-deep", "scope", "deep"));
+        Assertions.assertTrue(deepSnapshot.stream()
+                .map(Object::toString)
+                .anyMatch(text -> text.contains("FETCH_DEEP_VISIBLE")));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
     void invokeConnectionUpsertStoresConnectionForExecution()
     {
         QueryEngineProvider provider = activateAndGetProvider();

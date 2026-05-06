@@ -58,6 +58,9 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
 
     private static final String SCOPE_TOP = "top";
     private static final String SCOPE_DEEP = "deep";
+    private static final String SCOPE_TABLES = "tables";
+    private static final String SCOPE_COLUMNS = "columns";
+    private static final String DEFAULT_DATABASE_NODE = "default";
 
     private static final String OPTION_SCOPE = "scope";
     private static final String OPTION_TARGET = "target";
@@ -298,9 +301,11 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         {
             options.put(OPTION_TARGET, params.target());
         }
-        return resolved.dialect()
+        List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> result = resolved.dialect()
                 .schemaResolver()
                 .resolveSchema(materializedProfile, options);
+        persistDeepCacheFromFetch(resolved.connectionId(), params, result);
+        return result;
     }
 
     private Object schemaSnapshot(Object payload)
@@ -314,7 +319,20 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         String scope = trimToNull(params.scope());
         JdbcSchemaCrawlScope crawlScope = SCOPE_DEEP.equalsIgnoreCase(scope) ? JdbcSchemaCrawlScope.DEEP
                 : JdbcSchemaCrawlScope.TOP;
-        return schemaStore.latestSnapshot(connectionId, crawlScope);
+        List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> snapshot = schemaStore.latestSnapshot(connectionId, crawlScope);
+        if (!snapshot.isEmpty()
+                || crawlScope != JdbcSchemaCrawlScope.TOP)
+        {
+            return snapshot;
+        }
+        try
+        {
+            return crawlCoordinator.refreshNow(connectionId, JdbcSchemaCrawlScope.TOP, null);
+        }
+        catch (RuntimeException e)
+        {
+            return snapshot;
+        }
     }
 
     private Object schemaRefresh(Object payload)
@@ -354,6 +372,183 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                     : null, schema);
         }
         return crawlCoordinator.refreshNow(connectionId, crawlScope, target);
+    }
+
+    private void persistDeepCacheFromFetch(String connectionId, JdbcSchemaFetchPayload params, List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> fetched)
+    {
+        if (fetched == null
+                || fetched.isEmpty())
+        {
+            return;
+        }
+        String scope = trimToNull(params.scope());
+        if (!SCOPE_TABLES.equalsIgnoreCase(scope)
+                && !SCOPE_COLUMNS.equalsIgnoreCase(scope))
+        {
+            return;
+        }
+        try
+        {
+            List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> current = new java.util.ArrayList<>(schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP));
+            com.queryeer.backend.contract.jdbc.JdbcSchemaTarget target = params.target();
+            String database = target != null ? trimToNull(target.database())
+                    : null;
+            String schema = target != null ? trimToNull(target.schema())
+                    : null;
+            String table = target != null ? trimToNull(target.table())
+                    : null;
+            if (SCOPE_TABLES.equalsIgnoreCase(scope))
+            {
+                mergeTablesScope(current, database, schema, fetched);
+            }
+            else
+            {
+                mergeColumnsScope(current, database, schema, table, fetched);
+            }
+            schemaStore.persistSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP, current);
+        }
+        catch (RuntimeException ignored)
+        {
+            // best-effort append into deep cache during navigation fetch
+        }
+    }
+
+    private static void mergeTablesScope(List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> roots, String database, String schema,
+            List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> fetched)
+    {
+        String db = database != null ? database
+                : inferDatabase(fetched);
+        if (db == null)
+        {
+            db = DEFAULT_DATABASE_NODE;
+        }
+        com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject dbNode = upsertChild(roots,
+                new com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject("database:" + db, db, "database", List.of(), Map.of()));
+        List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> dbChildren = mutableChildren(dbNode);
+
+        if (schema == null)
+        {
+            mergeInto(dbChildren, fetched);
+            replaceNode(roots, dbNode, withChildren(dbNode, dbChildren));
+            return;
+        }
+
+        com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject schemaNode = upsertChild(dbChildren,
+                new com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject(db + "." + schema, schema, "schema", List.of(), Map.of("catalog", db)));
+        List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> schemaChildren = mutableChildren(schemaNode);
+        mergeInto(schemaChildren, fetched);
+        replaceNode(dbChildren, schemaNode, withChildren(schemaNode, schemaChildren));
+        replaceNode(roots, dbNode, withChildren(dbNode, dbChildren));
+    }
+
+    private static void mergeColumnsScope(List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> roots, String database, String schema, String table,
+            List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> fetched)
+    {
+        String db = database != null ? database
+                : inferDatabase(fetched);
+        if (db == null)
+        {
+            db = DEFAULT_DATABASE_NODE;
+        }
+        if (schema == null
+                || table == null)
+        {
+            return;
+        }
+        com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject dbNode = upsertChild(roots,
+                new com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject("database:" + db, db, "database", List.of(), Map.of()));
+        List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> dbChildren = mutableChildren(dbNode);
+        com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject schemaNode = upsertChild(dbChildren,
+                new com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject(db + "." + schema, schema, "schema", List.of(), Map.of("catalog", db)));
+        List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> schemaChildren = mutableChildren(schemaNode);
+        com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject tableNode = upsertChild(schemaChildren,
+                new com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject(db + "." + schema + "." + table, table, "table", List.of(), Map.of("catalog", db, "schema", schema)));
+        List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> tableChildren = mutableChildren(tableNode);
+        mergeInto(tableChildren, fetched);
+        replaceNode(schemaChildren, tableNode, withChildren(tableNode, tableChildren));
+        replaceNode(dbChildren, schemaNode, withChildren(schemaNode, schemaChildren));
+        replaceNode(roots, dbNode, withChildren(dbNode, dbChildren));
+    }
+
+    private static String inferDatabase(List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> objects)
+    {
+        for (com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject object : objects)
+        {
+            Object catalog = object.attributes()
+                    .get("catalog");
+            if (catalog instanceof String s
+                    && !s.isBlank())
+            {
+                return s;
+            }
+        }
+        return null;
+    }
+
+    private static List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> mutableChildren(com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject node)
+    {
+        return new java.util.ArrayList<>(node.children() == null ? List.of()
+                : node.children());
+    }
+
+    private static com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject withChildren(com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject node,
+            List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> children)
+    {
+        return new com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject(node.id(), node.name(), node.kind(), List.copyOf(children), node.attributes());
+    }
+
+    private static void mergeInto(List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> target, List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> incoming)
+    {
+        for (com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject item : incoming)
+        {
+            int idx = indexOf(target, item);
+            if (idx >= 0)
+            {
+                target.set(idx, item);
+            }
+            else
+            {
+                target.add(item);
+            }
+        }
+    }
+
+    private static com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject upsertChild(List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> target,
+            com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject candidate)
+    {
+        int idx = indexOf(target, candidate);
+        if (idx >= 0)
+        {
+            return target.get(idx);
+        }
+        target.add(candidate);
+        return candidate;
+    }
+
+    private static int indexOf(List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> list, com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject node)
+    {
+        for (int i = 0; i < list.size(); i++)
+        {
+            com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject current = list.get(i);
+            if (current.kind()
+                    .equals(node.kind())
+                    && current.name()
+                            .equals(node.name()))
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static void replaceNode(List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> list, com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject oldNode,
+            com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject updatedNode)
+    {
+        int idx = indexOf(list, oldNode);
+        if (idx >= 0)
+        {
+            list.set(idx, updatedNode);
+        }
     }
 
     private static String trimToNull(String value)

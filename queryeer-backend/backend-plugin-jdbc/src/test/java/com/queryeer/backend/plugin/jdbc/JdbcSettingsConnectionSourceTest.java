@@ -81,6 +81,23 @@ class JdbcSettingsConnectionSourceTest
         Assertions.assertEquals(4, connections.size());
     }
 
+    @Test
+    void ignoresUnknownConnectionProperties()
+    {
+        Map<String, Object> values = Map.of("core.queryengine.jdbc.connections",
+                List.of(Map.of("connectionId", "conn-1", "dialectId", "sqlserver", "properties", Map.of("host", "localhost", "database", "master"), "enabled", true, "color", "#ff0000")));
+
+        JdbcSettingsConnectionSource source = new JdbcSettingsConnectionSource(payloadMapper);
+        List<JdbcSettingsConnectionSource.JdbcConfiguredConnection> connections = source.parseConnections(values);
+
+        Assertions.assertEquals(1, connections.size());
+        Assertions.assertEquals("conn-1", connections.get(0)
+                .connectionId());
+        Assertions.assertEquals("sqlserver", connections.get(0)
+                .connection()
+                .get("dialectId"));
+    }
+
     private static final class NoopLoggerService implements LoggerService
     {
         @Override

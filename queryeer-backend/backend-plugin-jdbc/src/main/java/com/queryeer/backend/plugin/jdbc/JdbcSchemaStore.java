@@ -18,6 +18,7 @@ import com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject;
 
 final class JdbcSchemaStore
 {
+    private static final String H2_DRIVER_CLASS_NAME = "org.h2.Driver";
     private final Path baseDir;
     private final ObjectMapper objectMapper;
 
@@ -157,6 +158,7 @@ final class JdbcSchemaStore
 
     private Connection open(String connectionId, JdbcSchemaCrawlScope scope) throws SQLException
     {
+        ensureH2DriverLoaded();
         try
         {
             Files.createDirectories(baseDir);
@@ -173,6 +175,18 @@ final class JdbcSchemaStore
         Connection connection = DriverManager.getConnection(url);
         migrate(connection);
         return connection;
+    }
+
+    private static void ensureH2DriverLoaded()
+    {
+        try
+        {
+            Class.forName(H2_DRIVER_CLASS_NAME, true, JdbcSchemaStore.class.getClassLoader());
+        }
+        catch (ClassNotFoundException e)
+        {
+            throw new IllegalStateException("H2 JDBC driver is not available on classpath", e);
+        }
     }
 
     private void migrate(Connection connection) throws SQLException
