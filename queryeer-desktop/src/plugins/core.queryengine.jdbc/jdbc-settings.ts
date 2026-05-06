@@ -1,5 +1,6 @@
 import type { SecretRefValue } from "../../contracts/security/Security";
 import { getCoreSettingsService } from "../core.settings/service";
+import { parseSecretRefValue } from "../core.settings/secret-ref";
 
 export const JDBC_CONNECTIONS_SETTING_ID = "core.queryengine.jdbc.connections";
 
@@ -23,16 +24,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function parseSecretRef(value: unknown): SecretRefValue | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-  const secretRef = value.secretRef;
-  return typeof secretRef === "string" && secretRef.trim()
-    ? { secretRef: secretRef.trim() }
-    : undefined;
 }
 
 export function parseJdbcConnectionDefinitions(raw: unknown): JdbcConnectionDefinition[] {
@@ -69,7 +60,7 @@ export function parseJdbcConnectionDefinitions(raw: unknown): JdbcConnectionDefi
       dialectId: text(item.dialectId) || "jdbc",
       url: url || undefined,
       username: text(item.username) || undefined,
-      password: parseSecretRef(item.password) ?? (text(item.password) || undefined),
+      password: parseSecretRefValue(item.password) ?? (text(item.password) || undefined),
       properties: hasStructuredProperties ? (item.properties as Record<string, unknown>) : undefined,
       enabled: typeof item.enabled === "boolean" ? item.enabled : true,
       color: rawColor || undefined

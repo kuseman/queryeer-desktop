@@ -9,13 +9,16 @@
     "fileId": "file-fixture-1",
     "text": "select 1",
     "engineState": {
-      "defaultAlias": "es1",
-      "catalogs": {
-        "es1": {
-          "catalogId": "elasticsearch",
-          "properties": {
-            "connectionId": "550e8400-e29b-41d4-a716-446655440020",
-            "index": "my-idx"
+      "payloadbuilder": {
+        "selectedEnvironmentId": "test",
+        "defaultCatalogAlias": "es1",
+        "catalogs": {
+          "es1": {
+            "catalogId": "elasticsearch",
+            "properties": {
+              "connectionId": "550e8400-e29b-41d4-a716-446655440020",
+              "index": "my-idx"
+            }
           }
         }
       }

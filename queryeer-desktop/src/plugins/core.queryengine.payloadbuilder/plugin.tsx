@@ -3,11 +3,16 @@ import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import { registerQueryExecutableEngine } from "../core.queryengine/engine-registration";
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../core.settings/service";
 import { CatalogInstancesSettingsEditor } from "./CatalogInstancesSettingsEditor";
+import { PayloadbuilderEnvironmentsSettingsEditor } from "./PayloadbuilderEnvironmentsSettingsEditor";
 import { getPayloadbuilderCatalogStore } from "./catalog-store";
 import {
   parseCatalogAliasDefinitions,
   PAYLOADBUILDER_CATALOG_INSTANCES_SETTING_ID
 } from "./catalog-settings";
+import {
+  parsePayloadbuilderEnvironments,
+  PAYLOADBUILDER_ENVIRONMENTS_SETTING_ID
+} from "./environment-settings";
 import { PayloadbuilderCatalogSidebar } from "./PayloadbuilderCatalogSidebar";
 import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegistry";
 import {
@@ -75,6 +80,27 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
       )
     });
 
+    context.settings.registerAdvancedValidator({
+      id: "core.queryengine.payloadbuilder.environments.validator",
+      validate: ({ value }) => {
+        if (!Array.isArray(value)) {
+          return { ok: false, message: "Expected an array of environments" };
+        }
+        const parsed = parsePayloadbuilderEnvironments(value);
+        if (parsed.length !== value.length) {
+          return { ok: false, message: "Environment entries must have unique id/title and valid variables" };
+        }
+        return { ok: true };
+      }
+    });
+
+    context.settings.registerAdvancedRenderer({
+      id: "core.queryengine.payloadbuilder.environments.renderer",
+      render: ({ value, setValue, readonly }) => (
+        <PayloadbuilderEnvironmentsSettingsEditor value={value} setValue={setValue} readonly={readonly} />
+      )
+    });
+
     context.settings.registerSettings({
       moduleId: "core.queryengine.payloadbuilder",
       title: "Query Engine Payloadbuilder",
@@ -93,6 +119,28 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
           advanced: {
             rendererId: "core.queryengine.payloadbuilder.catalogInstances.renderer",
             validatorId: "core.queryengine.payloadbuilder.catalogInstances.validator"
+          }
+        }
+      ]
+    });
+
+    context.settings.registerSettings({
+      moduleId: "core.queryengine.payloadbuilder.environments",
+      title: "Query Engine Payloadbuilder Environments",
+      order: 31,
+      settings: [
+        {
+          id: PAYLOADBUILDER_ENVIRONMENTS_SETTING_ID,
+          moduleId: "core.queryengine.payloadbuilder.environments",
+          title: "Environment Profiles",
+          description: "Define payloadbuilder environments and their variables.",
+          sectionPath: ["Query Engine", "Payloadbuilder", "Environment"],
+          tags: ["payloadbuilder", "environment", "variables"],
+          type: "json",
+          defaultValue: [],
+          advanced: {
+            rendererId: "core.queryengine.payloadbuilder.environments.renderer",
+            validatorId: "core.queryengine.payloadbuilder.environments.validator"
           }
         }
       ]

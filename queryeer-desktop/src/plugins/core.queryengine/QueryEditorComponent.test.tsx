@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
   return {
     executeMock: vi.fn(async () => "exec-1"),
     cancelMock: vi.fn(async () => {}),
+    ensureUnlockedForSecretAccessMock: vi.fn(async () => true),
     subscribeMock: vi.fn((executionId: string, listener: (event: { method: string; params?: unknown }) => void) => {
       subscribeByExecutionId.set(executionId, listener);
       return () => {
@@ -77,6 +78,12 @@ vi.mock("./QueryEngineService", () => ({
     subscribe: mocks.subscribeMock,
     onExecuteRequest: mocks.onExecuteRequestMock,
     onCancelRequest: mocks.onCancelRequestMock
+  })
+}));
+
+vi.mock("../core.security/service", () => ({
+  getCoreSecurityService: () => ({
+    ensureUnlockedForSecretAccess: mocks.ensureUnlockedForSecretAccessMock
   })
 }));
 
@@ -162,6 +169,8 @@ describe("QueryEditorComponent execution state across tab switches", () => {
     mocks.subscribeMock.mockClear();
     mocks.onExecuteRequestMock.mockClear();
     mocks.onCancelRequestMock.mockClear();
+    mocks.ensureUnlockedForSecretAccessMock.mockReset();
+    mocks.ensureUnlockedForSecretAccessMock.mockResolvedValue(true);
     mocks.getActiveEditorMock.mockClear();
     mocks.subscribeByExecutionId.clear();
     mocks.executeRequestListeners.clear();
@@ -342,6 +351,46 @@ const filesRegistry = {
 
     const output = rootElement.querySelector('[data-testid="mock-output"]');
     expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.text");
+  });
+
+  it("retries at most once after SECURITY_SESSION_CLOSED", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+    mocks.executeMock.mockResolvedValueOnce("exec-1").mockResolvedValueOnce("exec-2");
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+
+    const firstListener = mocks.subscribeByExecutionId.get("exec-1");
+    expect(firstListener).toBeTruthy();
+
+    await act(async () => {
+      firstListener?.({ method: "queryengine.failed", params: { error: { code: "SECURITY_SESSION_CLOSED", message: "locked" } } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.executeMock).toHaveBeenCalledTimes(2);
+
+    const secondListener = mocks.subscribeByExecutionId.get("exec-2");
+    expect(secondListener).toBeTruthy();
+
+    await act(async () => {
+      secondListener?.({ method: "queryengine.failed", params: { error: { code: "SECURITY_SESSION_CLOSED", message: "still locked" } } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.executeMock).toHaveBeenCalledTimes(2);
+    const output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-state")).toBe("failed");
   });
 
   it("temporarily switches active output to text when query has no rows", async () => {

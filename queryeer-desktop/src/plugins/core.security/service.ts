@@ -39,6 +39,7 @@ export class CoreSecurityService {
   private readonly dialog: DialogRegistry;
   private readonly secretCache = new Map<string, string>();
   private unlockedHint = false;
+  private readonly statusListeners = new Set<(status: SecurityStatus) => void>();
 
   public constructor(bridge: SecurityBridge, dialog: DialogRegistry) {
     this.bridge = bridge;
@@ -48,7 +49,15 @@ export class CoreSecurityService {
   public async getStatus(): Promise<SecurityStatus> {
     const status = await this.bridge.getStatus();
     this.unlockedHint = status.unlocked;
+    this.emitStatus(status);
     return status;
+  }
+
+  public subscribeStatus(listener: (status: SecurityStatus) => void): () => void {
+    this.statusListeners.add(listener);
+    return () => {
+      this.statusListeners.delete(listener);
+    };
   }
 
   public async maybeAutoUnlockAtStartup(): Promise<{ accepted: boolean; reason?: string } | null> {
@@ -68,6 +77,7 @@ export class CoreSecurityService {
       masterPasswordStorage: this.getMasterPasswordStorage()
     });
     this.unlockedHint = response.accepted;
+    void this.getStatus();
     await this.showNoticeIfNeeded("Security Unlock", response);
     return response;
   }
@@ -76,6 +86,7 @@ export class CoreSecurityService {
     const result = await this.bridge.lock();
     if (result.accepted) {
       this.unlockedHint = false;
+      void this.getStatus();
     }
     return result;
   }
@@ -241,6 +252,12 @@ export class CoreSecurityService {
       message: response.reason,
       severity: response.accepted ? "warning" : "error"
     });
+  }
+
+  private emitStatus(status: SecurityStatus): void {
+    for (const listener of this.statusListeners) {
+      listener(status);
+    }
   }
 
   public getUnlockMode(): SecurityUnlockMode {

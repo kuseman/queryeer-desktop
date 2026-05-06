@@ -33,11 +33,12 @@ final class PayloadbuilderEngineStateSupport
         if (engineState == null
                 || engineState.payloadbuilder() == null)
         {
-            return new PayloadbuilderCatalogState(null, Map.of());
+            return new PayloadbuilderCatalogState(null, null, Map.of());
         }
 
         var pb = engineState.payloadbuilder();
         String defaultCatalogAlias = trimToNull(pb.defaultCatalogAlias());
+        String selectedEnvironmentId = trimToNull(pb.selectedEnvironmentId());
 
         Map<String, PayloadbuilderCatalogState.Instance> byAlias = new LinkedHashMap<>();
         if (pb.catalogs() != null)
@@ -91,7 +92,7 @@ final class PayloadbuilderEngineStateSupport
             throw new IllegalArgumentException(ERROR_DEFAULT_ALIAS_MISMATCH);
         }
 
-        return new PayloadbuilderCatalogState(defaultCatalogAlias, byAlias);
+        return new PayloadbuilderCatalogState(defaultCatalogAlias, selectedEnvironmentId, byAlias);
     }
 
     static void applyToSession(QuerySession session, PayloadbuilderCatalogState state)
@@ -165,7 +166,7 @@ final class PayloadbuilderEngineStateSupport
                 : trimmed;
     }
 
-    record PayloadbuilderCatalogState(String defaultCatalogAlias, Map<String, Instance> instancesByAlias)
+    record PayloadbuilderCatalogState(String defaultCatalogAlias, String selectedEnvironmentId, Map<String, Instance> instancesByAlias)
     {
         record Instance(String alias, String catalogId, Map<String, Object> properties)
         {

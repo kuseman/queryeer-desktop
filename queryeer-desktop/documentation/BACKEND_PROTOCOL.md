@@ -223,6 +223,7 @@ Request params:
   "text": "select * from foo",
   "engineState": {
     "payloadbuilder": {
+      "selectedEnvironmentId": "test",
       "defaultCatalogAlias": "jdbc1",
       "catalogs": {
         "jdbc1": {
@@ -255,6 +256,7 @@ Behavior:
 - Execution updates are sent via notifications (`queryengine.progress`, `queryengine.resultChunk`, `queryengine.completed`, `queryengine.failed`).
 - `engineState` is an engine-owned opaque blob. Core protocol forwards it without interpretation.
 - Payloadbuilder engine state may include `payloadbuilder.defaultCatalogAlias` to request session default catalog alias.
+- Payloadbuilder engine state may include `payloadbuilder.selectedEnvironmentId`. Backend reads environment variables from settings module `core.queryengine.payloadbuilder.environments` (`core.queryengine.payloadbuilder.environments.json`) and injects them into the query session as runtime variables before execution.
 - JDBC engine state carries `connectionId`, optional `database`, and optional `sessionId`. When `database` is present, the backend switches the JDBC connection to that catalog (via dialect-specific `setCatalog`/`setSchema`) before executing statements. After execution, the backend reflects the current database back in `queryengine.completed.engineState.database` and the active RDBMS session in `queryengine.completed.engineState.sessionId` so the UI stays synchronized.
 
 ## 5.4 `queryengine.cancel`

@@ -1,6 +1,7 @@
 package com.queryeer.backend.plugin.payloadbuilder;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -11,6 +12,7 @@ import com.queryeer.backend.api.ErrorMessages;
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryPublisher;
+import com.queryeer.backend.api.SettingsModule;
 import com.queryeer.backend.contract.payloadbuilder.PayloadbuilderEngineState;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
@@ -48,11 +50,16 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
 
     private final Set<String> cancelledExecutionIds = ConcurrentHashMap.newKeySet();
     private final Map<String, QuerySession> activeSessions = new ConcurrentHashMap<>();
+    private final ConfigService configService;
     private final PayloadbuilderCatalogProviderRegistry catalogProviders;
     private final PayloadMapper payloadMapper;
 
+    private static final String ENV_MODULE_ID = "core.queryengine.payloadbuilder.environments";
+    private static final String ENV_SETTING_KEY = "core.queryengine.payloadbuilder.environments.values";
+
     public PayloadbuilderQueryEngineProvider(ConfigService configService, PayloadMapper payloadMapper)
     {
+        this.configService = configService;
         this.payloadMapper = payloadMapper;
         this.catalogProviders = PayloadbuilderCatalogProviderRegistry.defaults(configService, payloadMapper);
     }
@@ -74,7 +81,8 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
             PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState catalogState = PayloadbuilderEngineStateSupport.parse(typedState);
             catalogState = resolveCatalogConnections(catalogState);
             CatalogRegistry catalogRegistry = buildCatalogRegistry(catalogState);
-            session = new QuerySession(catalogRegistry);
+            Map<String, Object> variables = resolveEnvironmentVariables(catalogState.selectedEnvironmentId());
+            session = new QuerySession(catalogRegistry, variables);
             session.setAbortSupplier(() -> cancelledExecutionIds.contains(queryExecutionId));
             activeSessions.put(queryExecutionId, session);
 
@@ -124,6 +132,10 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
         catch (IllegalArgumentException e)
         {
             publisher.failed("VALIDATION", e.getMessage());
+        }
+        catch (com.queryeer.backend.api.SecuritySessionClosedException e)
+        {
+            throw e;
         }
         catch (Exception e)
         {
@@ -197,7 +209,100 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
             }
             resolved.put(instance.alias(), instance);
         }
-        return new PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState(state.defaultCatalogAlias(), resolved);
+        return new PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState(state.defaultCatalogAlias(), state.selectedEnvironmentId(), resolved);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> resolveEnvironmentVariables(String selectedEnvironmentId)
+    {
+        if (selectedEnvironmentId == null)
+        {
+            return Map.of();
+        }
+
+        SettingsModule module = configService.getModule(ENV_MODULE_ID);
+        if (module == null
+                || module.values() == null)
+        {
+            return Map.of();
+        }
+        Object raw = module.values();
+        if (raw instanceof Map<?, ?> map
+                && map.containsKey(ENV_SETTING_KEY))
+        {
+            raw = map.get(ENV_SETTING_KEY);
+        }
+        if (!(raw instanceof List<?> environments))
+        {
+            return Map.of();
+        }
+
+        for (Object env : environments)
+        {
+            if (!(env instanceof Map<?, ?> envMap))
+            {
+                continue;
+            }
+            String id = stringValue(envMap.get("id"));
+            if (!selectedEnvironmentId.equals(id))
+            {
+                continue;
+            }
+            Object variablesRaw = envMap.get("variables");
+            if (!(variablesRaw instanceof List<?> variablesList))
+            {
+                return Map.of();
+            }
+
+            Map<String, Object> variables = new LinkedHashMap<>();
+            for (Object variableRaw : variablesList)
+            {
+                if (!(variableRaw instanceof Map<?, ?> variable))
+                {
+                    continue;
+                }
+                String key = stringValue(variable.get("key"));
+                if (key == null)
+                {
+                    continue;
+                }
+                Object value = variable.get("value");
+                Object secretRef = variable.get("secretRef");
+                String secretRefValue = null;
+                if (secretRef instanceof Map<?, ?> secretRefMap)
+                {
+                    secretRefValue = stringValue(secretRefMap.get("secretRef"));
+                }
+                else
+                {
+                    secretRefValue = stringValue(secretRef);
+                }
+                if (value != null
+                        && secretRefValue != null)
+                {
+                    continue;
+                }
+                if (secretRefValue != null)
+                {
+                    Object resolved = configService.materializeSecrets(Map.of("secret", Map.of("secretRef", secretRefValue)));
+                    if (resolved instanceof Map<?, ?> resolvedMap)
+                    {
+                        Object secret = resolvedMap.get("secret");
+                        if (secret != null)
+                        {
+                            variables.put(key, secret);
+                        }
+                    }
+                    continue;
+                }
+                if (value != null)
+                {
+                    variables.put(key, value);
+                }
+            }
+            return variables;
+        }
+        return Map.of();
     }
 
     private static String stringValue(Object value)

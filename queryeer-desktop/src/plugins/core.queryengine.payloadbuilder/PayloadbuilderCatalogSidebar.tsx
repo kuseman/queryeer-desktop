@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import type { EditorRegistryHost } from "../../contracts/editor/EditorCapability";
 import { getPayloadbuilderCatalogStore } from "./catalog-store";
-import { onCoreSettingsServiceInitialized } from "../core.settings/service";
+import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../core.settings/service";
 import { getPayloadbuilderCatalogContribution } from "./catalog-contributions";
+import { getPayloadbuilderEnvironments } from "./environment-settings";
+import { PAYLOADBUILDER_ENVIRONMENTS_SETTING_ID } from "./environment-settings";
 
 type Props = {
   editorRegistryHost: EditorRegistryHost;
@@ -55,6 +57,12 @@ export function PayloadbuilderCatalogSidebar({ editorRegistryHost }: Props): JSX
         payloadbuilder?: { defaultCatalogAlias?: string };
       })?.payloadbuilder?.defaultCatalogAlias ?? "")
     : "";
+  const selectedEnvironmentId = activeFile
+    ? ((getPayloadbuilderCatalogStore().buildEngineState(activeFile.fileId) as {
+        payloadbuilder?: { selectedEnvironmentId?: string };
+      })?.payloadbuilder?.selectedEnvironmentId ?? "")
+    : "";
+  const environments = getPayloadbuilderEnvironments();
 
   if (!activeFile) {
     return <div className="payloadbuilder-catalog-empty">Open a query file to configure catalogs.</div>;
@@ -62,6 +70,48 @@ export function PayloadbuilderCatalogSidebar({ editorRegistryHost }: Props): JSX
 
   return (
     <div className="payloadbuilder-catalog-sidebar" data-context="payloadbuilder-catalogs">
+      {environments.length > 0 && (
+        <section className="panel-card">
+          <header className="panel-header">
+            <span className="panel-title">Environment</span>
+          </header>
+          <div className="panel-content">
+            <div className="payloadbuilder-environment-selector-row">
+              <select
+                className="payloadbuilder-catalog-select"
+                value={selectedEnvironmentId}
+                onChange={(event) =>
+                  getPayloadbuilderCatalogStore().setSelectedEnvironmentId(
+                    activeFile.fileId,
+                    event.target.value || undefined
+                  )
+                }
+              >
+                <option value="">None</option>
+                {environments.map((environment) => (
+                  <option key={environment.id} value={environment.id}>
+                    {environment.title}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="payloadbuilder-catalog-button"
+                title="Open environment settings"
+                aria-label="Open environment settings"
+                onClick={() => {
+                  getCoreSettingsService()?.openModalForSetting(
+                    PAYLOADBUILDER_ENVIRONMENTS_SETTING_ID
+                  );
+                }}
+              >
+                ⚙
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
       {panelInstances.length === 0 && (
         <div className="payloadbuilder-catalog-empty">No configurable catalog panels for this file.</div>
       )}

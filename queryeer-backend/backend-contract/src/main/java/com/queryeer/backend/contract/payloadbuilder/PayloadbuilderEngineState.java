@@ -7,7 +7,7 @@ import java.util.Map;
  */
 public record PayloadbuilderEngineState(PayloadbuilderCatalogState payloadbuilder)
 {
-    public record PayloadbuilderCatalogState(String defaultCatalogAlias, Map<String, PayloadbuilderCatalogInstance> catalogs)
+    public record PayloadbuilderCatalogState(String defaultCatalogAlias, String selectedEnvironmentId, Map<String, PayloadbuilderCatalogInstance> catalogs)
     {
     }
 }

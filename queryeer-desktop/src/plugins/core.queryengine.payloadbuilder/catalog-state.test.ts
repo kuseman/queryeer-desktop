@@ -3,6 +3,7 @@ import {
   applyEngineStatePatch,
   emptyCatalogDocument,
   parseCatalogDocument,
+  setSelectedEnvironmentId,
   setInstanceProperty,
   toEngineState,
   upsertInstance,
@@ -106,5 +107,15 @@ describe("payloadbuilder catalog state", () => {
     });
     expect(patched.instancesByAlias.jdbc2).toBeUndefined();
     expect(patched.instancesByAlias.jdbc3?.catalogId).toBe("Jdbc");
+  });
+
+  it("stores selected environment id in engine state", () => {
+    const next = setSelectedEnvironmentId(emptyCatalogDocument(), "prod");
+    expect(toEngineState(next)).toEqual({
+      payloadbuilder: {
+        selectedEnvironmentId: "prod",
+        catalogs: {}
+      }
+    });
   });
 });

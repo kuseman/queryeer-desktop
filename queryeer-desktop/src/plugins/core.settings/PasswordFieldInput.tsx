@@ -28,8 +28,15 @@ export function PasswordFieldInput({ inputId, valueRef, readonly, onChangeRef }:
       }
     });
 
+    const unsubscribe = security.subscribeStatus((status) => {
+      if (!cancelled) {
+        setUnlocked(status.unlocked);
+      }
+    });
+
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [security]);
 

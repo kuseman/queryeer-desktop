@@ -14,6 +14,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.QueryPublisher;
+import com.queryeer.backend.api.SecuritySessionClosedException;
+import com.queryeer.backend.api.SettingsModule;
 
 import se.kuseman.payloadbuilder.api.catalog.Column;
 import se.kuseman.payloadbuilder.api.catalog.ResolvedType;
@@ -112,6 +114,72 @@ class PayloadbuilderQueryEngineProviderTest
         Assertions.assertEquals("VALIDATION", publisher.errorCode);
         Assertions.assertTrue(publisher.errorMessage.contains("jdbc1"));
         Assertions.assertFalse(publisher.completed);
+    }
+
+    @Test
+    void executeResolvesEnvironmentVariablesFromSettingsModule()
+    {
+        ConfigService config = new ConfigService()
+        {
+            @Override
+            public String get(String key)
+            {
+                return null;
+            }
+
+            @Override
+            public SettingsModule getModule(String moduleId)
+            {
+                return new SettingsModule("core.queryengine.payloadbuilder.environments", 1L, "2026-01-01T00:00:00Z", Map.of("core.queryengine.payloadbuilder.environments.values",
+                        List.of(Map.of("id", "test", "title", "Test", "variables", List.of(Map.of("key", "tenant", "value", "acme"), Map.of("key", "apiKey", "secretRef", "s-1"))))));
+            }
+
+            @Override
+            public Object materializeSecrets(Object payload)
+            {
+                return Map.of("secret", "plain-secret");
+            }
+        };
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(config, TEST_MAPPER);
+        RecordingPublisher publisher = new RecordingPublisher();
+
+        provider.execute("exec-env", "file-1", "select 1", Map.of("payloadbuilder", Map.of("selectedEnvironmentId", "test")), publisher);
+
+        Assertions.assertNull(publisher.errorCode);
+        Assertions.assertTrue(publisher.completed);
+    }
+
+    @Test
+    void executeThrowsSecuritySessionClosedWhenVaultIsLocked()
+    {
+        ConfigService config = new ConfigService()
+        {
+            @Override
+            public String get(String key)
+            {
+                return null;
+            }
+
+            @Override
+            public SettingsModule getModule(String moduleId)
+            {
+                return new SettingsModule("core.queryengine.payloadbuilder.environments", 1L, "2026-01-01T00:00:00Z", Map.of("core.queryengine.payloadbuilder.environments.values",
+                        List.of(Map.of("id", "test", "title", "Test", "variables", List.of(Map.of("key", "apiKey", "secretRef", "s-1"))))));
+            }
+
+            @Override
+            public Object materializeSecrets(Object payload)
+            {
+                throw new SecuritySessionClosedException("Security session is not open");
+            }
+        };
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(config, TEST_MAPPER);
+        RecordingPublisher publisher = new RecordingPublisher();
+
+        SecuritySessionClosedException error = Assertions.assertThrows(SecuritySessionClosedException.class,
+                () -> provider.execute("exec-env", "file-1", "select 1", Map.of("payloadbuilder", Map.of("selectedEnvironmentId", "test")), publisher));
+
+        Assertions.assertEquals("Security session is not open", error.getMessage());
     }
 
     @Test
