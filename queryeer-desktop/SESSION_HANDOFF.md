@@ -73,7 +73,7 @@
 
 - Created `src/contracts/editor/EditorApi.ts` — stable cross-editor contract (`ICodeEditor`, `TextDocument`, `Position`, `Selection`, `TextRange`, `TextEditorEditOperation`, `Disposable`, cursor/selection/layout/mouse event types, `EditorOptions`).
 - Created `src/plugins/core.editor/plugin.tsx` + `module.ts` — parent plugin that activates both `core.editor.text` and `core.editor.image`.
-- Created `src/plugins/core.editor/TextEditor/` module with:
+- Created `src/plugins/core.editor/texteditor/` module with:
   - `TextEditorRegistry.ts` — singleton managing Monaco model lifetime per file (uri-based deduplication, fileId→model map, active model switching)
   - `TextEditorModel.ts` — per-file model wrapping content + line cache
   - `TextEditorApi.ts` — abstract base class defining stable editor API
@@ -82,7 +82,7 @@
   - `commands/index.ts` — all editor commands registered against `context.commands`
   - `keybindings.ts` — all Monaco shortcuts registered as keybinding contributions
   - `types.ts` — internal types matching Monaco event shapes
-- Created `src/plugins/core.editor/ImageEditor/plugin.tsx` — placeholder image editor contribution for common image mime types.
+- Created `src/plugins/core.editor/imageeditor/plugin.tsx` — placeholder image editor contribution for common image mime types.
 - Split `FileEntity.viewState` into `runtimeViewState` + `persistentViewState` in `FileEntity.ts`, `FileOpenInput`, and `FileEntityUpdate`.
 - Updated `FileRegistry.ts` to use `persistentViewState` instead of `viewState`.
 - Added `monaco-editor` to `package.json` dependencies.
@@ -130,14 +130,14 @@
 
 - `npm run typecheck` passed.
 - `npm run lint` passed.
-- `npm run test -- src/plugins/core.editor/TextEditor/TextEditorRegistry.test.ts` passed.
+- `npm run test -- src/plugins/core.editor/texteditor/TextEditorRegistry.test.ts` passed.
 - `npm run test -- src/renderer/workspace/workspace-service.test.ts` passed.
 - `npm run test -- src/renderer/workspace/workspace-service.test.ts` passed (includes restart round-trip assertion for Monaco `persistentViewState["monaco.editor"]`).
 - `npm run test -- src/core/plugin-runtime/FileMediator.test.ts` passed (includes save flow assertions).
-- `npm run test -- src/plugins/core.editor/TextEditor/TextEditorRegistry.test.ts` passed.
+- `npm run test -- src/plugins/core.editor/texteditor/TextEditorRegistry.test.ts` passed.
 - `npm run test -- src/renderer/shell/bootstrap.test.ts` passed.
 - `npm run test -- src/renderer/workspace/workspace-service.test.ts` passed after backup auto-restore + stable backup id updates.
-- `npm run test -- src/plugins/core.editor/TextEditor/TextEditorRegistry.test.ts` passed after recovered-content queue updates.
+- `npm run test -- src/plugins/core.editor/texteditor/TextEditorRegistry.test.ts` passed after recovered-content queue updates.
 - `npm run typecheck` passed.
 - `npm run lint` passed.
 - `npm run build` passed.

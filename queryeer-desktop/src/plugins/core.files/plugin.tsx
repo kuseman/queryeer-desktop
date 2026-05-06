@@ -179,7 +179,7 @@ async function maybeFormatBeforeSave(
   editors: { getActiveEditor(): { fileId: string | null; format?: { format(): Promise<void> } } | null }
 ): Promise<void> {
   const settingsService = getCoreSettingsService();
-  const formatOnSave = settingsService?.getValue("core.editor.formatOnSave") === true;
+  const formatOnSave = settingsService?.getValue("core.editor.texteditor.formatOnSave") === true;
   if (!formatOnSave) {
     return;
   }

@@ -38,7 +38,7 @@ Use a hybrid persistence model:
   "version": 1,
   "updatedAt": "2026-04-25T12:00:00.000Z",
   "modules": {
-    "core.editor": { "file": "core.editor.json", "version": 1, "updatedAt": "..." }
+    "core.editor.texteditor": { "file": "core.editor.texteditor.json", "version": 1, "updatedAt": "..." }
   }
 }
 ```
@@ -46,10 +46,10 @@ Use a hybrid persistence model:
 ```json
 {
   "version": 1,
-  "moduleId": "core.editor",
+  "moduleId": "core.editor.texteditor",
   "updatedAt": "2026-04-25T12:00:00.000Z",
   "values": {
-    "core.editor.tabSize": 2
+    "core.editor.texteditor.tabSize": 2
   }
 }
 ```

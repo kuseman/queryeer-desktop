@@ -40,7 +40,7 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("../core.editor/TextEditor/TextEditorComponent", () => ({
+vi.mock("../core.editor/texteditor/TextEditorComponent", () => ({
   TextEditorComponent: () => <div data-testid="mock-editor" />
 }));
 

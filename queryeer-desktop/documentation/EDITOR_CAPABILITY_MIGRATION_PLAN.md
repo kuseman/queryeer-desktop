@@ -1,7 +1,7 @@
 # Editor Capability Migration Plan — Phase 2
 
 > **Goal**: Eliminate all remaining hard couplings to `TextEditorRegistry`, `TextEditorApi`, `TextEditorModelRepository`,
-> and `TextEditorModel` outside their owning module (`core.editor/TextEditor/`). Replace them with capabilities on
+> and `TextEditorModel` outside their owning module (`core.editor/texteditor/`). Replace them with capabilities on
 > `EditorHandle` and `EditorRegistryHost` so that any future editor type (diagram, image, hex, spreadsheet) can
 > participate in the same flows without modifying consumer code.
 
@@ -15,7 +15,7 @@ Phase 1 introduced:
 - **`EditorRegistryHost`** tracking the active editor handle
 - **`EditorRegistry`** (read-only) available via `PluginContext.editors`
 - **Outline view** decoupled from `TextEditorRegistry` internals
-- **Providers** moved from `core.outline` → `core.editor/TextEditor/outline-providers`
+- **Providers** moved from `core.outline` → `core.editor/texteditor/outline-providers`
 
 The following external hard couplings remain:
 
@@ -27,8 +27,8 @@ The following external hard couplings remain:
 
 **Current code:**
 ```ts
-import { TextEditorRegistry } from "../core.editor/TextEditor/TextEditorRegistry";
-import { registerTextEditorRepository } from "../core.editor/TextEditor/TextEditorModelRepository";
+import { TextEditorRegistry } from "../core.editor/texteditor/TextEditorRegistry";
+import { registerTextEditorRepository } from "../core.editor/texteditor/TextEditorModelRepository";
 
 const queryRegistry = new TextEditorRegistry();
 registerTextEditorRepository(queryRegistry);
@@ -51,7 +51,7 @@ export const queryTextRegistry = queryRegistry;
 
 **Current code (lines 5, 84-95, 217):**
 ```ts
-import { getTextEditorRegistry } from "../core.editor/TextEditor/TextEditorRegistry";
+import { getTextEditorRegistry } from "../core.editor/texteditor/TextEditorRegistry";
 // ...
 const textEditorRegistry = getTextEditorRegistry();
 const activeFile = textEditorRegistry.getActiveFile();
@@ -318,7 +318,7 @@ Add `FormatCapability`, `ContentCapability`, `FocusCapability`, `SelectionCapabi
 
 ### Step 2 — Implement capabilities in `TextEditorComponent`
 
-**File**: `plugins/core.editor/TextEditor/TextEditorComponent.tsx`
+**File**: `plugins/core.editor/texteditor/TextEditorComponent.tsx`
 
 - Populate `fileId` from the active file.
 - Create `FormatCapability` wrapping `api.format()`.
@@ -409,27 +409,27 @@ After each step:
 2. `npm run lint` — must pass
 3. `npm run build` — must pass
 4. `npm run test` — all 610+ tests must pass
-5. No remaining `import ... from "...TextEditorRegistry"` outside `core.editor/TextEditor/` and `core.queryengine/QueryTextEditorRegistry.ts`
-6. No remaining `import ... from "...TextEditorModelRepository"` outside `core.editor/TextEditor/` and `core.queryengine/QueryTextEditorRegistry.ts`
-7. No remaining `getTextEditorRegistry()` calls outside `core.editor/TextEditor/` and `core.queryengine/`
+5. No remaining `import ... from "...TextEditorRegistry"` outside `core.editor/texteditor/` and `core.queryengine/QueryTextEditorRegistry.ts`
+6. No remaining `import ... from "...TextEditorModelRepository"` outside `core.editor/texteditor/` and `core.queryengine/QueryTextEditorRegistry.ts`
+7. No remaining `getTextEditorRegistry()` calls outside `core.editor/texteditor/` and `core.queryengine/`
 
 ---
 
 ## Files NOT Changed
 
 These files use `TextEditorRegistry` / `TextEditorApi` legitimately within the owning module:
-- `plugins/core.editor/TextEditor/TextEditorRegistry.ts` — the registry itself
-- `plugins/core.editor/TextEditor/TextEditorApi.ts` — the API
-- `plugins/core.editor/TextEditor/TextEditorModel.ts` — the model
-- `plugins/core.editor/TextEditor/TextEditorModelRepository.ts` — the repository
-- `plugins/core.editor/TextEditor/TextEditorComponent.tsx` — the component
-- `plugins/core.editor/TextEditor/TextEditorOutlineCapability.ts` — the capability impl
-- `plugins/core.editor/TextEditor/MonacoTextEditorApi.ts` — the Monaco impl
-- `plugins/core.editor/TextEditor/ViewStateStore.ts` — view state
-- `plugins/core.editor/TextEditor/commands.ts` — editor commands
-- `plugins/core.editor/TextEditor/keybindings.ts` — keybindings
-- `plugins/core.editor/TextEditor/TextEditorRegistry.test.ts` — registry tests
-- `plugins/core.editor/TextEditor/TextEditorComponent.integration.test.tsx` — integration tests
-- `plugins/core.editor/TextEditor/editor-settings.ts` — settings
-- `plugins/core.editor/TextEditor/mime-types.ts` — MIME registration
+- `plugins/core.editor/texteditor/TextEditorRegistry.ts` — the registry itself
+- `plugins/core.editor/texteditor/TextEditorApi.ts` — the API
+- `plugins/core.editor/texteditor/TextEditorModel.ts` — the model
+- `plugins/core.editor/texteditor/TextEditorModelRepository.ts` — the repository
+- `plugins/core.editor/texteditor/TextEditorComponent.tsx` — the component
+- `plugins/core.editor/texteditor/TextEditorOutlineCapability.ts` — the capability impl
+- `plugins/core.editor/texteditor/MonacoTextEditorApi.ts` — the Monaco impl
+- `plugins/core.editor/texteditor/ViewStateStore.ts` — view state
+- `plugins/core.editor/texteditor/commands.ts` — editor commands
+- `plugins/core.editor/texteditor/keybindings.ts` — keybindings
+- `plugins/core.editor/texteditor/TextEditorRegistry.test.ts` — registry tests
+- `plugins/core.editor/texteditor/TextEditorComponent.integration.test.tsx` — integration tests
+- `plugins/core.editor/texteditor/editor-settings.ts` — settings
+- `plugins/core.editor/texteditor/mime-types.ts` — MIME registration
 - `core.queryengine/QueryTextEditorRegistry.ts` — scoped registry (keeps internal `TextEditorRegistry` usage)

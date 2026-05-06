@@ -278,8 +278,8 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
     expect(editor).toBeTruthy();
     expect(editor.updateOptions).toHaveBeenCalled();
 
-    settingsValues.set("core.editor.fontSize", 18);
-    settingsValues.set("core.editor.wordWrap", "on");
+    settingsValues.set("core.editor.texteditor.fontSize", 18);
+    settingsValues.set("core.editor.texteditor.wordWrap", "on");
     for (const listener of settingsSubscribers) {
       listener();
     }

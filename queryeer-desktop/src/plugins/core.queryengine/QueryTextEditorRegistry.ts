@@ -1,4 +1,4 @@
-import { TextEditorRegistry } from "../core.editor/TextEditor/TextEditorRegistry";
+import { TextEditorRegistry } from "../core.editor/texteditor/TextEditorRegistry";
 
 const queryRegistry = new TextEditorRegistry();
 

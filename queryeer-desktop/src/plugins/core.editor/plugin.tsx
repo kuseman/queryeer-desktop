@@ -1,6 +1,6 @@
 import type { Plugin } from "../../contracts/plugin/Plugin";
-import { coreEditorTextPlugin } from "./TextEditor/plugin";
-import { coreEditorImagePlugin } from "./ImageEditor/plugin";
+import { coreEditorTextPlugin } from "./texteditor/plugin";
+import { coreEditorImagePlugin } from "./imageeditor/plugin";
 
 export const coreEditorPlugin: Plugin = {
   manifest: {
@@ -14,13 +14,13 @@ export const coreEditorPlugin: Plugin = {
   },
   activate: (context) => {
     context.settings.registerSettings({
-      moduleId: "core.editor",
+      moduleId: "core.editor.texteditor",
       title: "Editor",
       order: 30,
       settings: [
         {
-          id: "core.editor.fontSize",
-          moduleId: "core.editor",
+          id: "core.editor.texteditor.fontSize",
+          moduleId: "core.editor.texteditor",
           title: "Font Size",
           description: "Controls editor font size in pixels.",
           sectionPath: ["Editor", "Font"],
@@ -33,8 +33,8 @@ export const coreEditorPlugin: Plugin = {
           }
         },
         {
-          id: "core.editor.fontFamily",
-          moduleId: "core.editor",
+          id: "core.editor.texteditor.fontFamily",
+          moduleId: "core.editor.texteditor",
           title: "Font Family",
           description: "Controls the editor font family.",
           sectionPath: ["Editor", "Font"],
@@ -43,8 +43,8 @@ export const coreEditorPlugin: Plugin = {
           defaultValue: "JetBrains Mono, Consolas, monospace"
         },
         {
-          id: "core.editor.wordWrap",
-          moduleId: "core.editor",
+          id: "core.editor.texteditor.wordWrap",
+          moduleId: "core.editor.texteditor",
           title: "Word Wrap",
           description: "Controls how lines should wrap in the editor.",
           sectionPath: ["Editor", "Formatting"],
@@ -58,8 +58,8 @@ export const coreEditorPlugin: Plugin = {
           ]
         },
         {
-          id: "core.editor.tabSize",
-          moduleId: "core.editor",
+          id: "core.editor.texteditor.tabSize",
+          moduleId: "core.editor.texteditor",
           title: "Tab Size",
           description: "The number of spaces a tab is equal to.",
           sectionPath: ["Editor", "Formatting"],
@@ -72,8 +72,8 @@ export const coreEditorPlugin: Plugin = {
           }
         },
         {
-          id: "core.editor.insertSpaces",
-          moduleId: "core.editor",
+          id: "core.editor.texteditor.insertSpaces",
+          moduleId: "core.editor.texteditor",
           title: "Insert Spaces",
           description: "Insert spaces when pressing Tab.",
           sectionPath: ["Editor", "Formatting"],
@@ -82,8 +82,8 @@ export const coreEditorPlugin: Plugin = {
           defaultValue: true
         },
         {
-          id: "core.editor.lineNumbers",
-          moduleId: "core.editor",
+          id: "core.editor.texteditor.lineNumbers",
+          moduleId: "core.editor.texteditor",
           title: "Line Numbers",
           description: "Controls the display of line numbers.",
           sectionPath: ["Editor", "Appearance"],
@@ -97,8 +97,8 @@ export const coreEditorPlugin: Plugin = {
           ]
         },
         {
-          id: "core.editor.minimap.enabled",
-          moduleId: "core.editor",
+          id: "core.editor.texteditor.minimap.enabled",
+          moduleId: "core.editor.texteditor",
           title: "Minimap Enabled",
           description: "Controls whether the editor minimap is shown.",
           sectionPath: ["Editor", "Appearance"],
@@ -107,8 +107,8 @@ export const coreEditorPlugin: Plugin = {
           defaultValue: true
         },
         {
-          id: "core.editor.renderWhitespace",
-          moduleId: "core.editor",
+          id: "core.editor.texteditor.renderWhitespace",
+          moduleId: "core.editor.texteditor",
           title: "Render Whitespace",
           description: "Controls how whitespace characters are rendered in the editor.",
           sectionPath: ["Editor", "Appearance"],
@@ -123,8 +123,8 @@ export const coreEditorPlugin: Plugin = {
           ]
         },
         {
-          id: "core.editor.formatOnSave",
-          moduleId: "core.editor",
+          id: "core.editor.texteditor.formatOnSave",
+          moduleId: "core.editor.texteditor",
           title: "Format On Save",
           description: "Format files automatically when saving.",
           sectionPath: ["Editor", "Formatting"],
@@ -133,8 +133,8 @@ export const coreEditorPlugin: Plugin = {
           defaultValue: false
         },
         {
-          id: "core.editor.cursorBlinking",
-          moduleId: "core.editor",
+          id: "core.editor.texteditor.cursorBlinking",
+          moduleId: "core.editor.texteditor",
           title: "Cursor Blinking",
           description: "Controls the cursor animation style.",
           sectionPath: ["Editor", "Cursor"],

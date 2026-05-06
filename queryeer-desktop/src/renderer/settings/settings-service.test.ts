@@ -9,20 +9,20 @@ import { SettingsService } from "./settings-service";
 function makeRegistry(): SettingsRegistry {
   const contributions: ReturnType<SettingsRegistry["listSettingsContributions"]> = [
     {
-      moduleId: "core.editor",
+      moduleId: "core.editor.texteditor",
       title: "Editor",
       settings: [
         {
-          id: "core.editor.tabSize",
-          moduleId: "core.editor",
+          id: "core.editor.texteditor.tabSize",
+          moduleId: "core.editor.texteditor",
           title: "Tab Size",
           sectionPath: ["Editor"],
           type: "number",
           defaultValue: 4
         },
         {
-          id: "core.editor.wordWrap",
-          moduleId: "core.editor",
+          id: "core.editor.texteditor.wordWrap",
+          moduleId: "core.editor.texteditor",
           title: "Word Wrap",
           sectionPath: ["Editor"],
           tags: ["wrapping"],
@@ -34,8 +34,8 @@ function makeRegistry(): SettingsRegistry {
           ]
         },
         {
-          id: "core.editor.token",
-          moduleId: "core.editor",
+          id: "core.editor.texteditor.token",
+          moduleId: "core.editor.texteditor",
           title: "API Token",
           sectionPath: ["Editor"],
           type: "string",
@@ -43,8 +43,8 @@ function makeRegistry(): SettingsRegistry {
           isSecret: true
         },
         {
-          id: "core.editor.tokenRef",
-          moduleId: "core.editor",
+          id: "core.editor.texteditor.tokenRef",
+          moduleId: "core.editor.texteditor",
           title: "API Token Ref",
           sectionPath: ["Editor"],
           type: "password",
@@ -88,8 +88,8 @@ describe("SettingsService", () => {
           version: 1,
           updatedAt: "now",
           modules: {
-            "core.editor": {
-              file: "core.editor.json",
+            "core.editor.texteditor": {
+              file: "core.editor.texteditor.json",
               version: 3,
               updatedAt: "now"
             }
@@ -100,7 +100,7 @@ describe("SettingsService", () => {
           moduleId,
           updatedAt: "now",
           values: {
-            "core.editor.tabSize": 2
+            "core.editor.texteditor.tabSize": 2
           }
         }),
         saveSettingsIndex: async () => ({ accepted: true }),
@@ -110,8 +110,8 @@ describe("SettingsService", () => {
 
     await service.initialize();
 
-    expect(service.getValue("core.editor.tabSize")).toBe(2);
-    expect(service.getValue("core.editor.wordWrap")).toBe("off");
+    expect(service.getValue("core.editor.texteditor.tabSize")).toBe(2);
+    expect(service.getValue("core.editor.texteditor.wordWrap")).toBe("off");
   });
 
   it("increments version on setValue and notifies backend after persist", async () => {
@@ -139,7 +139,7 @@ describe("SettingsService", () => {
     });
     await service.initialize();
 
-    await service.setValue("core.editor.tabSize", 8);
+    await service.setValue("core.editor.texteditor.tabSize", 8);
 
     expect(saveSettingsModule).not.toHaveBeenCalled();
     expect(notifyBackendModuleChanged).not.toHaveBeenCalled();
@@ -150,7 +150,7 @@ describe("SettingsService", () => {
     const savedCall = (saveSettingsModule.mock.calls[0] as unknown[])[0] as { moduleId: string; document: { version: number } };
     expect(savedCall.document.version).toBe(2);
     expect(notifyBackendModuleChanged).toHaveBeenCalledTimes(1);
-    expect(notifyBackendModuleChanged).toHaveBeenCalledWith("core.editor", 2);
+    expect(notifyBackendModuleChanged).toHaveBeenCalledWith("core.editor.texteditor", 2);
   });
 
   it("debounces persistence after setValue", async () => {
@@ -177,8 +177,8 @@ describe("SettingsService", () => {
     });
     await service.initialize();
 
-    await service.setValue("core.editor.tabSize", 8);
-    await service.setValue("core.editor.tabSize", 6);
+    await service.setValue("core.editor.texteditor.tabSize", 8);
+    await service.setValue("core.editor.texteditor.tabSize", 6);
 
     expect(saveSettingsModule).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(120);
@@ -208,10 +208,10 @@ describe("SettingsService", () => {
     });
     await service.initialize();
 
-    const result = await service.setValue("core.editor.token", "abc123");
+    const result = await service.setValue("core.editor.texteditor.token", "abc123");
 
     expect(result.ok).toBe(false);
-    expect(service.getValue("core.editor.token")).toBe("");
+    expect(service.getValue("core.editor.texteditor.token")).toBe("");
   });
 
   it("accepts password setting ref value", async () => {
@@ -235,10 +235,10 @@ describe("SettingsService", () => {
     });
     await service.initialize();
 
-    const result = await service.setValue("core.editor.tokenRef", "secret-ref-1");
+    const result = await service.setValue("core.editor.texteditor.tokenRef", "secret-ref-1");
 
     expect(result.ok).toBe(true);
-    expect(service.getValue("core.editor.tokenRef")).toBe("secret-ref-1");
+    expect(service.getValue("core.editor.texteditor.tokenRef")).toBe("secret-ref-1");
   });
 
   it("searches by title and tags", async () => {
@@ -265,7 +265,7 @@ describe("SettingsService", () => {
     const byTitle = service.listDefinitions("tab");
     const byTag = service.listDefinitions("wrapping");
 
-    expect(byTitle.map((definition) => definition.id)).toContain("core.editor.tabSize");
-    expect(byTag.map((definition) => definition.id)).toContain("core.editor.wordWrap");
+    expect(byTitle.map((definition) => definition.id)).toContain("core.editor.texteditor.tabSize");
+    expect(byTag.map((definition) => definition.id)).toContain("core.editor.texteditor.wordWrap");
   });
 });

@@ -39,11 +39,11 @@ class SettingsModuleChangedNotificationHandlerTest
         SettingsModuleChangedNotificationHandler handler = new SettingsModuleChangedNotificationHandler(codec, configService);
         assertEquals("settings.module.changed", handler.method());
 
-        BackendEnvelope envelope = new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, null, "settings.module.changed", Map.of("moduleId", "core.editor", "version", 7L), null,
-                null);
+        BackendEnvelope envelope = new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, null, "settings.module.changed",
+                Map.of("moduleId", "core.editor.texteditor", "version", 7L), null, null);
 
         handler.handle(envelope);
 
-        assertEquals("core.editor", invalidated[0]);
+        assertEquals("core.editor.texteditor", invalidated[0]);
     }
 }

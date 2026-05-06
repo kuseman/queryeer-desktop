@@ -60,26 +60,26 @@ export type ResolvedEditorSettings = {
 
 export function resolveEditorSettings(reader: SettingsReader | null): ResolvedEditorSettings {
   return {
-    fontSize: readNumber(reader, "core.editor.fontSize", 13, 8, 32),
-    fontFamily: readString(reader, "core.editor.fontFamily", "JetBrains Mono, Consolas, monospace"),
-    wordWrap: readEnum(reader, "core.editor.wordWrap", "off", ["off", "on", "wordWrapColumn"]),
-    tabSize: readNumber(reader, "core.editor.tabSize", 4, 1, 12),
-    insertSpaces: readBoolean(reader, "core.editor.insertSpaces", true),
-    lineNumbers: readEnum(reader, "core.editor.lineNumbers", "on", ["off", "on", "relative"]),
-    minimapEnabled: readBoolean(reader, "core.editor.minimap.enabled", true),
+    fontSize: readNumber(reader, "core.editor.texteditor.fontSize", 13, 8, 32),
+    fontFamily: readString(reader, "core.editor.texteditor.fontFamily", "JetBrains Mono, Consolas, monospace"),
+    wordWrap: readEnum(reader, "core.editor.texteditor.wordWrap", "off", ["off", "on", "wordWrapColumn"]),
+    tabSize: readNumber(reader, "core.editor.texteditor.tabSize", 4, 1, 12),
+    insertSpaces: readBoolean(reader, "core.editor.texteditor.insertSpaces", true),
+    lineNumbers: readEnum(reader, "core.editor.texteditor.lineNumbers", "on", ["off", "on", "relative"]),
+    minimapEnabled: readBoolean(reader, "core.editor.texteditor.minimap.enabled", true),
     renderWhitespace: readEnum(
       reader,
-      "core.editor.renderWhitespace",
+      "core.editor.texteditor.renderWhitespace",
       "selection",
       ["none", "boundary", "selection", "all"]
     ),
-    cursorBlinking: readEnum(reader, "core.editor.cursorBlinking", "blink", [
+    cursorBlinking: readEnum(reader, "core.editor.texteditor.cursorBlinking", "blink", [
       "blink",
       "smooth",
       "phase",
       "solid"
     ]),
-    formatOnSave: readBoolean(reader, "core.editor.formatOnSave", false)
+    formatOnSave: readBoolean(reader, "core.editor.texteditor.formatOnSave", false)
   };
 }
 

@@ -562,7 +562,7 @@ Renderer → backend notification. Tells the backend that a settings module has 
 
 ```json
 {
-  "moduleId": "core.editor",
+  "moduleId": "core.editor.texteditor",
   "version": 7
 }
 ```

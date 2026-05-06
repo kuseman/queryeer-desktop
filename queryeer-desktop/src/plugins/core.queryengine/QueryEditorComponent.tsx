@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { TextEditorComponent } from "../core.editor/TextEditor/TextEditorComponent";
+import { TextEditorComponent } from "../core.editor/texteditor/TextEditorComponent";
 import { OutputPanel } from "./output/OutputPanel";
 import type { OutputContext, ResultSet, ColumnType } from "../../contracts/extensions/OutputExtension";
 import { IDLE_OUTPUT_CONTEXT, DEFAULT_OUTPUT_LIMITS } from "../../contracts/extensions/OutputExtension";
