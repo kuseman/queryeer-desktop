@@ -2,6 +2,7 @@ import type { SettingsRegistry } from "../../contracts/extensions/SettingsExtens
 import { SettingsService } from "../../renderer/settings/settings-service";
 
 let coreSettingsService: SettingsService | null = null;
+let coreSettingsServiceReady = false;
 const coreSettingsServiceSubscribers = new Set<(service: SettingsService) => void>();
 
 export async function initializeCoreSettingsService(registry: SettingsRegistry): Promise<SettingsService> {
@@ -18,11 +19,14 @@ export async function initializeCoreSettingsService(registry: SettingsRegistry):
         await window.appShell.notifyBackendSettingsModuleChanged({ moduleId, version });
       }
     });
+  }
+  await coreSettingsService.initialize();
+  if (!coreSettingsServiceReady) {
+    coreSettingsServiceReady = true;
     for (const subscriber of coreSettingsServiceSubscribers) {
       subscriber(coreSettingsService);
     }
   }
-  await coreSettingsService.initialize();
   return coreSettingsService;
 }
 
@@ -34,7 +38,7 @@ export function onCoreSettingsServiceInitialized(
   listener: (service: SettingsService) => void
 ): () => void {
   coreSettingsServiceSubscribers.add(listener);
-  if (coreSettingsService) {
+  if (coreSettingsService && coreSettingsServiceReady) {
     listener(coreSettingsService);
   }
   return () => {

@@ -16,4 +16,5 @@ export type TooltipSectionContribution = {
 
 export type TooltipRegistry = {
   registerTooltipSection: (contribution: TooltipSectionContribution) => void;
+  listTooltipSections?: () => TooltipSectionContribution[];
 };

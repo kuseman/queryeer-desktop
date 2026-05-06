@@ -105,6 +105,118 @@
   padding-left: 16px;
 }
 
+.explorer-workspace-folder {
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.explorer-workspace-header {
+  position: relative;
+}
+
+.explorer-workspace-menu {
+  position: relative;
+}
+
+.explorer-workspace-menu-button {
+  border: none;
+  background: transparent;
+  color: var(--text-1);
+  cursor: pointer;
+  padding: 0 6px;
+  margin-left: 4px;
+  line-height: 1;
+}
+
+.explorer-workspace-menu-button:hover {
+  color: var(--text-0);
+}
+
+.explorer-workspace-menu-list {
+  position: absolute;
+  top: 18px;
+  right: 0;
+  min-width: 180px;
+  z-index: 50;
+  background: var(--surface-1, #2b2b2b);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.35);
+  padding: 4px;
+}
+
+.explorer-workspace-menu-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-0);
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.explorer-workspace-menu-item:hover,
+.explorer-workspace-menu-item.is-selected {
+  background: var(--titlebar-hover);
+}
+
+.explorer-workspace-tooltip {
+  transform: translateX(-100%);
+}
+
+.settings-advanced-empty {
+  color: var(--text-1);
+  padding: 8px 0;
+}
+
+.settings-advanced-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-advanced-hint {
+  color: var(--text-2);
+  font-size: var(--ui-font-size-xs);
+}
+
+.settings-advanced-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(160px, 260px) 80px;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-advanced-head {
+  font-size: var(--ui-font-size-xs);
+  color: var(--text-2);
+}
+
+.settings-advanced-folder {
+  min-width: 0;
+}
+
+.settings-advanced-folder-name {
+  font-size: var(--ui-font-size-sm);
+  color: var(--text-0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-advanced-folder-uri {
+  font-size: var(--ui-font-size-xs);
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-advanced-row input {
+  width: 100%;
+}
+
 .explorer-file {
   display: flex;
   align-items: center;
@@ -130,6 +242,7 @@
 }
 
 .explorer-file-name {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -160,6 +160,19 @@ describe("QuickCommandService.resolveItems — ranking", () => {
     // "for" is a contiguous prefix of "format" — should score higher than scattered in x2
     expect(ids.indexOf("x1")).toBeLessThan(ids.indexOf("x2"));
   });
+
+  it("deduplicates items across providers by id", async () => {
+    const shared = makeItem("shared", "Shared");
+    const providers: QuickCommandProvider[] = [
+      makeProvider({ label: "A", order: 1, getItems: () => [shared, makeItem("a1", "Alpha")] }),
+      makeProvider({ label: "B", order: 2, getItems: () => [makeItem("shared", "Shared"), makeItem("b1", "Beta")] })
+    ];
+    const svc = new QuickCommandService(providers);
+
+    const items = await svc.resolveItems("", makeCtx());
+
+    expect(items.filter((item) => item.id === "shared")).toHaveLength(1);
+  });
 });
 
 describe("QuickCommandService.resolveItems — when filtering", () => {

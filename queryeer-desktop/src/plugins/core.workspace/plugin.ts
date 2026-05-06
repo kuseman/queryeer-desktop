@@ -47,16 +47,19 @@ export const coreWorkspacePlugin: Plugin = {
       prefix: "#",
       label: "Recent Files",
       order: 10,
-      getItems: async () => {
+      getItems: async (_query, ctx) => {
         const entries = await window.appShell.getRecentFiles();
-        return entries.map((entry) => ({
+        const openUris = new Set(ctx.openFiles.map((file) => file.uri));
+        return entries
+          .filter((entry) => !openUris.has(entry.uri))
+          .map((entry) => ({
           id: `workspace.recentFile.${entry.uri}`,
           title: getFileName(entry.uri),
           description: getDisplayPath(entry.uri),
           action: async () => {
             await context.fileMediator.openFile(entry.uri);
           }
-        }));
+          }));
       }
     });
 
