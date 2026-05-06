@@ -32,6 +32,7 @@ export type MimeCapabilityRegistry = {
   registerCapabilities: (mimeType: string, capabilities: MimeCapability[]) => void;
   hasCapability: (mimeType: string, capability: MimeCapability) => boolean;
   listMimeTypesByCapability: (capability: MimeCapability) => string[];
+  listAllMimeTypes: () => string[];
   registerLabel?: (mimeType: string, label: string) => void;
   getLabel?: (mimeType: string) => string | undefined;
   registerPreferredNewFileMimeType?: (mimeType: string, order?: number) => void;

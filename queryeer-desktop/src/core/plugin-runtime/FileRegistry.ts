@@ -126,6 +126,9 @@ export class FileRegistry {
         }
         return matches;
       },
+      listAllMimeTypes: () => {
+        return [...this.mimeCapabilities.keys()];
+      },
       registerLabel: (mimeType, label) => {
         this.mimeLabels.set(mimeType, label);
       },

@@ -75,7 +75,7 @@ function makeFilesRegistry(file: FileEntity, editorState: Record<string, unknown
     getEditorState: vi.fn((_, key) => editorState[key]),
     setEditorState: vi.fn(),
     markDirty: vi.fn(),
-    capabilities: { registerCapabilities: vi.fn(), registerLabel: vi.fn(), registerPreferredNewFileMimeType: vi.fn(), listPreferredNewFileMimeTypes: vi.fn(() => []), getLabel: vi.fn(), hasCapability: vi.fn(), listMimeTypesByCapability: vi.fn(() => []), registerContentCategory: vi.fn(), getContentCategory: vi.fn() },
+    capabilities: { registerCapabilities: vi.fn(), registerLabel: vi.fn(), registerPreferredNewFileMimeType: vi.fn(), listPreferredNewFileMimeTypes: vi.fn(() => []), getLabel: vi.fn(), hasCapability: vi.fn(),         listMimeTypesByCapability: vi.fn(() => []), listAllMimeTypes: vi.fn(() => []), registerContentCategory: vi.fn(), getContentCategory: vi.fn() },
     mimeIcons: { registerMimeIcon: vi.fn(), getMimeIcon: vi.fn(), listMimeIcons: vi.fn() }
   } as unknown as FilesRegistry;
 }

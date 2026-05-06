@@ -268,6 +268,12 @@ export async function bootstrapShell() {
     executeCommand,
     canExecuteCommand: (commandId: string) => host.canExecuteCommand(commandId),
     onCommandContextChanged: (listener: () => void) => chain.onDidChange(listener),
-    diagnostics: host.getDiagnostics()
+    diagnostics: host.getDiagnostics(),
+    getExtensions: () => host.getExtensions(),
+    onMenuRebuild: (fn: () => void) => {
+      const fresh = host.getExtensions();
+      const menuExt = fresh.menu as unknown as { onRebuild: (fn: () => Promise<void>) => void };
+      menuExt.onRebuild(async () => fn());
+    }
   };
 }

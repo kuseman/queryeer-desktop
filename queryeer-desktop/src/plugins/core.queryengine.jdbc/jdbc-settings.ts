@@ -14,6 +14,7 @@ export type JdbcConnectionDefinition = {
   /** Dialect-specific structured fields (host, port, database, authType, etc.) */
   properties?: Record<string, unknown>;
   enabled: boolean;
+  color?: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -61,6 +62,7 @@ export function parseJdbcConnectionDefinitions(raw: unknown): JdbcConnectionDefi
 
     seen.add(connectionId);
 
+    const rawColor = text(item.color);
     result.push({
       connectionId,
       title: text(item.title) || undefined,
@@ -69,7 +71,8 @@ export function parseJdbcConnectionDefinitions(raw: unknown): JdbcConnectionDefi
       username: text(item.username) || undefined,
       password: parseSecretRef(item.password) ?? (text(item.password) || undefined),
       properties: hasStructuredProperties ? (item.properties as Record<string, unknown>) : undefined,
-      enabled: typeof item.enabled === "boolean" ? item.enabled : true
+      enabled: typeof item.enabled === "boolean" ? item.enabled : true,
+      color: rawColor || undefined
     });
   }
 

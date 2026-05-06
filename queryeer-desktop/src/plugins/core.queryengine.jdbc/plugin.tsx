@@ -47,6 +47,28 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       icon: DatabaseIcon
     });
 
+    context.layout.registerTabHeaderStyle({
+      id: "core.queryengine.jdbc.tabHeaderStyle.connectionColor",
+      order: 60,
+      render: ({ file }) => {
+        if (file.engineBinding?.engineId !== "jdbc") {
+          return null;
+        }
+        const connectionId = file.engineBinding.connectionId;
+        if (!connectionId) {
+          return null;
+        }
+        const connections = getConfiguredJdbcConnections();
+        const match = connections.find((c) => c.connectionId === connectionId);
+        if (!match?.color) {
+          return null;
+        }
+        return {
+          style: { backgroundColor: match.color }
+        };
+      }
+    });
+
     context.settings.registerAdvancedValidator({
       id: "core.queryengine.jdbc.connections.validator",
       validate: ({ value }) => {

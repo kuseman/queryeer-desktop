@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   registerEngineResolverMock: vi.fn(),
   onQueryEventMock: vi.fn(),
   invokeMock: vi.fn(async (): Promise<unknown> => []),
-  getConfiguredJdbcConnectionsMock: vi.fn(() => []),
+  getConfiguredJdbcConnectionsMock: vi.fn<() => unknown[]>(() => []),
   loadConnectionRootsMock: vi.fn(),
   openQuickCommandMock: vi.fn()
 }));
@@ -74,6 +74,7 @@ function createContext(): PluginContext {
         getLabel: vi.fn(),
         hasCapability: vi.fn(() => true),
         listMimeTypesByCapability: vi.fn(() => []),
+        listAllMimeTypes: vi.fn(() => []),
         registerContentCategory: vi.fn(),
         getContentCategory: vi.fn(() => "text" as const)
       },
@@ -442,5 +443,79 @@ describe("core.queryengine.jdbc plugin integration", () => {
     handler();
 
     expect(mocks.openQuickCommandMock).toHaveBeenCalledWith("$", { when: "activeFileMimeType == 'application/sql'" });
+  });
+
+  it("applies connection color to tab header style for JDBC files", () => {
+    const context = createContext();
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([
+      { connectionId: "conn-a", dialectId: "postgres", url: "jdbc:postgresql://localhost/db", enabled: true, color: "#ff0000" }
+    ]);
+
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const calls = (context.layout.registerTabHeaderStyle as ReturnType<typeof vi.fn>).mock
+      .calls as Array<[{ id: string; render: (ctx: { file: FileEntity; isActive: boolean; hasCapability: (cap: string) => boolean }) => unknown }]>;
+    const tabHeaderStyle = calls.find((call) => call[0].id === "core.queryengine.jdbc.tabHeaderStyle.connectionColor");
+    expect(tabHeaderStyle).toBeDefined();
+
+    const file = context.files.getFile("file-1")!;
+    file.engineBinding = { engineId: "jdbc", connectionId: "conn-a" };
+
+    const result = tabHeaderStyle![0].render({
+      file,
+      isActive: false,
+      hasCapability: () => true
+    });
+    expect(result).toEqual({
+      style: { backgroundColor: "#ff0000" }
+    });
+  });
+
+  it("returns no tab style when JDBC file has no connection color", () => {
+    const context = createContext();
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([
+      { connectionId: "conn-a", dialectId: "postgres", url: "jdbc:postgresql://localhost/db", enabled: true }
+    ]);
+
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const calls = (context.layout.registerTabHeaderStyle as ReturnType<typeof vi.fn>).mock
+      .calls as Array<[{ id: string; render: (ctx: { file: FileEntity; isActive: boolean; hasCapability: (cap: string) => boolean }) => unknown }]>;
+    const tabHeaderStyle = calls.find((call) => call[0].id === "core.queryengine.jdbc.tabHeaderStyle.connectionColor");
+    expect(tabHeaderStyle).toBeDefined();
+
+    const file = context.files.getFile("file-1")!;
+    file.engineBinding = { engineId: "jdbc", connectionId: "conn-a" };
+
+    const result = tabHeaderStyle![0].render({
+      file,
+      isActive: false,
+      hasCapability: () => true
+    });
+    expect(result).toBeNull();
+  });
+
+  it("returns no tab style for non-JDBC files", () => {
+    const context = createContext();
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([
+      { connectionId: "conn-a", dialectId: "postgres", url: "jdbc:postgresql://localhost/db", enabled: true, color: "#ff0000" }
+    ]);
+
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const calls = (context.layout.registerTabHeaderStyle as ReturnType<typeof vi.fn>).mock
+      .calls as Array<[{ id: string; render: (ctx: { file: FileEntity; isActive: boolean; hasCapability: (cap: string) => boolean }) => unknown }]>;
+    const tabHeaderStyle = calls.find((call) => call[0].id === "core.queryengine.jdbc.tabHeaderStyle.connectionColor");
+    expect(tabHeaderStyle).toBeDefined();
+
+    const file = context.files.getFile("file-1")!;
+    file.engineBinding = { engineId: "payloadbuilder", connectionId: "conn-a" };
+
+    const result = tabHeaderStyle![0].render({
+      file,
+      isActive: false,
+      hasCapability: () => true
+    });
+    expect(result).toBeNull();
   });
 });

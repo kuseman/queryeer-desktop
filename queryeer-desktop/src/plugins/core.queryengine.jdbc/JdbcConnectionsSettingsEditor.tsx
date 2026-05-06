@@ -29,6 +29,7 @@ type Row = {
   password?: SecretRefValue;
   properties?: Record<string, unknown>;
   enabled: boolean;
+  color?: string;
 };
 
 type Props = {
@@ -223,6 +224,39 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
             </div>
 
             <div className="jdbc-settings-cell">
+              <label className="jdbc-settings-label" htmlFor={`jdbc-color-${row.id}`}>
+                Color
+              </label>
+              <div className="jdbc-settings-color">
+                <label htmlFor={`jdbc-color-${row.id}`} className="jdbc-settings-color-swatch-wrapper" title="Set or change color">
+                  <input
+                    id={`jdbc-color-${row.id}`}
+                    type="color"
+                    className="jdbc-settings-color-input-hidden"
+                    value={row.color ?? "#000000"}
+                    disabled={readonly}
+                    onChange={(event) => updateRow(row.id, { color: event.target.value })}
+                  />
+                  <span
+                    className="jdbc-settings-color-swatch"
+                    style={{ backgroundColor: row.color ?? "transparent" }}
+                  />
+                </label>
+                {row.color && (
+                  <button
+                    type="button"
+                    className="jdbc-settings-color-clear"
+                    disabled={readonly}
+                    onClick={() => updateRow(row.id, { color: undefined })}
+                    title="Clear color"
+                  >
+                    &times;
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="jdbc-settings-cell">
               <label className="jdbc-settings-label" htmlFor={`jdbc-dialect-${row.id}`}>
                 Dialect
               </label>
@@ -338,24 +372,24 @@ function buildSubtitle(row: Row): string {
 }
 
 function serializeRow(row: Row): unknown {
-  if (row.dialectId === SQLSERVER_DIALECT_ID) {
-    return {
-      connectionId: row.connectionId,
-      title: row.title || undefined,
-      dialectId: row.dialectId,
-      properties: row.properties ?? {},
-      password: row.password,
-      enabled: row.enabled
-    };
-  }
-  return {
+  const base = {
     connectionId: row.connectionId,
     title: row.title || undefined,
     dialectId: row.dialectId,
-    url: row.url,
-    username: row.username || undefined,
     password: row.password,
-    enabled: row.enabled
+    enabled: row.enabled,
+    color: row.color || undefined
+  };
+  if (row.dialectId === SQLSERVER_DIALECT_ID) {
+    return {
+      ...base,
+      properties: row.properties ?? {}
+    };
+  }
+  return {
+    ...base,
+    url: row.url,
+    username: row.username || undefined
   };
 }
 
@@ -372,7 +406,8 @@ function toRows(definitions: JdbcConnectionDefinition[]): Row[] {
         ? definition.password
         : undefined,
     properties: definition.properties,
-    enabled: definition.enabled
+    enabled: definition.enabled,
+    color: definition.color
   }));
 }
 
@@ -393,7 +428,8 @@ function mergeRows(previous: Row[], definitions: JdbcConnectionDefinition[]): Ro
           ? definition.password
           : undefined,
       properties: definition.properties,
-      enabled: definition.enabled
+      enabled: definition.enabled,
+      color: definition.color
     };
   });
 }

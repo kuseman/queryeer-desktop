@@ -155,6 +155,7 @@ export type TabHeaderStyleContext = {
 export type TabHeaderStyle = {
   className?: string;
   indicatorClassName?: string;
+  style?: React.CSSProperties;
 };
 
 export type TabHeaderStyleContribution = {

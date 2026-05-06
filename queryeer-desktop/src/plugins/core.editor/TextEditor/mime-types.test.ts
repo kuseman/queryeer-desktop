@@ -36,6 +36,7 @@ describe("text editor mime type registrations", () => {
         registerContentCategory,
         hasCapability: vi.fn(),
         listMimeTypesByCapability: vi.fn(() => []),
+        listAllMimeTypes: vi.fn(() => []),
         getContentCategory: vi.fn()
       },
       mimeIcons: {

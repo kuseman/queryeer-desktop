@@ -104,4 +104,44 @@ describe("parseJdbcConnectionDefinitions", () => {
       }
     ]);
   });
+
+  it("parses color when present and omits when absent", () => {
+    const result = parseJdbcConnectionDefinitions([
+      {
+        connectionId: "pg1",
+        dialectId: "postgres",
+        url: "jdbc:postgresql://localhost:5432/app",
+        enabled: true,
+        color: "#ff0000"
+      },
+      {
+        connectionId: "pg2",
+        dialectId: "postgres",
+        url: "jdbc:postgresql://localhost:5432/other",
+        enabled: true
+      }
+    ]);
+
+    expect(result).toEqual([
+      {
+        connectionId: "pg1",
+        dialectId: "postgres",
+        url: "jdbc:postgresql://localhost:5432/app",
+        username: undefined,
+        password: undefined,
+        enabled: true,
+        title: undefined,
+        color: "#ff0000"
+      },
+      {
+        connectionId: "pg2",
+        dialectId: "postgres",
+        url: "jdbc:postgresql://localhost:5432/other",
+        username: undefined,
+        password: undefined,
+        enabled: true,
+        title: undefined
+      }
+    ]);
+  });
 });

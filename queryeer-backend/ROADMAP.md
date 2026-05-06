@@ -18,6 +18,7 @@ Large features in prio
 - [ ] Table query output settings
     - [ ] Stacked result set / tab per result set
 - [ ] Payloadbuilder
+    - Environments
     - JDBC Catalog
     - Kafka catalog
 - [ ] JDBC Tree component Context menu

@@ -51,12 +51,11 @@ export const coreSettingsPlugin: Plugin = {
     });
 
     context.menu.registerMenuItem({
-      id: "core.menu.options.settings",
+      id: "core.menu.tools.settings",
       label: "Settings",
       order: 20,
-      parentId: "core.menu.options",
+      parentId: "core.menu.tools",
       commandId: "core.settings.open",
-      accelerator: "CmdOrCtrl+,"
     });
   }
 };
