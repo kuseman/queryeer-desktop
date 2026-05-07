@@ -94,16 +94,42 @@ function formatRowsCsv(context: OutputContext): string[] {
 const ANSI_RED = "\x1b[31m";
 const ANSI_RESET = "\x1b[0m";
 
+function toEditorLink(fileId: string | undefined, line: number | undefined, column: number | undefined): string | null {
+  if (!fileId || line === undefined) {
+    return null;
+  }
+  const query = new URLSearchParams({
+    fileId,
+    line: String(line),
+    column: String(column ?? 1)
+  });
+  return `editor://open?${query.toString()}`;
+}
+
+function withLocationSuffix(message: string, fileId: string | undefined, line: number | undefined, column: number | undefined): string {
+  const hasLocation = Boolean(toEditorLink(fileId, line, column));
+  if (!hasLocation) {
+    return message;
+  }
+  const label = `line ${line}, col ${column ?? 1}`;
+  return `${message} ([${label}])`;
+}
+
 function getOutputLines(context: OutputContext): string[] {
   return (context.output ?? []).map((msg) =>
-    msg.severity === "error" ? `${ANSI_RED}Error: ${msg.message}${ANSI_RESET}` : msg.message
+    msg.severity === "error"
+      ? `${ANSI_RED}${withLocationSuffix(`Error: ${msg.message}`, context.fileId, msg.line, msg.column)}${ANSI_RESET}`
+      : withLocationSuffix(msg.message, context.fileId, msg.line, msg.column)
   );
 }
 
 function getStatusLines(context: OutputContext): string[] {
   const lines: string[] = [];
   if (context.state === "failed" && context.error) {
-    lines.push(`${ANSI_RED}${context.error.message}${ANSI_RESET}`);
+    const details = context.error.details;
+    const line = typeof details?.line === "number" ? details.line : undefined;
+    const column = typeof details?.column === "number" ? details.column : undefined;
+    lines.push(`${ANSI_RED}${withLocationSuffix(context.error.message, context.fileId, line, column)}${ANSI_RESET}`);
     return lines;
   }
   if (context.state === "completed") {

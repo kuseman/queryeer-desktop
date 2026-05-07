@@ -33,6 +33,8 @@ import se.kuseman.payloadbuilder.core.RawQueryResult;
 import se.kuseman.payloadbuilder.core.catalog.CatalogRegistry;
 import se.kuseman.payloadbuilder.core.catalog.CoreColumn;
 import se.kuseman.payloadbuilder.core.execution.QuerySession;
+import se.kuseman.payloadbuilder.core.parser.Location;
+import se.kuseman.payloadbuilder.core.parser.ParseException;
 
 public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider
 {
@@ -150,6 +152,11 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
         {
             throw e;
         }
+        catch (ParseException e)
+        {
+            outputWriter.flushMessages(publisher);
+            publisher.failed("VALIDATION", e.getMessage(), parseErrorDetails(text, e));
+        }
         catch (Exception e)
         {
             outputWriter.flushMessages(publisher);
@@ -170,6 +177,29 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
                 activeSessions.remove(queryExecutionId);
             }
         }
+    }
+
+    private static Map<String, Object> parseErrorDetails(String queryText, ParseException exception)
+    {
+        Location location = exception.getLocation();
+        if (location == null
+                || location.line() <= 0)
+        {
+            return Map.of();
+        }
+        int column = 1;
+        if (queryText != null
+                && location.startOffset() >= 0
+                && location.startOffset() <= queryText.length())
+        {
+            int lineStartOffset = queryText.lastIndexOf('\n', Math.max(0, location.startOffset() - 1));
+            column = location.startOffset() - lineStartOffset;
+            if (column <= 0)
+            {
+                column = 1;
+            }
+        }
+        return Map.of("line", location.line(), "column", column);
     }
 
     @Override

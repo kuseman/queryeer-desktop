@@ -118,6 +118,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     {
         long startedAt = System.currentTimeMillis();
         String sessionId = null;
+        JdbcResolvedConnection resolved = null;
         try
         {
             if (text == null
@@ -136,7 +137,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             }
 
             JdbcEngineState state = payloadMapper.convert(engineState, JdbcEngineState.class);
-            JdbcResolvedConnection resolved = JdbcResolvedConnection.fromEngineState(state, connections, registry);
+            resolved = JdbcResolvedConnection.fromEngineState(state, connections, registry);
             JdbcConnectionProfile materializedProfile = credentialResolver.resolve(resolved.profile());
 
             Connection sessionConnection = fileConnections.acquire(fileId, materializedProfile, resolved.dialect());
@@ -192,8 +193,18 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             }
             else
             {
-                publisher.failed(ERROR_CODE_INTERNAL, ErrorMessages.buildFailureMessage(e), sessionId != null ? Map.of("sessionId", sessionId)
-                        : null);
+                java.util.Map<String, Object> details = new java.util.LinkedHashMap<>();
+                if (sessionId != null)
+                {
+                    details.put("sessionId", sessionId);
+                }
+                if (resolved != null)
+                {
+                    details.putAll(resolved.dialect()
+                            .extractErrorDetails(e));
+                }
+                publisher.failed(ERROR_CODE_INTERNAL, ErrorMessages.buildFailureMessage(e), details.isEmpty() ? null
+                        : details);
             }
         }
         finally

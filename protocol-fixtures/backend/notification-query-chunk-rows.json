@@ -8,6 +8,18 @@
     "rows": [
       [1],
       [2]
+    ],
+    "messages": [
+      {
+        "severity": "error",
+        "message": "Parse issue",
+        "line": 2,
+        "column": 4,
+        "details": {
+          "line": 2,
+          "column": 4
+        }
+      }
     ]
   }
 }

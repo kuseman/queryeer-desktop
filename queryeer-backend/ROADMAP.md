@@ -5,11 +5,7 @@ Quick fixes
     - Should not output anything to table/text only writing status to text
 - [ ] Table query output settings
     - [ ] Stacked result set / tab per result set
-- [ ] Parse errors
-    - Link in text output to editor lines (payloadbuilder supports reporting lines)
-    - JDBC Dialects can catch known exceptions and extract
-    - Links in xterm.js
-    - Remember selection start upon exeuction to correctly link to corresponding line
+
 
 Large features in prio
 - [ ] Query shortcuts
@@ -56,6 +52,11 @@ Large features in prio
 - [ ] About dialog
     - Queryeer changelog
     - Modules changelog (Payloadbuilder)
+- [X] Parse errors
+    - Link in text output to editor lines (payloadbuilder supports reporting lines)
+    - JDBC Dialects can catch known exceptions and extract
+    - Links in xterm.js
+    - Remember selection start upon exeuction to correctly link to corresponding line
 - [X] Warnings/Prints
     - JDBC SQLWarnings -> Print in text output
                        -> Exceptions errors (red)

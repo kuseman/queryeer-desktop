@@ -48,6 +48,7 @@ export type XtermTextConsoleProps = {
   onScrollLineChange?: (line: number) => void;
   toolbarContent?: ReactNode;
   findButtonAtEnd?: boolean;
+  onLinkActivate?: (url: string) => void;
 };
 
 export function XtermTextConsole({
@@ -59,7 +60,8 @@ export function XtermTextConsole({
   initialScrollLine = 0,
   onScrollLineChange,
   toolbarContent,
-  findButtonAtEnd = false
+  findButtonAtEnd = false,
+  onLinkActivate
 }: XtermTextConsoleProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -75,6 +77,12 @@ export function XtermTextConsole({
   const prevSearchOpenRef = useRef(false);
   const scrollLineRef = useRef(initialScrollLine);
   const renderRevisionRef = useRef(0);
+  const lastRenderedSnapshotRef = useRef<string>("");
+  const onLinkActivateRef = useRef(onLinkActivate);
+
+  useEffect(() => {
+    onLinkActivateRef.current = onLinkActivate;
+  }, [onLinkActivate]);
 
   useEffect(() => {
     scrollLineRef.current = initialScrollLine;
@@ -92,10 +100,73 @@ export function XtermTextConsole({
     });
     const fitAddon = new FitAddon();
     const searchAddon = new SearchAddon();
-    const webLinksAddon = new WebLinksAddon();
+    const webLinksAddon = new WebLinksAddon((_event, uri) => {
+      onLinkActivateRef.current?.(uri);
+      if (uri.startsWith("editor://")) {
+        return;
+      }
+      window.open(uri, "_blank", "noopener,noreferrer");
+    });
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(searchAddon);
     terminal.loadAddon(webLinksAddon);
+    const editorLinkDisposable =
+      typeof terminal.registerLinkProvider === "function"
+        ? terminal.registerLinkProvider({
+            provideLinks: (bufferLineNumber, callback) => {
+              const line = terminal.buffer.active.getLine(bufferLineNumber - 1);
+              const text = line?.translateToString(true) ?? "";
+              const links: Array<{
+                range: {
+                  start: { x: number; y: number };
+                  end: { x: number; y: number };
+                };
+                text: string;
+                activate: () => void;
+              }> = [];
+              const directUriRegex = /editor:\/\/[^\s)]+/g;
+              let match: RegExpExecArray | null;
+              while ((match = directUriRegex.exec(text)) !== null) {
+                const uri = match[0];
+                const startX = match.index + 1;
+                const endX = startX + uri.length;
+                links.push({
+                  range: {
+                    start: { x: startX, y: bufferLineNumber },
+                    end: { x: endX, y: bufferLineNumber }
+                  },
+                  text: uri,
+                  activate: () => {
+                    onLinkActivateRef.current?.(uri);
+                  }
+                });
+              }
+
+              const locationLabelRegex = /\[line\s+(\d+),\s*col\s+(\d+)\]/gi;
+              while ((match = locationLabelRegex.exec(text)) !== null) {
+                const lineNumber = Number(match[1]);
+                const columnNumber = Number(match[2]);
+                if (!Number.isFinite(lineNumber) || lineNumber < 1 || !Number.isFinite(columnNumber) || columnNumber < 1) {
+                  continue;
+                }
+                const uri = `editor://open?line=${lineNumber}&column=${columnNumber}`;
+                const startX = match.index + 1;
+                const endX = startX + match[0].length;
+                links.push({
+                  range: {
+                    start: { x: startX, y: bufferLineNumber },
+                    end: { x: endX, y: bufferLineNumber }
+                  },
+                  text: match[0],
+                  activate: () => {
+                    onLinkActivateRef.current?.(uri);
+                  }
+                });
+              }
+              callback(links);
+            }
+          })
+        : null;
     terminal.open(containerRef.current);
     fitAddon.fit();
     terminalRef.current = terminal;
@@ -104,6 +175,7 @@ export function XtermTextConsole({
 
     return () => {
       terminal.dispose();
+      editorLinkDisposable?.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
       searchAddonRef.current = null;
@@ -124,6 +196,12 @@ export function XtermTextConsole({
   useEffect(() => {
     const terminal = terminalRef.current;
     if (!terminal) return;
+
+    const snapshot = lines.join("\n");
+    if (snapshot === lastRenderedSnapshotRef.current) {
+      return;
+    }
+    lastRenderedSnapshotRef.current = snapshot;
 
     renderRevisionRef.current += 1;
     const revision = renderRevisionRef.current;

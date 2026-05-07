@@ -23,6 +23,12 @@ export type FocusCapability = {
 export type SelectionCapability = {
   getSelectedText(): string | null;
   getContent(): string;
+  getSelection(): {
+    selectionStartLineNumber: number;
+    selectionStartColumn: number;
+    positionLineNumber: number;
+    positionColumn: number;
+  } | null;
 };
 
 export type EditorHandle = {

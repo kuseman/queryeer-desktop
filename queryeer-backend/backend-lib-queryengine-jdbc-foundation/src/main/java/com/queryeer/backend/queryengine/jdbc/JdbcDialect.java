@@ -3,6 +3,7 @@ package com.queryeer.backend.queryengine.jdbc;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 
@@ -47,6 +48,14 @@ public interface JdbcDialect
     default String resolveSessionId(Connection connection) throws SQLException
     {
         return "";
+    }
+
+    /**
+     * Extracts known error details from a driver-specific exception chain.
+     */
+    default Map<String, Object> extractErrorDetails(Throwable throwable)
+    {
+        return new HashMap<>();
     }
 
     /**

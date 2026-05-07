@@ -310,6 +310,12 @@ class ProtocolFixtureCompatibilityTest
         Assertions.assertEquals(0, params.resultSetIndex());
         Assertions.assertEquals(2, params.rows()
                 .size());
+        Assertions.assertNotNull(params.messages());
+        Assertions.assertEquals(1, params.messages()
+                .size());
+        Assertions.assertEquals(2, params.messages()
+                .get(0)
+                .line());
     }
 
     @Test
@@ -345,6 +351,9 @@ class ProtocolFixtureCompatibilityTest
         Assertions.assertNotNull(params.error());
         Assertions.assertEquals(BackendErrorCode.INTERNAL, params.error()
                 .code());
+        Assertions.assertEquals(3, params.error()
+                .details()
+                .get("line"));
     }
 
     @Test
