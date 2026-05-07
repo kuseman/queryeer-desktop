@@ -5,8 +5,14 @@ import { getConfiguredJdbcConnections } from "./jdbc-settings";
 import { getJdbcDatabaseCache } from "./jdbc-database-cache";
 
 export function createJdbcDatabaseQuickCommandProvider(
-  context: Pick<PluginContext, "fileMediator" | "files">
+  context: Pick<PluginContext, "fileMediator" | "files" | "editors">
 ): QuickCommandProvider {
+  const refocusActiveEditor = () => {
+    setTimeout(() => {
+      context.editors.getActiveEditor()?.focus?.focus();
+    }, 0);
+  };
+
   return {
     prefix: "$",
     label: "Select Database",
@@ -42,6 +48,7 @@ export function createJdbcDatabaseQuickCommandProvider(
             action: async () => {
               await context.fileMediator.bindEngine(activeFile.fileId, "jdbc", result.connectionId);
               context.files.setEditorState(activeFile.fileId, JDBC_NAV_DB_KEY, undefined);
+              refocusActiveEditor();
             }
           });
           continue;
@@ -56,6 +63,7 @@ export function createJdbcDatabaseQuickCommandProvider(
                 connectionId: result.connectionId,
                 database: db
               } satisfies JdbcSelectedDatabase);
+              refocusActiveEditor();
             }
           });
         }

@@ -13,6 +13,12 @@ import { writeToClipboard } from "./clipboard/ClipboardRegistry";
 import { computeSelection, extendSelection, isCellSelected, isRowSelected, getBoundingBox } from "./clipboard/CellSelectionModel";
 import type { SelectionAnchor, SelectionModel } from "./clipboard/CellSelectionModel";
 import outputTableIconUrl from "./output-table.svg";
+import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../core.settings/service";
+import {
+  OUTPUT_TABLE_STACKED_MAX_ROWS_SETTING_ID,
+  OUTPUT_TABLE_VIEW_MODE_SETTING_ID,
+  resolveOutputTableSettings,
+} from "./output-table-settings";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -90,6 +96,9 @@ function mapRow(row: unknown[]): GridRowData {
 }
 
 const ROW_NUMBER_COL_ID = "__rownum__";
+const STACKED_GRID_HEADER_HEIGHT_PX = 26;
+const STACKED_GRID_ROW_HEIGHT_PX = 24;
+const STACKED_GRID_EXTRA_CHROME_PX = 26;
 
 function buildColDefs(columns: GridColumn[]): ColDef[] {
   return columns.map((col, index) => ({
@@ -435,7 +444,12 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
 }
 
 function TableOutputView({ context }: { context: OutputContext }): JSX.Element {
+  const tableSettings = resolveOutputTableSettings();
+  const isStacked = tableSettings.viewMode === "stacked";
   const [activeIndex, setActiveIndex] = useState(0);
+  const [activeStackedResultSetIndex, setActiveStackedResultSetIndex] = useState<number | null>(null);
+  const [stackedGridHeightsByResultSet, setStackedGridHeightsByResultSet] = useState<Record<number, number>>({});
+  const stackedContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Restore per-file active tab when the active file changes
   useEffect(() => {
@@ -455,6 +469,102 @@ function TableOutputView({ context }: { context: OutputContext }): JSX.Element {
     setActiveIndex(i);
     if (context.fileId) getFileStateRegistry().set(context.fileId, ACTIVE_RESULT_SET_KEY, i);
   }, [context.fileId]);
+
+  useEffect(() => {
+    if (!isStacked) {
+      setActiveStackedResultSetIndex(null);
+      return;
+    }
+    const container = stackedContainerRef.current;
+    if (!container) return;
+
+    const targets = Array.from(container.querySelectorAll<HTMLElement>("[data-result-set-index]"));
+    if (targets.length === 0) return;
+
+    const onScroll = () => {
+      const containerTop = container.getBoundingClientRect().top;
+      let closest: { idx: number; delta: number } | null = null;
+      for (const el of targets) {
+        const raw = el.getAttribute("data-result-set-index");
+        if (!raw) continue;
+        const idx = Number(raw);
+        if (!Number.isFinite(idx)) continue;
+        const delta = Math.abs(el.getBoundingClientRect().top - containerTop - 44);
+        if (!closest || delta < closest.delta) {
+          closest = { idx, delta };
+        }
+      }
+      if (closest) setActiveStackedResultSetIndex(closest.idx);
+    };
+
+    onScroll();
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, [isStacked, context.resultSets]);
+
+  const scrollToStackedResultSet = useCallback((resultSetIndex: number) => {
+    setActiveStackedResultSetIndex(resultSetIndex);
+    const container = stackedContainerRef.current;
+    if (!container) return;
+    const target = container.querySelector<HTMLElement>(`[data-result-set-index="${resultSetIndex}"]`);
+    if (!target) return;
+    const containerRect = container.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const nextTop = container.scrollTop + (targetRect.top - containerRect.top) - 6;
+    container.scrollTo({ top: Math.max(0, nextTop), behavior: "auto" });
+  }, []);
+
+  useEffect(() => {
+    setStackedGridHeightsByResultSet((prev) => {
+      if (!isStacked || context.resultSets.length <= 1) {
+        return Object.keys(prev).length === 0 ? prev : {};
+      }
+      const activeIndexes = new Set<number>(context.resultSets.map((rs) => rs.resultSetIndex));
+      let changed = false;
+      const next: Record<number, number> = {};
+      for (const [rawKey, value] of Object.entries(prev)) {
+        const key = Number(rawKey);
+        if (!Number.isFinite(key) || !activeIndexes.has(key)) {
+          changed = true;
+          continue;
+        }
+        next[key] = value;
+      }
+      return changed ? next : prev;
+    });
+  }, [isStacked, context.resultSets]);
+
+  const startResizeStackedResultSet = useCallback((resultSetIndex: number, event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const container = stackedContainerRef.current;
+    if (!container) return;
+    const section = container.querySelector<HTMLElement>(`[data-result-set-index="${resultSetIndex}"]`);
+    if (!section) return;
+    const grid = section.querySelector<HTMLElement>(".table-output-grid-stacked");
+    if (!grid) return;
+
+    const startY = event.clientY;
+    const startHeight = grid.getBoundingClientRect().height;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientY - startY;
+      const nextHeight = Math.max(120, Math.round(startHeight + delta));
+      setStackedGridHeightsByResultSet((prev) => ({
+        ...prev,
+        [resultSetIndex]: nextHeight,
+      }));
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      document.body.classList.remove("table-output-resizing");
+    };
+
+    document.body.classList.add("table-output-resizing");
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }, []);
 
   if (context.resultSets.length === 0) {
     if (context.state === "failed") {
@@ -481,7 +591,7 @@ function TableOutputView({ context }: { context: OutputContext }): JSX.Element {
 
   return (
     <div className="table-output-container" tabIndex={-1} data-output-focus-target="true">
-      {context.resultSets.length > 1 && (
+      {!isStacked && context.resultSets.length > 1 && (
         <div className="table-output-result-tabs">
           {context.resultSets.map((rs, i) => (
             <button
@@ -495,30 +605,112 @@ function TableOutputView({ context }: { context: OutputContext }): JSX.Element {
         </div>
       )}
 
-      <div className="table-output-grid">
-        <TableGrid
-          resultSetIndex={activeSet.resultSetIndex}
-          schema={activeSet.schema}
-          rows={activeSet.rows}
-          fileId={context.fileId}
-        />
-      </div>
+      {isStacked
+        ? (
+            <>
+              {context.resultSets.length > 1 && (
+                <div className="table-output-stacked-jumpbar" role="navigation" aria-label="Result set navigation">
+                  <span className="table-output-stacked-jumpbar-label">Jump to:</span>
+                  {context.resultSets.map((resultSet) => {
+                    const isActive = activeStackedResultSetIndex === resultSet.resultSetIndex;
+                    return (
+                      <button
+                        type="button"
+                        key={`jump-${resultSet.resultSetIndex}`}
+                        className={`table-output-stacked-jump${isActive ? " active" : ""}`}
+                        onClick={() => scrollToStackedResultSet(resultSet.resultSetIndex)}
+                        aria-current={isActive ? "true" : undefined}
+                      >
+                        Result {resultSet.resultSetIndex + 1}
+                        {resultSet.rowLimitExceeded ? " *" : ""}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="table-output-stacked-list" ref={stackedContainerRef}>
+                {context.resultSets.map((resultSet) => (
+                  <section key={resultSet.resultSetIndex} className="table-output-stacked-section" data-result-set-index={resultSet.resultSetIndex}>
+                    <header className="table-output-stacked-header">Result {resultSet.resultSetIndex + 1}</header>
+                    {(() => {
+                      const defaultHeight = resolveStackedGridHeightPx(resultSet.rows.length, tableSettings.stackedMaxRows);
+                      const resolvedHeight = stackedGridHeightsByResultSet[resultSet.resultSetIndex] ?? defaultHeight;
+                      return (
+                    <div
+                      className="table-output-grid table-output-grid-stacked"
+                      style={{
+                        height: `${resolvedHeight}px`,
+                        maxHeight: `${resolvedHeight}px`
+                      }}
+                    >
+                      <TableGrid
+                        resultSetIndex={resultSet.resultSetIndex}
+                        schema={resultSet.schema}
+                      rows={resultSet.rows}
+                        fileId={context.fileId}
+                      />
+                    </div>
+                      );
+                    })()}
+                    {resultSet.rowLimitExceeded && (
+                      <div className="table-output-limit-banner">
+                        Showing {DEFAULT_OUTPUT_LIMITS.maxRows.toLocaleString()} rows — result was truncated.
+                        {resultSet.exportPath && (
+                          <button
+                            className="table-output-limit-open"
+                            onClick={() => void window.appShell.openPath(resultSet.exportPath!)}
+                          >
+                            Open full export
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {resultSet.resultSetIndex !== context.resultSets[context.resultSets.length - 1]?.resultSetIndex && (
+                      <div
+                        className="table-output-stacked-resizer"
+                        role="separator"
+                        aria-orientation="horizontal"
+                        onMouseDown={(event) => startResizeStackedResultSet(resultSet.resultSetIndex, event)}
+                      />
+                    )}
+                  </section>
+                ))}
+              </div>
+            </>
+          )
+        : (
+            <>
+              <div className="table-output-grid">
+                <TableGrid
+                  resultSetIndex={activeSet.resultSetIndex}
+                  schema={activeSet.schema}
+                  rows={activeSet.rows}
+                  fileId={context.fileId}
+                />
+              </div>
 
-      {activeSet.rowLimitExceeded && (
-        <div className="table-output-limit-banner">
-          Showing {DEFAULT_OUTPUT_LIMITS.maxRows.toLocaleString()} rows — result was truncated.
-          {activeSet.exportPath && (
-            <button
-              className="table-output-limit-open"
-              onClick={() => void window.appShell.openPath(activeSet.exportPath!)}
-            >
-              Open full export
-            </button>
+              {activeSet.rowLimitExceeded && (
+                <div className="table-output-limit-banner">
+                  Showing {DEFAULT_OUTPUT_LIMITS.maxRows.toLocaleString()} rows — result was truncated.
+                  {activeSet.exportPath && (
+                    <button
+                      className="table-output-limit-open"
+                      onClick={() => void window.appShell.openPath(activeSet.exportPath!)}
+                    >
+                      Open full export
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
           )}
-        </div>
-      )}
     </div>
   );
+}
+
+function resolveStackedGridHeightPx(rowCount: number, maxVisibleRows: number): number {
+  const visibleRows = Math.max(1, Math.min(rowCount, maxVisibleRows));
+  return STACKED_GRID_HEADER_HEIGHT_PX + (visibleRows * STACKED_GRID_ROW_HEIGHT_PX) + STACKED_GRID_EXTRA_CHROME_PX;
 }
 
 export const coreQueryEngineOutputTablePlugin: Plugin = {
@@ -528,10 +720,53 @@ export const coreQueryEngineOutputTablePlugin: Plugin = {
     version: "0.1.0",
     kind: "core",
     description: "Ag-Grid table output contributor for query results",
-    dependencies: ["core.queryengine"],
+    dependencies: ["core.queryengine", "core.settings"],
     requiredCapabilities: ["query.engine"]
   },
-  activate: () => {
+  activate: (context) => {
+    context.settings.registerSettings({
+      moduleId: "core.queryengine.output.table",
+      title: "Query Output Table",
+      order: 120,
+      settings: [
+        {
+          id: OUTPUT_TABLE_VIEW_MODE_SETTING_ID,
+          moduleId: "core.queryengine.output.table",
+          title: "Result Set Layout",
+          description: "Show multiple result sets as tabs or stacked sections.",
+          sectionPath: ["Query", "Output", "Table"],
+          tags: ["query", "output", "table", "resultset", "layout", "tabs", "stacked"],
+          type: "enum",
+          defaultValue: "tabs",
+          options: [
+            { value: "tabs", label: "Tabs" },
+            { value: "stacked", label: "Stacked" },
+          ],
+        },
+        {
+          id: OUTPUT_TABLE_STACKED_MAX_ROWS_SETTING_ID,
+          moduleId: "core.queryengine.output.table",
+          title: "Stacked Result Set Max Visible Rows",
+          description: "Maximum visible rows (height) per result set when layout is stacked.",
+          sectionPath: ["Query", "Output", "Table"],
+          tags: ["query", "output", "table", "stacked", "rows", "limit"],
+          type: "number",
+          defaultValue: 500,
+          constraints: { min: 10, max: 1000000 },
+        },
+      ],
+    });
+
+    const settingsService = getCoreSettingsService();
+    if (settingsService) {
+      settingsService.refreshSchemaFromRegistry();
+      void settingsService.syncRegistryModules();
+    }
+    onCoreSettingsServiceInitialized((service) => {
+      service.refreshSchemaFromRegistry();
+      void service.syncRegistryModules();
+    });
+
     getOutputRegistry().register({
       id: "core.queryengine.output.table",
       capability: "rows",

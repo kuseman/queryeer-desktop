@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { ContentCategory } from "../../contracts/files/FilesRegistry";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
+import type { OutputContext } from "../../contracts/extensions/OutputExtension";
 import { defineStateKey } from "../../contracts/files/FileStateRegistry";
 import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistryImpl";
 import { getQueryViewStateStore } from "./QueryViewStateStore";
@@ -49,7 +50,7 @@ const mocks = vi.hoisted(() => {
     selectedPrimaryRef,
     subscribeByExecutionId,
     executeRequestListeners,
-    cancelRequestListeners
+    cancelRequestListeners,
   };
 });
 
@@ -154,7 +155,7 @@ const mockOutlineRegistry: OutlineRegistry = {
 };
 
 const queryFilesById = new Map<string, FileEntity>();
-const OUTPUT_CONTEXT_KEY = defineStateKey<{ error?: { details?: Record<string, unknown> } }>("core.queryengine.outputContext");
+const OUTPUT_CONTEXT_KEY = defineStateKey<OutputContext>("core.queryengine.outputContext");
 
 function makeFile(overrides: Partial<FileEntity>): FileEntity {
   const file: FileEntity = {
@@ -237,6 +238,10 @@ const filesRegistry = {
     } satisfies FilesRegistry;
 
     getQueryViewStateStore().initialize(filesRegistry);
+
+    const appShell = ((window as unknown as { appShell?: Record<string, unknown> }).appShell ??= {});
+    (appShell as { finalizeExportStream?: () => Promise<{ exportPath: string }> }).finalizeExportStream ??= async () => ({ exportPath: "C:/tmp/export.csv" });
+    (appShell as { openPath?: () => Promise<{ accepted: boolean }> }).openPath ??= async () => ({ accepted: true });
 
     rootElement = document.createElement("div");
     document.body.appendChild(rootElement);
@@ -613,4 +618,5 @@ const filesRegistry = {
     expect(context!.error?.details?.line).toBe(11);
     expect(context!.error?.details?.column).toBe(4);
   });
+
 });

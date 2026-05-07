@@ -3,9 +3,6 @@
 Quick fixes
 - Save to file output
     - Should not output anything to table/text only writing status to text
-- [ ] Table query output settings
-    - [ ] Stacked result set / tab per result set
-
 
 Large features in prio
 - [ ] Query shortcuts
@@ -52,6 +49,9 @@ Large features in prio
 - [ ] About dialog
     - Queryeer changelog
     - Modules changelog (Payloadbuilder)
+- [X] Table query output settings
+    - [X] Stacked result set / tab per result set
+    - [X] Max rows per result set in stacked mode
 - [X] Parse errors
     - Link in text output to editor lines (payloadbuilder supports reporting lines)
     - JDBC Dialects can catch known exceptions and extract
