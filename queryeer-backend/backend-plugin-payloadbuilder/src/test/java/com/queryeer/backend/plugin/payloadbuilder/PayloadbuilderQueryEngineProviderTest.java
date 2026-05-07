@@ -29,7 +29,7 @@ import se.kuseman.payloadbuilder.api.execution.ValueVector;
 
 class PayloadbuilderQueryEngineProviderTest
 {
-    private static final ConfigService NOOP_CONFIG = key -> null;
+    private static final ConfigService NOOP_CONFIG = _ -> null;
     private static final PayloadMapper TEST_MAPPER = new PayloadMapper()
     {
         private final ObjectMapper objectMapper = new ObjectMapper();

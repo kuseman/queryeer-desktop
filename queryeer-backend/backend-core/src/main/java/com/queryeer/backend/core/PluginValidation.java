@@ -130,7 +130,7 @@ public final class PluginValidation
                 {
                     continue;
                 }
-                indegree.compute(descriptor.id(), (k, v) -> Objects.requireNonNull(v) + 1);
+                indegree.compute(descriptor.id(), (_, v) -> Objects.requireNonNull(v) + 1);
                 dependents.get(dependency)
                         .add(descriptor.id());
             }

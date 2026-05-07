@@ -26,6 +26,13 @@ jobs:
           cache: npm
           cache-dependency-path: queryeer-desktop/package-lock.json
 
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: "25"
+          distribution: "zulu"
+          cache: maven
+
       - name: Install desktop dependencies
         run: npm ci
 
@@ -48,10 +55,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
-          java-version: "17"
+          java-version: "25"
           distribution: "zulu"
           cache: maven
 
@@ -73,10 +80,10 @@ jobs:
           cache: npm
           cache-dependency-path: queryeer-desktop/package-lock.json
 
-      - name: Set up JDK 17
+      - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
-          java-version: "17"
+          java-version: "25"
           distribution: "zulu"
           cache: maven
 

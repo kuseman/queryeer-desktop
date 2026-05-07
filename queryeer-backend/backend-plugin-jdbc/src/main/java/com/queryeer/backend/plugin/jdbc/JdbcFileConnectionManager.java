@@ -46,7 +46,7 @@ final class JdbcFileConnectionManager
     {
         long now = System.currentTimeMillis();
         java.util.concurrent.atomic.AtomicBoolean createdNew = new java.util.concurrent.atomic.AtomicBoolean(false);
-        FileSessionHandle session = byFileId.compute(fileId, (id, existing) ->
+        FileSessionHandle session = byFileId.compute(fileId, (_, existing) ->
         {
             if (existing != null
                     && existing.matches(profile))
@@ -130,8 +130,14 @@ final class JdbcFileConnectionManager
             return currentSessionId;
         }
         Connection connection = acquired.connection();
-        return resolved.dialect()
+        String resolvedSessionId = resolved.dialect()
                 .resolveSessionId(connection);
+        if (resolvedSessionId == null
+                || resolvedSessionId.isBlank())
+        {
+            return currentSessionId;
+        }
+        return resolvedSessionId;
     }
 
     List<Map<String, Object>> connectionSnapshots(long now)
@@ -236,7 +242,7 @@ final class JdbcFileConnectionManager
         {
             return;
         }
-        byFileId.computeIfPresent(fileId, (ignored, existing) -> existing.withSessionId(sessionId));
+        byFileId.computeIfPresent(fileId, (_, existing) -> existing.withSessionId(sessionId));
     }
 
     private record DeadSessionSnapshot(String fileId, String connectionId, String sessionId, long expiresAtMs)

@@ -54,7 +54,7 @@ class SqlServerSchemaResolverTest
         @Override
         public Connection connect(String url, Properties info)
         {
-            return (Connection) Proxy.newProxyInstance(Connection.class.getClassLoader(), new Class<?>[] { Connection.class }, (proxy, method, args) ->
+            return (Connection) Proxy.newProxyInstance(Connection.class.getClassLoader(), new Class<?>[] { Connection.class }, (_, method, args) ->
             {
                 return switch (method.getName())
                 {
@@ -68,7 +68,7 @@ class SqlServerSchemaResolverTest
 
         private PreparedStatement preparedStatement(String sql)
         {
-            return (PreparedStatement) Proxy.newProxyInstance(PreparedStatement.class.getClassLoader(), new Class<?>[] { PreparedStatement.class }, (proxy, method, args) ->
+            return (PreparedStatement) Proxy.newProxyInstance(PreparedStatement.class.getClassLoader(), new Class<?>[] { PreparedStatement.class }, (_, method, _) ->
             {
                 return switch (method.getName())
                 {
@@ -142,7 +142,7 @@ class SqlServerSchemaResolverTest
         }
         Cursor cursor = new Cursor();
 
-        return (ResultSet) Proxy.newProxyInstance(ResultSet.class.getClassLoader(), new Class<?>[] { ResultSet.class }, (proxy, method, args) ->
+        return (ResultSet) Proxy.newProxyInstance(ResultSet.class.getClassLoader(), new Class<?>[] { ResultSet.class }, (_, method, args) ->
         {
             return switch (method.getName())
             {

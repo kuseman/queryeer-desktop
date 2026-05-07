@@ -273,7 +273,7 @@ class QueryExecutionServiceTest
         @Override
         public ConfigService config()
         {
-            return key -> null;
+            return _ -> null;
         }
 
         @Override
@@ -285,7 +285,7 @@ class QueryExecutionServiceTest
         @Override
         public FileSessionHandlerRegistry fileSessions()
         {
-            return handler ->
+            return _ ->
             {
             };
         }
@@ -293,7 +293,7 @@ class QueryExecutionServiceTest
         @Override
         public EventBus events()
         {
-            return (topic, event) ->
+            return (_, _) ->
             {
             };
         }
@@ -301,7 +301,7 @@ class QueryExecutionServiceTest
         @Override
         public SchedulerService scheduler()
         {
-            return (name, task) ->
+            return (_, task) ->
             {
                 task.run();
             };

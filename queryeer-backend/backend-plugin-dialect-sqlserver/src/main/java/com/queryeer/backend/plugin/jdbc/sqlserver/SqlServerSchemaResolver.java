@@ -152,7 +152,7 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
         List<JdbcSchemaObject> tables = new ArrayList<>();
         Connection source = catalog != null ? openForDatabase(url, baseProps, catalog)
                 : connection;
-        try (Connection targetConnection = source == connection ? null
+        try (Connection _ = source == connection ? null
                 : source; PreparedStatement statement = source.prepareStatement(SQL_TABLES_AND_VIEWS))
         {
             statement.setString(1, schema);
@@ -199,7 +199,7 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
         List<JdbcSchemaObject> columns = new ArrayList<>();
         Connection source = catalog != null ? openForDatabase(url, baseProps, catalog)
                 : connection;
-        try (Connection targetConnection = source == connection ? null
+        try (Connection _ = source == connection ? null
                 : source; PreparedStatement statement = source.prepareStatement(SQL_COLUMNS))
         {
             statement.setString(1, schema);

@@ -77,13 +77,13 @@ class DefaultJdbcDialectRegistryTest
             @Override
             public JdbcQueryExecutor queryExecutor()
             {
-                return (request, eventListener) -> new JdbcQueryResult(0, Map.of());
+                return (_, _) -> new JdbcQueryResult(0, Map.of());
             }
 
             @Override
             public JdbcSchemaResolver schemaResolver()
             {
-                return connection -> List.of();
+                return _ -> List.of();
             }
         };
     }

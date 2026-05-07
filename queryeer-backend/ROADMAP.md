@@ -47,6 +47,9 @@ Large features in prio
 - [ ] About dialog
     - Queryeer changelog
     - Modules changelog (Payloadbuilder)
+- [ ] Modularize
+    - Make sure all contributions have contracts and all API:s are located in a separate project
+      that might end up on npmjs one day
 - [X] Keybindings settings dialog
     - See conflicts
     - Specify new ones

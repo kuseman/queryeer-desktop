@@ -140,12 +140,11 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             resolved = JdbcResolvedConnection.fromEngineState(state, connections, registry);
             JdbcConnectionProfile materializedProfile = credentialResolver.resolve(resolved.profile());
 
-            Connection sessionConnection = fileConnections.acquire(fileId, materializedProfile, resolved.dialect());
-
             sessionId = trimToNull(state.sessionId());
             sessionId = fileConnections.resolveSessionId(fileId, materializedProfile, resolved, sessionId);
             fileConnections.rememberSessionId(fileId, sessionId);
 
+            Connection sessionConnection = fileConnections.acquire(fileId, materializedProfile, resolved.dialect());
             JdbcQueryRequest request = new JdbcQueryRequest(queryExecutionId, fileId, text, List.of(), materializedProfile, sessionConnection, state.database(), resolved.dialect());
 
             if (resolved.dialect()
