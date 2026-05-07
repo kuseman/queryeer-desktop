@@ -22,6 +22,7 @@ function createContext(file?: FileEntity) {
   const registerKeybinding = vi.fn();
   const closeFile = vi.fn(async () => {});
   const showMessage = vi.fn(async () => ({ action: "discard" }));
+  const closeActiveValuePreview = vi.fn(() => false);
 
   const context = {
     commands: {
@@ -107,7 +108,8 @@ function createContext(file?: FileEntity) {
       showMessage,
       showOpenDialog: vi.fn(),
       showOpenFolder: vi.fn(),
-      showSaveDialog: vi.fn()
+      showSaveDialog: vi.fn(),
+      closeActiveValuePreview
     },
     tooltip: { registerTooltipSection: vi.fn() },
     fileState: { get: vi.fn(), set: vi.fn(), delete: vi.fn(), evict: vi.fn() },
@@ -139,7 +141,8 @@ function createContext(file?: FileEntity) {
     commands,
     registerKeybinding,
     closeFile,
-    showMessage
+    showMessage,
+    closeActiveValuePreview
   };
 }
 
@@ -167,6 +170,19 @@ describe("core.layout close editor", () => {
 
     expect(showMessage).not.toHaveBeenCalled();
     expect(closeFile).toHaveBeenCalledWith(file.fileId, { discardDirty: true });
+  });
+
+  it("closes focused value preview before closing files", async () => {
+    const file = makeFile({ dirtyVsDisk: false, dirtyVsBackend: false });
+    const { context, commands, closeFile, closeActiveValuePreview } = createContext(file);
+    closeActiveValuePreview.mockReturnValueOnce(true);
+    coreLayoutPlugin.activate(context);
+
+    const handler = commands.get("core.closeActive");
+    await handler?.();
+
+    expect(closeActiveValuePreview).toHaveBeenCalledTimes(1);
+    expect(closeFile).not.toHaveBeenCalled();
   });
 
   it("asks confirmation for dirty file and respects cancel", async () => {

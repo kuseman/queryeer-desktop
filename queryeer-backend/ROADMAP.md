@@ -10,6 +10,11 @@ Large features in prio
     - [ ] Code parsing => wiggly lines in monaco
     - [ ] Code complete => register completion provider in monaco
         - Investigate LPS in backend if that simplifies things
+- [ ] Table context menu contribution
+    - Static items with when (based on value right clicked)
+    - Also contributions that has an items supplier that will be used later on
+      for a rule based context menu item extension where the user can create dynamic queries
+      based on table click contents.
 - [ ] Payloadbuilder
     - [X] Environments
     - [ ] JDBC Catalog
