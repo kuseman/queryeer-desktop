@@ -34,14 +34,20 @@ function makeFile(overrides: Partial<FileEntity> = {}): FileEntity {
   };
 }
 
-function makeContext(): Pick<PluginContext, "fileMediator" | "files"> {
+function makeContext(focusMock?: ReturnType<typeof vi.fn>): Pick<PluginContext, "fileMediator" | "files" | "editors"> {
   return {
     fileMediator: {
       bindEngine: vi.fn(async () => makeFile())
     } as unknown as PluginContext["fileMediator"],
     files: {
       setEditorState: vi.fn()
-    } as unknown as PluginContext["files"]
+    } as unknown as PluginContext["files"],
+    editors: {
+      getActiveEditor: vi.fn(() => (focusMock
+        ? ({ focus: { focus: focusMock } } as unknown as PluginContext["editors"] extends { getActiveEditor: () => infer T } ? T : never)
+        : null)),
+      onActiveEditorChanged: vi.fn(() => ({ dispose: vi.fn() }))
+    } as unknown as PluginContext["editors"]
   };
 }
 
@@ -53,6 +59,7 @@ const connections: JdbcConnectionDefinition[] = [
 describe("createJdbcDatabaseQuickCommandProvider", () => {
   beforeEach(() => {
     resetJdbcDatabaseCacheForTests();
+    vi.useFakeTimers();
     mocks.invokeMock.mockReset();
     mocks.invokeMock.mockResolvedValue([]);
     mocks.getConfiguredJdbcConnectionsMock.mockReset();
@@ -176,6 +183,30 @@ describe("createJdbcDatabaseQuickCommandProvider", () => {
 
     expect(context.fileMediator.bindEngine).toHaveBeenCalledWith("file-1", "jdbc", "conn-a");
     expect(context.files.setEditorState).toHaveBeenCalledWith("file-1", JDBC_NAV_DB_KEY, undefined);
+  });
+
+  it("refocuses active editor after selecting a database", async () => {
+    mocks.invokeMock.mockImplementation(async (req: unknown) => {
+      const payload = (req as { payload?: { connectionId: string } }).payload;
+      if (payload?.connectionId === "conn-a") {
+        return [{ id: "db:mydb", name: "mydb", kind: "database", children: [], attributes: {} }];
+      }
+      return [];
+    });
+    const focusMock = vi.fn();
+    const context = makeContext(focusMock);
+    const provider = createJdbcDatabaseQuickCommandProvider(context);
+    const items = await provider.getItems("", {
+      activeFile: makeFile(),
+      openFiles: [makeFile()]
+    });
+
+    const dbItem = items.find((i) => i.id === "jdbc.db.conn-a::mydb");
+    expect(dbItem).toBeDefined();
+    await dbItem!.action();
+    await vi.runAllTimersAsync();
+
+    expect(focusMock).toHaveBeenCalledTimes(1);
   });
 
   it("has the expected prefix, label, order and when clause", () => {
