@@ -70,5 +70,5 @@ export class KeybindingsStore {
 }
 
 export function defaultKeybindingsFilePath(userDataDir: string): string {
-  return join(userDataDir, "keybindings.json");
+  return join(userDataDir, "settings", "keybindings.json");
 }

@@ -45,9 +45,9 @@ describe("CoreMenuBar", () => {
     await act(async () => {
       root.render(
         <CoreMenuBar
-          keybindings={[]}
           canExecuteCommand={() => true}
           executeCommand={executeCommand}
+          getCommandAccelerator={() => undefined}
           menuItems={[
             { id: "root.file", label: "File", order: 1 },
             {

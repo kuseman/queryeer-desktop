@@ -89,6 +89,7 @@ describe("RecentFilesStore", () => {
 describe("defaultRecentFilesPath", () => {
   it("returns path in userData directory", () => {
     const result = defaultRecentFilesPath("/some/user/data");
+    expect(result).toContain("settings");
     expect(result).toContain("recent-files.json");
   });
 });

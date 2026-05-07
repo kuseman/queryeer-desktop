@@ -122,7 +122,7 @@ export class SettingsStore {
   }
 
   private indexFilePath(): string {
-    return join(this.settingsDirPath, "index.json");
+    return join(this.settingsDirPath, "core.settings.index.json");
   }
 
   private moduleFilePath(moduleId: string): string {

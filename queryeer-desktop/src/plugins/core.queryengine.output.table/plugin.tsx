@@ -582,7 +582,7 @@ function TableOutputView({ context }: { context: OutputContext }): JSX.Element {
       return <div className="table-output-empty">Query cancelled.</div>;
     }
     if (context.state === "idle") {
-      return <div className="table-output-empty">Press F5 or click Run to execute a query.</div>;
+      return <div />;
     }
     return <div />;
   }

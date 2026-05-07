@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSalt, createVerifier, deriveMasterKey } from "./vault-crypto.js";
-import { VaultStore } from "./vault-store.js";
+import { defaultSecurityDirPath, VaultStore } from "./vault-store.js";
 
 let workDir: string;
 
@@ -67,5 +67,12 @@ describe("VaultStore", () => {
     const entries = readdirSync(workDir);
     expect(existsSync(file)).toBe(false);
     expect(entries.some((entry) => entry.startsWith("vault.json.broken-"))).toBe(true);
+  });
+});
+
+describe("defaultSecurityDirPath", () => {
+  it("stores vault under settings directory", () => {
+    const result = defaultSecurityDirPath("/some/user/data");
+    expect(result).toContain("settings");
   });
 });

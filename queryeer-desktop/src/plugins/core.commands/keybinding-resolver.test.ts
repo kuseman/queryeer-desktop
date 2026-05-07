@@ -84,4 +84,23 @@ describe("resolveKeybindingState", () => {
     expect(state.diagnostics.invalidUserBindings).toHaveLength(1);
     expect(state.diagnostics.invalidUserBindings[0]?.reason).toBe("unknown-command");
   });
+
+  it("turns off default bindings through unbound entries", () => {
+    const state = resolveKeybindingState(baseExtensions(), {
+      version: KEYBINDINGS_SCHEMA_VERSION,
+      bindings: [],
+      unbound: [{ commandId: "core.commands.about" }]
+    });
+    expect(state.resolved.some((item) => item.commandId === "core.commands.about")).toBe(false);
+  });
+
+  it("normalizes ESC alias to Escape", () => {
+    const state = resolveKeybindingState(baseExtensions(), {
+      version: KEYBINDINGS_SCHEMA_VERSION,
+      bindings: [{ commandId: "core.files.save", key: "ESC", when: "global" }],
+      unbound: []
+    });
+    const escBinding = state.resolved.find((item) => item.commandId === "core.files.save");
+    expect(escBinding?.normalizedKey).toBe("escape");
+  });
 });

@@ -27,10 +27,6 @@ Large features in prio
         - Describe (sqlserver SP_HELP)
         - Count
         - etc.
-- [ ] Keybindings settings dialog
-    - See conflicts
-    - Specify new ones
-    - Turn off existing ones
 - [ ] Graph visualization framework
     - Query plan
     - Procedure call tree
@@ -46,6 +42,11 @@ Large features in prio
 - [ ] About dialog
     - Queryeer changelog
     - Modules changelog (Payloadbuilder)
+- [X] Keybindings settings dialog
+    - See conflicts
+    - Specify new ones
+    - Turn off existing ones
+    - Verify that it's persisted
 - [X] Query shortcuts
     - CTRL 0-9 / ALT-0
     - Rule based (query file meta data. Payloadbuilder properties / jdbc properties)

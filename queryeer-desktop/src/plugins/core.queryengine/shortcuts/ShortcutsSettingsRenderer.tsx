@@ -234,7 +234,7 @@ export function ShortcutsSettingsRenderer({ value, setValue, readonly }: Props):
               onClick={() => setSelectedSlot(i)}
             >
               <div className="shortcuts-slot-item-top">
-                <span className="shortcut-slot-badge">{getKeybindingLabel(`core.queryengine.shortcut.${i}`) ?? `Ctrl+${i}`}</span>
+                <span className="shortcut-slot-badge">{getKeybindingLabel(`core.queryengine.shortcut.${i}`) ?? "Unbound"}</span>
                 <span className="shortcuts-slot-item-label">
                   {shortcut.label || <span className="shortcuts-slot-item-placeholder">Slot {i}</span>}
                 </span>

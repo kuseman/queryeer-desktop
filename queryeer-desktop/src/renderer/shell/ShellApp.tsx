@@ -21,10 +21,11 @@ import { confirmCloseDirtyFile } from "./close-file-guard";
 import { requestMessageDialog } from "../../plugins/core.dialog/message-dialog-service";
 import { filterSidebarViews } from "./sidebar-view-filter";
 import { filterToolbarActions } from "./toolbar-action-filter";
-import { resolveFirstAcceleratorsByCommand } from "./accelerator-utils";
 import { subscribeOpenPanelRequests } from "./layout-panel-events";
 import { getOutlineRegistry } from "../../core/plugin-runtime/ExtensionRegistry";
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../../plugins/core.settings/service";
+import { getKeybindingLabel } from "../../plugins/core.commands/keybinding-label-accessor";
+import { subscribeKeybindingsRuntime } from "../../plugins/core.commands/keybindings-runtime-accessor";
 import {
   recordTabActivation,
   resolveActiveFileAfterRegistryUpdate,
@@ -54,6 +55,7 @@ export function ShellApp({
   canExecuteCommand,
   onCommandContextChanged
 }: ShellAppProps): JSX.Element {
+  const [, setKeybindingsVersion] = useState(0);
   const [visibleZones, setVisibleZones] = useState<Set<LayoutZone>>(() => {
     const restored = workspaceService.restoredLayout()?.visibleZones;
     if (restored) {
@@ -264,9 +266,11 @@ export function ShellApp({
     return map;
   }, [extensions.commands]);
 
-  const acceleratorByCommand = useMemo(() => {
-    return resolveFirstAcceleratorsByCommand(extensions.keybindings, window.appShell.platform);
-  }, [extensions.layout.toolbarActions, extensions.keybindings]);
+  useEffect(() => {
+    return subscribeKeybindingsRuntime(() => {
+      setKeybindingsVersion((version) => version + 1);
+    });
+  }, []);
 
   const openFiles = useMemo(
     () =>
@@ -582,9 +586,9 @@ export function ShellApp({
     <div className="shell-page">
       <CoreMenuBar
         menuItems={menuItems}
-        keybindings={extensions.keybindings}
         executeCommand={executeCommand}
         canExecuteCommand={canExecuteCommand}
+        getCommandAccelerator={(commandId) => getKeybindingLabel(commandId)}
         getMimeIcon={filesRegistry.mimeIcons.getMimeIcon}
       />
       {visibleZones.has("toolBar") && (
@@ -595,7 +599,7 @@ export function ShellApp({
           canExecuteCommand={canExecuteCommand}
           executeCommand={executeCommand}
           getCommandTitle={(commandId) => commandTitleById.get(commandId)}
-          getCommandAccelerator={(commandId) => acceleratorByCommand.get(commandId)}
+          getCommandAccelerator={(commandId) => getKeybindingLabel(commandId)}
         />
       )}
 
