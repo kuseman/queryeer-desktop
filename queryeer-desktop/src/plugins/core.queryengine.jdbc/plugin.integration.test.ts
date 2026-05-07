@@ -220,19 +220,27 @@ describe("core.queryengine.jdbc plugin integration", () => {
 
   it("includes sessionId from runtime metadata in JDBC engineState", () => {
     const context = createContext();
-    mocks.invokeMock.mockResolvedValueOnce([
-      { fileId: "file-1", connectionId: "conn-a", sessionId: "s-99", status: "alive" }
-    ]);
     const file = context.files.getFile("file-1");
     if (file) {
       file.engineBinding = { engineId: "jdbc", connectionId: "conn-a" };
       file.metadata = {
-        "core.queryengine.jdbc.sessionId": "s-99",
-        "core.queryengine.jdbc.sessionConnectionId": "conn-a"
+        "core.queryengine.jdbc.sessionId": "s-99"
       };
     }
 
     coreQueryEngineJdbcPlugin.activate(context);
+
+    // Populate sessionConnectionUuidMap by simulating a completed query event
+    const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+      | ((
+          event: { method: string; params?: { engineState?: unknown } },
+          executeContext?: { engineId?: string; fileId?: string }
+        ) => void)
+      | undefined;
+    listener?.(
+      { method: "queryengine.completed", params: { engineState: { sessionId: "s-99" } } },
+      { engineId: "jdbc", fileId: "file-1" }
+    );
 
     const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[0] as
       | ((params: { engineId: string; text: string; fileId?: string }) => unknown)
@@ -365,6 +373,9 @@ describe("core.queryengine.jdbc plugin integration", () => {
 
   it("applies completed engineState sessionId into runtime metadata", () => {
     const context = createContext();
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([
+      { connectionId: "conn-a", title: "My Connection", enabled: true }
+    ]);
     const file = context.files.getFile("file-1");
     if (file) {
       file.engineBinding = { engineId: "jdbc", connectionId: "conn-a" };
@@ -391,7 +402,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
 
     const updated = context.files.getFile("file-1");
     expect(updated?.metadata?.["core.queryengine.jdbc.sessionId"]).toBe("session-1");
-    expect(updated?.metadata?.["core.queryengine.jdbc.sessionConnectionId"]).toBe("conn-a");
+    expect(updated?.metadata?.["core.queryengine.jdbc.sessionConnection"]).toBe("My Connection");
   });
 
   it("registers a quick command provider with $ prefix", () => {

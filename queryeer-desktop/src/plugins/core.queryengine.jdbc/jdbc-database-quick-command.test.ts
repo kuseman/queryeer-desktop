@@ -40,7 +40,9 @@ function makeContext(focusMock?: ReturnType<typeof vi.fn>): Pick<PluginContext, 
       bindEngine: vi.fn(async () => makeFile())
     } as unknown as PluginContext["fileMediator"],
     files: {
-      setEditorState: vi.fn()
+      setEditorState: vi.fn(),
+      getFile: vi.fn(() => undefined),
+      updateFile: vi.fn()
     } as unknown as PluginContext["files"],
     editors: {
       getActiveEditor: vi.fn(() => (focusMock

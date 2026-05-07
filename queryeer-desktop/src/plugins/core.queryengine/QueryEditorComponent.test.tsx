@@ -90,7 +90,8 @@ vi.mock("./QueryEngineService", () => ({
     cancel: mocks.cancelMock,
     subscribe: mocks.subscribeMock,
     onExecuteRequest: mocks.onExecuteRequestMock,
-    onCancelRequest: mocks.onCancelRequestMock
+    onCancelRequest: mocks.onCancelRequestMock,
+    consumeExecuteOptions: () => null
   })
 }));
 

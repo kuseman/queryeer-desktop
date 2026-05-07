@@ -11,6 +11,7 @@ import {
   type ResolvedKeybinding
 } from "./keybinding-resolver";
 import { evaluateWhenExpression } from "./when-evaluator";
+import { updateKeybindingLabels } from "./keybinding-label-accessor";
 
 export type KeybindingService = {
   initialize: (extensions: ExtensionSnapshot) => Promise<void>;
@@ -86,12 +87,14 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
       const state = resolveKeybindingState(extensions, user);
       resolved = state.resolved;
       diagnostics = state.diagnostics;
+      updateKeybindingLabels(resolved);
     },
     updateExtensions: async (extensions) => {
       const user = await options.getUserKeybindings();
       const state = resolveKeybindingState(extensions, user);
       resolved = state.resolved;
       diagnostics = state.diagnostics;
+      updateKeybindingLabels(resolved);
     },
     diagnostics: () => diagnostics,
     dispose: () => {

@@ -5,6 +5,13 @@ type QueryEvent = { method: string; params: unknown };
 type QueryEventListener = (event: QueryEvent) => void;
 type GlobalQueryEventListener = (event: QueryEvent, context?: ExecuteParams) => void;
 type SimpleListener = () => void;
+
+export type ExecuteRequestOptions = {
+  /** When set, overrides the text taken from the editor. */
+  textOverride?: string;
+  /** When set, overrides the output contributor selected in the toolbar. */
+  outputIdOverride?: string;
+};
 type ExecutionContextProvider = (params: ExecuteParams) => Partial<ExecuteParams> | void;
 type EngineResolver = (params: Omit<ExecuteParams, "engineId">) => string | undefined;
 type EngineResolverEntry = {
@@ -44,6 +51,7 @@ export class QueryEngineService {
   private readonly engineResolvers: EngineResolverEntry[] = [];
   private readonly executionContextById = new Map<string, ExecuteParams>();
   private initialized = false;
+  private pendingExecuteOptions: ExecuteRequestOptions | null = null;
 
   initialize(): void {
     if (this.initialized) return;
@@ -163,10 +171,17 @@ export class QueryEngineService {
     return response.result;
   }
 
-  requestExecute(): void {
+  requestExecute(options?: ExecuteRequestOptions): void {
+    this.pendingExecuteOptions = options ?? null;
     for (const listener of this.executeRequestListeners) {
       listener();
     }
+  }
+
+  consumeExecuteOptions(): ExecuteRequestOptions | null {
+    const opts = this.pendingExecuteOptions;
+    this.pendingExecuteOptions = null;
+    return opts;
   }
 
   requestCancel(): void {

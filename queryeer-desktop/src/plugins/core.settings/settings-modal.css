@@ -10,8 +10,8 @@
 }
 
 .settings-modal {
-  width: min(1080px, calc(100vw - 48px));
-  height: min(760px, calc(100vh - 48px));
+  width: min(1280px, calc(100vw - 48px));
+  height: min(900px, calc(100vh - 48px));
   display: grid;
   grid-template-rows: auto auto 1fr;
   border: 1px solid var(--border);

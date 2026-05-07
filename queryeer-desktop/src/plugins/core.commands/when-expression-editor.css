@@ -1,0 +1,143 @@
+.when-expr-editor {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: visible;
+}
+
+.when-expr-editor:focus-within {
+  border-color: var(--accent-muted);
+}
+
+.when-expr-info-wrap {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+}
+
+.when-expr-info-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+.when-expr-info-btn:hover {
+  color: var(--text-1);
+}
+
+.when-expr-info-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 200;
+  background: var(--bg-1, #1e1e2e);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  padding: 12px;
+  min-width: 480px;
+  max-width: 600px;
+  max-height: min(480px, 60vh);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.when-expr-info-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.when-expr-info-section strong {
+  font-size: var(--ui-font-size-xs);
+  font-weight: 600;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.when-expr-info-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--ui-font-size-xs);
+}
+
+.when-expr-info-table tr + tr td {
+  border-top: 1px solid var(--border);
+}
+
+.when-expr-info-table td {
+  padding: 3px 6px;
+  vertical-align: top;
+}
+
+.when-expr-info-name {
+  font-family: var(--font-mono, monospace);
+  color: var(--accent, #7aa2f7);
+  white-space: nowrap;
+  width: 1%;
+}
+
+.when-expr-info-type {
+  color: var(--text-3);
+  white-space: nowrap;
+  width: 1%;
+  font-style: italic;
+}
+
+.when-expr-info-desc {
+  color: var(--text-1);
+}
+
+.when-expr-info-example {
+  font-size: var(--ui-font-size-xs);
+  color: var(--text-2);
+  margin-top: 2px;
+}
+
+.when-expr-info-example code {
+  font-family: var(--font-mono, monospace);
+  color: var(--accent, #7aa2f7);
+}
+
+.when-expr-info-ops {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.when-expr-info-ops code {
+  font-family: var(--font-mono, monospace);
+  background: var(--surface-overlay);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 6px;
+  color: var(--text-0);
+  font-size: var(--ui-font-size-xs);
+}
+
+.when-expr-info-tip {
+  font-size: var(--ui-font-size-xs);
+  color: var(--text-3);
+  margin-top: 4px;
+}
+
+.when-expr-info-tip kbd {
+  font-family: var(--font-mono, monospace);
+  background: var(--surface-overlay);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 5px;
+  font-size: var(--ui-font-size-xs);
+  color: var(--text-1);
+}

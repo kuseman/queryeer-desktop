@@ -106,6 +106,22 @@ export class PayloadbuilderCatalogStore {
     };
   }
 
+  getCatalogMeta(fileId: string | undefined): {
+    enabledAliases: string[];
+    selectedEnvironmentId: string | undefined;
+    defaultCatalogAlias: string | undefined;
+  } {
+    const document = this.readDocument(fileId);
+    const enabledAliases = this.listInstances(fileId)
+      .filter((i) => i.enabled)
+      .map((i) => i.alias);
+    return {
+      enabledAliases,
+      selectedEnvironmentId: document.selectedEnvironmentId,
+      defaultCatalogAlias: document.defaultCatalogAlias
+    };
+  }
+
   setSelectedEnvironmentId(fileId: string, environmentId: string | undefined): void {
     const document = this.readDocument(fileId);
     this.writeDocument(fileId, setSelectedEnvironmentId(document, environmentId));

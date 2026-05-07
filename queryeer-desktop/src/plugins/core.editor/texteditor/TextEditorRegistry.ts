@@ -35,6 +35,10 @@ export function setTextEditorContextChain(chain: ContextChain): void {
   globalContextChain = chain;
 }
 
+export function getEditorContextChain(): ContextChain | null {
+  return globalContextChain;
+}
+
 export class TextEditorRegistry {
   private readonly modelsByFileId = new Map<string, TextEditorModel>();
   private readonly modelsByUri = new Map<string, TextEditorModel>();
@@ -78,21 +82,47 @@ export class TextEditorRegistry {
 
     const focusDisposables: Disposable[] = [];
 
+    // Shared mutable context object — updated in-place so each callback publishes the full picture.
+    // languageId is left undefined until the first focus event (matching original behaviour).
+    const scopeCtx: {
+      hasActiveTextEditor: boolean;
+      editorTextFocus: boolean;
+      languageId: string | undefined;
+      selectedText: string;
+      hasSelection: boolean;
+    } = {
+      hasActiveTextEditor: true,
+      editorTextFocus: false,
+      languageId: undefined,
+      selectedText: "",
+      hasSelection: false
+    };
+
+    const publish = (): void => {
+      if (this.scopeId && globalContextChain) {
+        globalContextChain.update(this.scopeId, { ...scopeCtx });
+      }
+    };
+
     const onFocus = (): void => {
       if (this.scopeId && globalContextChain) {
         globalContextChain.activate(this.scopeId);
-        globalContextChain.update(this.scopeId, {
-          hasActiveTextEditor: true,
-          editorTextFocus: true,
-          languageId: api.getModel()?.languageId
-        });
+        scopeCtx.editorTextFocus = true;
+        scopeCtx.languageId = api.getModel()?.languageId;
+        publish();
       }
     };
 
     const onBlur = (): void => {
-      if (this.scopeId && globalContextChain) {
-        globalContextChain.update(this.scopeId, { hasActiveTextEditor: true, editorTextFocus: false });
-      }
+      scopeCtx.editorTextFocus = false;
+      publish();
+    };
+
+    const onSelectionChange = (): void => {
+      const selected = api.getSelectedText() ?? "";
+      scopeCtx.selectedText = selected;
+      scopeCtx.hasSelection = selected.length > 0;
+      publish();
     };
 
     const focusText = (api as unknown as {
@@ -119,6 +149,13 @@ export class TextEditorRegistry {
     }
     if (typeof blurWidget === "function") {
       focusDisposables.push(blurWidget.call(api, onBlur));
+    }
+
+    const onChangeCursorSelection = (api as unknown as {
+      onDidChangeCursorSelection?: (callback: (event: unknown) => void) => Disposable;
+    }).onDidChangeCursorSelection;
+    if (typeof onChangeCursorSelection === "function") {
+      focusDisposables.push(onChangeCursorSelection.call(api, onSelectionChange));
     }
 
     this.editorFocusDisposables = focusDisposables;

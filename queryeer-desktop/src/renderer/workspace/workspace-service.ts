@@ -159,6 +159,7 @@ export class RendererWorkspaceService {
       const entity = fileEntities.find((f) => f.uri === snapshot.activeFileUri);
       if (entity) {
         this.activeFileId = entity.fileId;
+        this.fileMediator.setActiveFileId(entity.fileId);
       }
     }
     this.restoredLayoutSnapshot = snapshot.layout ?? null;

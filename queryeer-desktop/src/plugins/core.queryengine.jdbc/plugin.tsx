@@ -14,13 +14,18 @@ import { DatabaseIcon } from "./DatabaseIcon";
 import { getJdbcNavigationStore } from "./jdbc-navigation-store";
 import { JdbcNavigationView } from "./JdbcNavigationView";
 import { JDBC_NAV_DB_KEY, type JdbcSelectedDatabase } from "./jdbc-navigation-types";
+import { writeJdbcContextMetadata } from "./jdbc-metadata";
+import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";
 import { getQuickCommandService } from "../core.quickcommand/service";
 import { createJdbcDatabaseQuickCommandProvider } from "./jdbc-database-quick-command";
 import { getJdbcDatabaseCache } from "./jdbc-database-cache";
 
 const JDBC_SESSION_ID_METADATA_KEY = "core.queryengine.jdbc.sessionId";
-const JDBC_SESSION_CONNECTION_ID_METADATA_KEY = "core.queryengine.jdbc.sessionConnectionId";
+const JDBC_SESSION_CONNECTION_TITLE_KEY = "core.queryengine.jdbc.sessionConnection";
 const JDBC_SESSION_STATE_METADATA_KEY = "core.queryengine.jdbc.sessionState";
+// Tracks which connectionId (UUID) each file's session was established with.
+// Kept in memory — same lifetime as metadata, which is also not persisted.
+const sessionConnectionUuidMap = new Map<string, string>();
 export const coreQueryEngineJdbcPlugin: Plugin = {
   manifest: {
     id: "core.queryengine.jdbc",
@@ -33,6 +38,14 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
     providesCapabilities: ["query.engine.jdbc"]
   },
   activate: (context) => {
+    registerWhenExpressionVariables([
+      { name: "activeFileMetadata.core.queryengine.jdbc.database", type: "string", description: "Selected JDBC database name" },
+      { name: "activeFileMetadata.core.queryengine.jdbc.connectionTitle", type: "string", description: "Human-readable title of the active JDBC connection" },
+      { name: "activeFileMetadata.core.queryengine.jdbc.dialectId", type: "string", description: "SQL dialect of the active JDBC connection (e.g. 'sqlserver', 'postgresql')" },
+      { name: "activeFileMetadata.core.queryengine.jdbc.sessionConnection", type: "string", description: "Title of the JDBC connection that owns the active session" },
+      { name: "activeFileMetadata.core.queryengine.jdbc.sessionState", type: "string", description: "State of the JDBC session: 'alive', 'dead', or 'none'" },
+    ]);
+
     registerQueryExecutableEngine(context, {
       engineId: "jdbc",
       mimeTypes: ["application/sql"]
@@ -206,12 +219,10 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
         engineState.database = selectedDatabase.database;
       }
       const sessionId = file?.metadata?.[JDBC_SESSION_ID_METADATA_KEY];
-      const sessionConnectionId = file?.metadata?.[JDBC_SESSION_CONNECTION_ID_METADATA_KEY];
       if (
         typeof sessionId === "string" &&
         sessionId.length > 0 &&
-        typeof sessionConnectionId === "string" &&
-        sessionConnectionId === connectionId
+        sessionConnectionUuidMap.get(params.fileId) === connectionId
       ) {
         engineState.sessionId = sessionId;
       }
@@ -241,11 +252,16 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
               metadata[JDBC_SESSION_ID_METADATA_KEY] = sessionId;
               metadata[JDBC_SESSION_STATE_METADATA_KEY] = "alive";
               if (typeof connectionId === "string" && connectionId.length > 0) {
-                metadata[JDBC_SESSION_CONNECTION_ID_METADATA_KEY] = connectionId;
+                sessionConnectionUuidMap.set(executeContext.fileId, connectionId);
+                const connTitle = getConfiguredJdbcConnections().find((c) => c.connectionId === connectionId)?.title;
+                if (connTitle) {
+                  metadata[JDBC_SESSION_CONNECTION_TITLE_KEY] = connTitle;
+                }
               }
             } else {
               delete metadata[JDBC_SESSION_ID_METADATA_KEY];
-              delete metadata[JDBC_SESSION_CONNECTION_ID_METADATA_KEY];
+              delete metadata[JDBC_SESSION_CONNECTION_TITLE_KEY];
+              sessionConnectionUuidMap.delete(executeContext.fileId);
               metadata[JDBC_SESSION_STATE_METADATA_KEY] = "dead";
             }
             context.files.updateFile(executeContext.fileId, { metadata });
@@ -259,8 +275,29 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
               connectionId,
               database
             } satisfies JdbcSelectedDatabase);
+            writeJdbcContextMetadata(executeContext.fileId, connectionId, database, context.files);
           }
         }
+      }
+    });
+
+    // Write metadata for any JDBC file the first time it appears in the registry
+    // (covers workspace restore before JdbcConnectionSelector has mounted).
+    const syncedFileIds = new Set<string>();
+    context.files.subscribe((files) => {
+      for (const file of files) {
+        if (file.engineBinding?.engineId !== "jdbc" || syncedFileIds.has(file.fileId)) {
+          continue;
+        }
+        syncedFileIds.add(file.fileId);
+        const connectionId = file.engineBinding.connectionId;
+        const persisted = context.files.getEditorState(file.fileId, JDBC_NAV_DB_KEY) as { database?: string } | null;
+        writeJdbcContextMetadata(
+          file.fileId,
+          connectionId || undefined,
+          persisted?.database || undefined,
+          context.files
+        );
       }
     });
 
@@ -278,7 +315,6 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
         }
         const metadata = { ...(file.metadata ?? {}) };
         const existingSessionId = metadata[JDBC_SESSION_ID_METADATA_KEY];
-        const existingSessionConnectionId = metadata[JDBC_SESSION_CONNECTION_ID_METADATA_KEY];
         const boundConnectionId = file.engineBinding?.connectionId;
         const match = byFileId.get(file.fileId);
         const nextSessionId =
@@ -288,19 +324,25 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
             ? match.sessionId
             : undefined;
         if (typeof nextSessionId === "string" && nextSessionId.length > 0) {
-          if (existingSessionId !== nextSessionId || existingSessionConnectionId !== boundConnectionId) {
+          const existingUuid = sessionConnectionUuidMap.get(file.fileId);
+          if (existingSessionId !== nextSessionId || existingUuid !== boundConnectionId) {
             metadata[JDBC_SESSION_ID_METADATA_KEY] = nextSessionId;
             metadata[JDBC_SESSION_STATE_METADATA_KEY] = "alive";
             if (boundConnectionId) {
-              metadata[JDBC_SESSION_CONNECTION_ID_METADATA_KEY] = boundConnectionId;
+              sessionConnectionUuidMap.set(file.fileId, boundConnectionId);
+              const connTitle = getConfiguredJdbcConnections().find((c) => c.connectionId === boundConnectionId)?.title;
+              if (connTitle) {
+                metadata[JDBC_SESSION_CONNECTION_TITLE_KEY] = connTitle;
+              }
             }
             context.files.updateFile(file.fileId, { metadata });
           }
           continue;
         }
-        if (existingSessionId !== undefined || existingSessionConnectionId !== undefined) {
+        if (existingSessionId !== undefined || sessionConnectionUuidMap.has(file.fileId)) {
           delete metadata[JDBC_SESSION_ID_METADATA_KEY];
-          delete metadata[JDBC_SESSION_CONNECTION_ID_METADATA_KEY];
+          delete metadata[JDBC_SESSION_CONNECTION_TITLE_KEY];
+          sessionConnectionUuidMap.delete(file.fileId);
           metadata[JDBC_SESSION_STATE_METADATA_KEY] = match?.status === "dead" ? "dead" : "none";
           context.files.updateFile(file.fileId, { metadata });
         }
@@ -330,12 +372,10 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
           return null;
         }
         const sessionId = file.metadata?.[JDBC_SESSION_ID_METADATA_KEY];
-        const sessionConnectionId = file.metadata?.[JDBC_SESSION_CONNECTION_ID_METADATA_KEY];
         if (
           typeof sessionId !== "string" ||
           sessionId.length === 0 ||
-          typeof sessionConnectionId !== "string" ||
-          sessionConnectionId !== file.engineBinding?.connectionId
+          sessionConnectionUuidMap.get(file.fileId) !== file.engineBinding?.connectionId
         ) {
           return null;
         }
@@ -369,12 +409,10 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
           return null;
         }
         const sessionId = file.metadata?.[JDBC_SESSION_ID_METADATA_KEY];
-        const sessionConnectionId = file.metadata?.[JDBC_SESSION_CONNECTION_ID_METADATA_KEY];
         if (
           typeof sessionId !== "string" ||
           sessionId.length === 0 ||
-          typeof sessionConnectionId !== "string" ||
-          sessionConnectionId !== file.engineBinding?.connectionId
+          sessionConnectionUuidMap.get(file.fileId) !== file.engineBinding?.connectionId
         ) {
           return null;
         }
