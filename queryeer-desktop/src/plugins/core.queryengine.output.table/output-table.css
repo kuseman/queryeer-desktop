@@ -169,3 +169,9 @@ body.table-output-resizing {
 .table-cell-selected {
   background-color: rgba(100, 160, 255, 0.22) !important;
 }
+
+.table-cell-link {
+  color: var(--accent) !important;
+  text-decoration: underline;
+  cursor: pointer;
+}

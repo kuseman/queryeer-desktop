@@ -468,6 +468,12 @@ export class ExtensionRegistry {
       },
       showInputDialog: async () => {
         return { canceled: true, value: undefined };
+      },
+      showValuePreview: async () => {
+        return;
+      },
+      closeActiveValuePreview: () => {
+        return false;
       }
     };
   }

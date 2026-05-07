@@ -24,6 +24,10 @@ export const coreLayoutPlugin: Plugin = {
       id: "core.closeActive",
       title: "Close Active",
       handler: async () => {
+        const closedValuePreview = context.dialog.closeActiveValuePreview?.() ?? false;
+        if (closedValuePreview) {
+          return;
+        }
         const activeFileId = context.fileMediator.getActiveFileId();
         if (!activeFileId) {
           return;

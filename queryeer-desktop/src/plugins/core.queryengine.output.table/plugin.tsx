@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { AgGridReact } from "ag-grid-react";
-import type { ColDef, GridApi, GridReadyEvent, FirstDataRenderedEvent, StateUpdatedEvent, ICellRendererParams, CellClickedEvent, CellClassParams, CellMouseDownEvent, CellMouseOverEvent } from "ag-grid-community";
+import type { ColDef, GridApi, GridReadyEvent, FirstDataRenderedEvent, StateUpdatedEvent, ICellRendererParams, CellClickedEvent, CellClassParams, CellMouseDownEvent, CellMouseOverEvent, CellDoubleClickedEvent, CellKeyDownEvent } from "ag-grid-community";
 import type { GridState } from "ag-grid-community";
 import { AllCommunityModule, ModuleRegistry, themeQuartz, colorSchemeDark } from "ag-grid-community";
 import type { Plugin } from "../../contracts/plugin/Plugin";
@@ -19,6 +19,11 @@ import {
   OUTPUT_TABLE_VIEW_MODE_SETTING_ID,
   resolveOutputTableSettings,
 } from "./output-table-settings";
+import {
+  formatPreviewValue,
+  inferPreviewMimeType,
+  resolveTableLinkAction,
+} from "./table-link-actions";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -160,9 +165,10 @@ type TableGridProps = {
   schema: { columns: Column[] };
   rows: unknown[][];
   fileId?: string;
+  onPreviewValue: (options: { title: string; value: string; mimeType?: string }) => void;
 };
 
-function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JSX.Element {
+function TableGrid({ resultSetIndex, schema, rows, fileId, onPreviewValue }: TableGridProps): JSX.Element {
   const apiRef = useRef<GridApi | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const rowsRef = useRef(rows);
@@ -243,8 +249,16 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
         const colIdx = gridColumns.findIndex((c) => c.key === params.column.getColId());
         return colIdx !== -1 && isCellSelected(model, params.rowIndex, colIdx);
       },
+      "table-cell-link": (params: CellClassParams) => {
+        if (params.rowIndex == null) return false;
+        const colIdx = gridColumns.findIndex((c) => c.key === params.column.getColId());
+        if (colIdx < 0) return false;
+        const rowData = params.data as GridRowData | undefined;
+        const value = getCellValueForCopy(rowData, colIdx);
+        return resolveTableLinkAction({ value, columnType: schema.columns[colIdx]?.type ?? "any" }) != null;
+      },
     },
-  }), [gridColumns]);
+  }), [gridColumns, schema.columns]);
 
   const onGridReady = useCallback(
     (params: GridReadyEvent) => {
@@ -339,6 +353,25 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
       const colIndex = colId === ROW_NUMBER_COL_ID ? -1 : gridColumns.findIndex((c) => c.key === colId);
       const rowIndex = e.node.rowIndex ?? 0;
       const totalCols = schema.columns.length;
+
+      if (colIndex >= 0) {
+        const rowData = e.data as GridRowData | undefined;
+        const value = getCellValueForCopy(rowData, colIndex);
+        const action = resolveTableLinkAction({ value, columnType: schema.columns[colIndex]?.type ?? "any" });
+        if (action) {
+          if (action.kind === "external") {
+            void window.appShell.openExternal(action.value);
+          } else {
+            onPreviewValue({
+              title: action.title,
+              value: action.value,
+              mimeType: action.mimeType,
+            });
+          }
+          return;
+        }
+      }
+
       const shift = !!me?.shiftKey;
       const ctrl = !!(me?.ctrlKey || me?.metaKey);
       const existing = selectionRef.current;
@@ -368,8 +401,52 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
 
       applySelection(newSel, e.api);
     },
-    [schema, gridColumns, applySelection]
+    [schema, gridColumns, applySelection, onPreviewValue]
   );
+
+  const runCellPrimaryAction = useCallback((columnId: string, rowData: GridRowData | undefined): boolean => {
+    const colIndex = columnId === ROW_NUMBER_COL_ID ? -1 : gridColumns.findIndex((c) => c.key === columnId);
+    if (colIndex < 0) {
+      return false;
+    }
+    const rawValue = getCellValueForCopy(rowData, colIndex);
+    const action = resolveTableLinkAction({ value: rawValue, columnType: schema.columns[colIndex]?.type ?? "any" });
+    if (action) {
+      if (action.kind === "external") {
+        void window.appShell.openExternal(action.value);
+      } else {
+        onPreviewValue({
+          title: action.title,
+          value: action.value,
+          mimeType: action.mimeType,
+        });
+      }
+      return true;
+    }
+
+    const mimeType = inferPreviewMimeType(rawValue);
+    const value = formatPreviewValue(rawValue, mimeType);
+    onPreviewValue({
+      title: "Value Preview",
+      value,
+      mimeType,
+    });
+    return true;
+  }, [gridColumns, onPreviewValue, schema.columns]);
+
+  const onCellDoubleClicked = useCallback((e: CellDoubleClickedEvent) => {
+    void runCellPrimaryAction(e.column.getColId(), e.data as GridRowData | undefined);
+  }, [runCellPrimaryAction]);
+
+  const onCellKeyDown = useCallback((e: CellKeyDownEvent) => {
+    const keyboardEvent = e.event as KeyboardEvent | null;
+    if (!keyboardEvent || keyboardEvent.key !== "Enter") {
+      return;
+    }
+    keyboardEvent.preventDefault();
+    keyboardEvent.stopPropagation();
+    void runCellPrimaryAction(e.column.getColId(), e.data as GridRowData | undefined);
+  }, [runCellPrimaryAction]);
 
   // Apply only newly arrived rows incrementally — no full re-render
   useEffect(() => {
@@ -436,6 +513,8 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
         onCellMouseDown={onCellMouseDown}
         onCellMouseOver={onCellMouseOver}
         onCellClicked={onCellClicked}
+        onCellDoubleClicked={onCellDoubleClicked}
+        onCellKeyDown={onCellKeyDown}
         rowBuffer={30}
         suppressMovableColumns={false}
       />
@@ -443,7 +522,7 @@ function TableGrid({ resultSetIndex, schema, rows, fileId }: TableGridProps): JS
   );
 }
 
-function TableOutputView({ context }: { context: OutputContext }): JSX.Element {
+function TableOutputView({ context, onPreviewValue }: { context: OutputContext; onPreviewValue: (options: { title: string; value: string; mimeType?: string }) => void }): JSX.Element {
   const tableSettings = resolveOutputTableSettings();
   const isStacked = tableSettings.viewMode === "stacked";
   const [activeIndex, setActiveIndex] = useState(0);
@@ -646,8 +725,9 @@ function TableOutputView({ context }: { context: OutputContext }): JSX.Element {
                       <TableGrid
                         resultSetIndex={resultSet.resultSetIndex}
                         schema={resultSet.schema}
-                      rows={resultSet.rows}
+                        rows={resultSet.rows}
                         fileId={context.fileId}
+                        onPreviewValue={onPreviewValue}
                       />
                     </div>
                       );
@@ -686,6 +766,7 @@ function TableOutputView({ context }: { context: OutputContext }): JSX.Element {
                   schema={activeSet.schema}
                   rows={activeSet.rows}
                   fileId={context.fileId}
+                  onPreviewValue={onPreviewValue}
                 />
               </div>
 
@@ -774,7 +855,7 @@ export const coreQueryEngineOutputTablePlugin: Plugin = {
       title: "Results",
       icon: outputTableIconUrl,
       priority: 0,
-      render: (context) => <TableOutputView context={context} />
+      render: (outputContext) => <TableOutputView context={outputContext} onPreviewValue={(options) => void context.dialog.showValuePreview?.(options)} />
     });
   }
 };

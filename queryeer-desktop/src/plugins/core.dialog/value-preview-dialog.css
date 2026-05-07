@@ -1,0 +1,110 @@
+.dialog-value-preview-window {
+  position: fixed;
+  width: 680px;
+  height: 420px;
+  z-index: 1400;
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.42);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dialog-value-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-2);
+  cursor: move;
+  user-select: none;
+}
+
+.dialog-value-preview-title {
+  color: var(--text-0);
+  font-size: var(--ui-font-size-sm);
+}
+
+.dialog-value-preview-close {
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+  color: var(--text-1);
+  font-size: var(--ui-font-size-sm);
+  cursor: pointer;
+  padding: 2px 8px;
+}
+
+.dialog-value-preview-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.dialog-value-preview-min {
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+  color: var(--text-1);
+  font-size: var(--ui-font-size-sm);
+  cursor: pointer;
+  padding: 2px 8px;
+}
+
+.dialog-value-preview-meta {
+  padding: 3px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 11px;
+  background: var(--bg-2);
+}
+
+.dialog-value-preview-editor {
+  flex: 1;
+  min-height: 0;
+}
+
+.dialog-value-preview-resizer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 45%, var(--border) 45%, var(--border) 55%, transparent 55%);
+}
+
+body.dialog-value-preview-dragging {
+  cursor: move;
+  user-select: none;
+}
+
+body.dialog-value-preview-resizing {
+  cursor: nwse-resize;
+  user-select: none;
+}
+
+.dialog-value-preview-minimized-strip {
+  position: fixed;
+  left: 8px;
+  right: 8px;
+  bottom: 28px;
+  z-index: 1450;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.dialog-value-preview-minimized-item {
+  pointer-events: auto;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-1);
+  font-size: var(--ui-font-size-sm);
+  padding: 3px 10px;
+  cursor: pointer;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -2,6 +2,7 @@ import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { DialogResult } from "../../contracts/extensions/DialogExtension";
 import { requestInputDialog } from "./input-dialog-service";
 import { requestMessageDialog } from "./message-dialog-service";
+import { closeFocusedValuePreviewDialog, requestValuePreviewDialog } from "./value-preview-dialog-service";
 
 const getAppShell = () => {
   return (window as unknown as {
@@ -88,6 +89,14 @@ export const coreDialogPlugin: Plugin = {
 
     context.dialog.showInputDialog = async (options) => {
       return requestInputDialog(options);
+    };
+
+    context.dialog.showValuePreview = async (options) => {
+      await requestValuePreviewDialog(options);
+    };
+
+    context.dialog.closeActiveValuePreview = () => {
+      return closeFocusedValuePreviewDialog();
     };
   }
 };

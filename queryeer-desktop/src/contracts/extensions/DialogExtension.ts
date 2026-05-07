@@ -38,4 +38,10 @@ export type DialogExtension = {
     placeholder?: string;
     password?: boolean;
   }) => Promise<{ canceled: boolean; value?: string }>;
+  showValuePreview?: (options: {
+    title: string;
+    value: string;
+    mimeType?: string;
+  }) => Promise<void>;
+  closeActiveValuePreview?: () => boolean;
 };
