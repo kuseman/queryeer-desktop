@@ -581,11 +581,22 @@ Rules:
 {
   "queryExecutionId": "qx-001",
   "error": {
-    "code": "ENGINE_NOT_FOUND",
-    "message": "Unknown engine 'foo'"
+    "code": "VALIDATION",
+    "message": "Parse error near 'from'",
+    "details": {
+      "line": 3,
+      "column": 15
+    }
   }
 }
 ```
+
+Rules:
+
+- For errors that can be associated with query text positions, backend SHOULD include 1-based `details.line` and `details.column`.
+- `details.line`/`details.column` are relative to the executed query text payload.
+- Backend MAY include additional engine/dialect-specific details alongside location keys.
+- SQL Server dialect implementations MUST resolve `com.microsoft.sqlserver.*` classes lazily when extracting optional error details, because the SQL Server driver JAR may be absent until runtime connection use.
 
 ## 7. Error codes
 

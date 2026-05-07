@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { OutputContext } from "../../contracts/extensions/OutputExtension";
 import { getOutputRegistry } from "../core.queryengine/output/OutputRegistry";
@@ -10,6 +10,7 @@ import {
   type TextOutputFormatId
 } from "./formatters";
 import outputTextIconUrl from "./output-text.svg";
+import { queryTextRegistry } from "../core.queryengine/QueryTextEditorRegistry";
 
 type TextOutputViewState = {
   lines: string[];
@@ -46,6 +47,29 @@ function TextOutputView({ context }: { context: OutputContext }): JSX.Element {
     });
   }, [context.fileId, formattedLines, scrollLine]);
 
+  const handleLinkActivate = useCallback((uri: string) => {
+    if (!uri.startsWith("editor://")) {
+      return;
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(uri);
+    } catch {
+      return;
+    }
+    const line = Number(parsed.searchParams.get("line") ?? "");
+    const column = Number(parsed.searchParams.get("column") ?? "");
+    if (!Number.isFinite(line) || line < 1) {
+      return;
+    }
+    const editor = queryTextRegistry.getCommandTargetEditor();
+    if (!editor) {
+      return;
+    }
+    editor.focus();
+    editor.setPosition({ lineNumber: line, column: Number.isFinite(column) && column > 0 ? column : 1 }, "center");
+  }, []);
+
   return (
     <XtermTextConsole
       lines={formattedLines}
@@ -64,6 +88,7 @@ function TextOutputView({ context }: { context: OutputContext }): JSX.Element {
           scrollLine: line
         });
       }}
+      onLinkActivate={handleLinkActivate}
     />
   );
 }

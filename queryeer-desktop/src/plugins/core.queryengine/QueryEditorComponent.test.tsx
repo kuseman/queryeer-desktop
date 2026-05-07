@@ -4,10 +4,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { ContentCategory } from "../../contracts/files/FilesRegistry";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
+import { defineStateKey } from "../../contracts/files/FileStateRegistry";
 import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistryImpl";
 import { getQueryViewStateStore } from "./QueryViewStateStore";
 
 const mocks = vi.hoisted(() => {
+  type ActiveEditorMock = {
+    getSelectedText?: () => string | undefined;
+    getContent?: () => string;
+    getSelection?: () => {
+      selectionStartLineNumber: number;
+      selectionStartColumn: number;
+      positionLineNumber: number;
+      positionColumn: number;
+    } | null;
+  };
   const subscribeByExecutionId = new Map<string, (event: { method: string; params?: unknown }) => void>();
   const executeRequestListeners = new Set<() => void>();
   const cancelRequestListeners = new Set<() => void>();
@@ -30,9 +41,10 @@ const mocks = vi.hoisted(() => {
       cancelRequestListeners.add(listener);
       return () => cancelRequestListeners.delete(listener);
     }),
-    getActiveEditorMock: vi.fn(() => ({
-      getSelectedText: () => undefined,
-      getContent: () => "select 1"
+    getActiveEditorMock: vi.fn<() => ActiveEditorMock>(() => ({
+      getSelectedText: () => "",
+      getContent: () => "select 1",
+      getSelection: () => null
     })),
     selectedPrimaryRef,
     subscribeByExecutionId,
@@ -119,7 +131,8 @@ const mockEditorRegistryHost: EditorRegistryHost = {
       focus: { focus: () => {} },
       selection: {
         getSelectedText: () => editor.getSelectedText?.() ?? null,
-        getContent: () => editor.getContent?.() ?? ""
+        getContent: () => editor.getContent?.() ?? "",
+        getSelection: () => editor.getSelection?.() ?? null
       }
     };
   },
@@ -141,6 +154,7 @@ const mockOutlineRegistry: OutlineRegistry = {
 };
 
 const queryFilesById = new Map<string, FileEntity>();
+const OUTPUT_CONTEXT_KEY = defineStateKey<{ error?: { details?: Record<string, unknown> } }>("core.queryengine.outputContext");
 
 function makeFile(overrides: Partial<FileEntity>): FileEntity {
   const file: FileEntity = {
@@ -559,5 +573,44 @@ const filesRegistry = {
     const output = rootElement.querySelector('[data-testid="mock-output"]');
     expect(output?.getAttribute("data-has-select-callback")).toBe("true");
     expect(getQueryViewStateStore().read("file-1").selectedOutputId).toBe("core.queryengine.output.text");
+  });
+
+  it("maps failed error line to absolute editor line using execution selection anchor", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+    mocks.getActiveEditorMock.mockReturnValue({
+      getSelectedText: () => "select x",
+      getContent: () => "select 1",
+      getSelection: () => ({
+        selectionStartLineNumber: 10,
+        selectionStartColumn: 3,
+        positionLineNumber: 12,
+        positionColumn: 8
+      })
+    });
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+
+    const listener = [...mocks.subscribeByExecutionId.values()][0];
+    await act(async () => {
+      listener?.({
+        method: "queryengine.failed",
+        params: { error: { code: "INTERNAL", message: "boom", details: { line: 2, column: 4 } } }
+      });
+      await Promise.resolve();
+    });
+
+    const context = getFileStateRegistry().get("file-1", OUTPUT_CONTEXT_KEY);
+    expect(context).toBeDefined();
+    expect(context!.error?.details?.line).toBe(11);
+    expect(context!.error?.details?.column).toBe(4);
   });
 });

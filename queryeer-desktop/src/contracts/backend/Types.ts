@@ -236,6 +236,7 @@ export type MessagePayload = {
   message: string;
   line?: number;
   column?: number;
+  details?: Record<string, unknown>;
 };
 
 export type QueryChunkRowsNotification = {

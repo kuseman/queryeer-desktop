@@ -190,9 +190,10 @@ class PayloadbuilderQueryEngineProviderTest
 
         provider.execute("exec-3", "file-1", "select from", null, publisher);
 
-        Assertions.assertEquals("INTERNAL", publisher.errorCode);
+        Assertions.assertEquals("VALIDATION", publisher.errorCode);
         Assertions.assertNotNull(publisher.errorMessage);
-        Assertions.assertTrue(publisher.errorMessage.contains(":"));
+        Assertions.assertTrue(publisher.errorDetails.containsKey("line"));
+        Assertions.assertTrue(publisher.errorDetails.containsKey("column"));
     }
 
     @Test
@@ -317,6 +318,7 @@ class PayloadbuilderQueryEngineProviderTest
         private Object completedEngineState;
         private String errorCode;
         private String errorMessage;
+        private Map<String, Object> errorDetails = Map.of();
 
         @Override
         public void progress(int percent, String message)
@@ -352,6 +354,15 @@ class PayloadbuilderQueryEngineProviderTest
         {
             this.errorCode = errorCode;
             this.errorMessage = errorMessage;
+        }
+
+        @Override
+        public void failed(String errorCode, String errorMessage, Map<String, Object> details)
+        {
+            this.errorCode = errorCode;
+            this.errorMessage = errorMessage;
+            this.errorDetails = details == null ? Map.of()
+                    : details;
         }
     }
 

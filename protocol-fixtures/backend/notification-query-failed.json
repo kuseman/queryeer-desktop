@@ -8,7 +8,9 @@
       "code": "INTERNAL",
       "message": "Fixture failure",
       "details": {
-        "source": "fixture"
+        "source": "fixture",
+        "line": 3,
+        "column": 7
       }
     }
   }

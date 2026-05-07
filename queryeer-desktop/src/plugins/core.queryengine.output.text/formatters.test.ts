@@ -50,6 +50,19 @@ describe("text output formatters", () => {
     expect(lines).toEqual(["\x1b[31mRich backend failure details\x1b[0m"]);
   });
 
+  it("includes editor link for failed errors with line details", () => {
+    const formatter = resolveTextOutputFormatter("plain");
+    const lines = formatter.format(
+      makeContext({
+        state: "failed",
+        fileId: "file-1",
+        error: { code: "FAILED", message: "Parse failed", details: { line: 4, column: 2 } }
+      })
+    );
+    expect(lines[0]).toContain("[line 4, col 2]");
+    expect(lines[0]).not.toContain("editor://open?");
+  });
+
   it("formats rows in json formatter", () => {
     const formatter = resolveTextOutputFormatter("json");
     const lines = formatter.format(

@@ -142,6 +142,15 @@ export class TextEditorSelectionCapability implements SelectionCapability {
   getContent(): string {
     return this.editor.getContent();
   }
+
+  getSelection(): {
+    selectionStartLineNumber: number;
+    selectionStartColumn: number;
+    positionLineNumber: number;
+    positionColumn: number;
+  } | null {
+    return this.editor.getSelection();
+  }
 }
 
 export function createTextEditorHandle(

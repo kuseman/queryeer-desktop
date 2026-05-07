@@ -59,7 +59,7 @@ export type OutputContext = {
    */
   features: string[] | null;
   metrics: { durationMs?: number; rowCount?: number } | null;
-  error: { code: string; message: string } | null;
+  error: { code: string; message: string; details?: Record<string, unknown> } | null;
   progress: { percent?: number; message?: string } | null;
   fetchedRowCount: number;
   executionStartedAtMs: number | null;

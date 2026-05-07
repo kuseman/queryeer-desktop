@@ -26,6 +26,23 @@ type ActiveExecution = {
   unsubscribe: () => void;
 };
 
+type ExecutionAnchor = {
+  line: number;
+  column: number;
+};
+
+function toAbsoluteLocation(anchor: ExecutionAnchor, line?: number, column?: number): { line?: number; column?: number } {
+  if (line === undefined) {
+    return { line: undefined, column: undefined };
+  }
+  const absoluteLine = anchor.line + Math.max(0, line - 1);
+  if (column === undefined) {
+    return { line: absoluteLine, column: undefined };
+  }
+  const absoluteColumn = line <= 1 ? anchor.column + Math.max(0, column - 1) : column;
+  return { line: absoluteLine, column: absoluteColumn };
+}
+
 const OUTPUT_CONTEXT_KEY = defineStateKey<OutputContext>("core.queryengine.outputContext");
 
 export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry }: Props): JSX.Element {
@@ -34,6 +51,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
   const [selectedPrimaryId, setSelectedPrimaryId] = useState<string | null>(null);
 
   const activeExecutionByFileIdRef = useRef(new Map<string, ActiveExecution>());
+  const executionAnchorByFileIdRef = useRef(new Map<string, ExecutionAnchor>());
   const securityRetryCountByFileIdRef = useRef(new Map<string, number>());
   const executionPrimaryOverrideByFileIdRef = useRef(new Map<string, string | null>());
   const handleExecuteRef = useRef<() => void>(() => {});
@@ -147,8 +165,24 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       }
 
       const handle = editorRegistryHost?.getActiveEditor();
-      const text = handle?.selection?.getSelectedText() ?? handle?.selection?.getContent() ?? "";
+      const selectedText = handle?.selection?.getSelectedText() ?? "";
+      const fullText = handle?.selection?.getContent() ?? "";
+      const text = selectedText.trim() ? selectedText : fullText;
       if (!text.trim()) return;
+
+      const selection = handle?.selection?.getSelection?.() ?? null;
+      const anchor: ExecutionAnchor = selectedText.trim() && selection
+        ? {
+            line: Math.min(selection.selectionStartLineNumber, selection.positionLineNumber),
+            column:
+              selection.selectionStartLineNumber < selection.positionLineNumber
+                ? selection.selectionStartColumn
+                : (selection.selectionStartLineNumber > selection.positionLineNumber
+                  ? selection.positionColumn
+                  : Math.min(selection.selectionStartColumn, selection.positionColumn))
+          }
+        : { line: 1, column: 1 };
+      executionAnchorByFileIdRef.current.set(targetFileId, anchor);
 
       const panelState = getQueryViewStateStore().read(targetFileId);
       const selectedFromToolbar = panelState.executionTargetOutputId;
@@ -195,7 +229,11 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
               };
             });
           } else if (event.method === "queryengine.chunkRows") {
-            const p = event.params as { resultSetIndex: number; rows: unknown[][]; messages?: Array<{ severity: string; message: string }> };
+            const p = event.params as {
+              resultSetIndex: number;
+              rows: unknown[][];
+              messages?: Array<{ severity: string; message: string; line?: number; column?: number }>;
+            };
             const registry = getOutputRegistry();
 
             const currentCtx = getFileStateRegistry().get(targetFileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT;
@@ -203,7 +241,13 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
 
             // Handle output messages (info/warnings/errors from the engine)
             if (p.messages && p.messages.length > 0) {
+              const executionAnchor = executionAnchorByFileIdRef.current.get(targetFileId) ?? { line: 1, column: 1 };
               const outputMessages: OutputMessage[] = p.messages.map((m) => ({
+                ...toAbsoluteLocation(
+                  executionAnchor,
+                  m.line ?? (typeof (m as { details?: Record<string, unknown> }).details?.line === "number" ? (m as { details?: Record<string, unknown> }).details!.line as number : undefined),
+                  m.column ?? (typeof (m as { details?: Record<string, unknown> }).details?.column === "number" ? (m as { details?: Record<string, unknown> }).details!.column as number : undefined)
+                ),
                 severity: m.severity as "info" | "error",
                 message: m.message
               }));
@@ -288,7 +332,29 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
               }
             }
           } else if (event.method === "queryengine.failed") {
-            const p = event.params as { error?: { code: string; message: string } };
+            const p = event.params as {
+              error?: { code: string; message: string; details?: Record<string, unknown> };
+            };
+            const executionAnchor = executionAnchorByFileIdRef.current.get(targetFileId) ?? { line: 1, column: 1 };
+            const relativeLine =
+              typeof p.error?.details?.line === "number"
+                ? p.error.details.line
+                : undefined;
+            const relativeColumn =
+              typeof p.error?.details?.column === "number"
+                ? p.error.details.column
+                : undefined;
+            const absoluteLocation = toAbsoluteLocation(executionAnchor, relativeLine, relativeColumn);
+            const errorWithLocation = p.error
+              ? {
+                  ...p.error,
+                  details: {
+                    ...(p.error.details ?? {}),
+                    ...(absoluteLocation.line !== undefined ? { line: absoluteLocation.line } : {}),
+                    ...(absoluteLocation.column !== undefined ? { column: absoluteLocation.column } : {})
+                  }
+                }
+              : null;
             if (p.error?.code === "SECURITY_SESSION_CLOSED") {
               void (async () => {
                 const security = getCoreSecurityService();
@@ -306,7 +372,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
                 updateOutputContextForFile(targetFileId, (prev) => ({
                   ...prev,
                   state: "failed",
-                  error: p.error ?? null,
+                  error: errorWithLocation,
                   progress: null,
                   executionStartedAtMs: null
                 }));
@@ -319,7 +385,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
             updateOutputContextForFile(targetFileId, (prev) => ({
               ...prev,
               state: "failed",
-              error: p.error ?? { code: "UNKNOWN", message: "Query failed" },
+              error: errorWithLocation ?? { code: "UNKNOWN", message: "Query failed" },
               progress: null,
               executionStartedAtMs: null
             }));
@@ -331,6 +397,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
         activeExecutionByFileIdRef.current.set(targetFileId, { executionId, unsubscribe });
       } catch (error) {
         activeExecutionByFileIdRef.current.delete(targetFileId);
+        executionAnchorByFileIdRef.current.delete(targetFileId);
         securityRetryCountByFileIdRef.current.delete(targetFileId);
         updateOutputContextForFile(targetFileId, () => ({
           ...IDLE_OUTPUT_CONTEXT,
@@ -361,6 +428,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       .cancel(execution.executionId)
       .catch(() => {});
     activeExecutionByFileIdRef.current.delete(targetFileId);
+    executionAnchorByFileIdRef.current.delete(targetFileId);
     securityRetryCountByFileIdRef.current.delete(targetFileId);
     updateOutputContextForFile(targetFileId, (prev) => ({
       ...prev,
@@ -395,6 +463,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
         execution.unsubscribe();
       }
       activeExecutionByFileIdRef.current.clear();
+      executionAnchorByFileIdRef.current.clear();
       securityRetryCountByFileIdRef.current.clear();
     };
   }, []);
