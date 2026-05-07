@@ -14,9 +14,13 @@ import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.SchedulerService;
 import com.queryeer.backend.queryengine.jdbc.DefaultJdbcDialectRegistry;
+import com.queryeer.backend.queryengine.jdbc.JdbcConnectionSetupDefinition;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialect;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectMetadata;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
+import com.queryeer.backend.queryengine.jdbc.JdbcQueryExecutor;
+import com.queryeer.backend.queryengine.jdbc.JdbcQueryResult;
+import com.queryeer.backend.queryengine.jdbc.JdbcSchemaResolver;
 
 class ServiceLoaderJdbcDialectDiscoveryTest
 {
@@ -65,21 +69,21 @@ class ServiceLoaderJdbcDialectDiscoveryTest
                 }
 
                 @Override
-                public com.queryeer.backend.queryengine.jdbc.JdbcConnectionSetupDefinition connectionSetup()
+                public JdbcConnectionSetupDefinition connectionSetup()
                 {
-                    return new com.queryeer.backend.queryengine.jdbc.JdbcConnectionSetupDefinition(java.util.List.of());
+                    return new JdbcConnectionSetupDefinition(java.util.List.of());
                 }
 
                 @Override
-                public com.queryeer.backend.queryengine.jdbc.JdbcQueryExecutor queryExecutor()
+                public JdbcQueryExecutor queryExecutor()
                 {
-                    return (request, eventListener) -> new com.queryeer.backend.queryengine.jdbc.JdbcQueryResult(0, java.util.Map.of());
+                    return (_, _) -> new JdbcQueryResult(0, java.util.Map.of());
                 }
 
                 @Override
-                public com.queryeer.backend.queryengine.jdbc.JdbcSchemaResolver schemaResolver()
+                public JdbcSchemaResolver schemaResolver()
                 {
-                    return connection -> java.util.List.of();
+                    return _ -> java.util.List.of();
                 }
             });
         }
@@ -153,7 +157,7 @@ class ServiceLoaderJdbcDialectDiscoveryTest
         @Override
         public ConfigService config()
         {
-            return key -> null;
+            return _ -> null;
         }
 
         @Override
@@ -171,7 +175,7 @@ class ServiceLoaderJdbcDialectDiscoveryTest
         @Override
         public EventBus events()
         {
-            return (topic, event) ->
+            return (_, _) ->
             {
             };
         }
@@ -179,7 +183,7 @@ class ServiceLoaderJdbcDialectDiscoveryTest
         @Override
         public SchedulerService scheduler()
         {
-            return (name, task) ->
+            return (_, task) ->
             {
                 task.run();
             };

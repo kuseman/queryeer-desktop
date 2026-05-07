@@ -78,7 +78,7 @@ class QueryExecutionTransportIntegrationTest
 
     private static List<BackendEnvelope> decodeEnvelopes(EnvelopeCodec codec, byte[] payload) throws Exception
     {
-        FramedReader reader = new FramedReader(new ByteArrayInputStream(payload), line ->
+        FramedReader reader = new FramedReader(new ByteArrayInputStream(payload), _ ->
         {
         });
         List<BackendEnvelope> envelopes = new ArrayList<>();

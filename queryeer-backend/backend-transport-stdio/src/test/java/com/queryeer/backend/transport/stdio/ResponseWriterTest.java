@@ -74,7 +74,7 @@ class ResponseWriterTest
         writer.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, "req-1", null, null, null, null, null));
         writer.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, null, "queryengine.progress", null, null, null));
 
-        FramedReader reader = new FramedReader(new ByteArrayInputStream(output.toByteArray()), l ->
+        FramedReader reader = new FramedReader(new ByteArrayInputStream(output.toByteArray()), _ ->
         {
         });
         BackendEnvelope first = codec.decode(reader.readFrame());

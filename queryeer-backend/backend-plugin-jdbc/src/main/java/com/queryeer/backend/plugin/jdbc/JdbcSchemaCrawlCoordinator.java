@@ -29,7 +29,7 @@ final class JdbcSchemaCrawlCoordinator
         Thread thread = new Thread(() -> loop(intervalMs), "jdbc-schema-crawl-loop");
         thread.setDaemon(true);
         thread.setContextClassLoader(getClass().getClassLoader());
-        thread.setUncaughtExceptionHandler((t, e) -> logger.error("JDBC schema crawl loop crashed", e));
+        thread.setUncaughtExceptionHandler((_, e) -> logger.error("JDBC schema crawl loop crashed", e));
         thread.start();
     }
 

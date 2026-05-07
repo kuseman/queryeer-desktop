@@ -516,7 +516,7 @@ final class JdbcSchemaStore
             Map<String, Object> attrs = parseAttributes(row.attributesJson());
             JdbcSchemaObject object = new JdbcSchemaObject(row.objectId(), row.name(), row.kind(), new ArrayList<>(), attrs);
             byId.put(row.objectId(), object);
-            byParent.computeIfAbsent(row.parentObjectId(), k -> new ArrayList<>())
+            byParent.computeIfAbsent(row.parentObjectId(), _ -> new ArrayList<>())
                     .add(object);
         }
         for (Row row : rows)

@@ -36,7 +36,7 @@ final class InMemoryEventBus implements EventBus
     @Override
     public synchronized void subscribe(String topic, Consumer<Object> listener)
     {
-        listenersByTopic.computeIfAbsent(topic, ignored -> new ArrayList<>())
+        listenersByTopic.computeIfAbsent(topic, _ -> new ArrayList<>())
                 .add(listener);
     }
 

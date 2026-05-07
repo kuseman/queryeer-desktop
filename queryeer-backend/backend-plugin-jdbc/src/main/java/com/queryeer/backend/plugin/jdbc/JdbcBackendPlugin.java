@@ -60,9 +60,9 @@ public final class JdbcBackendPlugin implements BackendPlugin
         JdbcSecuritySessionState securitySessionState = new JdbcSecuritySessionState();
         JdbcSchemaCrawlCoordinator crawlCoordinator = new JdbcSchemaCrawlCoordinator(connections, schemaCrawler, schemaStore, new JdbcSchemaCrawlPolicy(), context.logger());
         context.events()
-                .subscribe(EVENT_SECURITY_SESSION_OPENED, event -> securitySessionState.markOpen());
+                .subscribe(EVENT_SECURITY_SESSION_OPENED, _ -> securitySessionState.markOpen());
         context.events()
-                .subscribe(EVENT_SECURITY_SESSION_CLOSED, event -> securitySessionState.markClosed());
+                .subscribe(EVENT_SECURITY_SESSION_CLOSED, _ -> securitySessionState.markClosed());
         long idleTimeoutMs = parseDurationMs(context.config(), IDLE_TIMEOUT_KEY, DEFAULT_IDLE_TIMEOUT_MS);
         long reaperIntervalMs = parseDurationMs(context.config(), REAPER_INTERVAL_KEY, Math.max(1_000L, Math.min(idleTimeoutMs, TimeUnit.MINUTES.toMillis(5))));
         long schemaCrawlIntervalMs = parseDurationMs(context.config(), SCHEMA_CRAWL_INTERVAL_KEY, TimeUnit.MINUTES.toMillis(5));

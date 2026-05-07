@@ -121,7 +121,6 @@ public final class SqlServerDialect implements JdbcDialect
             Method getLineNumber = errorClass.getMethod("getLineNumber");
             Method getErrorNumber = errorClass.getMethod("getErrorNumber");
             Method getProcedureName = errorClass.getMethod("getProcedureName");
-            Method getErrorState = errorClass.getMethod("getErrorState");
 
             Map<String, Object> details = new LinkedHashMap<>();
             Object lineNumberValue = getLineNumber.invoke(sqlServerError);
@@ -144,6 +143,7 @@ public final class SqlServerDialect implements JdbcDialect
                 details.put("procedure", procedureName);
             }
 
+            Method getErrorState = errorClass.getMethod("getErrorState");
             Object errorStateValue = getErrorState.invoke(sqlServerError);
             if (errorStateValue instanceof Number errorState)
             {

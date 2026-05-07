@@ -33,7 +33,7 @@ final class JdbcConnectionRegistry
 
     JdbcStoredConnection upsert(String connectionId, String name, Map<String, Object> connection)
     {
-        return byId.compute(connectionId, (id, existing) ->
+        return byId.compute(connectionId, (_, existing) ->
         {
             long version = existing == null ? 1L
                     : existing.version()

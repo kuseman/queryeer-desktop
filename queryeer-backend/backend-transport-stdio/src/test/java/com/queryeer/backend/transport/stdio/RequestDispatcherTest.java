@@ -46,7 +46,7 @@ class RequestDispatcherTest
         BackendEnvelope envelope = new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-2", null, "unknown.method", null, null, null);
         dispatcher.dispatch(envelope);
 
-        FramedReader reader = new FramedReader(new ByteArrayInputStream(output.toByteArray()), l ->
+        FramedReader reader = new FramedReader(new ByteArrayInputStream(output.toByteArray()), _ ->
         {
         });
         BackendEnvelope response = codec.decode(reader.readFrame());

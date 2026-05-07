@@ -16,7 +16,7 @@ class FramedReaderTest
     void readsSingleFrame() throws IOException
     {
         InputStream input = new ByteArrayInputStream(frame("{\"id\":\"1\"}"));
-        FramedReader reader = new FramedReader(input, l ->
+        FramedReader reader = new FramedReader(input, _ ->
         {
         });
 
@@ -29,7 +29,7 @@ class FramedReaderTest
     {
         byte[] data = concat(frame("{\"a\":1}"), frame("{\"b\":2}"));
         InputStream input = new ByteArrayInputStream(data);
-        FramedReader reader = new FramedReader(input, l ->
+        FramedReader reader = new FramedReader(input, _ ->
         {
         });
 
@@ -57,7 +57,7 @@ class FramedReaderTest
         byte[] body = json.getBytes(StandardCharsets.UTF_8);
         byte[] data = concat(("Content-Length: " + body.length + "\n\n").getBytes(StandardCharsets.US_ASCII), body);
         InputStream input = new ByteArrayInputStream(data);
-        FramedReader reader = new FramedReader(input, l ->
+        FramedReader reader = new FramedReader(input, _ ->
         {
         });
 
@@ -68,7 +68,7 @@ class FramedReaderTest
     void returnsNullOnEmptyStream() throws IOException
     {
         InputStream input = new ByteArrayInputStream(new byte[0]);
-        FramedReader reader = new FramedReader(input, l ->
+        FramedReader reader = new FramedReader(input, _ ->
         {
         });
 
@@ -80,7 +80,7 @@ class FramedReaderTest
     {
         String json = "{\"msg\":\"héllo\"}";
         InputStream input = new ByteArrayInputStream(frame(json));
-        FramedReader reader = new FramedReader(input, l ->
+        FramedReader reader = new FramedReader(input, _ ->
         {
         });
 
@@ -92,7 +92,7 @@ class FramedReaderTest
     {
         byte[] data = concat("\r\n".getBytes(StandardCharsets.US_ASCII), frame("{\"id\":\"1\"}"));
         InputStream input = new ByteArrayInputStream(data);
-        FramedReader reader = new FramedReader(input, l ->
+        FramedReader reader = new FramedReader(input, _ ->
         {
         });
 

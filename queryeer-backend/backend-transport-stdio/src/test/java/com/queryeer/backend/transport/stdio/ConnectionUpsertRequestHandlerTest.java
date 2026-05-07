@@ -35,7 +35,7 @@ class ConnectionUpsertRequestHandlerTest
         handler.handle(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-upsert-1", null, "connection.upsert",
                 Map.of("connectionId", "conn-req-upsert-1", "engineId", "jdbc", "name", "Local JDBC", "connection", connection), null, null));
 
-        FramedReader reader = new FramedReader(new ByteArrayInputStream(output.toByteArray()), l ->
+        FramedReader reader = new FramedReader(new ByteArrayInputStream(output.toByteArray()), _ ->
         {
         });
         BackendEnvelope response = codec.decode(reader.readFrame());
@@ -70,7 +70,7 @@ class ConnectionUpsertRequestHandlerTest
         handler.handle(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-upsert-2", null, "connection.upsert",
                 Map.of("connectionId", "conn-req-upsert-2", "engineId", "missing", "name", "missing", "connection", Map.of("anything", "value")), null, null));
 
-        FramedReader reader = new FramedReader(new ByteArrayInputStream(output.toByteArray()), l ->
+        FramedReader reader = new FramedReader(new ByteArrayInputStream(output.toByteArray()), _ ->
         {
         });
         BackendEnvelope response = codec.decode(reader.readFrame());

@@ -90,7 +90,7 @@ class JdbcBackendPluginTest
         RecordingEventBus events = new RecordingEventBus();
         plugin.activate(new TestPluginContext(engines, fileSessions, key -> "queryeer.jdbc.schemaCache.dir".equals(key) ? Path.of("target", "test-work", "jdbc-schema-cache", "refresh-open")
                 .toString()
-                : null, (name, task) ->
+                : null, (_, _) ->
                 {
                 }, events));
         QueryEngineProvider provider = engines.provider;
@@ -264,7 +264,6 @@ class JdbcBackendPluginTest
                 .get(0)).intValue());
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     void executeFailureEmitsSessionIdInErrorDetails()
     {
@@ -272,7 +271,7 @@ class JdbcBackendPluginTest
         provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-session-fail", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_session_fail;DB_CLOSE_DELAY=-1")));
 
         RecordingPublisher publisher = new RecordingPublisher();
-        provider.execute("exec-fail-1", "file-fail", "select invalid_sql", Map.of("connectionId", "jdbc-session-fail", "sessionId", "my-session-456"), publisher);
+        provider.execute("exec-fail-1", "file-fail", "select * from definitely_missing_table_12345", Map.of("connectionId", "jdbc-session-fail", "sessionId", "my-session-456"), publisher);
 
         Assertions.assertEquals("INTERNAL", publisher.errorCode);
         Assertions.assertNotNull(publisher.errorDetails);
@@ -342,7 +341,7 @@ class JdbcBackendPluginTest
         RecordingFileSessionHandlerRegistry fileSessions = new RecordingFileSessionHandlerRegistry();
         RecordingScheduler scheduler = new RecordingScheduler();
 
-        plugin.activate(new TestPluginContext(engines, fileSessions, key -> "1000", scheduler));
+        plugin.activate(new TestPluginContext(engines, fileSessions, _ -> "1000", scheduler));
 
         Assertions.assertTrue(scheduler.scheduledNames.contains("jdbc.file-session-reaper"));
         Assertions.assertTrue(scheduler.scheduledNames.contains("jdbc.schema-crawl-startup"));
@@ -376,7 +375,7 @@ class JdbcBackendPluginTest
         RecordingQueryEngineRegistry engines = new RecordingQueryEngineRegistry();
         RecordingFileSessionHandlerRegistry fileSessions = new RecordingFileSessionHandlerRegistry();
         plugin.activate(new TestPluginContext(engines, fileSessions, key -> "queryeer.settings.dir".equals(key) ? settingsDir.toString()
-                : null, (name, task) ->
+                : null, (_, _) ->
                 {
                 }));
         QueryEngineProvider provider = engines.provider;
@@ -748,7 +747,7 @@ class JdbcBackendPluginTest
 
         public void subscribe(String topic, java.util.function.Consumer<Object> listener)
         {
-            listenersByTopic.computeIfAbsent(topic, ignored -> new java.util.ArrayList<>())
+            listenersByTopic.computeIfAbsent(topic, _ -> new java.util.ArrayList<>())
                     .add(listener);
         }
     }
@@ -776,7 +775,7 @@ class JdbcBackendPluginTest
 
         private TestPluginContext(QueryEngineRegistry queryEngineRegistry, FileSessionHandlerRegistry fileSessionHandlerRegistry)
         {
-            this(queryEngineRegistry, fileSessionHandlerRegistry, defaultConfigService(), (name, task) ->
+            this(queryEngineRegistry, fileSessionHandlerRegistry, defaultConfigService(), (_, _) ->
             {
             }, new RecordingEventBus());
         }
