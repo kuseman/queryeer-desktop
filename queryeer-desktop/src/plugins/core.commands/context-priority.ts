@@ -1,5 +1,6 @@
 export const ContextPriority = {
   WORKBENCH: 10,
+  ACTIVE_FILE: 15,
   ZONE: 20,
   EDITOR_GROUP: 30,
   EDITOR_INSTANCE: 40,

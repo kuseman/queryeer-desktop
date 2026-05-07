@@ -3,6 +3,7 @@ import type { PluginContext } from "../../contracts/plugin/Plugin";
 import { JDBC_NAV_DB_KEY, type JdbcSelectedDatabase } from "./jdbc-navigation-types";
 import { getConfiguredJdbcConnections } from "./jdbc-settings";
 import { getJdbcDatabaseCache } from "./jdbc-database-cache";
+import { writeJdbcContextMetadata } from "./jdbc-metadata";
 
 export function createJdbcDatabaseQuickCommandProvider(
   context: Pick<PluginContext, "fileMediator" | "files" | "editors">
@@ -48,6 +49,7 @@ export function createJdbcDatabaseQuickCommandProvider(
             action: async () => {
               await context.fileMediator.bindEngine(activeFile.fileId, "jdbc", result.connectionId);
               context.files.setEditorState(activeFile.fileId, JDBC_NAV_DB_KEY, undefined);
+              writeJdbcContextMetadata(activeFile.fileId, result.connectionId, undefined, context.files);
               refocusActiveEditor();
             }
           });
@@ -63,6 +65,7 @@ export function createJdbcDatabaseQuickCommandProvider(
                 connectionId: result.connectionId,
                 database: db
               } satisfies JdbcSelectedDatabase);
+              writeJdbcContextMetadata(activeFile.fileId, result.connectionId, db, context.files);
               refocusActiveEditor();
             }
           });

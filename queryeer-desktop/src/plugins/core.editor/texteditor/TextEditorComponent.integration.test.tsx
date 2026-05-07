@@ -21,6 +21,7 @@ type FakeEditor = {
   onDidDispose: (listener: () => void) => { dispose: () => void };
   onDidFocusEditorWidget: (listener: () => void) => { dispose: () => void };
   onDidChangeModelContent: (listener: (event: unknown) => void) => { dispose: () => void };
+  onDidChangeCursorSelection: (listener: (event: unknown) => void) => { dispose: () => void };
   triggerModelContentChange: () => void;
   getValue: ReturnType<typeof vi.fn>;
   dispose: () => void;
@@ -67,6 +68,9 @@ vi.mock("monaco-editor", () => {
       },
       onDidFocusEditorWidget: (listener) => {
         focusListeners.push(listener);
+        return { dispose: () => {} };
+      },
+      onDidChangeCursorSelection: () => {
         return { dispose: () => {} };
       },
       onDidChangeModelContent: (listener) => {

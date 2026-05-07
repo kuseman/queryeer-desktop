@@ -5,10 +5,7 @@ Quick fixes
     - Should not output anything to table/text only writing status to text
 
 Large features in prio
-- [ ] Query shortcuts
-    - CTRL 0-9 / ALT-0
-    - Rule based (query file meta data. Payloadbuilder properties / jdbc properties)
-    - Only active for queryexecutable && has text editor
+
 - [ ] Tree sitter foundation
     - [ ] Code parsing => wiggly lines in monaco
     - [ ] Code complete => register completion provider in monaco
@@ -49,6 +46,10 @@ Large features in prio
 - [ ] About dialog
     - Queryeer changelog
     - Modules changelog (Payloadbuilder)
+- [X] Query shortcuts
+    - CTRL 0-9 / ALT-0
+    - Rule based (query file meta data. Payloadbuilder properties / jdbc properties)
+    - Only active for queryexecutable && has text editor
 - [X] Table query output settings
     - [X] Stacked result set / tab per result set
     - [X] Max rows per result set in stacked mode

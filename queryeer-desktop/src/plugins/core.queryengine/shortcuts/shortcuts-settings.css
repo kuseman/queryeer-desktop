@@ -1,0 +1,337 @@
+/* Two-panel layout: slot list on the left, detail on the right */
+.shortcuts-settings {
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+  height: 580px;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* ── Left: slot list ──────────────────────────────────────────────────────── */
+
+.shortcuts-slot-list {
+  width: 190px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.shortcuts-slot-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid transparent;
+}
+
+.shortcuts-slot-item:hover {
+  background: var(--surface-overlay-weak);
+  border-color: var(--border);
+}
+
+.shortcuts-slot-item.selected {
+  background: var(--surface-overlay);
+  border-color: var(--accent-muted);
+}
+
+.shortcuts-slot-item-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.shortcuts-slot-item-label {
+  font-size: var(--ui-font-size-sm);
+  color: var(--text-0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.shortcuts-slot-item-placeholder {
+  color: var(--text-3);
+}
+
+.shortcuts-slot-item-count {
+  font-size: var(--ui-font-size-xs);
+  color: var(--text-2);
+  padding-left: 2px;
+}
+
+/* ── Shared: slot badge ───────────────────────────────────────────────────── */
+
+.shortcut-slot-badge {
+  font-size: var(--ui-font-size-xs);
+  color: var(--text-2);
+  background: var(--surface-overlay);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: var(--font-mono, monospace);
+  flex-shrink: 0;
+}
+
+/* ── Right: detail panel ──────────────────────────────────────────────────── */
+
+.shortcuts-detail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.shortcuts-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.shortcuts-detail-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* ── Slot body (rules list) ───────────────────────────────────────────────── */
+
+.shortcut-slot-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+.shortcut-rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.shortcut-slot-label-input {
+  flex: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-0);
+  font-size: var(--ui-font-size-sm);
+  padding: 3px 6px;
+  border-radius: 4px;
+  min-width: 0;
+}
+
+.shortcut-slot-label-input:hover {
+  border-color: var(--border);
+}
+
+.shortcut-slot-label-input:focus {
+  outline: none;
+  border-color: var(--accent-muted);
+  background: var(--surface-overlay-weak);
+}
+
+/* ── Rule card ────────────────────────────────────────────────────────────── */
+
+.shortcut-rule {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: 340px;
+}
+
+/* Single rule fills the full panel height */
+.shortcut-rule:only-child {
+  flex: 1;
+  height: auto;
+}
+
+.shortcut-rule-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--surface-overlay-weak);
+  border-bottom: 1px solid var(--border);
+}
+
+.shortcut-rule-number {
+  font-size: var(--ui-font-size-xs);
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+
+.shortcut-rule-description {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-1);
+  font-size: var(--ui-font-size-sm);
+  font-style: italic;
+  padding: 0 4px;
+  min-width: 0;
+}
+
+.shortcut-rule-description:focus {
+  outline: none;
+  font-style: normal;
+}
+
+.shortcut-rule-description::placeholder {
+  color: var(--text-3);
+  font-style: italic;
+}
+
+.shortcut-rule-move-btn,
+.shortcut-rule-delete-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.shortcut-rule-move-btn:hover,
+.shortcut-rule-delete-btn:hover {
+  background: var(--surface-overlay);
+  color: var(--text-0);
+}
+
+.shortcut-rule-move-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.shortcut-rule-delete-btn:hover {
+  color: var(--error, #e05252);
+}
+
+.shortcut-rule-body {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Fields ───────────────────────────────────────────────────────────────── */
+
+.shortcut-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.shortcut-field-query {
+  flex: 1;
+  min-height: 0;
+}
+
+.shortcut-field-label {
+  font-size: var(--ui-font-size-xs);
+  color: var(--text-2);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.shortcut-field-hint {
+  font-size: var(--ui-font-size-xs);
+  color: var(--text-3);
+  font-weight: 400;
+}
+
+.shortcut-monaco-container {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.shortcut-monaco-container:focus-within {
+  border-color: var(--accent-muted);
+}
+
+.shortcut-output-select {
+  background: var(--surface-overlay-weak);
+  border: 1px solid var(--border);
+  color: var(--text-0);
+  font-size: var(--ui-font-size-sm);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  max-width: 240px;
+}
+
+.shortcut-output-select:focus {
+  outline: none;
+  border-color: var(--accent-muted);
+}
+
+/* ── Footer ───────────────────────────────────────────────────────────────── */
+
+.shortcut-add-rule-btn {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--text-2);
+  font-size: var(--ui-font-size-sm);
+  padding: 5px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.shortcut-add-rule-btn:hover {
+  border-color: var(--accent-muted);
+  color: var(--text-0);
+  background: var(--surface-overlay-weak);
+}
+
+.shortcut-slot-empty {
+  color: var(--text-3);
+  font-size: var(--ui-font-size-sm);
+  font-style: italic;
+  padding: 4px 2px;
+}
+
+.shortcut-when-empty-badge {
+  font-size: var(--ui-font-size-xs);
+  color: var(--text-3);
+  background: var(--surface-overlay);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-style: italic;
+}

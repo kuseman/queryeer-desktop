@@ -1,16 +1,19 @@
 import type { Plugin } from "../../contracts/plugin/Plugin";
+import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
+import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import { registerQueryExecutableEngine } from "../core.queryengine/engine-registration";
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../core.settings/service";
 import { CatalogInstancesSettingsEditor } from "./CatalogInstancesSettingsEditor";
 import { PayloadbuilderEnvironmentsSettingsEditor } from "./PayloadbuilderEnvironmentsSettingsEditor";
-import { getPayloadbuilderCatalogStore } from "./catalog-store";
+import { getPayloadbuilderCatalogStore, type PayloadbuilderCatalogStore } from "./catalog-store";
 import {
   parseCatalogAliasDefinitions,
   PAYLOADBUILDER_CATALOG_INSTANCES_SETTING_ID
 } from "./catalog-settings";
 import {
   parsePayloadbuilderEnvironments,
+  getPayloadbuilderEnvironments,
   PAYLOADBUILDER_ENVIRONMENTS_SETTING_ID
 } from "./environment-settings";
 import { PayloadbuilderCatalogSidebar } from "./PayloadbuilderCatalogSidebar";
@@ -33,6 +36,12 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
     providesCapabilities: ["query.engine.payloadbuilder"]
   },
   activate: (context) => {
+    registerWhenExpressionVariables([
+      { name: "activeFileMetadata.core.queryengine.payloadbuilder.enabledCatalogs", type: "string", description: "Comma-separated enabled PayloadBuilder catalog aliases (e.g. 'es1,oss2')" },
+      { name: "activeFileMetadata.core.queryengine.payloadbuilder.selectedEnvironment", type: "string", description: "Title of the selected PayloadBuilder environment (e.g. 'Production')" },
+      { name: "activeFileMetadata.core.queryengine.payloadbuilder.defaultCatalogAlias", type: "string", description: "Default PayloadBuilder catalog alias for the file" },
+    ]);
+
     getPayloadbuilderCatalogStore().initialize(context.files);
     registerQueryExecutableEngine(context, {
       engineId: "payloadbuilder",
@@ -213,13 +222,75 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
       if (!params.engineState) {
         return;
       }
-      getPayloadbuilderCatalogStore().applyEngineStatePatch(
-        executeContext.fileId,
-        params.engineState
-      );
+      const catalogStore = getPayloadbuilderCatalogStore();
+      catalogStore.applyEngineStatePatch(executeContext.fileId, params.engineState);
+      syncPayloadbuilderMetadata(executeContext.fileId, context.files, catalogStore);
+    });
+
+    const catalogStore = getPayloadbuilderCatalogStore();
+    catalogStore.subscribe(() => {
+      for (const file of context.files.listFiles()) {
+        if (file.mimeType === "application/plbsql") {
+          syncPayloadbuilderMetadata(file.fileId, context.files, catalogStore);
+        }
+      }
+    });
+
+    // Write metadata for any PLB file the first time it appears in the registry
+    // (covers workspace restore before catalog store receives a runtime update).
+    const syncedPlbFileIds = new Set<string>();
+    context.files.subscribe((files) => {
+      for (const file of files) {
+        if (file.mimeType !== "application/plbsql" || syncedPlbFileIds.has(file.fileId)) {
+          continue;
+        }
+        syncedPlbFileIds.add(file.fileId);
+        syncPayloadbuilderMetadata(file.fileId, context.files, catalogStore);
+      }
     });
   }
 };
+
+const PLB_CTX_ENABLED_CATALOGS = "core.queryengine.payloadbuilder.enabledCatalogs";
+const PLB_CTX_SELECTED_ENV = "core.queryengine.payloadbuilder.selectedEnvironment";
+const PLB_CTX_DEFAULT_CATALOG = "core.queryengine.payloadbuilder.defaultCatalogAlias";
+
+function syncPayloadbuilderMetadata(
+  fileId: string,
+  files: FilesRegistry,
+  catalogStore: PayloadbuilderCatalogStore
+): void {
+  const file = files.getFile(fileId);
+  if (!file) return;
+
+  const meta = catalogStore.getCatalogMeta(fileId);
+  const metadata = { ...(file.metadata ?? {}) };
+
+  if (meta.enabledAliases.length > 0) {
+    metadata[PLB_CTX_ENABLED_CATALOGS] = meta.enabledAliases.join(",");
+  } else {
+    delete metadata[PLB_CTX_ENABLED_CATALOGS];
+  }
+
+  if (meta.selectedEnvironmentId) {
+    const envTitle = getPayloadbuilderEnvironments().find((e) => e.id === meta.selectedEnvironmentId)?.title;
+    if (envTitle) {
+      metadata[PLB_CTX_SELECTED_ENV] = envTitle;
+    } else {
+      delete metadata[PLB_CTX_SELECTED_ENV];
+    }
+  } else {
+    delete metadata[PLB_CTX_SELECTED_ENV];
+  }
+
+  if (meta.defaultCatalogAlias) {
+    metadata[PLB_CTX_DEFAULT_CATALOG] = meta.defaultCatalogAlias;
+  } else {
+    delete metadata[PLB_CTX_DEFAULT_CATALOG];
+  }
+
+  files.updateFile(fileId, { metadata });
+}
 
 function validateMultiplicity(definitions: ReturnType<typeof parseCatalogAliasDefinitions>): string | undefined {
   const contributions = listPayloadbuilderCatalogContributions();

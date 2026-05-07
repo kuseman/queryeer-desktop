@@ -141,6 +141,7 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
       }
 
       activeFileId = file.fileId;
+      notifyActiveFileChanged(file.fileId);
 
       return file;
     },

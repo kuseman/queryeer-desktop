@@ -164,14 +164,16 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
         activeExecutionByFileIdRef.current.delete(targetFileId);
       }
 
+      const executeOptions = getQueryEngineService().consumeExecuteOptions();
+
       const handle = editorRegistryHost?.getActiveEditor();
       const selectedText = handle?.selection?.getSelectedText() ?? "";
       const fullText = handle?.selection?.getContent() ?? "";
-      const text = selectedText.trim() ? selectedText : fullText;
+      const text = executeOptions?.textOverride ?? (selectedText.trim() ? selectedText : fullText);
       if (!text.trim()) return;
 
-      const selection = handle?.selection?.getSelection?.() ?? null;
-      const anchor: ExecutionAnchor = selectedText.trim() && selection
+      const selection = !executeOptions?.textOverride ? (handle?.selection?.getSelection?.() ?? null) : null;
+      const anchor: ExecutionAnchor = !executeOptions?.textOverride && selectedText.trim() && selection
         ? {
             line: Math.min(selection.selectionStartLineNumber, selection.positionLineNumber),
             column:
@@ -185,7 +187,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       executionAnchorByFileIdRef.current.set(targetFileId, anchor);
 
       const panelState = getQueryViewStateStore().read(targetFileId);
-      const selectedFromToolbar = panelState.executionTargetOutputId;
+      const selectedFromToolbar = executeOptions?.outputIdOverride ?? panelState.executionTargetOutputId;
       const fallbackPrimaryId = TEXT_OUTPUT_PRIMARY_ID;
       const targetPrimaryId = selectedFromToolbar
         ?? panelState.panelActiveOutputId

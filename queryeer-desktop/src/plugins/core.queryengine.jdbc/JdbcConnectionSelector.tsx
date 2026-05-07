@@ -4,6 +4,7 @@ import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import { getBackendStatusService } from "../../renderer/shell/backend-status-service";
 import { JDBC_NAV_DB_KEY, type JdbcSelectedDatabase } from "./jdbc-navigation-types";
 import { getConfiguredJdbcConnections } from "./jdbc-settings";
+import { writeJdbcContextMetadata } from "./jdbc-metadata";
 import { getJdbcDatabaseCache } from "./jdbc-database-cache";
 
 function readSelectedDatabase(
@@ -73,6 +74,11 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
     }
   }, []);
 
+  // Sync context metadata on mount so restored workspace state is immediately visible.
+  useEffect(() => {
+    writeJdbcContextMetadata(fileId, connectionId || undefined, selectedDatabase || undefined, filesRegistry);
+  }, []);
+
   // Re-sync with file entity when it changes externally
   useEffect(() => {
     return filesRegistry.subscribe((files) => {
@@ -104,6 +110,7 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
     setDatabases([]);
     filesRegistry.setEditorState(fileId, JDBC_NAV_DB_KEY, undefined);
     await fileMediator.bindEngine(fileId, "jdbc", newConnId || undefined);
+    writeJdbcContextMetadata(fileId, newConnId || undefined, undefined, filesRegistry);
     if (newConnId) {
       await loadDatabases(newConnId);
     }
@@ -117,8 +124,10 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
         connectionId: currentConnId,
         database: db
       } satisfies JdbcSelectedDatabase);
+      writeJdbcContextMetadata(fileId, currentConnId, db, filesRegistry);
     } else {
       filesRegistry.setEditorState(fileId, JDBC_NAV_DB_KEY, undefined);
+      writeJdbcContextMetadata(fileId, currentConnId || undefined, undefined, filesRegistry);
     }
   };
 

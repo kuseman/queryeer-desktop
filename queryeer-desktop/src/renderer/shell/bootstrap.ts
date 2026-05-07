@@ -22,6 +22,7 @@ import { createContextChain } from "../../plugins/core.commands/context-chain";
 import { ContextPriority } from "../../plugins/core.commands/context-priority";
 import { createZoneFocusScope } from "../../plugins/core.commands/context-key-service";
 import { initializeQuickCommandService } from "../../plugins/core.quickcommand/service";
+import { setCommandContextChain } from "../../plugins/core.commands/command-context-accessor";
 import { requestMessageDialog } from "../../plugins/core.dialog/message-dialog-service";
 
 export async function bootstrapShell() {
@@ -33,6 +34,9 @@ export async function bootstrapShell() {
   await commandContext.initialize();
   chain.update("backend", commandContext.snapshot());
   commandContext.onDidChange(() => chain.update("backend", commandContext.snapshot()));
+
+  // Active-file context scope — updated reactively whenever the active file or its metadata changes.
+  chain.register({ id: "activeFile", priority: ContextPriority.ACTIVE_FILE, context: {} });
 
   // UI zone focus tracking (editorFocus, terminalFocus, inputFocus, …).
   createZoneFocusScope(chain);
@@ -85,21 +89,7 @@ export async function bootstrapShell() {
     workspaceService?.handleFileChanged(file, text);
   };
 
-  const getCommandContextValues = (): Record<string, string | number | boolean | undefined> => {
-    const activeFileId = fileMediator?.getActiveFileId() ?? null;
-    const activeFile = activeFileId ? filesRegistry?.getFile(activeFileId) : undefined;
-    const isQueryExecutable = activeFile
-      ? filesRegistry?.capabilities.hasCapability(activeFile.mimeType, "queryexecutable") === true
-      : false;
-    const metadataContext = flattenContextObject("activeFileMetadata", activeFile?.metadata);
-    return {
-      ...chain.getEffectiveContext(),
-      hasActiveFile: activeFile != null,
-      activeFileMimeType: activeFile?.mimeType,
-      hasActiveQueryExecutableFile: isQueryExecutable,
-      ...metadataContext
-    };
-  };
+  setCommandContextChain(chain);
 
   const host = new PluginHost({
     fileWatcher,
@@ -110,11 +100,28 @@ export async function bootstrapShell() {
     muteFileWatcherPath: (uri, durationMs) => fileWatcher.mutePath(uri, durationMs),
     resolveFileContent,
     showSaveDialog: (options) => window.appShell.showDialogSave(options),
-    getCommandContextValues
+    getCommandContextValues: () => chain.getEffectiveContext()
   });
 
   filesRegistry = host.getFilesRegistry();
   fileMediator = host.getFileMediator();
+
+  const updateActiveFileScope = (): void => {
+    const activeFileId = fileMediator!.getActiveFileId() ?? null;
+    const activeFile = activeFileId ? filesRegistry!.getFile(activeFileId) : undefined;
+    const isQueryExecutable = activeFile
+      ? filesRegistry!.capabilities.hasCapability(activeFile.mimeType, "queryexecutable") === true
+      : false;
+    chain.update("activeFile", {
+      hasActiveFile: activeFile != null,
+      activeFileMimeType: activeFile?.mimeType,
+      hasActiveQueryExecutableFile: isQueryExecutable,
+      ...flattenContextObject("activeFileMetadata", activeFile?.metadata)
+    });
+  };
+  fileMediator.onActiveFileChanged(() => updateActiveFileScope());
+  filesRegistry.subscribe(() => updateActiveFileScope());
+  updateActiveFileScope();
 
   const externalFrontendPlugins = await window.appShell.getExternalFrontendPlugins();
   const externalManifests = externalFrontendPlugins.map(toPluginManifestFile);
@@ -127,7 +134,7 @@ export async function bootstrapShell() {
   await host.start(discovery.manifests);
   host.setExternalLoadErrors(discovery.loadErrors);
 
-  initializeQuickCommandService(host.getQuickCommandProviders(), getCommandContextValues);
+  initializeQuickCommandService(host.getQuickCommandProviders(), () => chain.getEffectiveContext());
 
   const rebuildNativeMenu = async (): Promise<void> => {
     const extensions = host.getExtensions();
@@ -218,6 +225,7 @@ export async function bootstrapShell() {
     }
   });
   await workspaceService.hydrate();
+  updateActiveFileScope();
 
   getEditorRegistryHost().onContentDirty((fileId, text) => {
     const file = filesRegistry!.getFile(fileId);

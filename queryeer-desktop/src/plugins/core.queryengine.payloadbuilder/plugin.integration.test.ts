@@ -28,7 +28,9 @@ vi.mock("./catalog-store", () => ({
     initialize: mocks.initializeStoreMock,
     buildEngineState: mocks.buildEngineStateMock,
     applyEngineStatePatch: mocks.applyEngineStatePatchMock,
-    setDefaultCatalogAlias: vi.fn()
+    setDefaultCatalogAlias: vi.fn(),
+    subscribe: vi.fn(() => () => {}),
+    getCatalogMeta: vi.fn(() => ({ enabledAliases: [], selectedEnvironmentId: undefined, defaultCatalogAlias: undefined }))
   })
 }));
 

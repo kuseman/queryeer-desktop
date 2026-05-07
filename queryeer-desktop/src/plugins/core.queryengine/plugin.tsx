@@ -1,3 +1,4 @@
+import React from "react";
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import { getQueryEngineService } from "./QueryEngineService";
@@ -9,6 +10,11 @@ import { getQueryViewStateStore, TEXT_OUTPUT_PRIMARY_ID } from "./QueryViewState
 import { TEXT_OUTPUT_FORMATTERS } from "../core.queryengine.output.text/formatters";
 import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegistry";
 import { getOutlineRegistry } from "../../core/plugin-runtime/ExtensionRegistry";
+import { registerShortcuts } from "./shortcuts";
+import { setFilesRegistry } from "../core.commands/files-registry-accessor";
+import { ExpressionTesterRenderer } from "../core.commands/ExpressionTesterRenderer";
+
+void React;
 
 const QUERY_TAB_STATE_METADATA_KEY = "core.queryengine.tabState";
 
@@ -55,6 +61,7 @@ export const coreQueryEnginePlugin: Plugin = {
     const queryEngineService = getQueryEngineService();
     queryEngineService.initialize();
     queryTextRegistry.setFilesRegistry(context.files);
+    setFilesRegistry(context.files);
     getEditorRegistryHost().registerContentRepository(queryTextRegistry);
     getQueryViewStateStore().initialize(context.files);
 
@@ -259,6 +266,27 @@ export const coreQueryEnginePlugin: Plugin = {
       when: "global",
       scope: "global",
       order: 500
+    });
+
+    registerShortcuts(context);
+
+    context.settings.registerAdvancedRenderer({
+      id: "core.commands.expression-tester",
+      render: (props) => <ExpressionTesterRenderer {...props} />
+    });
+    context.settings.registerSettings({
+      moduleId: "core.commands",
+      title: "When Expressions",
+      settings: [{
+        id: "core.commands.expression-tester.dummy",
+        moduleId: "core.commands",
+        title: "Expression Tester",
+        description: "Test when-expressions against the context of any open file.",
+        sectionPath: ["Expression Tester"],
+        type: "json",
+        defaultValue: null,
+        advanced: { rendererId: "core.commands.expression-tester" }
+      }]
     });
   }
 };

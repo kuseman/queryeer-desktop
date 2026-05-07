@@ -442,7 +442,6 @@ export const coreExplorerPlugin: Plugin = {
         }
         try {
           // validate upfront
-          // eslint-disable-next-line no-new
           new RegExp(selectedRegex, "i");
         } catch {
           await context.dialog.showMessage({
