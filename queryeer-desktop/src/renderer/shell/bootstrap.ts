@@ -23,6 +23,7 @@ import { ContextPriority } from "../../plugins/core.commands/context-priority";
 import { createZoneFocusScope } from "../../plugins/core.commands/context-key-service";
 import { initializeQuickCommandService } from "../../plugins/core.quickcommand/service";
 import { setCommandContextChain } from "../../plugins/core.commands/command-context-accessor";
+import { setKeybindingsRuntimeState } from "../../plugins/core.commands/keybindings-runtime-accessor";
 import { requestMessageDialog } from "../../plugins/core.dialog/message-dialog-service";
 
 export async function bootstrapShell() {
@@ -203,6 +204,12 @@ export async function bootstrapShell() {
     contextChain: chain
   });
   await keybindingService.initialize(host.getExtensions());
+  setKeybindingsRuntimeState({
+    getExtensions: () => host.getExtensions(),
+    refresh: async () => {
+      await keybindingService.updateExtensions(host.getExtensions());
+    }
+  });
 
   workspaceService = new RendererWorkspaceService({
     bridge: {

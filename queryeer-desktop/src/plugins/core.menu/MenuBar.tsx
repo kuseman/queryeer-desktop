@@ -1,19 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import type { KeybindingContribution } from "../../contracts/extensions/KeybindingExtension";
 import type { MenuItemContribution } from "../../contracts/extensions/MenuExtension";
 import queryeerLogoUrl from "../../assets/icons/queryeer-logo.svg";
 import { layoutToolbarIconMap } from "../../renderer/icons/LayoutIcons";
 import {
-  normalizeAcceleratorForPlatform,
-  resolveGlobalAcceleratorsByCommand
+  normalizeAcceleratorForPlatform
 } from "../../renderer/shell/accelerator-utils";
 import { QuickCommandButton } from "../core.quickcommand/QuickCommandButton";
 
 type CoreMenuBarProps = {
   menuItems: MenuItemContribution[];
-  keybindings: KeybindingContribution[];
   executeCommand: (commandId: string) => Promise<unknown>;
   canExecuteCommand: (commandId: string) => boolean;
+  getCommandAccelerator: (commandId: string) => string | undefined;
   getMimeIcon?: (mimeType: string) => ((props: { className?: string }) => JSX.Element) | undefined;
 };
 
@@ -30,9 +28,9 @@ function isTextInputTarget(target: EventTarget | null): boolean {
 
 export function CoreMenuBar({
   menuItems,
-  keybindings,
   executeCommand,
   canExecuteCommand,
+  getCommandAccelerator,
   getMimeIcon
 }: CoreMenuBarProps): JSX.Element {
   const [openPath, setOpenPath] = useState<string[]>([]);
@@ -79,14 +77,18 @@ export function CoreMenuBar({
         map.set(item.commandId ?? item.id, normalizeAcceleratorForPlatform(item.accelerator, platform));
       }
     }
-    const globalFallback = resolveGlobalAcceleratorsByCommand(keybindings, platform);
-    for (const [commandId, accelerator] of globalFallback.entries()) {
-      if (!map.has(commandId)) {
+    for (const item of sortedItems) {
+      const commandId = item.commandId ?? item.id;
+      if (map.has(commandId)) {
+        continue;
+      }
+      const accelerator = getCommandAccelerator(commandId);
+      if (accelerator) {
         map.set(commandId, accelerator);
       }
     }
     return map;
-  }, [keybindings, sortedItems]);
+  }, [getCommandAccelerator, sortedItems]);
 
   const getChildren = (id: string): MenuItemContribution[] => {
     return childrenByParent.get(id) ?? [];

@@ -65,7 +65,7 @@ export const coreWorkspacePlugin: Plugin = {
 
     context.commands.registerCommand({
       id: "core.quickcommand.open.files",
-      title: "Open Quick Command",
+      title: "Open Quick Command Files",
       category: "Quick Command",
       handler: () => {
         getQuickCommandService()?.open("#");

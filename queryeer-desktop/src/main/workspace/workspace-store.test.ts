@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_SCHEMA_VERSION } from "../../contracts/workspace/WorkspaceSnapshot.js";
-import { WorkspaceStore } from "./workspace-store.js";
+import { defaultWorkspaceFilePath, WorkspaceStore } from "./workspace-store.js";
 
 let workDir: string;
 
@@ -159,5 +159,13 @@ describe("WorkspaceStore atomic write", () => {
 
     expect(readFileSync(path, "utf8")).toContain("atomic");
     expect(() => readFileSync(`${path}.tmp`, "utf8")).toThrow();
+  });
+});
+
+describe("defaultWorkspaceFilePath", () => {
+  it("stores workspace in settings directory", () => {
+    const result = defaultWorkspaceFilePath("/some/user/data");
+    expect(result).toContain("settings");
+    expect(result).toContain("workspace.json");
   });
 });

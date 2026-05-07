@@ -119,5 +119,5 @@ export class WorkspaceStore {
 }
 
 export function defaultWorkspaceFilePath(userDataDir: string): string {
-  return join(userDataDir, "workspace.json");
+  return join(userDataDir, "settings", "workspace.json");
 }

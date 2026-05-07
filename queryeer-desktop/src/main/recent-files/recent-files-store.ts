@@ -106,5 +106,5 @@ export class RecentFilesStore {
 }
 
 export function defaultRecentFilesPath(userDataDir: string): string {
-  return join(userDataDir, "recent-files.json");
+  return join(userDataDir, "settings", "recent-files.json");
 }

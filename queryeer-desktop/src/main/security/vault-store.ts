@@ -80,7 +80,7 @@ export class VaultStore {
 }
 
 export function defaultSecurityDirPath(userDataDir: string): string {
-  return join(userDataDir, "security");
+  return join(userDataDir, "settings");
 }
 
 function isVaultDocument(value: Partial<VaultDocument>): value is VaultDocument {

@@ -45,7 +45,7 @@ describe("SettingsStore read", () => {
     const { store, settingsDir } = makeStore();
     mkdirSync(settingsDir, { recursive: true });
     writeFileSync(
-      join(settingsDir, "index.json"),
+      join(settingsDir, "core.settings.index.json"),
       JSON.stringify({ version: 42, updatedAt: "now", modules: {} }),
       "utf8"
     );
@@ -100,13 +100,13 @@ describe("SettingsStore write", () => {
       }
     });
 
-    const persistedIndex = JSON.parse(readFileSync(join(settingsDir, "index.json"), "utf8"));
+    const persistedIndex = JSON.parse(readFileSync(join(settingsDir, "core.settings.index.json"), "utf8"));
     const persistedModule = JSON.parse(readFileSync(join(settingsDir, "core.editor.texteditor.json"), "utf8"));
     expect(persistedIndex.version).toBe(5);
     expect(persistedIndex.modules["core.editor.texteditor"].file).toBe("core.editor.texteditor.json");
     expect(persistedModule.version).toBe(3);
     expect(persistedModule.values["core.editor.texteditor.tabSize"]).toBe(2);
-    expect(existsSync(join(settingsDir, "index.json.tmp"))).toBe(false);
+    expect(existsSync(join(settingsDir, "core.settings.index.json.tmp"))).toBe(false);
     expect(existsSync(join(settingsDir, "core.editor.texteditor.json.tmp"))).toBe(false);
   });
 });

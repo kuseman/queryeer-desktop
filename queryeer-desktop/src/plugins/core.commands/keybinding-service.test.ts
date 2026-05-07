@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ExtensionSnapshot } from "../../core/plugin-runtime/ExtensionRegistry";
-import { KEYBINDINGS_SCHEMA_VERSION } from "../../contracts/commands/Keybindings";
+import { KEYBINDINGS_SCHEMA_VERSION, type UserKeybindingsDocument } from "../../contracts/commands/Keybindings";
 import { createKeybindingService } from "./keybinding-service";
 
 function makeExtensions(): ExtensionSnapshot {
@@ -92,6 +92,34 @@ describe("createKeybindingService", () => {
     expect(executeCommand).toHaveBeenCalledWith("core.commands.about");
 
     document.body.removeChild(input);
+    service.dispose();
+  });
+
+  it("reloads user keybindings on updateExtensions", async () => {
+    const executeCommand = vi.fn(async () => ({ commandId: "core.commands.about", executed: true }));
+    let current: UserKeybindingsDocument = {
+      version: KEYBINDINGS_SCHEMA_VERSION,
+      bindings: [],
+      unbound: []
+    };
+    const service = createKeybindingService({
+      executeCommand,
+      getUserKeybindings: async () => current
+    });
+
+    await service.initialize(makeExtensions());
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "F1" }));
+    expect(executeCommand).toHaveBeenLastCalledWith("core.commands.about");
+
+    current = {
+      version: KEYBINDINGS_SCHEMA_VERSION,
+      bindings: [{ commandId: "core.files.save", key: "F2", when: "global" }],
+      unbound: []
+    };
+    await service.updateExtensions(makeExtensions());
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "F2" }));
+    expect(executeCommand).toHaveBeenLastCalledWith("core.files.save");
     service.dispose();
   });
 });

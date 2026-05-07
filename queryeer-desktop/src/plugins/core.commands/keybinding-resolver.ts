@@ -42,6 +42,11 @@ export function normalizeKeybindingKey(value: string): string {
     .filter((part) => part.length > 0)
     .map((part) => {
       const lower = part.toLowerCase();
+      if (lower === "esc") return "escape";
+      if (lower === "del") return "delete";
+      if (lower === "ins") return "insert";
+      if (lower === "return") return "enter";
+      if (lower === "spacebar") return "space";
       if (lower === "cmdorctrl") {
         const isMac = typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform ?? "");
         return isMac ? "meta" : "ctrl";
