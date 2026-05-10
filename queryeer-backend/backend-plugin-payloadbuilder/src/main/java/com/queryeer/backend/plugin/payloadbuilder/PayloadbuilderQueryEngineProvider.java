@@ -2,11 +2,13 @@ package com.queryeer.backend.plugin.payloadbuilder;
 
 import java.io.Writer;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.apache.commons.lang3.ObjectUtils;
 
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.ErrorMessages;
@@ -15,8 +17,9 @@ import com.queryeer.backend.api.OutputSeverity;
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryPublisher;
+import com.queryeer.backend.api.SecuritySessionClosedException;
 import com.queryeer.backend.api.SettingsModule;
-import com.queryeer.backend.contract.payloadbuilder.PayloadbuilderEngineState;
+import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
 import se.kuseman.payloadbuilder.api.catalog.Column;
@@ -52,6 +55,8 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
     private static final String TYPE_ARRAY = "array";
     private static final String TYPE_TABLE = "table";
     private static final String TYPE_ANY = "any";
+    private static final String ENV_MODULE_ID = "core.queryengine.payloadbuilder.environments";
+    private static final String ENV_VALUES_KEY = "core.queryengine.payloadbuilder.environments.values";
 
     private final Set<String> cancelledExecutionIds = ConcurrentHashMap.newKeySet();
     private final Map<String, QuerySession> activeSessions = new ConcurrentHashMap<>();
@@ -59,14 +64,11 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
     private final PayloadbuilderCatalogProviderRegistry catalogProviders;
     private final PayloadMapper payloadMapper;
 
-    private static final String ENV_MODULE_ID = "core.queryengine.payloadbuilder.environments";
-    private static final String ENV_SETTING_KEY = "core.queryengine.payloadbuilder.environments.values";
-
-    public PayloadbuilderQueryEngineProvider(ConfigService configService, PayloadMapper payloadMapper)
+    public PayloadbuilderQueryEngineProvider(ConfigService configService, PayloadMapper payloadMapper, JdbcRuntimeService hdbcRuntimeService)
     {
         this.configService = configService;
         this.payloadMapper = payloadMapper;
-        this.catalogProviders = PayloadbuilderCatalogProviderRegistry.defaults(configService, payloadMapper);
+        this.catalogProviders = PayloadbuilderCatalogProviderRegistry.defaults(configService, payloadMapper, hdbcRuntimeService);
     }
 
     @Override
@@ -85,10 +87,12 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
         {
             PayloadbuilderEngineState typedState = payloadMapper.convert(engineState, PayloadbuilderEngineState.class);
             PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState catalogState = PayloadbuilderEngineStateSupport.parse(typedState);
-            catalogState = resolveCatalogConnections(catalogState);
             CatalogRegistry catalogRegistry = buildCatalogRegistry(catalogState);
             Map<String, Object> variables = resolveEnvironmentVariables(catalogState.selectedEnvironmentId());
             session = new QuerySession(catalogRegistry, variables);
+
+            injectCatalogProperties(session, catalogState);
+
             session.setAbortSupplier(() -> cancelledExecutionIds.contains(queryExecutionId));
             activeSessions.put(queryExecutionId, session);
 
@@ -148,7 +152,7 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
             outputWriter.flushMessages(publisher);
             publisher.failed("VALIDATION", e.getMessage());
         }
-        catch (com.queryeer.backend.api.SecuritySessionClosedException e)
+        catch (SecuritySessionClosedException e)
         {
             throw e;
         }
@@ -209,10 +213,6 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
         {
             return Map.of("actions", mergeActions(), "catalogIds", catalogProviders.catalogIds());
         }
-        if ("payloadbuilder.echo".equals(action))
-        {
-            return Map.of("fileId", fileId, "payload", payload);
-        }
         return catalogProviders.invoke(action, payload);
     }
 
@@ -231,29 +231,17 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
         return registry;
     }
 
-    private PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState resolveCatalogConnections(PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
+    private void injectCatalogProperties(QuerySession querySession, PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
     {
-        Map<String, PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState.Instance> resolved = new java.util.LinkedHashMap<>();
         for (PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState.Instance instance : state.instancesByAlias()
                 .values())
         {
-            String connectionId = stringValue(instance.properties()
-                    .get("connectionId"));
-            if (connectionId != null)
+            PayloadbuilderCatalogProvider provider = catalogProviders.getCatalogProvider(instance.catalogId());
+            if (provider != null)
             {
-                Map<String, Object> connProperties = catalogProviders.resolveConnection(instance.catalogId(), connectionId);
-                if (!connProperties.isEmpty())
-                {
-                    Map<String, Object> merged = new java.util.LinkedHashMap<>(connProperties);
-                    merged.putAll(instance.properties());
-                    String alias = instance.alias();
-                    resolved.put(alias, new PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState.Instance(alias, instance.catalogId(), merged));
-                    continue;
-                }
+                provider.injectProperties(querySession, instance.alias(), instance.properties());
             }
-            resolved.put(instance.alias(), instance);
         }
-        return new PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState(state.defaultCatalogAlias(), state.selectedEnvironmentId(), resolved);
     }
 
     private Map<String, Object> resolveEnvironmentVariables(String selectedEnvironmentId)
@@ -269,101 +257,40 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
         {
             return Map.of();
         }
-        Object raw = module.values();
-        if (raw instanceof Map<?, ?> map
-                && map.containsKey(ENV_SETTING_KEY))
-        {
-            raw = map.get(ENV_SETTING_KEY);
-        }
-        if (!(raw instanceof List<?> environments))
+
+        List<Environment> environments = payloadMapper.convertToList(module.values()
+                .get(ENV_VALUES_KEY), Environment.class);
+        Environment environment = environments.stream()
+                .filter(env -> selectedEnvironmentId.equals(env.id))
+                .findFirst()
+                .orElse(null);
+        if (environment == null)
         {
             return Map.of();
         }
 
-        for (Object env : environments)
+        Map<String, Object> result = new HashMap<>(environment.variables.size());
+        for (EnvironmentVariable var : environment.variables)
         {
-            if (!(env instanceof Map<?, ?> envMap))
+            Object value;
+            if (var.secretRef != null)
             {
-                continue;
+                value = configService.materializeSecrets(var.secretRef);
             }
-            String id = stringValue(envMap.get("id"));
-            if (!selectedEnvironmentId.equals(id))
+            else
             {
-                continue;
-            }
-            Object variablesRaw = envMap.get("variables");
-            if (!(variablesRaw instanceof List<?> variablesList))
-            {
-                return Map.of();
+                value = var.value;
             }
 
-            Map<String, Object> variables = new LinkedHashMap<>();
-            for (Object variableRaw : variablesList)
-            {
-                if (!(variableRaw instanceof Map<?, ?> variable))
-                {
-                    continue;
-                }
-                String key = stringValue(variable.get("key"));
-                if (key == null)
-                {
-                    continue;
-                }
-                Object value = variable.get("value");
-                Object secretRef = variable.get("secretRef");
-                String secretRefValue = null;
-                if (secretRef instanceof Map<?, ?> secretRefMap)
-                {
-                    secretRefValue = stringValue(secretRefMap.get("secretRef"));
-                }
-                else
-                {
-                    secretRefValue = stringValue(secretRef);
-                }
-                if (value != null
-                        && secretRefValue != null)
-                {
-                    continue;
-                }
-                if (secretRefValue != null)
-                {
-                    Object resolved = configService.materializeSecrets(Map.of("secret", Map.of("secretRef", secretRefValue)));
-                    if (resolved instanceof Map<?, ?> resolvedMap)
-                    {
-                        Object secret = resolvedMap.get("secret");
-                        if (secret != null)
-                        {
-                            variables.put(key, secret);
-                        }
-                    }
-                    continue;
-                }
-                if (value != null)
-                {
-                    variables.put(key, value);
-                }
-            }
-            return variables;
+            result.put(var.key, value);
         }
-        return Map.of();
-    }
-
-    private static String stringValue(Object value)
-    {
-        if (value instanceof String s)
-        {
-            String trimmed = s.trim();
-            return trimmed.isEmpty() ? null
-                    : trimmed;
-        }
-        return null;
+        return result;
     }
 
     private List<String> mergeActions()
     {
         List<String> actions = new ArrayList<>();
         actions.add("engine.capabilities");
-        actions.add("payloadbuilder.echo");
         actions.addAll(catalogProviders.actions());
         return actions;
     }
@@ -723,6 +650,19 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
             buffer.setLength(0);
             buffer.append(content);
         }
+    }
+
+    private record Environment(String id, String title, List<EnvironmentVariable> variables)
+    {
+        @SuppressWarnings("unused")
+        Environment
+        {
+            variables = ObjectUtils.getIfNull(variables, List.of());
+        }
+    }
+
+    private record EnvironmentVariable(String key, String value, Object secretRef)
+    {
     }
 
 }

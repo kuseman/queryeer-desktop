@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import com.queryeer.backend.api.EventBus;
+import com.queryeer.backend.api.Events;
 import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
@@ -45,7 +46,7 @@ final class SecuritySessionOpenRequestHandler implements RequestHandler
             event.put("sessionId", params.sessionId());
             event.put("vaultPath", params.vaultPath());
             event.put("vaultUpdatedAt", params.vaultUpdatedAt());
-            events.publish("security.session.opened", event);
+            events.publish(Events.SECURITY_SESSION_OPENED, event);
         }
 
         responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, new SecuritySessionOpenResult(true), null));

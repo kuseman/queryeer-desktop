@@ -39,6 +39,7 @@ type Props = {
 };
 
 const SQLSERVER_DIALECT_ID = "sqlserver";
+const TEST_CONNECTION_SUFFIX = "::test";
 
 export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Props): JSX.Element {
   const [rows, setRows] = useState<Row[]>(() => toRows(parseJdbcConnectionDefinitions(value)));
@@ -151,21 +152,21 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
   const rowErrors = useMemo(() => buildRowErrors(rows), [rows]);
 
   const testConnection = async (row: Row): Promise<void> => {
+    const testConnectionId = `${row.connectionId}${TEST_CONNECTION_SUFFIX}`;
     setTestStatusByRowId((previous) => ({
       ...previous,
       [row.id]: { state: "running", message: "Testing..." }
     }));
 
     try {
-      const payload =
-        row.dialectId === SQLSERVER_DIALECT_ID
-          ? { dialectId: row.dialectId, ...row.properties, password: row.password }
-          : { dialectId: row.dialectId, url: row.url, username: row.username || undefined, password: row.password };
-
       const result = await getQueryEngineService().invoke({
         engineId: "jdbc",
         action: "jdbc.connection.test",
-        payload
+        payload: {
+          connectionId: testConnectionId,
+          title: row.title,
+          connection: serializeRow(row)
+        }
       });
 
       const message =

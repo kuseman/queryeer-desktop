@@ -15,10 +15,6 @@ Large features in prio
     - Also contributions that has an items supplier that will be used later on
       for a rule based context menu item extension where the user can create dynamic queries
       based on table click contents.
-- [ ] Payloadbuilder
-    - [X] Environments
-    - [ ] JDBC Catalog
-    - [ ] Kafka catalog
 - [ ] JDBC Tree component Context menu
     - Context menu items default + dialect spcific
     - New query on connection / database
@@ -47,9 +43,14 @@ Large features in prio
 - [ ] About dialog
     - Queryeer changelog
     - Modules changelog (Payloadbuilder)
+- [ ] Backend builtin modules should be discovered normally but with targer/classes as source class path etc.
 - [ ] Modularize
     - Make sure all contributions have contracts and all API:s are located in a separate project
       that might end up on npmjs one day
+- [ ] Payloadbuilder
+    - [X] Environments
+    - [X] JDBC Catalog
+    - [ ] Kafka catalog
 - [X] Keybindings settings dialog
     - See conflicts
     - Specify new ones
@@ -125,7 +126,6 @@ Large features in prio
 - [x] Add notification DTOs (`progress`, `resultChunk`, `completed`, `failed`)
 - [x] Align JSON envelope type wire values with desktop protocol casing
 - [x] Add fixture compatibility tests for handshake/ping shared with desktop fixtures
-- [x] Add DTOs for `connection.upsert` connection metadata flow
 - [x] Add DTOs for `backend.runtimeStatus` runtime diagnostics flow
 - [x] Add DTOs for `file.open` / `file.close` / `file.bind` request flow
 - [x] Add DTO for `file.change` notification
@@ -151,7 +151,6 @@ Large features in prio
 - [x] Add `queryengine.execute` / `queryengine.cancel` dispatch with mock notifications
 - [x] Add protocol error mapping
 - [x] Refactor transport into decomposed components + manual DI wiring
-- [x] Add mock dispatch handler for `connection.upsert`
 - [x] Refactor request dispatch into handler registry + per-method handlers
 - [x] Add `backend.runtimeStatus` dispatch handler exposing runtime snapshot
 - [x] Add unit tests for request dispatcher routing + unknown-method error mapping
@@ -198,7 +197,6 @@ Large features in prio
 - [x] Add desktop gateway negative-path tests (timeouts/send failures/ping failure/unknown response id)
 - [x] Add CI workflow executing desktop tests + protocol fixtures + backend contract fixture tests
 - [~] Implement protocol/diagnostics secret redaction (desktop side done; backend side pending)
-- [~] Implement secret integration around `connection.upsert` (desktop `core.security` in progress; backend bridge pending decision)
 - [x] Centralize desktop backend capability declarations for handshake requests
 - [x] Establish Java backend platform skeleton v1 (service composition + runtime lifecycle baseline)
 - [x] Add backend-core governance tests (dependencies/capabilities/cycles/status transitions)

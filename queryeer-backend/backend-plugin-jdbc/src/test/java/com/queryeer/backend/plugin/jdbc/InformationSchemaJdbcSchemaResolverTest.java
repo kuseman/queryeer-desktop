@@ -9,8 +9,8 @@ import java.util.Map;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import com.queryeer.backend.queryengine.jdbc.JdbcConnectionProfile;
-import com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject;
+import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 
 class InformationSchemaJdbcSchemaResolverTest
 {
@@ -26,7 +26,9 @@ class InformationSchemaJdbcSchemaResolverTest
         }
 
         InformationSchemaJdbcSchemaResolver resolver = new InformationSchemaJdbcSchemaResolver();
-        List<JdbcSchemaObject> roots = resolver.resolveSchema(new JdbcConnectionProfile("c1", "c1", "jdbc", Map.of("url", url)));
+        JdbcConnection connection = new JdbcConnection("coonection", "connection", new BasicJdbcDialect(), Map.of("url", url));
+
+        List<JdbcSchemaObject> roots = resolver.resolveSchema(connection, Map.of());
 
         JdbcSchemaObject table = roots.stream()
                 .flatMap(database -> database.children()

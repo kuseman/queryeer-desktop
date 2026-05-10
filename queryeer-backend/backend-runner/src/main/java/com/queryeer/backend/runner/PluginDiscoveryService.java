@@ -7,7 +7,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.PluginHostServices;
 
 final class PluginDiscoveryService
@@ -17,10 +16,10 @@ final class PluginDiscoveryService
     private final BackendPluginResolver backendResolver;
     private final FrontendPluginResolver frontendResolver;
 
-    PluginDiscoveryService(ObjectMapper objectMapper, PluginHostServices hostServices, PluginClassLoaderFactory classLoaderFactory)
+    PluginDiscoveryService(PluginHostServices hostServices, PluginClassLoaderFactory classLoaderFactory)
     {
         this.sourceExplorer = new PluginSourceExplorer();
-        this.manifestLoader = new PluginManifestLoader(objectMapper);
+        this.manifestLoader = new PluginManifestLoader();
         this.backendResolver = new ManifestBackendPluginResolver(classLoaderFactory, new PluginFactory(), hostServices);
         this.frontendResolver = new ManifestFrontendPluginResolver();
     }

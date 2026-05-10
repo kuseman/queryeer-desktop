@@ -15,4 +15,6 @@ public interface BackendPluginContext
     SchedulerService scheduler();
 
     PayloadMapper payloadMapper();
+
+    PluginServiceRegistry services();
 }

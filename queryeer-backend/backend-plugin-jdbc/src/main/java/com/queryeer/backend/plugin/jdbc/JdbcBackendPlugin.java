@@ -8,8 +8,14 @@ import com.queryeer.backend.api.BackendPlugin;
 import com.queryeer.backend.api.BackendPluginContext;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.PluginDescriptor;
+import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawlCoordinator;
+import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawlPolicy;
+import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawler;
+import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaStore;
 import com.queryeer.backend.queryengine.jdbc.DefaultJdbcDialectRegistry;
+import com.queryeer.backend.queryengine.jdbc.DefaultJdbcRuntimeService;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
+import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
 
 public final class JdbcBackendPlugin implements BackendPlugin
 {
@@ -19,9 +25,6 @@ public final class JdbcBackendPlugin implements BackendPlugin
     private static final String SCHEMA_CACHE_DIR_KEY = "queryeer.jdbc.schemaCache.dir";
     private static final String SCHEMA_CRAWL_INTERVAL_KEY = "queryeer.jdbc.schemaCrawl.intervalMs";
     private static final String APP_DIR_KEY = "queryeer.app.dir";
-    static final String EVENT_SECURITY_SESSION_OPENED = "security.session.opened";
-    static final String EVENT_SECURITY_SESSION_CLOSED = "security.session.closed";
-
     private JdbcDialectDiscovery dialectDiscovery;
 
     public JdbcBackendPlugin()
@@ -51,27 +54,19 @@ public final class JdbcBackendPlugin implements BackendPlugin
         context.logger()
                 .info("Registered built-in generic JDBC dialect");
         dialectDiscovery.discoverAndRegister(registry, context.logger());
-        JdbcSettingsConnectionSource settingsSource = new JdbcSettingsConnectionSource(context.payloadMapper());
-        JdbcConnectionRegistry connections = new JdbcConnectionRegistry(context.config(), settingsSource, context.logger());
-        JdbcConnectionResolver resolver = new JdbcConnectionResolver();
-        JdbcCredentialResolver credentialResolver = new JdbcCredentialResolver(context.config(), context.payloadMapper());
+        DefaultJdbcConnections connections = new DefaultJdbcConnections(context.config(), context.payloadMapper(), registry);
+        context.services()
+                .register(JdbcRuntimeService.class, new DefaultJdbcRuntimeService(registry, connections));
         JdbcSchemaStore schemaStore = new JdbcSchemaStore(resolveSchemaCacheDir(context.config()));
-        JdbcSchemaCrawler schemaCrawler = new JdbcSchemaCrawler(registry, resolver, schemaStore, context.logger(), credentialResolver);
-        JdbcSecuritySessionState securitySessionState = new JdbcSecuritySessionState();
+        JdbcSchemaCrawler schemaCrawler = new JdbcSchemaCrawler(schemaStore);
         JdbcSchemaCrawlCoordinator crawlCoordinator = new JdbcSchemaCrawlCoordinator(connections, schemaCrawler, schemaStore, new JdbcSchemaCrawlPolicy(), context.logger());
-        context.events()
-                .subscribe(EVENT_SECURITY_SESSION_OPENED, _ -> securitySessionState.markOpen());
-        context.events()
-                .subscribe(EVENT_SECURITY_SESSION_CLOSED, _ -> securitySessionState.markClosed());
         long idleTimeoutMs = parseDurationMs(context.config(), IDLE_TIMEOUT_KEY, DEFAULT_IDLE_TIMEOUT_MS);
         long reaperIntervalMs = parseDurationMs(context.config(), REAPER_INTERVAL_KEY, Math.max(1_000L, Math.min(idleTimeoutMs, TimeUnit.MINUTES.toMillis(5))));
         long schemaCrawlIntervalMs = parseDurationMs(context.config(), SCHEMA_CRAWL_INTERVAL_KEY, TimeUnit.MINUTES.toMillis(5));
-        JdbcFileConnectionManager fileConnections = new JdbcFileConnectionManager(idleTimeoutMs);
-        JdbcQueryEngineProvider provider = new JdbcQueryEngineProvider(registry, connections, fileConnections, crawlCoordinator::onUsage, schemaStore, crawlCoordinator, credentialResolver,
-                context.payloadMapper());
+        JdbcQueryEngineProvider provider = new JdbcQueryEngineProvider(registry, connections, idleTimeoutMs, crawlCoordinator::onUsage, schemaStore, crawlCoordinator, context.payloadMapper());
 
         context.scheduler()
-                .schedule("jdbc.file-session-reaper", () -> startReaperThread(fileConnections, reaperIntervalMs));
+                .schedule("jdbc.file-session-reaper", () -> startReaperThread(provider, reaperIntervalMs));
         context.scheduler()
                 .schedule("jdbc.schema-crawl-startup", () -> crawlCoordinator.start(schemaCrawlIntervalMs));
 
@@ -120,14 +115,14 @@ public final class JdbcBackendPlugin implements BackendPlugin
         return Path.of("jdbc-schema-cache");
     }
 
-    private static void startReaperThread(JdbcFileConnectionManager fileConnections, long intervalMs)
+    private static void startReaperThread(JdbcQueryEngineProvider provider, long intervalMs)
     {
         Thread thread = new Thread(() ->
         {
             while (!Thread.currentThread()
                     .isInterrupted())
             {
-                fileConnections.closeIdleConnections(System.currentTimeMillis());
+                provider.closeIdleConnections(System.currentTimeMillis());
                 sleepQuietly(intervalMs);
             }
         }, "jdbc-file-session-reaper");

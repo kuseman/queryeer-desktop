@@ -1,5 +1,8 @@
 package com.queryeer.backend.core.query;
 
+import static org.mockito.Mockito.mock;
+
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -10,17 +13,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.BackendPluginContext;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.EventBus;
 import com.queryeer.backend.api.FileSessionHandlerRegistry;
 import com.queryeer.backend.api.LoggerService;
 import com.queryeer.backend.api.PayloadMapper;
+import com.queryeer.backend.api.PluginServiceRegistry;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.QueryPublisher;
 import com.queryeer.backend.api.SchedulerService;
+import com.queryeer.backend.api.SettingsModule;
+import com.queryeer.backend.core.JacksonPayloadMapper;
+import com.queryeer.backend.core.MapperUtils;
 import com.queryeer.backend.plugin.jdbc.JdbcBackendPlugin;
 
 class QueryExecutionServiceTest
@@ -32,8 +38,7 @@ class QueryExecutionServiceTest
         QueryExecutionService service = new QueryExecutionService(registry);
         RecordingQueryPublisher publisher = new RecordingQueryPublisher();
 
-        service.execute("exec-jdbc-1", "jdbc", "file-1", "select 1 as one", Map.of("jdbc", Map.of("connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_qes_1;DB_CLOSE_DELAY=-1"))),
-                publisher);
+        service.execute("exec-jdbc-1", "jdbc", "file-1", "select 1 as one", Map.of("connectionId", "jdbc-qes"), publisher);
 
         boolean completed = publisher.awaitCompleted(5, TimeUnit.SECONDS);
         Assertions.assertTrue(completed, "Query did not complete in time");
@@ -232,16 +237,7 @@ class QueryExecutionServiceTest
     private static final class JdbcPluginContext implements BackendPluginContext
     {
         private final QueryEngineRegistry registry;
-        private final PayloadMapper payloadMapper = new PayloadMapper()
-        {
-            private final ObjectMapper objectMapper = new ObjectMapper();
-
-            @Override
-            public <T> T convert(Object fromValue, Class<T> toValueType)
-            {
-                return objectMapper.convertValue(fromValue, toValueType);
-            }
-        };
+        private final PayloadMapper payloadMapper = new JacksonPayloadMapper(MapperUtils.MAPPER);
 
         private JdbcPluginContext(QueryEngineRegistry registry)
         {
@@ -273,7 +269,30 @@ class QueryExecutionServiceTest
         @Override
         public ConfigService config()
         {
-            return _ -> null;
+            return new ConfigService()
+            {
+                @Override
+                public String get(String key)
+                {
+                    if ("queryeer.jdbc.schemaCache.dir".equals(key))
+                    {
+                        return Path.of("target", "test-work", "jdbc-schema-cache", "qes")
+                                .toString();
+                    }
+                    return null;
+                }
+
+                @Override
+                public SettingsModule getModule(String moduleId)
+                {
+                    if (!"core.queryengine.jdbc".equals(moduleId))
+                    {
+                        return null;
+                    }
+                    return new SettingsModule(moduleId, 0L, "2010-10-10T10:10:10Z", Map.of("core.queryengine.jdbc.connections",
+                            List.of(Map.of("connectionId", "jdbc-qes", "dialectId", "jdbc", "url", "jdbc:h2:mem:test_qes_1;DB_CLOSE_DELAY=-1", "enabled", true))));
+                }
+            };
         }
 
         @Override
@@ -311,6 +330,12 @@ class QueryExecutionServiceTest
         public PayloadMapper payloadMapper()
         {
             return payloadMapper;
+        }
+
+        @Override
+        public PluginServiceRegistry services()
+        {
+            return mock(PluginServiceRegistry.class);
         }
     }
 }

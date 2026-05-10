@@ -52,7 +52,7 @@ class EngineInvokeRequestHandlerTest
         EngineInvokeRequestHandler handler = new EngineInvokeRequestHandler(responseWriter, codec, new EngineInvokeService(registry));
 
         handler.handle(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-invoke-1", null, "queryengine.invoke",
-                Map.of("engineId", "payloadbuilder", "fileId", "file-1", "action", "payloadbuilder.echo", "payload", Map.of("x", 1)), null, null));
+                Map.of("engineId", "payloadbuilder", "fileId", "file-1", "action", "engine.capabilities", "payload", Map.of("x", 1)), null, null));
 
         FramedReader reader = new FramedReader(new ByteArrayInputStream(output.toByteArray()), _ ->
         {
@@ -65,7 +65,7 @@ class EngineInvokeRequestHandlerTest
         Map<?, ?> body = (Map<?, ?>) response.result();
         Map<?, ?> result = (Map<?, ?>) body.get("result");
         Assertions.assertEquals("file-1", result.get("fileId"));
-        Assertions.assertEquals("payloadbuilder.echo", result.get("action"));
+        Assertions.assertEquals("engine.capabilities", result.get("action"));
     }
 
     @Test
@@ -79,7 +79,7 @@ class EngineInvokeRequestHandlerTest
 
         EngineInvokeRequestHandler handler = new EngineInvokeRequestHandler(responseWriter, codec, new EngineInvokeService(registry));
 
-        handler.handle(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-invoke-2", null, "queryengine.invoke", Map.of("engineId", "missing", "action", "payloadbuilder.echo"),
+        handler.handle(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-invoke-2", null, "queryengine.invoke", Map.of("engineId", "missing", "action", "engine.capabilities"),
                 null, null));
 
         FramedReader reader = new FramedReader(new ByteArrayInputStream(output.toByteArray()), _ ->

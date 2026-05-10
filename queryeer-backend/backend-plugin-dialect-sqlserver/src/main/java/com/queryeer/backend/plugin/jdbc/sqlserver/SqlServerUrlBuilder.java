@@ -1,5 +1,8 @@
 package com.queryeer.backend.plugin.jdbc.sqlserver;
 
+import static com.queryeer.backend.api.PayloadUtils.stringValue;
+import static com.queryeer.backend.api.PayloadUtils.toInt;
+
 import java.util.Map;
 import java.util.Properties;
 
@@ -10,7 +13,7 @@ final class SqlServerUrlBuilder
      */
     static String buildUrl(Map<String, Object> properties)
     {
-        String host = text(properties.get("host"));
+        String host = stringValue(properties, "host");
         if (host == null)
         {
             throw new IllegalArgumentException("host is required for SQL Server connections");
@@ -30,11 +33,77 @@ final class SqlServerUrlBuilder
             }
         }
 
-        String instanceName = text(properties.get("instanceName"));
+        String instanceName = stringValue(properties, "instanceName");
         if (instanceName != null)
         {
             url.append('\\')
                     .append(instanceName);
+        }
+
+        String database = stringValue(properties, "database");
+        if (database != null)
+        {
+            url.append(";databaseName=")
+                    .append(database);
+        }
+
+        SqlServerAuthType authType = SqlServerAuthType.fromString(stringValue(properties, "authType"));
+        switch (authType)
+        {
+            case WINDOWS_NATIVE_AUTH ->
+            {
+                url.append(";integratedSecurity=true");
+            }
+            case WINDOWS_NTLM_AUTH ->
+            {
+                url.append(";integratedSecurity=true");
+                url.append(";authenticationScheme=NTLM");
+                String domain = stringValue(properties, "domain");
+                if (domain != null)
+                {
+                    url.append(";domain=")
+                            .append(domain);
+                }
+            }
+            case JAVA_KERBEROS ->
+            {
+                url.append(";integratedSecurity=true");
+                url.append(";authenticationScheme=JavaKerberos");
+                String jaasConfigEntry = stringValue(properties, "jaasConfigEntry");
+                if (jaasConfigEntry != null)
+                {
+                    url.append(";jaasConfigurationName=")
+                            .append(jaasConfigEntry);
+                }
+            }
+            default ->
+                    {
+                    }
+        }
+
+        String encrypt = stringValue(properties, "encrypt");
+        if (encrypt != null)
+        {
+            url.append(";encrypt=")
+                    .append(encrypt);
+        }
+        else
+        {
+            url.append(";encrypt=true");
+        }
+
+        Object trustCert = properties.get("trustServerCertificate");
+        if (Boolean.TRUE.equals(trustCert)
+                || "true".equalsIgnoreCase(String.valueOf(trustCert)))
+        {
+            url.append(";trustServerCertificate=true");
+        }
+
+        String hostNameInCert = stringValue(properties, "hostNameInCertificate");
+        if (hostNameInCert != null)
+        {
+            url.append(";hostNameInCertificate=")
+                    .append(hostNameInCert);
         }
 
         return url.toString();
@@ -47,20 +116,14 @@ final class SqlServerUrlBuilder
     {
         Properties props = new Properties();
 
-        String database = text(properties.get("database"));
-        if (database != null)
-        {
-            props.setProperty("databaseName", database);
-        }
-
-        SqlServerAuthType authType = SqlServerAuthType.fromString(text(properties.get("authType")));
+        SqlServerAuthType authType = SqlServerAuthType.fromString(stringValue(properties, "authType"));
 
         switch (authType)
         {
             case SQL_SERVER_AUTH ->
             {
-                String username = text(properties.get("username"));
-                String password = text(properties.get("password"));
+                String username = stringValue(properties, "username");
+                String password = stringValue(properties, "password");
                 if (username != null)
                 {
                     props.setProperty("user", username);
@@ -71,20 +134,12 @@ final class SqlServerUrlBuilder
                 }
             }
             case WINDOWS_NATIVE_AUTH ->
-            {
-                props.setProperty("integratedSecurity", "true");
-            }
+                    {
+                    }
             case WINDOWS_NTLM_AUTH ->
             {
-                props.setProperty("integratedSecurity", "true");
-                props.setProperty("authenticationScheme", "NTLM");
-                String domain = text(properties.get("domain"));
-                if (domain != null)
-                {
-                    props.setProperty("domain", domain);
-                }
-                String username = text(properties.get("username"));
-                String password = text(properties.get("password"));
+                String username = stringValue(properties, "username");
+                String password = stringValue(properties, "password");
                 if (username != null)
                 {
                     props.setProperty("user", username);
@@ -96,17 +151,11 @@ final class SqlServerUrlBuilder
             }
             case JAVA_KERBEROS ->
             {
-                props.setProperty("integratedSecurity", "true");
-                props.setProperty("authenticationScheme", "JavaKerberos");
-                String krb5ConfigFile = text(properties.get("krb5ConfigFile"));
+                String krb5ConfigFile = stringValue(properties, "krb5ConfigFile");
                 if (krb5ConfigFile != null)
                 {
+                    // Kerberos realm/KDC config is a JVM system property, not a SQL Server JDBC URL/property option.
                     System.setProperty("java.security.krb5.conf", krb5ConfigFile);
-                }
-                String jaasConfigEntry = text(properties.get("jaasConfigEntry"));
-                if (jaasConfigEntry != null)
-                {
-                    props.setProperty("jaasConfigurationName", jaasConfigEntry);
                 }
             }
             default ->
@@ -115,60 +164,7 @@ final class SqlServerUrlBuilder
             }
         }
 
-        String encrypt = text(properties.get("encrypt"));
-        if (encrypt != null)
-        {
-            props.setProperty("encrypt", encrypt);
-        }
-        else
-        {
-            props.setProperty("encrypt", "true");
-        }
-
-        Object trustCert = properties.get("trustServerCertificate");
-        if (Boolean.TRUE.equals(trustCert)
-                || "true".equalsIgnoreCase(String.valueOf(trustCert)))
-        {
-            props.setProperty("trustServerCertificate", "true");
-        }
-
-        String hostNameInCert = text(properties.get("hostNameInCertificate"));
-        if (hostNameInCert != null)
-        {
-            props.setProperty("hostNameInCertificate", hostNameInCert);
-        }
-
         return props;
-    }
-
-    private static String text(Object value)
-    {
-        if (value instanceof String s)
-        {
-            String trimmed = s.trim();
-            return trimmed.isBlank() ? null
-                    : trimmed;
-        }
-        return null;
-    }
-
-    private static int toInt(Object value, int fallback)
-    {
-        if (value instanceof Number n)
-        {
-            return n.intValue();
-        }
-        if (value instanceof String s)
-        {
-            try
-            {
-                return Integer.parseInt(s.trim());
-            }
-            catch (NumberFormatException ignored)
-            {
-            }
-        }
-        return fallback;
     }
 
     private SqlServerUrlBuilder()

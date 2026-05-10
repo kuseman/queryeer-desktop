@@ -17,9 +17,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.queryeer.backend.contract.runtime.RuntimePluginState;
 import com.queryeer.backend.contract.runtime.RuntimePluginStatus;
 import com.queryeer.backend.contract.runtime.RuntimeStatusResult;
@@ -51,10 +48,7 @@ public final class BackendRunnerModule
 
         SecuritySession securitySession = new SecuritySession();
         BackendPlatformServices services = BackendPlatformServices.fileBased(config, securitySession);
-        ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.registerModule(new JavaTimeModule());
-        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        PluginDiscoveryService discoveryService = new PluginDiscoveryService(objectMapper, services, classLoaderFactory);
+        PluginDiscoveryService discoveryService = new PluginDiscoveryService(services, classLoaderFactory);
 
         PluginRuntime runtime = new PluginRuntime();
         List<DiscoveredPlugin> discoveredPlugins;
@@ -84,8 +78,8 @@ public final class BackendRunnerModule
         }
 
         long startedAt = System.currentTimeMillis();
-        StdioTransportModule.RunningTransport transportServer = new StdioTransportModule().create(input, output, objectMapper, services.queryEngines(), services.fileRegistryView(), services.events(),
-                () -> runtimeStatusSnapshot(runtime), startedAt, services.config(), securitySession);
+        StdioTransportModule.RunningTransport transportServer = new StdioTransportModule().create(input, output, MapperUtils.MAPPER, services.queryEngines(), services.fileRegistryView(),
+                services.events(), () -> runtimeStatusSnapshot(runtime), startedAt, services.config(), securitySession);
         System.err.println(withCorrelation("Queryeer backend runner started (stdio mode).", null));
 
         Thread selfDestruct = new Thread(() ->

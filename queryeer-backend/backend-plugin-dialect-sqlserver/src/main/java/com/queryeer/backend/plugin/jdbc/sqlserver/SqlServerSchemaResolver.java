@@ -1,5 +1,7 @@
 package com.queryeer.backend.plugin.jdbc.sqlserver;
 
+import static com.queryeer.backend.api.PayloadUtils.trimToNull;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -10,12 +12,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import com.queryeer.backend.contract.jdbc.JdbcSchemaTarget;
-import com.queryeer.backend.queryengine.jdbc.JdbcColumnDefinition;
-import com.queryeer.backend.queryengine.jdbc.JdbcConnectionProfile;
-import com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject;
-import com.queryeer.backend.queryengine.jdbc.JdbcSchemaObjectFactory;
-import com.queryeer.backend.queryengine.jdbc.JdbcSchemaResolver;
+import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcColumnDefinition;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObjectFactory;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaTarget;
 
 final class SqlServerSchemaResolver implements JdbcSchemaResolver
 {
@@ -79,13 +81,7 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
             """;
 
     @Override
-    public List<JdbcSchemaObject> resolveSchema(JdbcConnectionProfile connection)
-    {
-        return resolveSchema(connection, Map.of());
-    }
-
-    @Override
-    public List<JdbcSchemaObject> resolveSchema(JdbcConnectionProfile connection, Map<String, Object> options)
+    public List<JdbcSchemaObject> resolveSchema(JdbcConnection connection, Map<String, Object> options)
     {
         String scope = options.containsKey(OPTION_SCOPE) ? String.valueOf(options.get(OPTION_SCOPE))
                 : SCOPE_TOP;
@@ -187,7 +183,7 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
         return tables;
     }
 
-    private List<JdbcSchemaObject> resolveColumnsScope(Connection connection, String url, Properties baseProps, com.queryeer.backend.contract.jdbc.JdbcSchemaTarget target) throws SQLException
+    private List<JdbcSchemaObject> resolveColumnsScope(Connection connection, String url, Properties baseProps, JdbcSchemaTarget target) throws SQLException
     {
         String catalog = target != null ? trimToNull(target.database())
                 : null;
@@ -258,9 +254,9 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
         return DriverManager.getConnection(url, props);
     }
 
-    private static com.queryeer.backend.contract.jdbc.JdbcSchemaTarget extractTarget(Object value)
+    private static JdbcSchemaTarget extractTarget(Object value)
     {
-        if (value instanceof com.queryeer.backend.contract.jdbc.JdbcSchemaTarget t)
+        if (value instanceof JdbcSchemaTarget t)
         {
             return t;
         }
@@ -272,19 +268,8 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
                     : null;
             String table = map.get(KEY_TABLE) instanceof String s ? trimToNull(s)
                     : null;
-            return new com.queryeer.backend.contract.jdbc.JdbcSchemaTarget(database, schema, table);
+            return new JdbcSchemaTarget(database, schema, table);
         }
         return null;
-    }
-
-    private static String trimToNull(String value)
-    {
-        if (value == null)
-        {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isBlank() ? null
-                : trimmed;
     }
 }

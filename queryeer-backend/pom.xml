@@ -20,6 +20,7 @@
         <surefire.plugin.version>3.2.5</surefire.plugin.version>
         <jackson.version>2.18.2</jackson.version>
         <junit.jupiter.version>5.11.0</junit.jupiter.version>
+        <mockito.core.version>5.23.0</mockito.core.version>
         <queryeer.config.root>${project.basedir}</queryeer.config.root>
     </properties>
 
@@ -54,6 +55,11 @@
                 <artifactId>junit-jupiter</artifactId>
                 <version>${junit.jupiter.version}</version>
             </dependency>
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+                <version>${mockito.core.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -67,7 +73,6 @@
         <module>backend-plugin-payloadbuilder</module>
         <module>backend-plugin-jdbc</module>
         <module>backend-plugin-dialect-sqlserver</module>
-        <module>backend-plugin-queryengine-payloadbuilder-jdbc</module>
         <module>backend-plugin-devprobe</module>
     </modules>
 

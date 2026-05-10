@@ -311,17 +311,32 @@ async function adaptCatalogInstancesSettings(settingsService: {
   getValue: (settingId: string) => unknown;
   setValue: (settingId: string, value: unknown) => Promise<{ ok: boolean }>;
 }): Promise<void> {
+  const contributions = listPayloadbuilderCatalogContributions();
+  const byCatalogIdInsensitive = new Map(
+    contributions.map((contribution) => [contribution.catalogId.toLowerCase(), contribution])
+  );
+
   const current = parseCatalogAliasDefinitions(
     settingsService.getValue(PAYLOADBUILDER_CATALOG_INSTANCES_SETTING_ID)
   );
-  const merged = [...current];
+  const merged = current.map((entry) => {
+    const contribution = byCatalogIdInsensitive.get(entry.catalogId.toLowerCase());
+    if (!contribution) {
+      return entry;
+    }
+    return {
+      ...entry,
+      catalogId: contribution.catalogId
+    };
+  });
+
   const byCatalogId = new Map<string, number>();
-  for (const entry of current) {
+  for (const entry of merged) {
     byCatalogId.set(entry.catalogId, (byCatalogId.get(entry.catalogId) ?? 0) + 1);
   }
 
-  const takenAliases = new Set(current.map((item) => item.alias));
-  for (const contribution of listPayloadbuilderCatalogContributions()) {
+  const takenAliases = new Set(merged.map((item) => item.alias));
+  for (const contribution of contributions) {
     const currentCount = byCatalogId.get(contribution.catalogId) ?? 0;
     if (currentCount > 0) {
       continue;
@@ -337,7 +352,13 @@ async function adaptCatalogInstancesSettings(settingsService: {
     byCatalogId.set(contribution.catalogId, 1);
   }
 
-  if (merged.length === current.length) {
+  const changed =
+    merged.length !== current.length ||
+    merged.some((entry, index) => {
+      const prev = current[index];
+      return !prev || prev.alias !== entry.alias || prev.catalogId !== entry.catalogId || prev.title !== entry.title || prev.enabled !== entry.enabled;
+    });
+  if (!changed) {
     return;
   }
   await settingsService.setValue(PAYLOADBUILDER_CATALOG_INSTANCES_SETTING_ID, merged);

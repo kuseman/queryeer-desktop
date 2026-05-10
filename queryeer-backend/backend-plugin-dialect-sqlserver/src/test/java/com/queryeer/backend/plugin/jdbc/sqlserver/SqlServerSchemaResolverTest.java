@@ -17,8 +17,8 @@ import java.util.logging.Logger;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import com.queryeer.backend.queryengine.jdbc.JdbcConnectionProfile;
-import com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject;
+import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 
 class SqlServerSchemaResolverTest
 {
@@ -30,9 +30,10 @@ class SqlServerSchemaResolverTest
         try
         {
             SqlServerSchemaResolver resolver = new SqlServerSchemaResolver();
-            JdbcConnectionProfile profile = new JdbcConnectionProfile("conn-1", "conn-1", "sqlserver", Map.of("host", "localhost", "database", "master", "authType", "WINDOWS_NATIVE_AUTH"));
+            Map<String, Object> profile = Map.of("host", "localhost", "database", "master", "authType", "WINDOWS_NATIVE_AUTH");
 
-            List<JdbcSchemaObject> result = resolver.resolveSchema(profile, Map.of("scope", "deep", "target", Map.of("database", "master", "schema", "dbo")));
+            JdbcConnection connection = new JdbcConnection("connection", "connection", new SqlServerDialect(), profile);
+            List<JdbcSchemaObject> result = resolver.resolveSchema(connection, Map.of("scope", "deep", "target", Map.of("database", "master", "schema", "dbo")));
 
             Assertions.assertTrue(driver.tablesQueryCalled.get(), "deep scope should query tables");
             Assertions.assertFalse(result.isEmpty());

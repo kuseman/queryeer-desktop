@@ -100,20 +100,6 @@ const testCancelFixtures = () => {
   assert(request.params?.queryExecutionId === response.result?.queryExecutionId, "Cancel queryExecutionId mismatch");
 };
 
-const testConnectionUpsertFixtures = () => {
-  const request = readFixture("request-connection-upsert.json");
-  const response = readFixture("response-connection-upsert.json");
-
-  assertEnvelopeBase(request);
-  assertEnvelopeBase(response);
-  assert(request.type === "request", "Connection upsert request fixture must be request");
-  assert(response.type === "response", "Connection upsert response fixture must be response");
-  assert(request.method === "connection.upsert", "Unexpected connection.upsert method");
-  assert(request.id === response.id, "Connection upsert request/response id mismatch");
-  assert(response.result && typeof response.result === "object", "Connection upsert result is missing");
-  assert(typeof response.result.connectionId === "string", "connection.upsert connectionId missing");
-};
-
 const testFileOpenFixtures = () => {
   const request = readFixture("request-file-open.json");
   const response = readFixture("response-file-open.json");
@@ -188,7 +174,6 @@ testRuntimeStatusFixtures();
 testPingFixtures();
 testExecuteFixtures();
 testCancelFixtures();
-testConnectionUpsertFixtures();
 testFileOpenFixtures();
 testFileCloseFixtures();
 testJdbcEngineStateFixture();

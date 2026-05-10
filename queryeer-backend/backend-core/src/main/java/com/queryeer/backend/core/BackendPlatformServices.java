@@ -2,7 +2,6 @@ package com.queryeer.backend.core;
 
 import java.util.Map;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.BackendPluginContext;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.EventBus;
@@ -10,6 +9,7 @@ import com.queryeer.backend.api.FileSessionHandlerRegistry;
 import com.queryeer.backend.api.LoggerService;
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.PluginHostServices;
+import com.queryeer.backend.api.PluginServiceRegistry;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.SchedulerService;
 import com.queryeer.backend.core.security.SecuritySession;
@@ -52,9 +52,10 @@ public final class BackendPlatformServices implements PluginHostServices
         DefaultFileRegistry fileRegistry = new DefaultFileRegistry();
         InMemoryEventBus events = new InMemoryEventBus();
         InlineSchedulerService scheduler = new InlineSchedulerService(logger);
-        PayloadMapper payloadMapper = new JacksonPayloadMapper(new ObjectMapper());
+        PayloadMapper payloadMapper = new JacksonPayloadMapper(MapperUtils.MAPPER);
+        PluginServiceRegistry services = new InMemoryPluginServiceRegistry();
 
-        BackendPluginContext context = new DefaultBackendPluginContext(logger, config, queryEngines, fileRegistry, events, scheduler, payloadMapper);
+        BackendPluginContext context = new DefaultBackendPluginContext(logger, config, queryEngines, fileRegistry, events, scheduler, payloadMapper, services);
 
         return new BackendPlatformServices(logger, config, queryEngines, fileRegistry, events, scheduler, context, payloadMapper);
     }
@@ -68,9 +69,10 @@ public final class BackendPlatformServices implements PluginHostServices
         DefaultFileRegistry fileRegistry = new DefaultFileRegistry();
         InMemoryEventBus events = new InMemoryEventBus();
         InlineSchedulerService scheduler = new InlineSchedulerService(logger);
-        PayloadMapper payloadMapper = new JacksonPayloadMapper(new ObjectMapper());
+        PayloadMapper payloadMapper = new JacksonPayloadMapper(MapperUtils.MAPPER);
+        PluginServiceRegistry services = new InMemoryPluginServiceRegistry();
 
-        BackendPluginContext context = new DefaultBackendPluginContext(logger, config, queryEngines, fileRegistry, events, scheduler, payloadMapper);
+        BackendPluginContext context = new DefaultBackendPluginContext(logger, config, queryEngines, fileRegistry, events, scheduler, payloadMapper, services);
 
         return new BackendPlatformServices(logger, config, queryEngines, fileRegistry, events, scheduler, context, payloadMapper);
     }
@@ -80,36 +82,43 @@ public final class BackendPlatformServices implements PluginHostServices
         return pluginContext;
     }
 
+    @Override
     public LoggerService logger()
     {
         return logger;
     }
 
+    @Override
     public ConfigService config()
     {
         return config;
     }
 
+    @Override
     public QueryEngineRegistry queryEngines()
     {
         return queryEngines;
     }
 
+    @Override
     public FileSessionHandlerRegistry fileSessions()
     {
         return fileRegistry;
     }
 
+    @Override
     public EventBus events()
     {
         return events;
     }
 
+    @Override
     public SchedulerService scheduler()
     {
         return scheduler;
     }
 
+    @Override
     public PayloadMapper payloadMapper()
     {
         return payloadMapper;

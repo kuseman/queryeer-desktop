@@ -281,39 +281,6 @@ Success result:
 }
 ```
 
-## 5.5 `connection.upsert`
-
-Purpose: create/update engine-owned connection payload. Transport treats `connection` as opaque.
-
-`connectionId` is a **frontend-generated stable UUID** (e.g. `550e8400-e29b-41d4-a716-446655440001`). It is not a user-defined name — the human-readable label is carried in `name`. The backend must reject requests with a missing or blank `connectionId`.
-
-Request params:
-
-```json
-{
-  "connectionId": "550e8400-e29b-41d4-a716-446655440001",
-  "engineId": "jdbc",
-  "name": "Local Postgres",
-  "connection": {
-    "dialectId": "postgres",
-    "url": "jdbc:postgresql://localhost:5432/appdb",
-    "username": "app_user",
-    "password": {
-      "secretRef": "sec_abc123"
-    }
-  }
-}
-```
-
-Success result:
-
-```json
-{
-  "connectionId": "550e8400-e29b-41d4-a716-446655440001",
-  "version": 2
-}
-```
-
 ## 5.2.1 `security.session.open`
 
 Purpose: open backend-side security session context for secret resolution. This is a control-plane request from desktop main to backend.
@@ -510,10 +477,7 @@ Request params:
 {
   "engineId": "payloadbuilder",
   "fileId": "file-001",
-  "action": "payloadbuilder.echo",
-  "payload": {
-    "hello": "world"
-  }
+  "action": "engine.capabilities"
 }
 ```
 
@@ -522,10 +486,8 @@ Success result:
 ```json
 {
   "result": {
-    "fileId": "file-001",
-    "payload": {
-      "hello": "world"
-    }
+    "actions": ["engine.capabilities", "payloadbuilder.es.listIndices"],
+    "catalogIds": ["jdbc", "elasticsearch", "filesystem"]
   }
 }
 ```
@@ -687,8 +649,9 @@ Current Java stdio scaffold implementation status:
 - `queryengine.execute` implemented (mocked progressive notifications); `fileId` is required and validated
 - `queryengine.cancel` implemented (mocked cancellation notification)
 - `backend.runtimeStatus` implemented
-- `connection.upsert` request handling scaffolded
 - JDBC provider actions include `jdbc.schema.snapshot` (latest cached snapshot by `connectionId` and optional `scope`) and `jdbc.schema.refresh` (synchronous refresh + cache persist with scope-aware behavior)
+- JDBC provider action `jdbc.schema.fetch` resolves connection settings by `connectionId` only; fetch payload supports `connectionId`, `scope`, and optional `target` (no inline connection overrides).
+- JDBC provider action `jdbc.connection.test` accepts `{ "connectionId": "..." }` whole body for a connection.
 - JDBC provider action `jdbc.connection.sessions` returns file-scoped JDBC session metadata (`fileId`, `connectionId`, optional `sessionId`, optional `lastAccessTimeMs`, `status=alive|dead`) for UI session badges and connection health views.
 - `file.open` / `file.close` request handlers implemented against `DefaultFileRegistry`; JDBC provider registers `FileSessionHandler` for file-scoped connection lifecycle and cleanup. `file.bind` has been removed — backend auto-upserts on `queryengine.execute`.
 - `file.change` notification handler implemented

@@ -1,6 +1,7 @@
 package com.queryeer.backend.plugin.payloadbuilder;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -9,13 +10,15 @@ import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.plugin.payloadbuilder.elasticsearch.ElasticsearchCatalogProvider;
 import com.queryeer.backend.plugin.payloadbuilder.filesystem.FilesystemCatalogProvider;
+import com.queryeer.backend.plugin.payloadbuilder.jdbc.JdbcCatalogProvider;
+import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
 
 final class PayloadbuilderCatalogProviderRegistry
 {
-    private final Map<String, PayloadbuilderCatalogProvider> providersByCatalogId;
-    private final Map<String, PayloadbuilderCatalogProvider> providersByAction;
+    private final Map<String, PayloadbuilderCatalogProvider> builtinsByCatalogId;
+    private final Map<String, PayloadbuilderCatalogProvider> builtinsByAction;
 
     PayloadbuilderCatalogProviderRegistry(List<PayloadbuilderCatalogProvider> providers)
     {
@@ -29,35 +32,44 @@ final class PayloadbuilderCatalogProviderRegistry
                 byAction.put(action, provider);
             }
         }
-        this.providersByCatalogId = Map.copyOf(byCatalogId);
-        this.providersByAction = Map.copyOf(byAction);
+        this.builtinsByCatalogId = Map.copyOf(byCatalogId);
+        this.builtinsByAction = Map.copyOf(byAction);
     }
 
-    static PayloadbuilderCatalogProviderRegistry defaults(ConfigService configService, PayloadMapper payloadMapper)
+    static PayloadbuilderCatalogProviderRegistry defaults(ConfigService configService, PayloadMapper payloadMapper, JdbcRuntimeService jdbcRuntimeServices)
     {
-        return new PayloadbuilderCatalogProviderRegistry(List.of(new ElasticsearchCatalogProvider(configService, payloadMapper), new FilesystemCatalogProvider()));
+        return new PayloadbuilderCatalogProviderRegistry(
+                List.of(new JdbcCatalogProvider(jdbcRuntimeServices), new ElasticsearchCatalogProvider(configService, payloadMapper), new FilesystemCatalogProvider()));
     }
 
     Catalog createCatalog(String catalogId)
     {
-        PayloadbuilderCatalogProvider provider = providersByCatalogId.get(catalogId);
+        PayloadbuilderCatalogProvider provider = providerByCatalogId(catalogId);
         return provider == null ? null
                 : provider.createCatalog();
     }
 
+    PayloadbuilderCatalogProvider getCatalogProvider(String catalogId)
+    {
+        PayloadbuilderCatalogProvider provider = providerByCatalogId(catalogId);
+        return provider;
+    }
+
     Set<String> catalogIds()
     {
-        return providersByCatalogId.keySet();
+        Set<String> ids = new LinkedHashSet<>(builtinsByCatalogId.keySet());
+        return ids;
     }
 
     Set<String> actions()
     {
-        return providersByAction.keySet();
+        Set<String> actions = new LinkedHashSet<>(builtinsByAction.keySet());
+        return actions;
     }
 
     Object invoke(String action, Object payload)
     {
-        PayloadbuilderCatalogProvider provider = providersByAction.get(action);
+        PayloadbuilderCatalogProvider provider = providerByAction(action);
         if (provider == null)
         {
             throw new IllegalArgumentException("Unsupported payloadbuilder action: " + action);
@@ -65,14 +77,31 @@ final class PayloadbuilderCatalogProviderRegistry
         return provider.invoke(action, payload);
     }
 
-    /** Resolves connection properties by catalogId + connectionId from ConfigService. */
-    Map<String, Object> resolveConnection(String catalogId, String connectionId)
+    private PayloadbuilderCatalogProvider providerByCatalogId(String catalogId)
     {
-        PayloadbuilderCatalogProvider provider = providersByCatalogId.get(catalogId);
+        PayloadbuilderCatalogProvider provider = builtinsByCatalogId.get(catalogId);
         if (provider != null)
         {
-            return provider.resolveConnection(connectionId);
+            return provider;
         }
-        return Map.of();
+        for (Map.Entry<String, PayloadbuilderCatalogProvider> entry : builtinsByCatalogId.entrySet())
+        {
+            if (entry.getKey()
+                    .equalsIgnoreCase(catalogId))
+            {
+                return entry.getValue();
+            }
+        }
+        return null;
+    }
+
+    private PayloadbuilderCatalogProvider providerByAction(String action)
+    {
+        PayloadbuilderCatalogProvider provider = builtinsByAction.get(action);
+        if (provider != null)
+        {
+            return provider;
+        }
+        return null;
     }
 }

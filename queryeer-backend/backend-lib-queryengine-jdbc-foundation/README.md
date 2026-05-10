@@ -11,4 +11,3 @@ This module is intentionally runtime-agnostic and provides:
 Planned consumers:
 
 - `backend-plugin-jdbc` for execution and connection capability exposure.
-- `backend-plugin-queryengine-payloadbuilder-jdbc` for JDBC catalog bridge features.

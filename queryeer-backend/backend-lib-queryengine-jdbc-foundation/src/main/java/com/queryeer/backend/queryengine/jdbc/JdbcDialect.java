@@ -1,5 +1,7 @@
 package com.queryeer.backend.queryengine.jdbc;
 
+import static com.queryeer.backend.api.PayloadUtils.stringValue;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -7,24 +9,16 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 
+import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryExecutor;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
+
 public interface JdbcDialect
 {
     JdbcDialectMetadata metadata();
 
-    JdbcConnectionSetupDefinition connectionSetup();
-
     JdbcQueryExecutor queryExecutor();
 
     JdbcSchemaResolver schemaResolver();
-
-    /**
-     * Returns {@code true} if this dialect requires an explicit JDBC URL in the connection configuration, or {@code false} if the dialect constructs the URL itself from structured connection fields
-     * (host, port, database, etc.).
-     */
-    default boolean requiresExplicitUrl()
-    {
-        return true;
-    }
 
     /**
      * Switches the given connection to the requested database/catalog before executing statements. Default implementation uses {@link Connection#setCatalog(String)}.
@@ -61,21 +55,20 @@ public interface JdbcDialect
     /**
      * Opens a JDBC connection used for file-scoped session management.
      */
-    default Connection openSessionConnection(JdbcConnectionProfile profile) throws SQLException
+    default Connection openSessionConnection(Map<String, Object> materializedProperties) throws SQLException
     {
-        Map<String, Object> props = profile.properties();
-        String url = text(props, "url");
+        String url = buildUrl(materializedProperties);
         if (url == null)
         {
             throw new IllegalArgumentException("Connection profile has no url");
         }
         Properties properties = new Properties();
-        String username = text(props, "username");
+        String username = stringValue(materializedProperties, JdbcConnection.KEY_USERNAME);
         if (username != null)
         {
             properties.setProperty("user", username);
         }
-        String password = text(props, "password");
+        String password = stringValue(materializedProperties, JdbcConnection.KEY_PASSWORD);
         if (password != null)
         {
             properties.setProperty("password", password);
@@ -83,15 +76,8 @@ public interface JdbcDialect
         return DriverManager.getConnection(url, properties);
     }
 
-    private static String text(Map<String, Object> properties, String key)
-    {
-        Object value = properties.get(key);
-        if (value instanceof String s)
-        {
-            String trimmed = s.trim();
-            return trimmed.isEmpty() ? null
-                    : trimmed;
-        }
-        return null;
-    }
+    /**
+     * Builds JDBC URL from a materialized connection property map.
+     */
+    String buildUrl(Map<String, Object> materializedProperties);
 }

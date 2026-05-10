@@ -10,6 +10,7 @@ import java.util.List;
 
 import com.queryeer.backend.api.PluginHostServices;
 
+/** TODO: This must go and fixed with a real target/classes based discovery in dev mode. */
 final class BuiltinPluginDiscovery
 {
     private final PluginFactory pluginFactory;
@@ -64,15 +65,31 @@ final class BuiltinPluginDiscovery
 
     private List<PluginManifest> builtinManifests()
     {
+        //@formatter:off
         return List.of(
-                new PluginManifest(1, "query.payloadbuilder", "Payloadbuilder Query Engine", "0.1.0",
-                        new PluginManifest.BackendTarget("com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderBackendPlugin", null, null, "17"), null, List.of(),
-                        List.of("queryengine.execute", "queryengine.invoke", "queryengine.payloadbuilder.catalog"), List.of(), null, null),
-                new PluginManifest(1, "query.jdbc", "JDBC Query Engine", "0.1.0", new PluginManifest.BackendTarget("com.queryeer.backend.plugin.jdbc.JdbcBackendPlugin", null, null, "17"), null,
-                        List.of(), List.of("queryengine.execute", "queryengine.jdbc.connection"), List.of(), null, null),
-                new PluginManifest(1, "query.payloadbuilder.jdbc", "Payloadbuilder JDBC Bridge", "0.1.0",
-                        new PluginManifest.BackendTarget("com.queryeer.backend.plugin.queryengine.payloadbuilder.jdbc.PayloadbuilderJdbcBackendPlugin", null, null, "17"), null,
-                        List.of("query.payloadbuilder", "query.jdbc"), List.of("queryengine.payloadbuilder.jdbc.bridge"), List.of("queryengine.payloadbuilder.catalog", "queryengine.jdbc.connection"),
-                        null, null));
+                new PluginManifest(
+                        1,
+                        "query.jdbc",
+                        "JDBC Query Engine", "0.1.0",
+                        new PluginManifest.BackendTarget("com.queryeer.backend.plugin.jdbc.JdbcBackendPlugin", null, null),
+                        null,
+                        List.of(),
+                        List.of("queryengine.execute", "queryengine.jdbc.connection"),
+                        List.of(),
+                        null,
+                        null),
+                new PluginManifest(
+                        1,
+                        "query.payloadbuilder",
+                        "Payloadbuilder Query Engine", "0.1.0",
+                        new PluginManifest.BackendTarget("com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderBackendPlugin", null, null),
+                        null,
+                        List.of("query.jdbc"),
+                        List.of("queryengine.execute", "queryengine.invoke", "queryengine.payloadbuilder.catalog"),
+                        List.of(),
+                        null,
+                        null)
+                );
+        //@formatter:on
     }
 }

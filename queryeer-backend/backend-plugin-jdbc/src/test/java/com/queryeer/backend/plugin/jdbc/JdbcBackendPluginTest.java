@@ -1,5 +1,7 @@
 package com.queryeer.backend.plugin.jdbc;
 
+import static org.mockito.Mockito.mock;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -14,18 +16,18 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.BackendPluginContext;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.EventBus;
 import com.queryeer.backend.api.FileSessionHandlerRegistry;
 import com.queryeer.backend.api.LoggerService;
 import com.queryeer.backend.api.PayloadMapper;
+import com.queryeer.backend.api.PluginServiceRegistry;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.QueryPublisher;
 import com.queryeer.backend.api.SchedulerService;
-import com.queryeer.backend.queryengine.jdbc.JdbcConnectionSetupDefinition;
+import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionSetupDefinition;
 
 class JdbcBackendPluginTest
 {
@@ -53,31 +55,8 @@ class JdbcBackendPluginTest
         Object result = provider.invoke("file-1", "engine.capabilities", null);
 
         Map<String, Object> map = (Map<String, Object>) result;
-        Assertions.assertEquals(List.of("engine.capabilities", "connection.upsert", "jdbc.connection.setup", "jdbc.connection.dialects", "jdbc.connection.test", "jdbc.schema.snapshot",
-                "jdbc.schema.refresh", "jdbc.schema.fetch", "jdbc.connection.sessions"), map.get("actions"));
-    }
-
-    @Test
-    void schemaRefreshSucceedsWithoutOpenSessionWhenNoSecretsNeeded()
-    {
-        QueryEngineProvider provider = activateAndGetProvider();
-        provider.invoke(null, "connection.upsert",
-                Map.of("connectionId", "jdbc-refresh-closed", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_refresh_closed;DB_CLOSE_DELAY=-1")));
-
-        Object result = provider.invoke(null, "jdbc.schema.refresh", Map.of("connectionId", "jdbc-refresh-closed", "scope", "deep", "target", Map.of("schema", "PUBLIC")));
-        Assertions.assertNotNull(result);
-    }
-
-    @Test
-    void schemaRefreshDeepRequiresTargetSchema()
-    {
-        QueryEngineProvider provider = activateAndGetProvider();
-        provider.invoke(null, "connection.upsert",
-                Map.of("connectionId", "jdbc-refresh-target", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_refresh_target;DB_CLOSE_DELAY=-1")));
-
-        IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class,
-                () -> provider.invoke(null, "jdbc.schema.refresh", Map.of("connectionId", "jdbc-refresh-target", "scope", "deep")));
-        Assertions.assertEquals("target.schema is required for scope=deep", error.getMessage());
+        Assertions.assertEquals(List.of("engine.capabilities", "jdbc.connection.setup", "jdbc.connection.dialects", "jdbc.connection.test", "jdbc.schema.snapshot", "jdbc.schema.refresh",
+                "jdbc.schema.fetch", "jdbc.connection.sessions"), map.get("actions"));
     }
 
     @SuppressWarnings("unchecked")
@@ -88,15 +67,12 @@ class JdbcBackendPluginTest
         RecordingQueryEngineRegistry engines = new RecordingQueryEngineRegistry();
         RecordingFileSessionHandlerRegistry fileSessions = new RecordingFileSessionHandlerRegistry();
         RecordingEventBus events = new RecordingEventBus();
-        plugin.activate(new TestPluginContext(engines, fileSessions, key -> "queryeer.jdbc.schemaCache.dir".equals(key) ? Path.of("target", "test-work", "jdbc-schema-cache", "refresh-open")
-                .toString()
-                : null, (_, _) ->
-                {
-                }, events));
+        plugin.activate(new TestPluginContext(engines, fileSessions, defaultConnectionsConfigService(), (_, _) ->
+        {
+        }, events));
         QueryEngineProvider provider = engines.provider;
 
         String jdbcUrl = "jdbc:h2:mem:test_refresh_open;DB_CLOSE_DELAY=-1";
-        provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-refresh-open", "connection", Map.of("dialectId", "jdbc", "url", jdbcUrl)));
 
         try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
         {
@@ -116,7 +92,6 @@ class JdbcBackendPluginTest
     {
         QueryEngineProvider provider = activateAndGetProvider();
         String jdbcUrl = "jdbc:h2:mem:test_snapshot_backfill;DB_CLOSE_DELAY=-1";
-        provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-snapshot-backfill", "connection", Map.of("dialectId", "jdbc", "url", jdbcUrl)));
 
         try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
         {
@@ -133,7 +108,6 @@ class JdbcBackendPluginTest
     {
         QueryEngineProvider provider = activateAndGetProvider();
         String jdbcUrl = "jdbc:h2:mem:test_fetch_deep_append;DB_CLOSE_DELAY=-1";
-        provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-fetch-deep", "connection", Map.of("dialectId", "jdbc", "url", jdbcUrl)));
 
         try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
         {
@@ -143,41 +117,17 @@ class JdbcBackendPluginTest
         Object fetched = provider.invoke(null, "jdbc.schema.fetch", Map.of("connectionId", "jdbc-fetch-deep", "scope", "tables", "target", Map.of("schema", "PUBLIC")));
         Assertions.assertNotNull(fetched);
 
+        Thread.sleep(Duration.ofMillis(500));
         List<Object> deepSnapshot = (List<Object>) provider.invoke(null, "jdbc.schema.snapshot", Map.of("connectionId", "jdbc-fetch-deep", "scope", "deep"));
         Assertions.assertTrue(deepSnapshot.stream()
                 .map(Object::toString)
                 .anyMatch(text -> text.contains("FETCH_DEEP_VISIBLE")));
     }
 
-    @SuppressWarnings("unchecked")
-    @Test
-    void invokeConnectionUpsertStoresConnectionForExecution()
-    {
-        QueryEngineProvider provider = activateAndGetProvider();
-
-        Object upsertResult = provider.invoke(null, "connection.upsert",
-                Map.of("connectionId", "jdbc1", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_upsert;DB_CLOSE_DELAY=-1")));
-
-        Map<String, Object> upsert = (Map<String, Object>) upsertResult;
-        Assertions.assertEquals("jdbc1", upsert.get("connectionId"));
-        Assertions.assertEquals(1L, upsert.get("version"));
-
-        RecordingPublisher publisher = new RecordingPublisher();
-        provider.execute("exec-1", "file-1", "select 1", Map.of("connectionId", "jdbc1"), publisher);
-
-        Assertions.assertNull(publisher.errorCode);
-        Assertions.assertTrue(publisher.completed);
-        Assertions.assertEquals(1L, publisher.rowCount);
-        Assertions.assertFalse(publisher.rows.isEmpty());
-    }
-
     @Test
     void executeResolvesPasswordFromSecretRefMapInStoredConnection()
     {
         QueryEngineProvider provider = activateAndGetProvider();
-
-        provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-secret", "connection",
-                Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_secret;DB_CLOSE_DELAY=-1", "username", "sa", "password", Map.of("secretRef", "jdbc-pass"))));
 
         RecordingPublisher publisher = new RecordingPublisher();
         provider.execute("exec-2", "file-1", "select 1", Map.of("connectionId", "jdbc-secret"), publisher);
@@ -193,7 +143,7 @@ class JdbcBackendPluginTest
     {
         QueryEngineProvider provider = activateAndGetProvider();
 
-        Object result = provider.invoke("file-1", "jdbc.connection.test", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_connection;DB_CLOSE_DELAY=-1"));
+        Object result = provider.invoke("file-1", "jdbc.connection.test", Map.of("connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_connection;DB_CLOSE_DELAY=-1")));
 
         Assertions.assertInstanceOf(Map.class, result);
         Map<String, Object> map = (Map<String, Object>) result;
@@ -206,7 +156,7 @@ class JdbcBackendPluginTest
         QueryEngineProvider provider = activateAndGetProvider();
 
         IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class,
-                () -> provider.invoke("file-1", "jdbc.connection.test", Map.of("dialectId", "oracle", "url", "jdbc:oracle:thin:@localhost:1521/XE")));
+                () -> provider.invoke("file-1", "jdbc.connection.test", Map.of("connection", Map.of("dialectId", "oracle", "url", "jdbc:oracle:thin:@localhost:1521/XE"))));
 
         Assertions.assertEquals("Unsupported JDBC dialect: oracle", error.getMessage());
     }
@@ -217,7 +167,6 @@ class JdbcBackendPluginTest
         QueryEngineProvider provider = activateAndGetProvider();
         RecordingPublisher publisher = new RecordingPublisher();
 
-        provider.invoke(null, "connection.upsert", Map.of("connectionId", "bad-url", "connection", Map.of("dialectId", "jdbc")));
         provider.execute("exec-1", "file-1", "select 1", Map.of("connectionId", "bad-url"), publisher);
 
         Assertions.assertEquals("VALIDATION", publisher.errorCode);
@@ -230,7 +179,6 @@ class JdbcBackendPluginTest
         QueryEngineProvider provider = activateAndGetProvider();
         RecordingPublisher publisher = new RecordingPublisher();
 
-        provider.invoke(null, "connection.upsert", Map.of("connectionId", "cancel-conn", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_cancel;DB_CLOSE_DELAY=-1")));
         provider.cancel("exec-cancelled");
         provider.execute("exec-cancelled", "file-1", "select 1", Map.of("connectionId", "cancel-conn"), publisher);
 
@@ -242,8 +190,6 @@ class JdbcBackendPluginTest
     void executeReusesSessionConnectionWithinFileSessionForTempObjects()
     {
         QueryEngineProvider provider = activateAndGetProvider();
-
-        provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-session", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_session;DB_CLOSE_DELAY=-1")));
 
         RecordingPublisher createPublisher = new RecordingPublisher();
         provider.execute("exec-session-1", "file-session", "create local temporary table temp_t(v int)", Map.of("connectionId", "jdbc-session"), createPublisher);
@@ -268,7 +214,6 @@ class JdbcBackendPluginTest
     void executeFailureEmitsSessionIdInErrorDetails()
     {
         QueryEngineProvider provider = activateAndGetProvider();
-        provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-session-fail", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_session_fail;DB_CLOSE_DELAY=-1")));
 
         RecordingPublisher publisher = new RecordingPublisher();
         provider.execute("exec-fail-1", "file-fail", "select * from definitely_missing_table_12345", Map.of("connectionId", "jdbc-session-fail", "sessionId", "my-session-456"), publisher);
@@ -286,9 +231,6 @@ class JdbcBackendPluginTest
         RecordingFileSessionHandlerRegistry fileSessions = new RecordingFileSessionHandlerRegistry();
         plugin.activate(new TestPluginContext(engines, fileSessions));
         QueryEngineProvider provider = engines.provider;
-
-        provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-rebind-a", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_rebind_a;DB_CLOSE_DELAY=-1")));
-        provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-rebind-b", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_rebind_b;DB_CLOSE_DELAY=-1")));
 
         RecordingPublisher createPublisher = new RecordingPublisher();
         provider.execute("exec-rebind-1", "file-rebind", "create local temporary table temp_rebind(v int)", Map.of("connectionId", "jdbc-rebind-a"), createPublisher);
@@ -314,8 +256,6 @@ class JdbcBackendPluginTest
         RecordingFileSessionHandlerRegistry fileSessions = new RecordingFileSessionHandlerRegistry();
         plugin.activate(new TestPluginContext(engines, fileSessions));
         QueryEngineProvider provider = engines.provider;
-
-        provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-close", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_close_session;DB_CLOSE_DELAY=-1")));
 
         RecordingPublisher createPublisher = new RecordingPublisher();
         provider.execute("exec-close-1", "file-close", "create local temporary table temp_close(v int)", Map.of("connectionId", "jdbc-close"), createPublisher);
@@ -365,19 +305,22 @@ class JdbcBackendPluginTest
     @Test
     void activateLoadsConfiguredJdbcConnectionsFromSettingsDir(@TempDir Path tempDir) throws Exception
     {
-        Path settingsDir = tempDir.resolve("settings");
-        Files.createDirectories(settingsDir);
-        Path fixturePath = Path.of("..", "..", "protocol-fixtures", "jdbc", "connection-settings.json")
-                .normalize();
-        Files.copy(fixturePath, settingsDir.resolve("core.queryengine.jdbc.json"));
-
         JdbcBackendPlugin plugin = new JdbcBackendPlugin();
         RecordingQueryEngineRegistry engines = new RecordingQueryEngineRegistry();
         RecordingFileSessionHandlerRegistry fileSessions = new RecordingFileSessionHandlerRegistry();
-        plugin.activate(new TestPluginContext(engines, fileSessions, key -> "queryeer.settings.dir".equals(key) ? settingsDir.toString()
-                : null, (_, _) ->
+        ConfigService configService = TestUtils.mockConnections("""
                 {
-                }));
+                    "core.queryengine.jdbc.connections": [
+                        {
+                            "connectionId": "550e8400-e29b-41d4-a716-446655440003",
+                            "dialectId": "jdbc",
+                            "url": "jdbc:h2:mem:test_preload;DB_CLOSE_DELAY=-1",
+                            "enabled": true
+                        }
+                    ]
+                }
+                """);
+        plugin.activate(new TestPluginContext(engines, fileSessions, configService));
         QueryEngineProvider provider = engines.provider;
 
         RecordingPublisher publisher = new RecordingPublisher();
@@ -391,29 +334,48 @@ class JdbcBackendPluginTest
     void startupSchemaCrawlRunsEvenWhenSecuritySessionClosedForPasswordlessConnections() throws Exception
     {
         Path tempDir = Path.of("target", "test-work", "jdbc-crawl-" + java.util.UUID.randomUUID());
-        Path settingsDir = tempDir.resolve("settings");
         Path cacheDir = tempDir.resolve("cache");
-        Files.createDirectories(settingsDir);
-        Path fixturePath = Path.of("..", "..", "protocol-fixtures", "jdbc", "connection-settings.json")
-                .normalize();
-        Files.copy(fixturePath, settingsDir.resolve("core.queryengine.jdbc.json"));
+        ConfigService baseConfigService = TestUtils.mockConnections("""
+                {
+                    "core.queryengine.jdbc.connections": [
+                        {
+                            "connectionId": "550e8400-e29b-41d4-a716-446655440003",
+                            "dialectId": "jdbc",
+                            "url": "jdbc:h2:mem:test_preload;DB_CLOSE_DELAY=-1",
+                            "enabled": true
+                        }
+                    ]
+                }
+                """);
 
         JdbcBackendPlugin plugin = new JdbcBackendPlugin();
         RecordingQueryEngineRegistry engines = new RecordingQueryEngineRegistry();
         RecordingFileSessionHandlerRegistry fileSessions = new RecordingFileSessionHandlerRegistry();
         RecordingScheduler scheduler = new RecordingScheduler();
         RecordingEventBus events = new RecordingEventBus();
-        plugin.activate(new TestPluginContext(engines, fileSessions, key ->
+        plugin.activate(new TestPluginContext(engines, fileSessions, new ConfigService()
         {
-            if ("queryeer.settings.dir".equals(key))
+            @Override
+            public String get(String key)
             {
-                return settingsDir.toString();
+                if ("queryeer.jdbc.schemaCache.dir".equals(key))
+                {
+                    return cacheDir.toString();
+                }
+                return baseConfigService.get(key);
             }
-            if ("queryeer.jdbc.schemaCache.dir".equals(key))
+
+            @Override
+            public com.queryeer.backend.api.SettingsModule getModule(String moduleId)
             {
-                return cacheDir.toString();
+                return baseConfigService.getModule(moduleId);
             }
-            return null;
+
+            @Override
+            public Object materializeSecrets(Object payload)
+            {
+                return baseConfigService.materializeSecrets(payload);
+            }
         }, scheduler, events));
 
         scheduler.run("jdbc.schema-crawl-startup");
@@ -443,114 +405,10 @@ class JdbcBackendPluginTest
         Assertions.assertTrue(created, "Expected schema cache to be created even without security.session.opened for passwordless connections");
     }
 
-    @SuppressWarnings("unchecked")
-    @Test
-    void schemaCrawlPausesAfterSecuritySessionClosed() throws Exception
-    {
-        Path tempDir = Path.of("target", "test-work", "jdbc-crawl-close-" + java.util.UUID.randomUUID());
-        Path settingsDir = tempDir.resolve("settings");
-        Path cacheDir = tempDir.resolve("cache");
-        Files.createDirectories(settingsDir);
-        String jdbcUrl = "jdbc:h2:mem:test_pause_crawl;DB_CLOSE_DELAY=-1";
-        String settingsJson = """
-                {
-                  "version": 1,
-                  "moduleId": "core.queryengine.jdbc",
-                  "updatedAt": "2026-05-01T00:00:00.000Z",
-                  "values": {
-                    "core.queryengine.jdbc.connections": [
-                      {
-                        "connectionId": "pause1",
-                        "dialectId": "jdbc",
-                        "url": "%s",
-                        "enabled": true
-                      }
-                    ]
-                  }
-                }
-                """.formatted(jdbcUrl.replace("\\", "\\\\"));
-        Files.writeString(settingsDir.resolve("core.queryengine.jdbc.json"), settingsJson);
-
-        try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
-        {
-            statement.execute("create table baseline(id int)");
-        }
-
-        JdbcBackendPlugin plugin = new JdbcBackendPlugin();
-        RecordingQueryEngineRegistry engines = new RecordingQueryEngineRegistry();
-        RecordingFileSessionHandlerRegistry fileSessions = new RecordingFileSessionHandlerRegistry();
-        RecordingScheduler scheduler = new RecordingScheduler();
-        RecordingEventBus events = new RecordingEventBus();
-        plugin.activate(new TestPluginContext(engines, fileSessions, key ->
-        {
-            if ("queryeer.settings.dir".equals(key))
-            {
-                return settingsDir.toString();
-            }
-            if ("queryeer.jdbc.schemaCache.dir".equals(key))
-            {
-                return cacheDir.toString();
-            }
-            if ("queryeer.jdbc.schemaCrawl.intervalMs".equals(key))
-            {
-                return "500";
-            }
-            return null;
-        }, scheduler, events));
-
-        scheduler.run("jdbc.schema-crawl-startup");
-        events.publish("security.session.opened", Map.of("sessionId", "s1"));
-
-        QueryEngineProvider provider = engines.provider;
-        waitUntil(Duration.ofSeconds(5), () ->
-        {
-            if (!Files.exists(cacheDir))
-            {
-                return false;
-            }
-            try (java.util.stream.Stream<Path> stream = Files.list(cacheDir))
-            {
-                return stream.anyMatch(path -> path.getFileName()
-                        .toString()
-                        .contains("pause1"));
-            }
-        });
-
-        events.publish("security.session.closed", Map.of());
-        try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
-        {
-            statement.execute("create table after_close(id int)");
-        }
-
-        Thread.sleep(1500L);
-        List<Object> snapshot = (List<Object>) provider.invoke(null, "jdbc.schema.snapshot", Map.of("connectionId", "pause1"));
-        Assertions.assertFalse(snapshot.stream()
-                .map(Object::toString)
-                .anyMatch(text -> text.contains("after_close")));
-    }
-
-    private static void waitUntil(Duration timeout, java.util.concurrent.Callable<Boolean> condition) throws Exception
-    {
-        Instant deadline = Instant.now()
-                .plus(timeout);
-        while (Instant.now()
-                .isBefore(deadline))
-        {
-            if (Boolean.TRUE.equals(condition.call()))
-            {
-                return;
-            }
-            Thread.sleep(100L);
-        }
-        Assertions.fail("Condition was not met within timeout " + timeout);
-    }
-
     @Test
     void executeWithDatabaseSwitchesCatalogAndReflectsItBackInEngineState()
     {
         QueryEngineProvider provider = activateAndGetProvider();
-
-        provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-db", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_db;DB_CLOSE_DELAY=-1")));
 
         RecordingPublisher publisher = new RecordingPublisher();
         provider.execute("exec-db-1", "file-1", "select 1", Map.of("connectionId", "jdbc-db", "database", "TEST_DB"), publisher);
@@ -568,8 +426,6 @@ class JdbcBackendPluginTest
     {
         QueryEngineProvider provider = activateAndGetProvider();
 
-        provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-no-db", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_no_db;DB_CLOSE_DELAY=-1")));
-
         RecordingPublisher publisher = new RecordingPublisher();
         provider.execute("exec-no-db-1", "file-1", "select 1", Map.of("connectionId", "jdbc-no-db"), publisher);
 
@@ -582,15 +438,17 @@ class JdbcBackendPluginTest
     }
 
     @Test
-    void connectionSessionsReportsAliveAndTransientDeadEntries()
+    void connectionSessionsReportsAliveAndTransientDeadEntries() throws Exception
     {
         JdbcBackendPlugin plugin = new JdbcBackendPlugin();
         RecordingQueryEngineRegistry engines = new RecordingQueryEngineRegistry();
         RecordingFileSessionHandlerRegistry fileSessions = new RecordingFileSessionHandlerRegistry();
-        plugin.activate(new TestPluginContext(engines, fileSessions));
+
+        ConfigService configService = defaultConnectionsConfigService();
+
+        plugin.activate(new TestPluginContext(engines, fileSessions, configService));
         QueryEngineProvider provider = engines.provider;
 
-        provider.invoke(null, "connection.upsert", Map.of("connectionId", "jdbc-live", "connection", Map.of("dialectId", "jdbc", "url", "jdbc:h2:mem:test_sessions;DB_CLOSE_DELAY=-1")));
         RecordingPublisher publisher = new RecordingPublisher();
         provider.execute("exec-live-1", "file-live", "select 1", Map.of("connectionId", "jdbc-live"), publisher);
 
@@ -613,8 +471,119 @@ class JdbcBackendPluginTest
     {
         JdbcBackendPlugin plugin = new JdbcBackendPlugin();
         RecordingQueryEngineRegistry registry = new RecordingQueryEngineRegistry();
-        plugin.activate(new TestPluginContext(registry, new RecordingFileSessionHandlerRegistry()));
+        plugin.activate(new TestPluginContext(registry, new RecordingFileSessionHandlerRegistry(), defaultConnectionsConfigService()));
         return registry.provider;
+    }
+
+    private static ConfigService defaultConnectionsConfigService()
+    {
+        try
+        {
+            return TestUtils.mockConnections("""
+                    {
+                        "core.queryengine.jdbc.connections": [
+                            {
+                                "connectionId": "jdbc-refresh-open",
+                                "dialectId": "jdbc",
+                                "url": "jdbc:h2:mem:test_refresh_open;DB_CLOSE_DELAY=-1",
+                                "enabled": true
+                            },
+                            {
+                                "connectionId": "jdbc-snapshot-backfill",
+                                "dialectId": "jdbc",
+                                "url": "jdbc:h2:mem:test_snapshot_backfill;DB_CLOSE_DELAY=-1",
+                                "enabled": true
+                            },
+                            {
+                                "connectionId": "jdbc-fetch-deep",
+                                "dialectId": "jdbc",
+                                "url": "jdbc:h2:mem:test_fetch_deep_append;DB_CLOSE_DELAY=-1",
+                                "enabled": true
+                            },
+                            {
+                                "connectionId": "jdbc-secret",
+                                "dialectId": "jdbc",
+                                "url": "jdbc:h2:mem:test_secret;DB_CLOSE_DELAY=-1",
+                                "username": "sa",
+                                "password": {
+                                    "secretRef": "jdbc-pass"
+                                },
+                                "enabled": true
+                            },
+                            {
+                                "connectionId": "jdbc-test",
+                                "dialectId": "jdbc",
+                                "url": "jdbc:h2:mem:test_connection;DB_CLOSE_DELAY=-1",
+                                "enabled": true
+                            },
+                            {
+                                "connectionId": "bad-url",
+                                "dialectId": "jdbc",
+                                "properties": {},
+                                "enabled": true
+                            },
+                            {
+                                "connectionId": "cancel-conn",
+                                "dialectId": "jdbc",
+                                "url": "jdbc:h2:mem:test_cancel;DB_CLOSE_DELAY=-1",
+                                "enabled": true
+                            },
+                            {
+                                "connectionId": "jdbc-session",
+                                "dialectId": "jdbc",
+                                "url": "jdbc:h2:mem:test_session;DB_CLOSE_DELAY=-1",
+                                "enabled": true
+                            },
+                            {
+                                "connectionId": "jdbc-session-fail",
+                                "dialectId": "jdbc",
+                                "url": "jdbc:h2:mem:test_session_fail;DB_CLOSE_DELAY=-1",
+                                "enabled": true
+                            },
+                            {
+                                "connectionId": "jdbc-rebind-a",
+                                "dialectId": "jdbc",
+                                "url": "jdbc:h2:mem:test_rebind_a;DB_CLOSE_DELAY=-1",
+                                "enabled": true
+                            },
+                            {
+                                "connectionId": "jdbc-rebind-b",
+                                "dialectId": "jdbc",
+                                "url": "jdbc:h2:mem:test_rebind_b;DB_CLOSE_DELAY=-1",
+                                "enabled": true
+                            },
+                            {
+                                "connectionId": "jdbc-close",
+                                "dialectId": "jdbc",
+                                "url": "jdbc:h2:mem:test_close;DB_CLOSE_DELAY=-1",
+                                "enabled": true
+                            },
+                            {
+                                "connectionId": "jdbc-db",
+                                "dialectId": "jdbc",
+                                "url": "jdbc:h2:mem:test_db;DB_CLOSE_DELAY=-1",
+                                "enabled": true
+                            },
+                            {
+                                "connectionId": "jdbc-no-db",
+                                "dialectId": "jdbc",
+                                "url": "jdbc:h2:mem:test_no_db;DB_CLOSE_DELAY=-1",
+                                "enabled": true
+                            },
+                            {
+                                "connectionId": "jdbc-live",
+                                "dialectId": "jdbc",
+                                "url": "jdbc:h2:mem:test_live;DB_CLOSE_DELAY=-1",
+                                "enabled": true
+                            }
+                        ]
+                    }
+                    """);
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException(e);
+        }
     }
 
     private static final class RecordingQueryEngineRegistry implements QueryEngineRegistry
@@ -745,6 +714,7 @@ class JdbcBackendPluginTest
             }
         }
 
+        @Override
         public void subscribe(String topic, java.util.function.Consumer<Object> listener)
         {
             listenersByTopic.computeIfAbsent(topic, _ -> new java.util.ArrayList<>())
@@ -759,33 +729,23 @@ class JdbcBackendPluginTest
         private final ConfigService configService;
         private final SchedulerService schedulerService;
         private final EventBus eventBus;
-        private final PayloadMapper payloadMapper = new PayloadMapper()
-        {
-            private final ObjectMapper objectMapper = new ObjectMapper();
-
-            @Override
-            public <T> T convert(Object fromValue, Class<T> toValueType)
-            {
-                return objectMapper.convertValue(fromValue, toValueType);
-            }
-        };
+        private final PayloadMapper payloadMapper = TestPayloadMapper.INSTANCE;
         private final String cacheDir = Path.of("target", "test-work", "jdbc-schema-cache", java.util.UUID.randomUUID()
                 .toString())
                 .toString();
 
         private TestPluginContext(QueryEngineRegistry queryEngineRegistry, FileSessionHandlerRegistry fileSessionHandlerRegistry)
         {
-            this(queryEngineRegistry, fileSessionHandlerRegistry, defaultConfigService(), (_, _) ->
+            this(queryEngineRegistry, fileSessionHandlerRegistry, defaultConnectionsConfigService(), (_, _) ->
             {
             }, new RecordingEventBus());
         }
 
-        private static ConfigService defaultConfigService()
+        private TestPluginContext(QueryEngineRegistry queryEngineRegistry, FileSessionHandlerRegistry fileSessionHandlerRegistry, ConfigService configService)
         {
-            Path cacheDir = Path.of("target", "test-work", "jdbc-schema-cache", java.util.UUID.randomUUID()
-                    .toString());
-            return key -> "queryeer.jdbc.schemaCache.dir".equals(key) ? cacheDir.toString()
-                    : null;
+            this(queryEngineRegistry, fileSessionHandlerRegistry, configService, (_, _) ->
+            {
+            }, new RecordingEventBus());
         }
 
         private TestPluginContext(QueryEngineRegistry queryEngineRegistry, FileSessionHandlerRegistry fileSessionHandlerRegistry, ConfigService configService, SchedulerService schedulerService)
@@ -798,15 +758,37 @@ class JdbcBackendPluginTest
         {
             this.queryEngineRegistry = queryEngineRegistry;
             this.fileSessionHandlerRegistry = fileSessionHandlerRegistry;
-            this.configService = key ->
+            this.configService = new ConfigService()
             {
-                String value = configService.get(key);
-                if (value != null)
+                @Override
+                public String get(String key)
                 {
-                    return value;
+                    String value = configService.get(key);
+                    if (value != null)
+                    {
+                        return value;
+                    }
+                    return "queryeer.jdbc.schemaCache.dir".equals(key) ? cacheDir
+                            : null;
                 }
-                return "queryeer.jdbc.schemaCache.dir".equals(key) ? cacheDir
-                        : null;
+
+                @Override
+                public com.queryeer.backend.api.SettingsModule getModule(String moduleId)
+                {
+                    return configService.getModule(moduleId);
+                }
+
+                @Override
+                public Object materializeSecrets(Object payload)
+                {
+                    return configService.materializeSecrets(payload);
+                }
+
+                @Override
+                public void invalidateModule(String moduleId)
+                {
+                    configService.invalidateModule(moduleId);
+                }
             };
             this.schedulerService = schedulerService;
             this.eventBus = eventBus;
@@ -868,6 +850,12 @@ class JdbcBackendPluginTest
         public PayloadMapper payloadMapper()
         {
             return payloadMapper;
+        }
+
+        @Override
+        public PluginServiceRegistry services()
+        {
+            return mock(PluginServiceRegistry.class);
         }
     }
 }

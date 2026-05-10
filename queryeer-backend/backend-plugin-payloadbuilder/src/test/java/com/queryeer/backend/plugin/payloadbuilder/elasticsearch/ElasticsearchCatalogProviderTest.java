@@ -1,37 +1,32 @@
 package com.queryeer.backend.plugin.payloadbuilder.elasticsearch;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.SettingsModule;
+import com.queryeer.backend.plugin.payloadbuilder.TestPayloadMapper;
+
+import se.kuseman.payloadbuilder.catalog.es.ESCatalog;
+import se.kuseman.payloadbuilder.core.catalog.CatalogRegistry;
+import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
 class ElasticsearchCatalogProviderTest
 {
-    private static final PayloadMapper TEST_MAPPER = new PayloadMapper()
-    {
-        private final ObjectMapper objectMapper = new ObjectMapper();
-
-        @Override
-        public <T> T convert(Object fromValue, Class<T> toValueType)
-        {
-            return objectMapper.convertValue(fromValue, toValueType);
-        }
-    };
+    private static final PayloadMapper TEST_MAPPER = TestPayloadMapper.INSTANCE;
 
     @Test
     void resolveConnectionReturnsConfigFromSettingsModule()
     {
         Map<String, Object> conn = Map.of("connectionId", "550e8400-e29b-41d4-a716-446655440100", "endpoint", "https://localhost:9200", "authType", "BASIC", "authUsername", "elastic", "authPassword",
                 Map.of("secretRef", "es-pass"));
-        Map<String, Object> values = Map.of("core.queryengine.payloadbuilder.elasticsearch.connections", java.util.List.of(conn));
+        Map<String, Object> values = Map.of("core.queryengine.payloadbuilder.elasticsearch.connections", List.of(conn));
         SettingsModule module = new SettingsModule("core.queryengine.payloadbuilder.elasticsearch", 1L, "2026-01-01T00:00:00Z", values);
 
         ConfigService config = new ConfigService()
@@ -48,17 +43,35 @@ class ElasticsearchCatalogProviderTest
                 return "core.queryengine.payloadbuilder.elasticsearch".equals(moduleId) ? module
                         : null;
             }
+
+            @Override
+            public Object materializeSecrets(Object payload)
+            {
+                if (payload instanceof Map m
+                        && m.size() == 1
+                        && m.containsKey("secretRef"))
+                {
+                    return m.get("secretRef");
+                }
+                return payload;
+            }
         };
 
+        Map<String, Object> params = Map.of("connectionId", "550e8400-e29b-41d4-a716-446655440100", "index", "myindex");
+
         ElasticsearchCatalogProvider provider = new ElasticsearchCatalogProvider(config, TEST_MAPPER);
-
-        Map<String, Object> resolved = provider.resolveConnection("550e8400-e29b-41d4-a716-446655440100");
-
-        assertNotNull(resolved);
-        assertEquals("https://localhost:9200", resolved.get("endpoint"));
-        assertEquals("BASIC", resolved.get("authType"));
-        assertEquals("elastic", resolved.get("authUsername"));
-        assertEquals(Map.of("secretRef", "es-pass"), resolved.get("authPassword"));
+        QuerySession session = new QuerySession(new CatalogRegistry());
+        provider.injectProperties(session, "es", params);
+        assertEquals("https://localhost:9200", session.getCatalogProperty("es", ESCatalog.ENDPOINT_KEY)
+                .valueAsString(0));
+        assertEquals("myindex", session.getCatalogProperty("es", ESCatalog.INDEX_KEY)
+                .valueAsString(0));
+        assertEquals("BASIC", session.getCatalogProperty("es", ESCatalog.AUTH_TYPE_KEY)
+                .valueAsString(0));
+        assertEquals("elastic", session.getCatalogProperty("es", ESCatalog.AUTH_USERNAME_KEY)
+                .valueAsString(0));
+        assertEquals("es-pass", session.getCatalogProperty("es", ESCatalog.AUTH_PASSWORD_KEY)
+                .valueAsString(0));
     }
 
     @Test
@@ -79,11 +92,11 @@ class ElasticsearchCatalogProviderTest
             }
         };
 
+        Map<String, Object> params = Map.of("connectionId", "550e8400-e29b-41d4-a716-446655440100", "index", "myindex");
+
         ElasticsearchCatalogProvider provider = new ElasticsearchCatalogProvider(config, TEST_MAPPER);
-
-        Map<String, Object> resolved = provider.resolveConnection("nonexistent");
-
-        assertTrue(resolved.isEmpty());
+        QuerySession session = new QuerySession(new CatalogRegistry());
+        assertThrows(IllegalArgumentException.class, () -> provider.injectProperties(session, "es", params));
     }
 
     @Test
@@ -106,8 +119,9 @@ class ElasticsearchCatalogProviderTest
 
         ElasticsearchCatalogProvider provider = new ElasticsearchCatalogProvider(config, TEST_MAPPER);
 
-        Map<String, Object> resolved = provider.resolveConnection("any");
+        Map<String, Object> params = Map.of("connectionId", "550e8400-e29b-41d4-a716-446655440100", "index", "myindex");
 
-        assertTrue(resolved.isEmpty());
+        QuerySession session = new QuerySession(new CatalogRegistry());
+        assertThrows(IllegalArgumentException.class, () -> provider.injectProperties(session, "es", params));
     }
 }

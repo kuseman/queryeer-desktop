@@ -70,15 +70,13 @@ describe("Backend E2E Integration", () => {
     const result = await gateway.invokeEngine({
       engineId: "payloadbuilder",
       fileId: "e2e-file-1",
-      action: "payloadbuilder.echo",
-      payload: { hello: "world" }
+      action: "engine.capabilities"
     });
 
     expect(result).toEqual({
-      result: {
-        fileId: "e2e-file-1",
-        payload: { hello: "world" }
-      }
+      result: expect.objectContaining({
+        actions: expect.arrayContaining(["engine.capabilities"])
+      })
     });
   }, 10_000);
 

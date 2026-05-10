@@ -3,10 +3,10 @@ package com.queryeer.backend.plugin.jdbc.sqlserver;
 import java.util.List;
 import java.util.Map;
 
-import com.queryeer.backend.queryengine.jdbc.JdbcConnectionFieldDefinition;
-import com.queryeer.backend.queryengine.jdbc.JdbcConnectionFieldOption;
-import com.queryeer.backend.queryengine.jdbc.JdbcConnectionFieldType;
-import com.queryeer.backend.queryengine.jdbc.JdbcConnectionSetupDefinition;
+import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldDefinition;
+import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldOption;
+import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldType;
+import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionSetupDefinition;
 
 final class SqlServerConnectionSetup
 {

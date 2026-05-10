@@ -556,7 +556,7 @@ describe("BackendGateway", () => {
     const result = await gateway.invokeEngine({
       engineId: "payloadbuilder",
       fileId: "file-1",
-      action: "payloadbuilder.echo",
+      action: "engine.capabilities",
       payload: { ping: true }
     });
 
@@ -564,7 +564,7 @@ describe("BackendGateway", () => {
       result: {
         engineId: "payloadbuilder",
         fileId: "file-1",
-        action: "payloadbuilder.echo",
+        action: "engine.capabilities",
         payload: { ping: true }
       }
     });

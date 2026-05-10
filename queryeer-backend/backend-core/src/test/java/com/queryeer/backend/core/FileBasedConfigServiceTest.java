@@ -22,14 +22,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.SettingsModule;
 import com.queryeer.backend.core.security.SecuritySession;
 
 class FileBasedConfigServiceTest
 {
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
     @TempDir
     Path tempDir;
 
@@ -282,7 +279,7 @@ class FileBasedConfigServiceTest
     {
         try
         {
-            OBJECT_MAPPER.writeValue(settingsDir.resolve(fileName)
+            MapperUtils.MAPPER.writeValue(settingsDir.resolve(fileName)
                     .toFile(), document);
         }
         catch (Exception e)
@@ -315,7 +312,7 @@ class FileBasedConfigServiceTest
                     .encodeToString(ciphertext));
             vault.put("entries", Map.of(secretRef, entry));
 
-            new ObjectMapper().writeValue(vaultPath.toFile(), vault);
+            MapperUtils.MAPPER.writeValue(vaultPath.toFile(), vault);
             return vaultPath;
         }
         catch (Exception e)
