@@ -18,7 +18,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: #1e1e1e;
+  background: var(--bg-0);
   display: flex;
   flex-direction: column;
 }
@@ -36,8 +36,8 @@
 .shell-panel {
   display: flex;
   flex-direction: column;
-  background: #1e1e1e;
-  border-top: 1px solid #3c3c3c;
+  background: var(--bg-0);
+  border-top: 1px solid var(--border);
   min-height: 100px;
   overflow: hidden;
 }
@@ -46,15 +46,15 @@
   display: flex;
   gap: 0;
   padding: 0 8px;
-  background: #252526;
-  border-bottom: 1px solid #3c3c3c;
+  background: var(--surface-sidebar);
+  border-bottom: 1px solid var(--border);
 }
 
 .shell-panel-tab {
   padding: 6px 16px;
   background: transparent;
   border: none;
-  color: #cccccc;
+  color: var(--text-0);
   cursor: pointer;
   font-size: 12px;
   border-bottom: 2px solid transparent;
@@ -62,12 +62,12 @@
 }
 
 .shell-panel-tab:hover {
-  color: #ffffff;
+  color: var(--text-0);
 }
 
 .shell-panel-tab.active {
-  color: #ffffff;
-  border-bottom-color: #007acc;
+  color: var(--text-0);
+  border-bottom-color: var(--accent);
 }
 
 .shell-panel-content {

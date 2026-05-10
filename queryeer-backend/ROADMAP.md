@@ -38,8 +38,6 @@ Large features in prio
     - Rulebased actions based on node type etc
         - SQLServer + Procedure => sp_helptext
         - etc.
-- [ ] Core.themes
-    - Themes support
 - [ ] About dialog
     - Queryeer changelog
     - Modules changelog (Payloadbuilder)
@@ -47,6 +45,8 @@ Large features in prio
 - [ ] Modularize
     - Make sure all contributions have contracts and all API:s are located in a separate project
       that might end up on npmjs one day
+- [X] Core.themes
+    - Themes support
 - [ ] Payloadbuilder
     - [X] Environments
     - [X] JDBC Catalog

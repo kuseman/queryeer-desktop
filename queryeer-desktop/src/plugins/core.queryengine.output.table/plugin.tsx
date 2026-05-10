@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { AgGridReact } from "ag-grid-react";
 import type { ColDef, GridApi, GridReadyEvent, FirstDataRenderedEvent, StateUpdatedEvent, ICellRendererParams, CellClickedEvent, CellClassParams, CellMouseDownEvent, CellMouseOverEvent, CellDoubleClickedEvent, CellKeyDownEvent } from "ag-grid-community";
 import type { GridState } from "ag-grid-community";
-import { AllCommunityModule, ModuleRegistry, themeQuartz, colorSchemeDark } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry, themeQuartz, colorSchemeDark, colorSchemeLight } from "ag-grid-community";
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { OutputContext, Column } from "../../contracts/extensions/OutputExtension";
 import { DEFAULT_OUTPUT_LIMITS } from "../../contracts/extensions/OutputExtension";
@@ -24,10 +24,19 @@ import {
   inferPreviewMimeType,
   resolveTableLinkAction,
 } from "./table-link-actions";
+import { getThemeService } from "../core.themes/runtime";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
 const compactDarkTheme = themeQuartz.withPart(colorSchemeDark).withParams({
+  rowHeight: 24,
+  headerHeight: 26,
+  rowVerticalPaddingScale: 0.5,
+  cellHorizontalPaddingScale: 0.75,
+  fontSize: 12,
+});
+
+const compactLightTheme = themeQuartz.withPart(colorSchemeLight).withParams({
   rowHeight: 24,
   headerHeight: 26,
   rowVerticalPaddingScale: 0.5,
@@ -176,6 +185,18 @@ function TableGrid({ resultSetIndex, schema, rows, fileId, onPreviewValue }: Tab
   const appliedCountRef = useRef(0);
   const bindingRef = useRef<string>("");
   const gridColumns = useMemo(() => toGridColumns(schema.columns), [schema.columns]);
+  const [isDarkTheme, setIsDarkTheme] = useState<boolean>(() => (getThemeService()?.getActiveThemeMode() ?? "dark") === "dark");
+
+  useEffect(() => {
+    const themeService = getThemeService();
+    if (!themeService) {
+      return;
+    }
+    setIsDarkTheme(themeService.getActiveThemeMode() === "dark");
+    return themeService.subscribe(() => {
+      setIsDarkTheme(themeService.getActiveThemeMode() === "dark");
+    });
+  }, []);
 
   // Custom rectangular cell selection — managed independently of AG Grid's row selection.
   const [selection, setSelection] = useState<SelectionModel | null>(() =>
@@ -504,7 +525,7 @@ function TableGrid({ resultSetIndex, schema, rows, fileId, onPreviewValue }: Tab
   return (
     <div ref={containerRef} style={{ height: "100%", width: "100%" }}>
       <AgGridReact
-        theme={compactDarkTheme}
+        theme={isDarkTheme ? compactDarkTheme : compactLightTheme}
         columnDefs={colDefs}
         defaultColDef={defaultColDef}
         onGridReady={onGridReady}

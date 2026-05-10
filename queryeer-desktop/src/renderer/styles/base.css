@@ -7,9 +7,27 @@
   --text-0: #cccccc;
   --text-1: #858585;
   --text-2: #6b6b6b;
+  --text-3: #575757;
   --accent: #0e639c;
   --accent-muted: #1177bb;
   --border: #454545;
+  --focus-border: #0e639c;
+  --error: #ef4444;
+  --warning: #f59e0b;
+  --success: #31c48d;
+  --surface-overlay: rgba(255, 255, 255, 0.08);
+  --surface-1: #252526;
+  --input-bg: #2d2d2d;
+  --background: #1e1e1e;
+  --foreground: #cccccc;
+  --text: #cccccc;
+  --text-muted: #858585;
+  --editor-font: "JetBrains Mono", Consolas, monospace;
+  --font-mono: "JetBrains Mono", Consolas, monospace;
+  --badge-background: rgba(255, 255, 255, 0.12);
+  --badge-foreground: #ffffff;
+  --border-active: #0e639c;
+  --state-warning-soft: rgba(245, 158, 11, 0.2);
   --titlebar-hover: rgba(255, 255, 255, 0.08);
   --titlebar-active: rgba(255, 255, 255, 0.16);
   --titlebar-danger: #f14c4c;
@@ -46,6 +64,9 @@
   --ui-scrollbar-thumb: rgba(255, 255, 255, 0.2);
   --ui-scrollbar-thumb-hover: rgba(255, 255, 255, 0.4);
   --ui-scrollbar-track: rgba(0, 0, 0, 0.2);
+  --body-bg: radial-gradient(1200px circle at 15% -10%, #1a3c5f 0%, transparent 55%),
+    radial-gradient(700px circle at 90% 120%, #1e3653 0%, transparent 50%),
+    linear-gradient(145deg, var(--bg-0), var(--bg-1));
 }
 
 * {
@@ -85,8 +106,5 @@ body {
   font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
   font-size: var(--ui-font-size-sm);
   color: var(--text-0);
-  background:
-    radial-gradient(1200px circle at 15% -10%, #1a3c5f 0%, transparent 55%),
-    radial-gradient(700px circle at 90% 120%, #1e3653 0%, transparent 50%),
-    linear-gradient(145deg, var(--bg-0), var(--bg-1));
+  background: var(--body-bg);
 }
