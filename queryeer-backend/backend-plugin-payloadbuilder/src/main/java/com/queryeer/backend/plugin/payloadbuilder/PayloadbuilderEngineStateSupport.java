@@ -4,9 +4,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-import com.queryeer.backend.contract.payloadbuilder.PayloadbuilderCatalogInstance;
-import com.queryeer.backend.contract.payloadbuilder.PayloadbuilderEngineState;
-
 import se.kuseman.payloadbuilder.api.catalog.ResolvedType;
 import se.kuseman.payloadbuilder.api.execution.ValueVector;
 import se.kuseman.payloadbuilder.core.execution.QuerySession;

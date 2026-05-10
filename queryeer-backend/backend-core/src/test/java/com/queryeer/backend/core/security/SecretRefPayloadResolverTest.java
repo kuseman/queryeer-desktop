@@ -16,8 +16,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.SecuritySessionClosedException;
+import com.queryeer.backend.core.MapperUtils;
 
 class SecretRefPayloadResolverTest
 {
@@ -38,7 +38,7 @@ class SecretRefPayloadResolverTest
         session.openSession("session-1", vaultPath.toString(), Base64.getEncoder()
                 .encodeToString(key), null);
 
-        SecretRefPayloadResolver resolver = new SecretRefPayloadResolver(session, new ObjectMapper());
+        SecretRefPayloadResolver resolver = new SecretRefPayloadResolver(session, MapperUtils.MAPPER);
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("credentials", Map.of("secretRef", "db-pass"));
         payload.put("items", List.of(Map.of("secretRef", "db-pass"), Map.of("plain", "value")));
@@ -56,7 +56,7 @@ class SecretRefPayloadResolverTest
     void materializeFailsWhenSecuritySessionIsClosed() throws Exception
     {
         Path vaultPath = createVault("api-key", new byte[32], "secret");
-        SecretRefPayloadResolver resolver = new SecretRefPayloadResolver(new SecuritySession(), new ObjectMapper());
+        SecretRefPayloadResolver resolver = new SecretRefPayloadResolver(new SecuritySession(), MapperUtils.MAPPER);
 
         SecuritySessionClosedException error = Assertions.assertThrows(SecuritySessionClosedException.class, () -> resolver.materialize(Map.of("auth", Map.of("secretRef", "api-key"))));
 
@@ -72,7 +72,7 @@ class SecretRefPayloadResolverTest
         SecuritySession session = new SecuritySession();
         session.openSession("session-2", vaultPath.toString(), Base64.getEncoder()
                 .encodeToString(key), null);
-        SecretRefPayloadResolver resolver = new SecretRefPayloadResolver(session, new ObjectMapper());
+        SecretRefPayloadResolver resolver = new SecretRefPayloadResolver(session, MapperUtils.MAPPER);
 
         SecretRefPayloadResolver.SecretResolutionException error = Assertions.assertThrows(SecretRefPayloadResolver.SecretResolutionException.class,
                 () -> resolver.materialize(Map.of("auth", Map.of("secretRef", "missing"))));
@@ -89,7 +89,7 @@ class SecretRefPayloadResolverTest
         SecuritySession session = new SecuritySession();
         session.openSession("session-3", vaultPath.toString(), Base64.getEncoder()
                 .encodeToString(key), null);
-        SecretRefPayloadResolver resolver = new SecretRefPayloadResolver(session, new ObjectMapper());
+        SecretRefPayloadResolver resolver = new SecretRefPayloadResolver(session, MapperUtils.MAPPER);
 
         Object resolved = resolver.materialize(Map.of("apiKeyHandle", "api-key-ref", "name", "conn-1"));
         Assertions.assertEquals(Map.of("apiKeyHandle", "api-key-ref", "name", "conn-1"), resolved);
@@ -100,7 +100,7 @@ class SecretRefPayloadResolverTest
         Path path = tempDir.resolve("vault.json");
         Map<String, String> encrypted = encrypt(key, plaintext);
         Map<String, Object> root = Map.of("entries", Map.of(secretRef, encrypted));
-        new ObjectMapper().writeValue(path.toFile(), root);
+        MapperUtils.MAPPER.writeValue(path.toFile(), root);
         return path;
     }
 

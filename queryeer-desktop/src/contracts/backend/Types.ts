@@ -13,7 +13,6 @@ export type Capability =
   | "queryengine.execute"
   | "queryengine.cancel"
   | "queryengine.invoke"
-  | "connection.upsert"
   | "queryengine.progress"
   | "queryengine.chunkStart"
   | "queryengine.chunkRows"
@@ -161,12 +160,6 @@ export type JdbcEngineState = {
   connectionId?: string;
   database?: string;
   sessionId?: string;
-  jdbc?: {
-    connection?: Record<string, unknown>;
-  };
-  dialectId?: string;
-  url?: string;
-  properties?: Record<string, unknown>;
 };
 
 export type PayloadbuilderEngineState = {
@@ -310,7 +303,6 @@ export type BackendMethodParamsMap = {
   "queryengine.execute": QueryExecuteParams;
   "queryengine.cancel": QueryCancelParams;
   "queryengine.invoke": EngineInvokeParams;
-  "connection.upsert": ConnectionUpsertParams;
   "file.open": FileOpenParams;
   "file.close": FileCloseParams;
 };
@@ -325,7 +317,6 @@ export type BackendMethodResultMap = {
   "queryengine.execute": QueryExecuteResult;
   "queryengine.cancel": QueryCancelResult;
   "queryengine.invoke": EngineInvokeResult;
-  "connection.upsert": ConnectionUpsertResult;
   "file.open": FileOpenResult;
   "file.close": FileCloseResult;
 };

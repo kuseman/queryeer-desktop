@@ -7,6 +7,8 @@ import se.kuseman.payloadbuilder.catalog.fs.FilesystemCatalog;
 
 public class FilesystemCatalogProvider implements PayloadbuilderCatalogProvider
 {
+    private static final FilesystemCatalog CATALOG = new FilesystemCatalog();
+
     @Override
     public String catalogId()
     {
@@ -16,6 +18,6 @@ public class FilesystemCatalogProvider implements PayloadbuilderCatalogProvider
     @Override
     public Catalog createCatalog()
     {
-        return new FilesystemCatalog();
+        return CATALOG;
     }
 }

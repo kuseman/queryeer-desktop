@@ -444,9 +444,6 @@
   - added unit tests for redaction behavior (`backend-log-redaction.test.ts`)
   - protocol document updated with explicit sensitive-field redaction and no-raw-secret guidance
 - Added connection metadata contract scaffolding across TS + Java:
-  - new request method: `connection.upsert`
-  - TS backend contracts now define params/results for connection metadata upsert
-  - Java stdio dispatcher now mocks handling for `connection.upsert`
   - handshake capabilities include the method
   - shared protocol fixtures and dual-side fixture checks include the connection method pair
   - protocol documentation updated with explicit method specs and secret-handling constraints

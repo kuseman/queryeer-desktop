@@ -19,13 +19,9 @@ class BuiltinPluginDiscoveryTest
 
         List<DiscoveredPlugin> discovered = discovery.discover();
 
-        Assertions.assertEquals(List.of("query.payloadbuilder", "query.jdbc", "query.payloadbuilder.jdbc"), discovered.stream()
+        Assertions.assertEquals(List.of("query.jdbc", "query.payloadbuilder"), discovered.stream()
                 .map(item -> item.manifest()
                         .id())
                 .toList());
-        Assertions.assertEquals(List.of("query.payloadbuilder", "query.jdbc"), discovered.get(2)
-                .plugin()
-                .descriptor()
-                .dependencies());
     }
 }

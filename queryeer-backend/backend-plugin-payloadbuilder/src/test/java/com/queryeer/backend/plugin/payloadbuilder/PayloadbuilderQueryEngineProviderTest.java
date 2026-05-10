@@ -9,13 +9,14 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.QueryPublisher;
 import com.queryeer.backend.api.SecuritySessionClosedException;
 import com.queryeer.backend.api.SettingsModule;
+import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
 
 import se.kuseman.payloadbuilder.api.catalog.Column;
 import se.kuseman.payloadbuilder.api.catalog.ResolvedType;
@@ -30,59 +31,37 @@ import se.kuseman.payloadbuilder.api.execution.ValueVector;
 class PayloadbuilderQueryEngineProviderTest
 {
     private static final ConfigService NOOP_CONFIG = _ -> null;
-    private static final PayloadMapper TEST_MAPPER = new PayloadMapper()
-    {
-        private final ObjectMapper objectMapper = new ObjectMapper();
-
-        @Override
-        public <T> T convert(Object fromValue, Class<T> toValueType)
-        {
-            return objectMapper.convertValue(fromValue, toValueType);
-        }
-    };
-
-    @Test
-    void invokeEchoReturnsPayload()
-    {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER);
-
-        Object result = provider.invoke("file-1", "payloadbuilder.echo", Map.of("hello", "world"));
-
-        Assertions.assertNotNull(result);
-        Assertions.assertTrue(result instanceof Map);
-        Map<?, ?> asMap = (Map<?, ?>) result;
-        Assertions.assertEquals("file-1", asMap.get("fileId"));
-        Assertions.assertEquals(Map.of("hello", "world"), asMap.get("payload"));
-    }
+    private static final JdbcRuntimeService JDBCRUNTIMESERVICE = Mockito.mock(JdbcRuntimeService.class);
+    private static final PayloadMapper TEST_MAPPER = TestPayloadMapper.INSTANCE;
 
     @SuppressWarnings("unchecked")
     @Test
     void invokeCapabilitiesIncludesCatalogActions()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE);
 
         Object result = provider.invoke("file-1", "engine.capabilities", null);
 
         Assertions.assertTrue(result instanceof Map);
         Map<?, ?> asMap = (Map<?, ?>) result;
-        Assertions.assertEquals(Set.of("engine.capabilities", "payloadbuilder.echo", "payloadbuilder.es.listIndices"), Set.copyOf((List<String>) asMap.get("actions")));
-        Assertions.assertEquals(Set.of("elasticsearch", "filesystem"), Set.copyOf((Set<String>) asMap.get("catalogIds")));
+        Assertions.assertEquals(Set.of("engine.capabilities", "payloadbuilder.es.listIndices"), Set.copyOf((List<String>) asMap.get("actions")));
+        Assertions.assertEquals(Set.of("jdbc", "elasticsearch", "filesystem"), Set.copyOf((Set<String>) asMap.get("catalogIds")));
     }
 
     @Test
     void invokeEsListIndicesRequiresEndpoint()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE);
 
         IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class, () -> provider.invoke("file-1", "payloadbuilder.es.listIndices", Map.of("properties", Map.of())));
 
-        Assertions.assertEquals("endpoint is required for payloadbuilder.es.listIndices", error.getMessage());
+        Assertions.assertEquals("Connection with id: null could not be found", error.getMessage());
     }
 
     @Test
     void invokeThrowsForUnsupportedAction()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE);
 
         IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class, () -> provider.invoke("file-1", "payloadbuilder.unknown", null));
 
@@ -92,7 +71,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void executePublishesCompletionWithEngineStatePatch()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE);
         RecordingPublisher publisher = new RecordingPublisher();
 
         provider.execute("exec-2", "file-1", "select 1", null, publisher);
@@ -105,7 +84,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void executeReturnsValidationFailureForMalformedEngineState()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE);
         RecordingPublisher publisher = new RecordingPublisher();
         Map<String, Object> malformed = Map.of("payloadbuilder", Map.of("catalogs", Map.of("jdbc1", "bad")));
 
@@ -140,7 +119,7 @@ class PayloadbuilderQueryEngineProviderTest
                 return Map.of("secret", "plain-secret");
             }
         };
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(config, TEST_MAPPER);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(config, TEST_MAPPER, JDBCRUNTIMESERVICE);
         RecordingPublisher publisher = new RecordingPublisher();
 
         provider.execute("exec-env", "file-1", "select 1", Map.of("payloadbuilder", Map.of("selectedEnvironmentId", "test")), publisher);
@@ -173,7 +152,7 @@ class PayloadbuilderQueryEngineProviderTest
                 throw new SecuritySessionClosedException("Security session is not open");
             }
         };
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(config, TEST_MAPPER);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(config, TEST_MAPPER, JDBCRUNTIMESERVICE);
         RecordingPublisher publisher = new RecordingPublisher();
 
         SecuritySessionClosedException error = Assertions.assertThrows(SecuritySessionClosedException.class,
@@ -185,7 +164,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void executeIncludesExceptionTypeInFailureMessage()
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE);
         RecordingPublisher publisher = new RecordingPublisher();
 
         provider.execute("exec-3", "file-1", "select from", null, publisher);

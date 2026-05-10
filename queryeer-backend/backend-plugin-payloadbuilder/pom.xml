@@ -18,11 +18,13 @@
             <groupId>com.queryeer.backend</groupId>
             <artifactId>backend-api</artifactId>
             <version>${project.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>com.queryeer.backend</groupId>
-            <artifactId>backend-contract</artifactId>
+            <artifactId>backend-lib-queryengine-jdbc-foundation</artifactId>
             <version>${project.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>se.kuseman.payloadbuilder</groupId>
@@ -37,6 +39,11 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

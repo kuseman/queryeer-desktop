@@ -6,9 +6,6 @@
   "params": {
     "engineId": "payloadbuilder",
     "fileId": "file-fixture-1",
-    "action": "payloadbuilder.echo",
-    "payload": {
-      "hello": "world"
-    }
+    "action": "engine.capabilities"
   }
 }

@@ -7,7 +7,6 @@ Status: active implementation plan with resumable phases.
 - [x] Remove legacy credential RPC from frontend/backend contracts.
 - [x] Remove legacy credential request handler and capability wiring from Java transport.
 - [x] Remove legacy credential protocol fixtures and related checks.
-- [x] Remove legacy credential state field from `connection.upsert` contracts and fixtures.
 - [x] Update protocol and architecture docs to remove legacy credential RPC references.
 
 ## Phase 1 - Core Security Module Skeleton

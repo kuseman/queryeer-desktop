@@ -1,26 +1,29 @@
 package com.queryeer.backend.plugin.jdbc;
 
+import static org.mockito.Mockito.mock;
+
+import java.util.Map;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.BackendPluginContext;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.EventBus;
 import com.queryeer.backend.api.FileSessionHandlerRegistry;
 import com.queryeer.backend.api.LoggerService;
 import com.queryeer.backend.api.PayloadMapper;
+import com.queryeer.backend.api.PluginServiceRegistry;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.SchedulerService;
 import com.queryeer.backend.queryengine.jdbc.DefaultJdbcDialectRegistry;
-import com.queryeer.backend.queryengine.jdbc.JdbcConnectionSetupDefinition;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialect;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectMetadata;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
-import com.queryeer.backend.queryengine.jdbc.JdbcQueryExecutor;
-import com.queryeer.backend.queryengine.jdbc.JdbcQueryResult;
-import com.queryeer.backend.queryengine.jdbc.JdbcSchemaResolver;
+import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryExecutor;
+import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryResult;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
 
 class ServiceLoaderJdbcDialectDiscoveryTest
 {
@@ -69,12 +72,6 @@ class ServiceLoaderJdbcDialectDiscoveryTest
                 }
 
                 @Override
-                public JdbcConnectionSetupDefinition connectionSetup()
-                {
-                    return new JdbcConnectionSetupDefinition(java.util.List.of());
-                }
-
-                @Override
                 public JdbcQueryExecutor queryExecutor()
                 {
                     return (_, _) -> new JdbcQueryResult(0, java.util.Map.of());
@@ -83,7 +80,13 @@ class ServiceLoaderJdbcDialectDiscoveryTest
                 @Override
                 public JdbcSchemaResolver schemaResolver()
                 {
-                    return _ -> java.util.List.of();
+                    return (_, _) -> java.util.List.of();
+                }
+
+                @Override
+                public String buildUrl(Map<String, Object> materializedProperties)
+                {
+                    return null;
                 }
             });
         }
@@ -131,16 +134,7 @@ class ServiceLoaderJdbcDialectDiscoveryTest
     {
         private final QueryEngineRegistry queryEngineRegistry;
         private final FileSessionHandlerRegistry fileSessionHandlerRegistry;
-        private final PayloadMapper payloadMapper = new PayloadMapper()
-        {
-            private final ObjectMapper objectMapper = new ObjectMapper();
-
-            @Override
-            public <T> T convert(Object fromValue, Class<T> toValueType)
-            {
-                return objectMapper.convertValue(fromValue, toValueType);
-            }
-        };
+        private final PayloadMapper payloadMapper = TestPayloadMapper.INSTANCE;
 
         private TestPluginContext(QueryEngineRegistry queryEngineRegistry, FileSessionHandlerRegistry fileSessionHandlerRegistry)
         {
@@ -193,6 +187,12 @@ class ServiceLoaderJdbcDialectDiscoveryTest
         public PayloadMapper payloadMapper()
         {
             return payloadMapper;
+        }
+
+        @Override
+        public PluginServiceRegistry services()
+        {
+            return mock(PluginServiceRegistry.class);
         }
     }
 

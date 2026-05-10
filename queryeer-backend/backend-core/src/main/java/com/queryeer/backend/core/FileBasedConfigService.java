@@ -7,7 +7,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.LoggerService;
 import com.queryeer.backend.api.SettingsModule;
@@ -27,7 +26,6 @@ final class FileBasedConfigService implements ConfigService
 
     private final Map<String, String> systemProperties;
     private final Map<String, CachedModule> moduleCache = new ConcurrentHashMap<>();
-    private final ObjectMapper objectMapper;
     private final LoggerService logger;
     private final SecuritySession securitySession;
 
@@ -38,7 +36,6 @@ final class FileBasedConfigService implements ConfigService
     FileBasedConfigService(Map<String, String> systemProperties, SecuritySession securitySession, LoggerService logger)
     {
         this.systemProperties = Map.copyOf(systemProperties);
-        this.objectMapper = new ObjectMapper();
         this.securitySession = securitySession;
         this.logger = logger;
     }
@@ -85,7 +82,7 @@ final class FileBasedConfigService implements ConfigService
         {
             long mtime = Files.getLastModifiedTime(path)
                     .toMillis();
-            Map<String, Object> raw = objectMapper.readValue(path.toFile(), new TypeReference<Map<String, Object>>()
+            Map<String, Object> raw = MapperUtils.MAPPER.readValue(path.toFile(), new TypeReference<Map<String, Object>>()
             {
             });
 
@@ -135,7 +132,7 @@ final class FileBasedConfigService implements ConfigService
                 resolver = this.secretResolver;
                 if (resolver == null)
                 {
-                    this.secretResolver = resolver = new SecretRefPayloadResolver(securitySession, objectMapper);
+                    this.secretResolver = resolver = new SecretRefPayloadResolver(securitySession, MapperUtils.MAPPER);
                 }
             }
         }

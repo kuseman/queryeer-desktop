@@ -337,7 +337,6 @@ engineState: {
 
 ## 10. Non-Goals
 
-- Secrets in `connection.upsert` payloads — handled in separate streamlining
 - `engineStatePatch` in notifications other than `completed` — unchanged
 - Workspace persistence format — unchanged
 - Frontend settings storage mechanism — unchanged

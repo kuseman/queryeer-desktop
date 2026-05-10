@@ -6,6 +6,10 @@ import java.util.Map;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryExecutor;
+import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryResult;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
+
 class DefaultJdbcDialectRegistryTest
 {
     @Test
@@ -69,12 +73,6 @@ class DefaultJdbcDialectRegistryTest
             }
 
             @Override
-            public JdbcConnectionSetupDefinition connectionSetup()
-            {
-                return new JdbcConnectionSetupDefinition(List.of(new JdbcConnectionFieldDefinition("host", "Host", JdbcConnectionFieldType.TEXT, true, null, List.of(), "localhost", null)));
-            }
-
-            @Override
             public JdbcQueryExecutor queryExecutor()
             {
                 return (_, _) -> new JdbcQueryResult(0, Map.of());
@@ -83,7 +81,13 @@ class DefaultJdbcDialectRegistryTest
             @Override
             public JdbcSchemaResolver schemaResolver()
             {
-                return _ -> List.of();
+                return (_, _) -> List.of();
+            }
+
+            @Override
+            public String buildUrl(Map<String, Object> materializedProperties)
+            {
+                return null;
             }
         };
     }

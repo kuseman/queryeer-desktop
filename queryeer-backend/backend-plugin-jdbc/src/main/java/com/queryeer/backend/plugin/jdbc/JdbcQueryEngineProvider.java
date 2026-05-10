@@ -1,11 +1,20 @@
 package com.queryeer.backend.plugin.jdbc;
 
+import static com.queryeer.backend.api.PayloadUtils.stringValue;
+import static com.queryeer.backend.api.PayloadUtils.trimToNull;
+import static com.queryeer.backend.plugin.jdbc.JdbcUtils.closeQuietly;
+import static com.queryeer.backend.plugin.jdbc.JdbcUtils.rollbackAndClose;
+
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.queryeer.backend.api.ErrorMessages;
 import com.queryeer.backend.api.FileSession;
@@ -16,28 +25,24 @@ import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryPublisher;
 import com.queryeer.backend.api.SecuritySessionClosedException;
-import com.queryeer.backend.contract.connection.ConnectionUpsertParams;
-import com.queryeer.backend.contract.engine.JdbcSchemaRefreshPayload;
-import com.queryeer.backend.contract.jdbc.JdbcConnectionProperties;
-import com.queryeer.backend.contract.jdbc.JdbcEngineState;
-import com.queryeer.backend.contract.jdbc.JdbcSchemaFetchPayload;
-import com.queryeer.backend.contract.jdbc.JdbcSchemaSnapshotPayload;
+import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaActionHandler;
+import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawlCoordinator;
+import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaStore;
 import com.queryeer.backend.queryengine.jdbc.CancellableJdbcQueryExecutor;
-import com.queryeer.backend.queryengine.jdbc.JdbcConnectionFieldDefinition;
-import com.queryeer.backend.queryengine.jdbc.JdbcConnectionFieldOption;
-import com.queryeer.backend.queryengine.jdbc.JdbcConnectionFieldType;
-import com.queryeer.backend.queryengine.jdbc.JdbcConnectionProfile;
-import com.queryeer.backend.queryengine.jdbc.JdbcConnectionSetupDefinition;
+import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
-import com.queryeer.backend.queryengine.jdbc.JdbcQueryEventListener;
-import com.queryeer.backend.queryengine.jdbc.JdbcQueryRequest;
-import com.queryeer.backend.queryengine.jdbc.JdbcQueryResult;
-import com.queryeer.backend.queryengine.jdbc.JdbcResultColumn;
+import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryEventListener;
+import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryRequest;
+import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryResult;
+import com.queryeer.backend.queryengine.jdbc.execute.JdbcResultColumn;
+import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldDefinition;
+import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldOption;
+import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldType;
+import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionSetupDefinition;
 
 final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionHandler
 {
     private static final String ENGINE_ID = "jdbc";
-    private static final String ACTION_CONNECTION_UPSERT = "connection.upsert";
     private static final String ACTION_ENGINE_CAPABILITIES = "engine.capabilities";
     private static final String ACTION_CONNECTION_SETUP = "jdbc.connection.setup";
     private static final String ACTION_CONNECTION_DIALECTS = "jdbc.connection.dialects";
@@ -58,53 +63,35 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private static final String FIELD_USERNAME = "username";
     private static final String FIELD_PASSWORD = "password";
 
-    private static final String SCOPE_TOP = "top";
-    private static final String SCOPE_DEEP = "deep";
-    private static final String SCOPE_TABLES = "tables";
-    private static final String SCOPE_COLUMNS = "columns";
-    private static final String DEFAULT_DATABASE_NODE = "default";
-
-    private static final String OPTION_SCOPE = "scope";
-    private static final String OPTION_TARGET = "target";
-
     private static final String KEY_OK = "ok";
     private static final String KEY_MESSAGE = "message";
-    private static final String KEY_CONNECTION_ID = "connectionId";
-    private static final String KEY_VERSION = "version";
     private static final String KEY_ACTIONS = "actions";
-
-    private static final String CONNECTION_TEST_EXECUTION_ID = "connection-test";
-    private static final String CONNECTION_TEST_QUERY = "select 1";
 
     private static final String ERROR_SQL_TEXT_REQUIRED = "SQL text is required";
     private static final String ERROR_FILE_ID_REQUIRED = "fileId is required for JDBC query execution";
     private static final String ERROR_CANCELLED_MESSAGE = "Execution cancelled by client";
-    private static final String ERROR_CONNECTION_FAILED = "Connection failed: ";
-    private static final String ERROR_CONNECTION_ID_REQUIRED = "connectionId is required";
-    private static final String ERROR_TARGET_SCHEMA_REQUIRED = "target.schema is required for scope=deep";
+    private static final long DEFAULT_DEAD_SNAPSHOT_TTL_MS = TimeUnit.SECONDS.toMillis(45);
 
     private final JdbcDialectRegistry registry;
-    private final JdbcConnectionRegistry connections;
-    private final JdbcFileConnectionManager fileConnections;
+    private final DefaultJdbcConnections connections;
     private final JdbcConnectionUsageListener usageListener;
-    private final JdbcSchemaStore schemaStore;
-    private final JdbcSchemaCrawlCoordinator crawlCoordinator;
-    private final JdbcCredentialResolver credentialResolver;
+    private final JdbcSchemaActionHandler schemaActions;
+    private final long idleTimeoutMs;
     private final PayloadMapper payloadMapper;
     private final Map<String, CancellableJdbcQueryExecutor> activeExecutors = new ConcurrentHashMap<>();
     private final Set<String> cancelledExecutionIds = ConcurrentHashMap.newKeySet();
+    private final Map<String, FileSessionHandle> byFileId = new ConcurrentHashMap<>();
+    private final Map<String, DeadSessionSnapshot> deadByFileId = new ConcurrentHashMap<>();
 
-    JdbcQueryEngineProvider(JdbcDialectRegistry registry, JdbcConnectionRegistry connections, JdbcFileConnectionManager fileConnections, JdbcConnectionUsageListener usageListener,
-            JdbcSchemaStore schemaStore, JdbcSchemaCrawlCoordinator crawlCoordinator, JdbcCredentialResolver credentialResolver, PayloadMapper payloadMapper)
+    JdbcQueryEngineProvider(JdbcDialectRegistry registry, DefaultJdbcConnections connections, long idleTimeoutMs, JdbcConnectionUsageListener usageListener, JdbcSchemaStore schemaStore,
+            JdbcSchemaCrawlCoordinator crawlCoordinator, PayloadMapper payloadMapper)
     {
         this.registry = registry;
         this.connections = connections;
-        this.fileConnections = fileConnections;
+        this.idleTimeoutMs = Math.max(0L, idleTimeoutMs);
         this.usageListener = usageListener;
-        this.schemaStore = schemaStore;
-        this.crawlCoordinator = crawlCoordinator;
-        this.credentialResolver = credentialResolver;
         this.payloadMapper = payloadMapper;
+        this.schemaActions = new JdbcSchemaActionHandler(payloadMapper, connections, schemaStore, crawlCoordinator);
     }
 
     @Override
@@ -118,7 +105,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     {
         long startedAt = System.currentTimeMillis();
         String sessionId = null;
-        JdbcResolvedConnection resolved = null;
+        JdbcConnection resolved = null;
         try
         {
             if (text == null
@@ -137,15 +124,14 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             }
 
             JdbcEngineState state = payloadMapper.convert(engineState, JdbcEngineState.class);
-            resolved = JdbcResolvedConnection.fromEngineState(state, connections, registry);
-            JdbcConnectionProfile materializedProfile = credentialResolver.resolve(resolved.profile());
+            resolved = connections.resolve(state.connectionId());
 
             sessionId = trimToNull(state.sessionId());
-            sessionId = fileConnections.resolveSessionId(fileId, materializedProfile, resolved, sessionId);
-            fileConnections.rememberSessionId(fileId, sessionId);
+            sessionId = resolveSessionId(fileId, resolved, sessionId);
+            rememberSessionId(fileId, sessionId);
 
-            Connection sessionConnection = fileConnections.acquire(fileId, materializedProfile, resolved.dialect());
-            JdbcQueryRequest request = new JdbcQueryRequest(queryExecutionId, fileId, text, List.of(), materializedProfile, sessionConnection, state.database(), resolved.dialect());
+            Connection sessionConnection = acquire(fileId, resolved);
+            JdbcQueryRequest request = new JdbcQueryRequest(queryExecutionId, fileId, text, resolved.connectionId(), resolved.properties(), sessionConnection, state.database(), resolved.dialect());
 
             if (resolved.dialect()
                     .queryExecutor() instanceof CancellableJdbcQueryExecutor cancellable)
@@ -232,11 +218,10 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             case ACTION_CONNECTION_SETUP -> connectionSetup();
             case ACTION_CONNECTION_DIALECTS -> registry.all();
             case ACTION_CONNECTION_TEST -> connectionTest(payload);
-            case ACTION_SCHEMA_SNAPSHOT -> schemaSnapshot(payload);
-            case ACTION_SCHEMA_REFRESH -> schemaRefresh(payload);
-            case ACTION_SCHEMA_FETCH -> schemaFetch(payload);
+            case ACTION_SCHEMA_SNAPSHOT -> schemaActions.snapshot(payload);
+            case ACTION_SCHEMA_REFRESH -> schemaActions.refresh(payload);
+            case ACTION_SCHEMA_FETCH -> schemaActions.fetch(payload);
             case ACTION_CONNECTION_SESSIONS -> connectionSessions();
-            case ACTION_CONNECTION_UPSERT -> connectionUpsert(payload);
             case ACTION_ENGINE_CAPABILITIES -> engineCapabilities();
             default -> QueryEngineProvider.super.invoke(fileId, action, payload);
         };
@@ -255,325 +240,20 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
 
     private Object connectionTest(Object payload)
     {
-        JdbcConnectionProperties properties = payloadMapper.convert(payload, JdbcConnectionProperties.class);
-        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromProperties(properties, null, registry);
-        JdbcConnectionProfile materializedProfile = credentialResolver.resolve(resolved.profile());
-        try
-        {
-            resolved.dialect()
-                    .queryExecutor()
-                    .execute(new JdbcQueryRequest(CONNECTION_TEST_EXECUTION_ID, null, CONNECTION_TEST_QUERY, List.of(), materializedProfile, null, null, resolved.dialect()),
-                            new NoopJdbcQueryEventListener());
-            return Map.of(KEY_OK, true, KEY_MESSAGE, "Connection successful");
-        }
-        catch (RuntimeException e)
-        {
-            throw new IllegalArgumentException(ERROR_CONNECTION_FAILED + e.getMessage(), e);
-        }
-    }
-
-    private Object connectionUpsert(Object payload)
-    {
-        ConnectionUpsertParams params = payloadMapper.convert(payload, ConnectionUpsertParams.class);
-        String connectionId = trimToNull(params.connectionId());
-        if (connectionId == null)
-        {
-            throw new IllegalArgumentException(ERROR_CONNECTION_ID_REQUIRED);
-        }
-
-        @SuppressWarnings("unchecked")
-        java.util.Map<String, Object> connection = payloadMapper.convert(params.connection(), java.util.Map.class);
-        JdbcConnectionRegistry.JdbcStoredConnection stored = connections.upsert(connectionId, trimToNull(params.name()), connection);
-        crawlCoordinator.onConnectionUpsert(connectionId);
-        return Map.of(KEY_CONNECTION_ID, stored.connectionId(), KEY_VERSION, stored.version()
-                .get());
+        JdbcConnectionTestPayload params = payloadMapper.convert(payload, JdbcConnectionTestPayload.class);
+        connections.testConnection(params);
+        return Map.of(KEY_OK, true, KEY_MESSAGE, "Connection successful");
     }
 
     private Object engineCapabilities()
     {
-        return Map.of(KEY_ACTIONS, List.of(ACTION_ENGINE_CAPABILITIES, ACTION_CONNECTION_UPSERT, ACTION_CONNECTION_SETUP, ACTION_CONNECTION_DIALECTS, ACTION_CONNECTION_TEST, ACTION_SCHEMA_SNAPSHOT,
-                ACTION_SCHEMA_REFRESH, ACTION_SCHEMA_FETCH, ACTION_CONNECTION_SESSIONS));
+        return Map.of(KEY_ACTIONS, List.of(ACTION_ENGINE_CAPABILITIES, ACTION_CONNECTION_SETUP, ACTION_CONNECTION_DIALECTS, ACTION_CONNECTION_TEST, ACTION_SCHEMA_SNAPSHOT, ACTION_SCHEMA_REFRESH,
+                ACTION_SCHEMA_FETCH, ACTION_CONNECTION_SESSIONS));
     }
 
     private Object connectionSessions()
     {
-        return fileConnections.connectionSnapshots(System.currentTimeMillis());
-    }
-
-    private Object schemaFetch(Object payload)
-    {
-        JdbcSchemaFetchPayload params = payloadMapper.convert(payload, JdbcSchemaFetchPayload.class);
-        JdbcResolvedConnection resolved = JdbcResolvedConnection.fromRegistryWithOverrides(params, connections, registry);
-        JdbcConnectionProfile materializedProfile = credentialResolver.resolve(resolved.profile());
-
-        Map<String, Object> options = new java.util.HashMap<>();
-        if (params.scope() != null)
-        {
-            options.put(OPTION_SCOPE, params.scope());
-        }
-        if (params.target() != null)
-        {
-            options.put(OPTION_TARGET, params.target());
-        }
-        List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> result = resolved.dialect()
-                .schemaResolver()
-                .resolveSchema(materializedProfile, options);
-        persistDeepCacheFromFetch(resolved.connectionId(), params, result);
-        return result;
-    }
-
-    private Object schemaSnapshot(Object payload)
-    {
-        JdbcSchemaSnapshotPayload params = payloadMapper.convert(payload, JdbcSchemaSnapshotPayload.class);
-        String connectionId = trimToNull(params.connectionId());
-        if (connectionId == null)
-        {
-            throw new IllegalArgumentException(ERROR_CONNECTION_ID_REQUIRED);
-        }
-        String scope = trimToNull(params.scope());
-        JdbcSchemaCrawlScope crawlScope = SCOPE_DEEP.equalsIgnoreCase(scope) ? JdbcSchemaCrawlScope.DEEP
-                : JdbcSchemaCrawlScope.TOP;
-        List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> snapshot = schemaStore.latestSnapshot(connectionId, crawlScope);
-        if (!snapshot.isEmpty()
-                || crawlScope != JdbcSchemaCrawlScope.TOP)
-        {
-            return snapshot;
-        }
-        try
-        {
-            return crawlCoordinator.refreshNow(connectionId, JdbcSchemaCrawlScope.TOP, null);
-        }
-        catch (RuntimeException e)
-        {
-            return snapshot;
-        }
-    }
-
-    private Object schemaRefresh(Object payload)
-    {
-        JdbcSchemaRefreshPayload params = payloadMapper.convert(payload, JdbcSchemaRefreshPayload.class);
-        String connectionId = trimToNull(params.connectionId());
-        if (connectionId == null)
-        {
-            throw new IllegalArgumentException(ERROR_CONNECTION_ID_REQUIRED);
-        }
-        String scope = trimToNull(params.scope());
-        JdbcSchemaCrawlScope crawlScope;
-        if (scope == null
-                || SCOPE_TOP.equalsIgnoreCase(scope))
-        {
-            crawlScope = JdbcSchemaCrawlScope.TOP;
-        }
-        else if (SCOPE_DEEP.equalsIgnoreCase(scope))
-        {
-            crawlScope = JdbcSchemaCrawlScope.DEEP;
-        }
-        else
-        {
-            throw new IllegalArgumentException("scope must be one of: " + SCOPE_TOP + ", " + SCOPE_DEEP);
-        }
-        JdbcSchemaTarget target = null;
-        if (crawlScope == JdbcSchemaCrawlScope.DEEP)
-        {
-            com.queryeer.backend.contract.jdbc.JdbcSchemaTarget t = params.target();
-            String schema = t != null ? trimToNull(t.schema())
-                    : null;
-            if (schema == null)
-            {
-                throw new IllegalArgumentException(ERROR_TARGET_SCHEMA_REQUIRED);
-            }
-            target = new JdbcSchemaTarget(t != null ? trimToNull(t.database())
-                    : null, schema);
-        }
-        return crawlCoordinator.refreshNow(connectionId, crawlScope, target);
-    }
-
-    private void persistDeepCacheFromFetch(String connectionId, JdbcSchemaFetchPayload params, List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> fetched)
-    {
-        if (fetched == null
-                || fetched.isEmpty())
-        {
-            return;
-        }
-        String scope = trimToNull(params.scope());
-        if (!SCOPE_TABLES.equalsIgnoreCase(scope)
-                && !SCOPE_COLUMNS.equalsIgnoreCase(scope))
-        {
-            return;
-        }
-        try
-        {
-            List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> current = new java.util.ArrayList<>(schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP));
-            com.queryeer.backend.contract.jdbc.JdbcSchemaTarget target = params.target();
-            String database = target != null ? trimToNull(target.database())
-                    : null;
-            String schema = target != null ? trimToNull(target.schema())
-                    : null;
-            String table = target != null ? trimToNull(target.table())
-                    : null;
-            if (SCOPE_TABLES.equalsIgnoreCase(scope))
-            {
-                mergeTablesScope(current, database, schema, fetched);
-            }
-            else
-            {
-                mergeColumnsScope(current, database, schema, table, fetched);
-            }
-            schemaStore.persistSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP, current);
-        }
-        catch (RuntimeException ignored)
-        {
-            // best-effort append into deep cache during navigation fetch
-        }
-    }
-
-    private static void mergeTablesScope(List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> roots, String database, String schema,
-            List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> fetched)
-    {
-        String db = database != null ? database
-                : inferDatabase(fetched);
-        if (db == null)
-        {
-            db = DEFAULT_DATABASE_NODE;
-        }
-        com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject dbNode = upsertChild(roots,
-                new com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject("database:" + db, db, "database", List.of(), Map.of()));
-        List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> dbChildren = mutableChildren(dbNode);
-
-        if (schema == null)
-        {
-            mergeInto(dbChildren, fetched);
-            replaceNode(roots, dbNode, withChildren(dbNode, dbChildren));
-            return;
-        }
-
-        com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject schemaNode = upsertChild(dbChildren,
-                new com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject(db + "." + schema, schema, "schema", List.of(), Map.of("catalog", db)));
-        List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> schemaChildren = mutableChildren(schemaNode);
-        mergeInto(schemaChildren, fetched);
-        replaceNode(dbChildren, schemaNode, withChildren(schemaNode, schemaChildren));
-        replaceNode(roots, dbNode, withChildren(dbNode, dbChildren));
-    }
-
-    private static void mergeColumnsScope(List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> roots, String database, String schema, String table,
-            List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> fetched)
-    {
-        String db = database != null ? database
-                : inferDatabase(fetched);
-        if (db == null)
-        {
-            db = DEFAULT_DATABASE_NODE;
-        }
-        if (schema == null
-                || table == null)
-        {
-            return;
-        }
-        com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject dbNode = upsertChild(roots,
-                new com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject("database:" + db, db, "database", List.of(), Map.of()));
-        List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> dbChildren = mutableChildren(dbNode);
-        com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject schemaNode = upsertChild(dbChildren,
-                new com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject(db + "." + schema, schema, "schema", List.of(), Map.of("catalog", db)));
-        List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> schemaChildren = mutableChildren(schemaNode);
-        com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject tableNode = upsertChild(schemaChildren,
-                new com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject(db + "." + schema + "." + table, table, "table", List.of(), Map.of("catalog", db, "schema", schema)));
-        List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> tableChildren = mutableChildren(tableNode);
-        mergeInto(tableChildren, fetched);
-        replaceNode(schemaChildren, tableNode, withChildren(tableNode, tableChildren));
-        replaceNode(dbChildren, schemaNode, withChildren(schemaNode, schemaChildren));
-        replaceNode(roots, dbNode, withChildren(dbNode, dbChildren));
-    }
-
-    private static String inferDatabase(List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> objects)
-    {
-        for (com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject object : objects)
-        {
-            Object catalog = object.attributes()
-                    .get("catalog");
-            if (catalog instanceof String s
-                    && !s.isBlank())
-            {
-                return s;
-            }
-        }
-        return null;
-    }
-
-    private static List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> mutableChildren(com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject node)
-    {
-        return new java.util.ArrayList<>(node.children() == null ? List.of()
-                : node.children());
-    }
-
-    private static com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject withChildren(com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject node,
-            List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> children)
-    {
-        return new com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject(node.id(), node.name(), node.kind(), List.copyOf(children), node.attributes());
-    }
-
-    private static void mergeInto(List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> target, List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> incoming)
-    {
-        for (com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject item : incoming)
-        {
-            int idx = indexOf(target, item);
-            if (idx >= 0)
-            {
-                target.set(idx, item);
-            }
-            else
-            {
-                target.add(item);
-            }
-        }
-    }
-
-    private static com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject upsertChild(List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> target,
-            com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject candidate)
-    {
-        int idx = indexOf(target, candidate);
-        if (idx >= 0)
-        {
-            return target.get(idx);
-        }
-        target.add(candidate);
-        return candidate;
-    }
-
-    private static int indexOf(List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> list, com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject node)
-    {
-        for (int i = 0; i < list.size(); i++)
-        {
-            com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject current = list.get(i);
-            if (current.kind()
-                    .equals(node.kind())
-                    && current.name()
-                            .equals(node.name()))
-            {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    private static void replaceNode(List<com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject> list, com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject oldNode,
-            com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject updatedNode)
-    {
-        int idx = indexOf(list, oldNode);
-        if (idx >= 0)
-        {
-            list.set(idx, updatedNode);
-        }
-    }
-
-    private static String trimToNull(String value)
-    {
-        if (value == null)
-        {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isBlank() ? null
-                : trimmed;
+        return connectionSnapshots(System.currentTimeMillis());
     }
 
     private static final class QueryCancelledException extends RuntimeException
@@ -614,19 +294,6 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         }
     }
 
-    private static final class NoopJdbcQueryEventListener implements JdbcQueryEventListener
-    {
-        @Override
-        public void onResultSetStart(List<JdbcResultColumn> columns)
-        {
-        }
-
-        @Override
-        public void onRows(List<List<Object>> rows)
-        {
-        }
-    }
-
     private static boolean containsCancelledState(Throwable throwable)
     {
         Throwable current = throwable;
@@ -645,6 +312,179 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     @Override
     public void onClose(FileSession session)
     {
-        fileConnections.closeFile(session.fileId());
+        closeFile(session.fileId());
+    }
+
+    void closeIdleConnections(long now)
+    {
+        if (idleTimeoutMs <= 0L)
+        {
+            return;
+        }
+        byFileId.forEach((fileId, session) ->
+        {
+            if (now - session.lastUsedAtMs() < idleTimeoutMs)
+            {
+                return;
+            }
+            if (byFileId.remove(fileId, session))
+            {
+                rollbackAndClose(session.connection());
+                deadByFileId.put(fileId, new DeadSessionSnapshot(fileId, session.connectionId(), session.sessionId(), now + DEFAULT_DEAD_SNAPSHOT_TTL_MS));
+            }
+        });
+        deadByFileId.forEach((fileId, snapshot) ->
+        {
+            if (snapshot.expiresAtMs() <= now)
+            {
+                deadByFileId.remove(fileId, snapshot);
+            }
+        });
+    }
+
+    private Connection acquire(String fileId, JdbcConnection resolved) throws SQLException
+    {
+        return acquireWithStatus(fileId, resolved).connection();
+    }
+
+    private AcquiredConnection acquireWithStatus(String fileId, JdbcConnection resolved) throws SQLException
+    {
+        long now = System.currentTimeMillis();
+        AtomicBoolean createdNew = new AtomicBoolean(false);
+        FileSessionHandle session = byFileId.compute(fileId, (_, existing) ->
+        {
+            if (existing != null
+                    && existing.matches(resolved))
+            {
+                try
+                {
+                    if (!existing.connection()
+                            .isClosed())
+                    {
+                        return existing.touch(now);
+                    }
+                }
+                catch (SQLException e)
+                {
+                    closeQuietly(existing.connection());
+                }
+            }
+
+            if (existing != null)
+            {
+                rollbackAndClose(existing.connection());
+            }
+
+            Connection connection = openConnection(resolved);
+            createdNew.set(true);
+            deadByFileId.remove(fileId);
+            return new FileSessionHandle(resolved.connectionId(), resolved.dialect()
+                    .metadata()
+                    .id(), stringValue(resolved.properties(), "url"), stringValue(resolved.properties(), "username"), stringValue(resolved.properties(), "password"), connection, now, null);
+        });
+        return new AcquiredConnection(session.connection(), createdNew.get());
+    }
+
+    private String resolveSessionId(String fileId, JdbcConnection resolved, String currentSessionId) throws SQLException
+    {
+        AcquiredConnection acquired = acquireWithStatus(fileId, resolved);
+        if (!acquired.createdNew()
+                && currentSessionId != null
+                && !currentSessionId.isBlank())
+        {
+            return currentSessionId;
+        }
+        String resolvedSessionId = resolved.dialect()
+                .resolveSessionId(acquired.connection());
+        if (resolvedSessionId == null
+                || resolvedSessionId.isBlank())
+        {
+            return currentSessionId;
+        }
+        return resolvedSessionId;
+    }
+
+    private void rememberSessionId(String fileId, String sessionId)
+    {
+        if (sessionId == null
+                || sessionId.isBlank())
+        {
+            return;
+        }
+        byFileId.computeIfPresent(fileId, (_, existing) -> existing.withSessionId(sessionId));
+    }
+
+    private void closeFile(String fileId)
+    {
+        FileSessionHandle removed = byFileId.remove(fileId);
+        if (removed != null)
+        {
+            rollbackAndClose(removed.connection());
+            deadByFileId.put(fileId, new DeadSessionSnapshot(fileId, removed.connectionId(), removed.sessionId(), System.currentTimeMillis() + DEFAULT_DEAD_SNAPSHOT_TTL_MS));
+        }
+    }
+
+    private List<Map<String, Object>> connectionSnapshots(long now)
+    {
+        List<Map<String, Object>> result = new ArrayList<>();
+        byFileId.forEach((fileId, session) ->
+        {
+            result.add(Map.of("fileId", fileId, "connectionId", session.connectionId(), "sessionId", session.sessionId() == null ? ""
+                    : session.sessionId(), "lastAccessTimeMs", session.lastUsedAtMs(), "status", "alive"));
+        });
+        deadByFileId.forEach((fileId, snapshot) ->
+        {
+            if (snapshot.expiresAtMs() > now)
+            {
+                result.add(Map.of("fileId", fileId, "connectionId", snapshot.connectionId(), "sessionId", snapshot.sessionId() == null ? ""
+                        : snapshot.sessionId(), "status", "dead"));
+            }
+        });
+        return result;
+    }
+
+    private static Connection openConnection(JdbcConnection resolved)
+    {
+        try
+        {
+            return resolved.dialect()
+                    .openSessionConnection(resolved.properties());
+        }
+        catch (SQLException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private record FileSessionHandle(String connectionId, String dialectId, String url, String username, String password, Connection connection, long lastUsedAtMs, String sessionId)
+    {
+        FileSessionHandle touch(long now)
+        {
+            return new FileSessionHandle(connectionId, dialectId, url, username, password, connection, now, sessionId);
+        }
+
+        boolean matches(JdbcConnection resolved)
+        {
+            return Objects.equals(connectionId, resolved.connectionId())
+                    && Objects.equals(dialectId, resolved.dialect()
+                            .metadata()
+                            .id())
+                    && Objects.equals(url, stringValue(resolved.properties(), "url"))
+                    && Objects.equals(username, stringValue(resolved.properties(), "username"))
+                    && Objects.equals(password, stringValue(resolved.properties(), "password"));
+        }
+
+        FileSessionHandle withSessionId(String nextSessionId)
+        {
+            return new FileSessionHandle(connectionId, dialectId, url, username, password, connection, lastUsedAtMs, nextSessionId);
+        }
+    }
+
+    private record DeadSessionSnapshot(String fileId, String connectionId, String sessionId, long expiresAtMs)
+    {
+    }
+
+    private record AcquiredConnection(Connection connection, boolean createdNew)
+    {
     }
 }

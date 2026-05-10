@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.core.BackendPlatformServices;
 
 class PluginManifestDiscoveryTest
@@ -42,7 +41,7 @@ class PluginManifestDiscoveryTest
         Files.writeString(pluginFolder.resolve("plugin.json"), json, StandardCharsets.UTF_8);
 
         PluginSourceExplorer explorer = new PluginSourceExplorer();
-        PluginManifestLoader loader = new PluginManifestLoader(new ObjectMapper());
+        PluginManifestLoader loader = new PluginManifestLoader();
 
         List<Path> sources = explorer.discoverPluginSources(pluginsDir);
         Assertions.assertEquals(1, sources.size());
@@ -61,7 +60,7 @@ class PluginManifestDiscoveryTest
         Path pluginFolder = pluginsDir.resolve("broken-plugin");
         Files.createDirectories(pluginFolder);
 
-        PluginManifestLoader loader = new PluginManifestLoader(new ObjectMapper());
+        PluginManifestLoader loader = new PluginManifestLoader();
 
         PluginDiscoveryException error = Assertions.assertThrows(PluginDiscoveryException.class, () -> loader.load(pluginFolder));
         Assertions.assertTrue(error.getMessage()
@@ -103,7 +102,7 @@ class PluginManifestDiscoveryTest
         Files.writeString(pluginFolderB.resolve("plugin.json"), duplicateManifestB, StandardCharsets.UTF_8);
 
         PluginClassLoaderFactory classLoaderFactory = new PluginClassLoaderFactory(new SharedClassLoader(List.of(), getClass().getClassLoader()));
-        PluginDiscoveryService service = new PluginDiscoveryService(new ObjectMapper(), BackendPlatformServices.defaultServices(), classLoaderFactory);
+        PluginDiscoveryService service = new PluginDiscoveryService(BackendPlatformServices.defaultServices(), classLoaderFactory);
         PluginDiscoveryException error = Assertions.assertThrows(PluginDiscoveryException.class, () -> service.discoverFromPath(pluginsDir.toString()));
 
         Assertions.assertTrue(error.getMessage()
@@ -134,7 +133,7 @@ class PluginManifestDiscoveryTest
                 """;
         Files.writeString(pluginFolder.resolve("plugin.json"), json, StandardCharsets.UTF_8);
 
-        PluginManifestLoader loader = new PluginManifestLoader(new ObjectMapper());
+        PluginManifestLoader loader = new PluginManifestLoader();
         PluginDiscoveryException error = Assertions.assertThrows(PluginDiscoveryException.class, () -> loader.load(pluginFolder));
         Assertions.assertTrue(error.getMessage()
                 .contains("backend.classpath.include"));

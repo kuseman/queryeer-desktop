@@ -6,9 +6,6 @@ import java.util.Map;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import com.queryeer.backend.contract.payloadbuilder.PayloadbuilderCatalogInstance;
-import com.queryeer.backend.contract.payloadbuilder.PayloadbuilderEngineState;
-
 import se.kuseman.payloadbuilder.core.catalog.CatalogRegistry;
 import se.kuseman.payloadbuilder.core.execution.QuerySession;
 

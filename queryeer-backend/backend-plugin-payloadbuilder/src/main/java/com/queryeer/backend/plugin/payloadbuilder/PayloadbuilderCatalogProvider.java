@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.Set;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
+import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
 public interface PayloadbuilderCatalogProvider
 {
@@ -21,9 +22,8 @@ public interface PayloadbuilderCatalogProvider
         throw new IllegalArgumentException("Unsupported payloadbuilder action: " + action);
     }
 
-    /** Resolves connection properties by connectionId from ConfigService. Returns empty map if not found. */
-    default Map<String, Object> resolveConnection(String connectionId)
+    /** Inject properties for this catalog / alias combo. */
+    default void injectProperties(QuerySession querySession, String alias, Map<String, Object> properties)
     {
-        return Map.of();
     }
 }

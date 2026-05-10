@@ -77,17 +77,6 @@ describe("Protocol fixture compatibility", () => {
     expect(params.queryExecutionId).toBe(result.queryExecutionId);
   });
 
-  it("connection upsert fixtures", () => {
-    const request = readFixture("request-connection-upsert.json");
-    const response = readFixture("response-connection-upsert.json");
-    assertEnvelopeBase(request);
-    assertEnvelopeBase(response);
-    expect(request.method).toBe("connection.upsert");
-    expect(request.id).toBe(response.id);
-    const result = response.result as Record<string, unknown>;
-    expect(typeof result.connectionId).toBe("string");
-  });
-
   it("file open fixtures", () => {
     const request = readFixture("request-file-open.json");
     const response = readFixture("response-file-open.json");

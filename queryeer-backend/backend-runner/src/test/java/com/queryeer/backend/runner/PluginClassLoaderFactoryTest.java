@@ -115,8 +115,7 @@ class PluginClassLoaderFactoryTest
 
     private PluginManifest pluginManifest(PluginManifest.Classpath classpath)
     {
-        return new PluginManifest(1, "dev.plugin", "Dev Plugin", "0.1.0", new PluginManifest.BackendTarget("dev.sample.Plugin", null, classpath, "17"), null, List.of(), List.of(), List.of(), null,
-                null);
+        return new PluginManifest(1, "dev.plugin", "Dev Plugin", "0.1.0", new PluginManifest.BackendTarget("dev.sample.Plugin", null, classpath), null, List.of(), List.of(), List.of(), null, null);
     }
 
     private void compilePluginClass(Path classesRoot, String fqcn, String sourceValue) throws IOException

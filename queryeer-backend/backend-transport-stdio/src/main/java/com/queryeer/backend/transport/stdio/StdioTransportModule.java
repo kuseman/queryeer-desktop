@@ -1,5 +1,7 @@
 package com.queryeer.backend.transport.stdio;
 
+import static java.util.Objects.requireNonNull;
+
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.List;
@@ -32,6 +34,9 @@ public final class StdioTransportModule
     public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry, EventBus events,
             Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt, ConfigService configService, SecuritySession securitySession)
     {
+        requireNonNull(configService, "configService");
+        requireNonNull(events, "events");
+
         EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
         ResponseWriter responseWriter = new ResponseWriter(output, codec);
         NotificationPublisher notificationPublisher = new NotificationPublisher(responseWriter);
@@ -42,21 +47,12 @@ public final class StdioTransportModule
                 new SecuritySessionOpenRequestHandler(responseWriter, codec, securitySession, events), new SecuritySessionCloseRequestHandler(responseWriter, securitySession, events),
                 new SecurityVaultChangedRequestHandler(responseWriter, codec, securitySession), new HealthPingRequestHandler(startedAt, responseWriter, codec),
                 new QueryExecuteRequestHandler(responseWriter, codec, queryExecutionService, notificationPublisher), new QueryCancelRequestHandler(responseWriter, codec, queryExecutionService),
-                new EngineInvokeRequestHandler(responseWriter, codec, engineInvokeService), new ConnectionUpsertRequestHandler(responseWriter, codec, queryEngines),
-                new FileOpenRequestHandler(responseWriter, codec, fileRegistry), new FileCloseRequestHandler(responseWriter, codec, fileRegistry));
+                new EngineInvokeRequestHandler(responseWriter, codec, engineInvokeService), new FileOpenRequestHandler(responseWriter, codec, fileRegistry),
+                new FileCloseRequestHandler(responseWriter, codec, fileRegistry));
 
         RequestDispatcher requestDispatcher = new RequestDispatcher(responseWriter, handlers);
 
-        List<NotificationHandler> notificationHandlers = List.of(new FileChangeNotificationHandler(codec, fileRegistry),
-                new SettingsModuleChangedNotificationHandler(codec, configService != null ? configService
-                        : new com.queryeer.backend.api.ConfigService()
-                        {
-                            @Override
-                            public String get(String key)
-                            {
-                                return null;
-                            }
-                        }));
+        List<NotificationHandler> notificationHandlers = List.of(new FileChangeNotificationHandler(codec, fileRegistry), new SettingsModuleChangedNotificationHandler(codec, configService, events));
         NotificationDispatcher notificationDispatcher = new NotificationDispatcher(notificationHandlers);
 
         StdioTransportServer transportServer = new StdioTransportServer(input, codec, responseWriter, requestDispatcher, notificationDispatcher);

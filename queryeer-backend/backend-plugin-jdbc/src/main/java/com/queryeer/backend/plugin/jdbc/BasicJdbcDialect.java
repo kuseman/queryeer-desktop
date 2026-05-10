@@ -1,17 +1,20 @@
 package com.queryeer.backend.plugin.jdbc;
 
-import java.util.List;
+import java.util.Map;
 
-import com.queryeer.backend.queryengine.jdbc.DriverManagerJdbcQueryExecutor;
-import com.queryeer.backend.queryengine.jdbc.JdbcConnectionSetupDefinition;
+import com.queryeer.backend.api.PayloadUtils;
+import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialect;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectMetadata;
-import com.queryeer.backend.queryengine.jdbc.JdbcQueryExecutor;
-import com.queryeer.backend.queryengine.jdbc.JdbcSchemaResolver;
+import com.queryeer.backend.queryengine.jdbc.execute.AbstractJdbcQueryExecutor;
+import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryExecutor;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
 
 final class BasicJdbcDialect implements JdbcDialect
 {
-    private final JdbcQueryExecutor queryExecutor = new DriverManagerJdbcQueryExecutor();
+    private final JdbcQueryExecutor queryExecutor = new AbstractJdbcQueryExecutor()
+    {
+    };
     private final JdbcSchemaResolver schemaResolver = new InformationSchemaJdbcSchemaResolver();
 
     @Override
@@ -21,9 +24,9 @@ final class BasicJdbcDialect implements JdbcDialect
     }
 
     @Override
-    public JdbcConnectionSetupDefinition connectionSetup()
+    public String buildUrl(Map<String, Object> materializedProperties)
     {
-        return new JdbcConnectionSetupDefinition(List.of());
+        return PayloadUtils.stringValue(materializedProperties, JdbcConnection.KEY_URL);
     }
 
     @Override

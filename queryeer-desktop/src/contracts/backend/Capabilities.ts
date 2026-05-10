@@ -9,7 +9,6 @@ export const BACKEND_REQUEST_CAPABILITIES: ReadonlyArray<Capability> = [
   "queryengine.execute",
   "queryengine.cancel",
   "queryengine.invoke",
-  "connection.upsert",
   "file.open",
   "file.close"
 ];

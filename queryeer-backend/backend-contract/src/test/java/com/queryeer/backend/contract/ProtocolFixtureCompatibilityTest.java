@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.queryeer.backend.contract.connection.ConnectionUpsertResult;
 import com.queryeer.backend.contract.engine.EngineInvokeParams;
 import com.queryeer.backend.contract.engine.EngineInvokeResult;
 import com.queryeer.backend.contract.file.FileChangeNotification;
@@ -233,29 +232,10 @@ class ProtocolFixtureCompatibilityTest
         EngineInvokeParams params = objectMapper.convertValue(request.params(), EngineInvokeParams.class);
         Assertions.assertEquals("payloadbuilder", params.engineId());
         Assertions.assertEquals("file-fixture-1", params.fileId());
-        Assertions.assertEquals("payloadbuilder.echo", params.action());
+        Assertions.assertEquals("engine.capabilities", params.action());
 
         EngineInvokeResult result = objectMapper.convertValue(response.result(), EngineInvokeResult.class);
         Assertions.assertNotNull(result.result());
-    }
-
-    @Test
-    void connectionUpsertFixturesAreCompatible() throws IOException
-    {
-        BackendEnvelope request = readFixture("request-connection-upsert.json");
-        BackendEnvelope response = readFixture("response-connection-upsert.json");
-
-        assertEnvelopeBase(request);
-        assertEnvelopeBase(response);
-        Assertions.assertEquals(EnvelopeType.REQUEST, request.type());
-        Assertions.assertEquals(EnvelopeType.RESPONSE, response.type());
-        Assertions.assertEquals("connection.upsert", request.method());
-        Assertions.assertEquals(request.id(), response.id());
-        Assertions.assertNotNull(response.result());
-
-        ConnectionUpsertResult result = objectMapper.convertValue(response.result(), ConnectionUpsertResult.class);
-        Assertions.assertEquals("conn-fixture-1", result.connectionId());
-        Assertions.assertEquals(1L, result.version());
     }
 
     @Test

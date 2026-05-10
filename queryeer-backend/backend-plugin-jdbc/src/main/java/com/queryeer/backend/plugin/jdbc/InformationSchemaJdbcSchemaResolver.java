@@ -1,8 +1,11 @@
 package com.queryeer.backend.plugin.jdbc;
 
+import static com.queryeer.backend.api.PayloadUtils.nullToEmpty;
+import static com.queryeer.backend.api.PayloadUtils.stringValue;
+import static com.queryeer.backend.api.PayloadUtils.trimToNull;
+
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -11,21 +14,18 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.stream.Collectors;
 
-import com.queryeer.backend.queryengine.jdbc.JdbcColumnDefinition;
-import com.queryeer.backend.queryengine.jdbc.JdbcConnectionProfile;
-import com.queryeer.backend.queryengine.jdbc.JdbcSchemaObject;
-import com.queryeer.backend.queryengine.jdbc.JdbcSchemaObjectFactory;
-import com.queryeer.backend.queryengine.jdbc.JdbcSchemaResolver;
+import com.queryeer.backend.api.PayloadUtils;
+import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcColumnDefinition;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObjectFactory;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaTarget;
 
 final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
 {
-    private static final String KEY_URL = "url";
-    private static final String KEY_USERNAME = "username";
-    private static final String KEY_PASSWORD = "password";
-    private static final String KEY_USER = "user";
     private static final String OPTION_SCOPE = "scope";
     private static final String OPTION_TARGET = "target";
     private static final String SCOPE_TOP = "top";
@@ -55,38 +55,12 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
     private static final String KEY_NON_UNIQUE = "nonUnique";
 
     @Override
-    public List<JdbcSchemaObject> resolveSchema(JdbcConnectionProfile connection)
+    public List<JdbcSchemaObject> resolveSchema(JdbcConnection connection, Map<String, Object> options)
     {
-        return resolveSchema(connection, Map.of());
-    }
-
-    @Override
-    public List<JdbcSchemaObject> resolveSchema(JdbcConnectionProfile connection, Map<String, Object> options)
-    {
-        String url = text(connection.properties()
-                .get(KEY_URL));
-        if (url == null)
+        try (Connection jdbc = connection.dialect()
+                .openSessionConnection(connection.properties()))
         {
-            return List.of();
-        }
-
-        Properties properties = new Properties();
-        String username = text(connection.properties()
-                .get(KEY_USERNAME));
-        String password = text(connection.properties()
-                .get(KEY_PASSWORD));
-        if (username != null)
-        {
-            properties.setProperty(KEY_USER, username);
-        }
-        if (password != null)
-        {
-            properties.setProperty(KEY_PASSWORD, password);
-        }
-
-        try (Connection jdbc = DriverManager.getConnection(url, properties))
-        {
-            String scope = text(options.get(OPTION_SCOPE));
+            String scope = stringValue(options, OPTION_SCOPE);
             if (SCOPE_TOP.equalsIgnoreCase(scope))
             {
                 return readTopLevelObjects(jdbc);
@@ -171,11 +145,8 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
     private static List<JdbcSchemaObject> toDatabaseHierarchy(List<JdbcSchemaObject> schemas)
     {
         Map<String, List<JdbcSchemaObject>> byCatalog = schemas.stream()
-                .collect(Collectors.groupingBy(schema -> text(schema.attributes()
-                        .get(KEY_CATALOG)) == null ? DEFAULT_CATALOG_NAME
-                                : text(schema.attributes()
-                                        .get(KEY_CATALOG)),
-                        LinkedHashMap::new, Collectors.toList()));
+                .collect(Collectors.groupingBy(schema -> stringValue(schema.attributes(), KEY_CATALOG) == null ? DEFAULT_CATALOG_NAME
+                        : stringValue(schema.attributes(), KEY_CATALOG), LinkedHashMap::new, Collectors.toList()));
         List<JdbcSchemaObject> databases = new ArrayList<>();
         byCatalog.forEach((catalog, children) -> databases.add(new JdbcSchemaObject("database:" + catalog, catalog, KIND_DATABASE, children, Map.of())));
         return databases;
@@ -269,7 +240,7 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
 
     private static JdbcSchemaTarget targetFrom(Object value)
     {
-        if (value instanceof com.queryeer.backend.contract.jdbc.JdbcSchemaTarget t)
+        if (value instanceof JdbcSchemaTarget t)
         {
             return new JdbcSchemaTarget(trimToNull(t.database()), trimToNull(t.schema()), trimToNull(t.table()));
         }
@@ -413,36 +384,8 @@ final class InformationSchemaJdbcSchemaResolver implements JdbcSchemaResolver
     private static String key(String... values)
     {
         return java.util.Arrays.stream(values)
-                .map(InformationSchemaJdbcSchemaResolver::nullToEmpty)
+                .map(PayloadUtils::nullToEmpty)
                 .collect(Collectors.joining("|"));
-    }
-
-    private static String text(Object value)
-    {
-        if (!(value instanceof String stringValue))
-        {
-            return null;
-        }
-        String trimmed = stringValue.trim();
-        return trimmed.isBlank() ? null
-                : trimmed;
-    }
-
-    private static String trimToNull(String value)
-    {
-        if (value == null)
-        {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isBlank() ? null
-                : trimmed;
-    }
-
-    private static String nullToEmpty(String value)
-    {
-        return value == null ? ""
-                : value;
     }
 
     private record TableRow(String tableCatalog, String tableSchema, String tableName, String tableType)

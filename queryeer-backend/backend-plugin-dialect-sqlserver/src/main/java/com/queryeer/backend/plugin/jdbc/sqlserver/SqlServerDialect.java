@@ -10,11 +10,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Properties;
 
-import com.queryeer.backend.queryengine.jdbc.JdbcConnectionSetupDefinition;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialect;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectMetadata;
-import com.queryeer.backend.queryengine.jdbc.JdbcQueryExecutor;
-import com.queryeer.backend.queryengine.jdbc.JdbcSchemaResolver;
+import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryExecutor;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
 
 public final class SqlServerDialect implements JdbcDialect
 {
@@ -30,12 +29,6 @@ public final class SqlServerDialect implements JdbcDialect
     }
 
     @Override
-    public JdbcConnectionSetupDefinition connectionSetup()
-    {
-        return SqlServerConnectionSetup.build();
-    }
-
-    @Override
     public JdbcQueryExecutor queryExecutor()
     {
         return queryExecutor;
@@ -45,12 +38,6 @@ public final class SqlServerDialect implements JdbcDialect
     public JdbcSchemaResolver schemaResolver()
     {
         return schemaResolver;
-    }
-
-    @Override
-    public boolean requiresExplicitUrl()
-    {
-        return false;
     }
 
     @Override
@@ -78,11 +65,17 @@ public final class SqlServerDialect implements JdbcDialect
     }
 
     @Override
-    public Connection openSessionConnection(com.queryeer.backend.queryengine.jdbc.JdbcConnectionProfile profile) throws SQLException
+    public Connection openSessionConnection(Map<String, Object> materializedProperties) throws SQLException
     {
-        String url = SqlServerUrlBuilder.buildUrl(profile.properties());
-        Properties jdbcProps = SqlServerUrlBuilder.buildConnectionProperties(profile.properties());
+        String url = buildUrl(materializedProperties);
+        Properties jdbcProps = SqlServerUrlBuilder.buildConnectionProperties(materializedProperties);
         return DriverManager.getConnection(url, jdbcProps);
+    }
+
+    @Override
+    public String buildUrl(Map<String, Object> materializedProperties)
+    {
+        return SqlServerUrlBuilder.buildUrl(materializedProperties);
     }
 
     @Override

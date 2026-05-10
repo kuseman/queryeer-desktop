@@ -9,18 +9,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 final class PluginManifestLoader
 {
     static final String MANIFEST_FILE = "plugin.json";
 
-    private final ObjectMapper objectMapper;
     private final PluginManifestValidation validator;
 
-    PluginManifestLoader(ObjectMapper objectMapper)
+    PluginManifestLoader()
     {
-        this.objectMapper = objectMapper;
         this.validator = new PluginManifestValidation();
     }
 
@@ -43,7 +39,7 @@ final class PluginManifestLoader
 
         try (InputStream input = Files.newInputStream(manifestPath))
         {
-            PluginManifest manifest = objectMapper.readValue(input, PluginManifest.class);
+            PluginManifest manifest = MapperUtils.MAPPER.readValue(input, PluginManifest.class);
             validator.validate(manifest, manifestPath.toString());
             return manifest;
         }
@@ -66,7 +62,7 @@ final class PluginManifestLoader
 
             try (InputStream input = Files.newInputStream(manifestPath))
             {
-                PluginManifest manifest = objectMapper.readValue(input, PluginManifest.class);
+                PluginManifest manifest = MapperUtils.MAPPER.readValue(input, PluginManifest.class);
                 validator.validate(manifest, source.toString());
                 return manifest;
             }

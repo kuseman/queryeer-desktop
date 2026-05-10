@@ -1,5 +1,7 @@
 package com.queryeer.backend.plugin.payloadbuilder.elasticsearch;
 
+import static com.queryeer.backend.api.PayloadUtils.stringValue;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -18,11 +20,11 @@ import java.util.regex.Pattern;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.SettingsModule;
-import com.queryeer.backend.contract.payloadbuilder.EsListIndicesPayload;
 import com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderCatalogProvider;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
 import se.kuseman.payloadbuilder.catalog.es.ESCatalog;
+import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
 public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalogProvider
 {
@@ -32,10 +34,10 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
     private static final Pattern INDEX_JSON_PATTERN = Pattern.compile("\\\"index\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
 
     private static final String KEY_CONNECTION_ID = "connectionId";
+    private static final String KEY_INDEX = "index";
     private static final String KEY_INDICES = "indices";
     private static final String ERROR_UNSUPPORTED_ACTION = "Unsupported payloadbuilder action: ";
     private static final String ERROR_PROPERTIES_REQUIRED = "payloadbuilder.es.listIndices payload.properties must be an object";
-    private static final String ERROR_ENDPOINT_REQUIRED = "endpoint is required for payloadbuilder.es.listIndices";
     private static final String ERROR_INTERRUPTED = "Interrupted while listing Elasticsearch indices";
     private static final String ERROR_FAILED = "Failed to list Elasticsearch indices: ";
     private static final String ERROR_STATUS = "Elasticsearch request failed with status ";
@@ -47,6 +49,7 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
     private static final String AUTH_PREFIX_BASIC = "Basic ";
     private static final String AUTH_TYPE_BASIC = "BASIC";
 
+    private static final ESCatalog CATALOG = new ESCatalog();
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
@@ -59,36 +62,54 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
         this.payloadMapper = payloadMapper;
     }
 
-    /** Resolves connection properties from settings by connectionId and merges into the given properties map. */
-    @SuppressWarnings("unchecked")
     @Override
-    public Map<String, Object> resolveConnection(String connectionId)
+    public void injectProperties(QuerySession session, String alias, Map<String, Object> properties)
     {
+        String connectionId = stringValue(properties, KEY_CONNECTION_ID);
+        ElasticsearchConnection connection = getConnection(connectionId);
+        if (connection == null)
+        {
+            throw new IllegalArgumentException("Connection with id: " + connectionId + " could not be found");
+        }
+
+        String index = stringValue(properties, KEY_INDEX);
+        session.setCatalogProperty(alias, ESCatalog.INDEX_KEY, index);
+
+        // TODO: ESCatalog.TRUSTCERTIFICATE_KEY
+        // TODO: ESCatalog.CONNECT_TIMEOUT_KEY
+        // TODO: ESCatalog.RECEIVE_TIMEOUT_KEY
+        session.setCatalogProperty(alias, ESCatalog.ENDPOINT_KEY, connection.endpoint());
+        if (connection.authType() != null)
+        {
+            session.setCatalogProperty(alias, ESCatalog.AUTH_TYPE_KEY, connection.authType());
+            session.setCatalogProperty(alias, ESCatalog.AUTH_USERNAME_KEY, connection.authUsername());
+            session.setCatalogProperty(alias, ESCatalog.AUTH_PASSWORD_KEY, configService.materializeSecrets(connection.authPassword()));
+        }
+    }
+
+    private ElasticsearchConnection getConnection(String connectionId)
+    {
+        if (connectionId == null
+                || connectionId.isBlank())
+        {
+            return null;
+        }
         SettingsModule module = configService.getModule(ES_MODULE_ID);
         if (module == null)
         {
-            return Map.of();
+            return null;
         }
-        Object conns = module.values()
-                .get(ES_CONNECTIONS_SETTING_ID);
-        if (!(conns instanceof List<?> list))
+        List<ElasticsearchConnection> connections = payloadMapper.convertToList(module.values()
+                .get(ES_CONNECTIONS_SETTING_ID), ElasticsearchConnection.class);
+
+        for (ElasticsearchConnection con : connections)
         {
-            return Map.of();
-        }
-        for (Object item : list)
-        {
-            if (!(item instanceof Map<?, ?> entry))
+            if (connectionId.equals(con.connectionId()))
             {
-                continue;
+                return con;
             }
-            if (!connectionId.equals(entry.get(KEY_CONNECTION_ID) instanceof String s ? trimToNull(s)
-                    : null))
-            {
-                continue;
-            }
-            return (Map<String, Object>) entry;
         }
-        return Map.of();
+        return null;
     }
 
     @Override
@@ -100,7 +121,7 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
     @Override
     public Catalog createCatalog()
     {
-        return new ESCatalog();
+        return CATALOG;
     }
 
     @Override
@@ -127,28 +148,22 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
             throw new IllegalArgumentException(ERROR_PROPERTIES_REQUIRED);
         }
 
-        // Resolve connection from settings by connectionId if present
-        String connectionId = trimToNull((String) params.properties()
-                .get(KEY_CONNECTION_ID));
-        Map<String, Object> effectiveProperties = connectionId != null ? resolveConnection(connectionId)
-                : params.properties();
-
-        String endpoint = normalize(effectiveProperties.get(ESCatalog.ENDPOINT_KEY));
-        if (endpoint.isEmpty())
+        String connectionId = stringValue(params.properties(), KEY_CONNECTION_ID);
+        ElasticsearchConnection connection = getConnection(connectionId);
+        if (connection == null)
         {
-            throw new IllegalArgumentException(ERROR_ENDPOINT_REQUIRED);
+            throw new IllegalArgumentException("Connection with id: " + connectionId + " could not be found");
         }
 
-        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(resolveCatIndicesUri(endpoint))
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(resolveCatIndicesUri(connection.endpoint()))
                 .GET()
                 .timeout(Duration.ofSeconds(30))
                 .header(HEADER_ACCEPT, CONTENT_TYPE_JSON);
 
-        String authType = normalize(effectiveProperties.get(ESCatalog.AUTH_TYPE_KEY)).toUpperCase();
-        if (AUTH_TYPE_BASIC.equals(authType))
+        if (AUTH_TYPE_BASIC.equals(connection.authType()))
         {
-            String username = normalize(effectiveProperties.get(ESCatalog.AUTH_USERNAME_KEY));
-            String password = normalize(effectiveProperties.get(ESCatalog.AUTH_PASSWORD_KEY));
+            String username = connection.authUsername();
+            String password = (String) configService.materializeSecrets(connection.authPassword());
             String token = Base64.getEncoder()
                     .encodeToString((username + ":" + password).getBytes(StandardCharsets.UTF_8));
             requestBuilder.header(HEADER_AUTHORIZATION, AUTH_PREFIX_BASIC + token);
@@ -200,22 +215,5 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
             }
         }
         return result;
-    }
-
-    private static String normalize(Object value)
-    {
-        return value instanceof String text ? text.trim()
-                : "";
-    }
-
-    private static String trimToNull(String value)
-    {
-        if (value == null)
-        {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isBlank() ? null
-                : trimmed;
     }
 }
