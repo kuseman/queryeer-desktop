@@ -105,8 +105,17 @@ function prettyPrintXml(xml: string): string {
 
 function createJsonAction(value: unknown): TableLinkAction | null {
   const text = valueToString(value).trim();
-  const formatted = tryFormatJson(text);
-  if (!formatted) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const isObjectOrArray = typeof parsed === "object" && parsed !== null;
+  if (!isObjectOrArray) {
+    return null;
+  }
+  const formatted = JSON.stringify(parsed, null, 2);
   return {
     kind: "preview",
     title: "JSON Preview",

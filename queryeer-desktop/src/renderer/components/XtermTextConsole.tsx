@@ -7,6 +7,42 @@ import "@xterm/xterm/css/xterm.css";
 
 const WRITE_BATCH_SIZE = 200;
 
+function readCssVar(style: CSSStyleDeclaration, name: string, fallback: string): string {
+  const value = style.getPropertyValue(name).trim();
+  return value.length > 0 ? value : fallback;
+}
+
+function resolveXtermTheme() {
+  const style = getComputedStyle(document.documentElement);
+  const background = readCssVar(style, "--surface-editor-active", "#121417");
+  const foreground = readCssVar(style, "--text-0", "#cccccc");
+  const cursor = readCssVar(style, "--accent", "#0e639c");
+  const selectionBackground = readCssVar(style, "--state-select-bg", "rgba(0, 120, 215, 0.25)");
+
+  return {
+    background,
+    foreground,
+    cursor,
+    selectionBackground,
+    black: readCssVar(style, "--bg-0", "#1e1e1e"),
+    brightBlack: readCssVar(style, "--text-2", "#6b6b6b"),
+    red: "#cd3131",
+    brightRed: "#f14c4c",
+    green: "#0dbc79",
+    brightGreen: "#23d18b",
+    yellow: "#e5e510",
+    brightYellow: "#f5f543",
+    blue: "#2472c8",
+    brightBlue: "#3b8eea",
+    magenta: "#bc3fbc",
+    brightMagenta: "#d670d6",
+    cyan: "#11a8cd",
+    brightCyan: "#29b8db",
+    white: "#e5e5e5",
+    brightWhite: "#ffffff"
+  };
+}
+
 function renderLinesWithFlowControl(
   terminal: Terminal,
   lines: string[],
@@ -96,7 +132,8 @@ export function XtermTextConsole({
       disableStdin: true,
       fontFamily,
       fontSize,
-      scrollback
+      scrollback,
+      theme: resolveXtermTheme()
     });
     const fitAddon = new FitAddon();
     const searchAddon = new SearchAddon();
@@ -181,6 +218,39 @@ export function XtermTextConsole({
       searchAddonRef.current = null;
     };
   }, [fontFamily, fontSize, scrollback]);
+
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) {
+      return;
+    }
+
+    const applyTheme = () => {
+      const optionsTarget = terminal.options as unknown as { theme?: unknown } | undefined;
+      if (!optionsTarget) {
+        return;
+      }
+      optionsTarget.theme = resolveXtermTheme();
+      if (typeof terminal.refresh === "function" && terminal.rows > 0) {
+        terminal.refresh(0, terminal.rows - 1);
+      }
+    };
+
+    applyTheme();
+
+    const root = document.documentElement;
+    const observer = new MutationObserver(() => {
+      applyTheme();
+    });
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ["style", "data-theme-id", "class"]
+    });
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     const root = rootRef.current;

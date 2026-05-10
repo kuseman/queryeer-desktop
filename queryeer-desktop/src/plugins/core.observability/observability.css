@@ -86,7 +86,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px;
-  background: #2d2d2d;
+  background: var(--bg-2);
 }
 
 .shell-status .label {
@@ -116,7 +116,7 @@
 
 .backend-actions button {
   border: 1px solid var(--border);
-  background: rgba(7, 15, 25, 0.6);
+  background: var(--surface-editor-tabs);
   color: var(--text-0);
   border-radius: 6px;
   padding: 6px 9px;
@@ -131,7 +131,7 @@
 .backend-log-panel {
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: #2d2d2d;
+  background: var(--bg-2);
   max-height: 280px;
   overflow: auto;
 }

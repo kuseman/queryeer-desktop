@@ -12,6 +12,7 @@ import {
   buildMonacoModelUpdateOptions,
   buildMonacoUpdateOptions
 } from "./editor-settings";
+import { getThemeService } from "../../core.themes/runtime";
 import "./text-editor.css";
 
 void React;
@@ -48,6 +49,11 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
     if (!editor) {
       return;
     }
+    const themeMode = getThemeService()?.getActiveThemeMode() ?? "dark";
+    const monacoEditor = monacoModuleInstance?.editor as
+      | { setTheme?: (theme: string) => void }
+      | undefined;
+    monacoEditor?.setTheme?.(themeMode === "dark" ? "vs-dark" : "vs");
     const settingsService = getCoreSettingsService();
     editor.updateOptions(buildMonacoUpdateOptions(settingsService));
     const model = editor.getModel();

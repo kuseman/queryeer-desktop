@@ -136,7 +136,7 @@
   gap: 0;
   min-height: 0;
   overflow: auto;
-  background: #252526;
+  background: var(--surface-sidebar);
 }
 
 .shell-sidebar-empty-state {
@@ -173,7 +173,7 @@
   gap: 0;
   padding: 0;
   border-bottom: 1px solid var(--border);
-  background: rgba(6, 12, 22, 0.6);
+  background: var(--surface-editor-tabs);
   min-height: 28px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -214,12 +214,12 @@
 }
 
 .shell-editor-tab-button:hover {
-  background: rgba(173, 194, 219, 0.08);
+  background: var(--surface-overlay-soft);
   color: var(--text-0);
 }
 
 .shell-editor-tab.is-active .shell-editor-tab-button {
-  background: rgba(7, 15, 25, 0.55);
+  background: var(--surface-editor-active);
   color: var(--text-0);
 }
 
@@ -281,7 +281,7 @@
 }
 
 .shell-editor-tab-close:hover {
-  background: rgba(173, 194, 219, 0.2);
+  background: var(--surface-overlay-strong);
   color: var(--text-0);
 }
 
@@ -289,7 +289,7 @@
   position: fixed;
   z-index: 1000;
   background: var(--bg-2);
-  border: 1px solid rgba(173, 194, 219, 0.35);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 8px 12px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
@@ -471,7 +471,7 @@
 }
 
 .panel-header-interactive:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-overlay-weak);
 }
 
 .panel-title {
@@ -563,7 +563,7 @@
   min-height: 24px;
   padding: 6px 12px;
   border-top: 1px solid var(--border);
-  background: #007acc;
+  background: var(--surface-statusbar);
   position: sticky;
   bottom: 0;
   z-index: 5;
@@ -578,7 +578,7 @@
 
 .shell-status-item {
   font-size: var(--ui-font-size-xs);
-  color: #ffffff;
+  color: var(--color-white);
 }
 
 .shell-status-item-interactive {

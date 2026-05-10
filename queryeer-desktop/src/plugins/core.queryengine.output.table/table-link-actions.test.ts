@@ -21,6 +21,13 @@ describe("table link actions", () => {
     expect(action?.value).toContain("\n");
   });
 
+  it("does not resolve json preview for scalar json", () => {
+    expect(resolveTableLinkAction({ value: '"hello"', columnType: "string" })).toBeNull();
+    expect(resolveTableLinkAction({ value: "123", columnType: "string" })).toBeNull();
+    expect(resolveTableLinkAction({ value: "true", columnType: "string" })).toBeNull();
+    expect(resolveTableLinkAction({ value: "null", columnType: "string" })).toBeNull();
+  });
+
   it("detects and resolves xml previews", () => {
     const action = resolveTableLinkAction({ value: "<root><x>1</x></root>", columnType: "string" });
     expect(action).toBeTruthy();

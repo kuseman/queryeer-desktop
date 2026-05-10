@@ -1,0 +1,61 @@
+.theme-studio {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 10px;
+}
+
+.theme-studio-list {
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+  max-height: 320px;
+  overflow: auto;
+}
+
+.theme-studio-item {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-0);
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.theme-studio-item.active {
+  background: var(--state-select-bg);
+}
+
+.theme-studio-form {
+  display: grid;
+  gap: 8px;
+}
+
+.theme-studio-row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.theme-studio-row input,
+.theme-studio-row select,
+.theme-studio-form textarea {
+  background: var(--input-bg);
+  color: var(--text-0);
+  border: 1px solid var(--border);
+  padding: 4px 6px;
+}
+
+.theme-studio-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.theme-studio-actions button {
+  background: var(--bg-2);
+  color: var(--text-0);
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  cursor: pointer;
+}
