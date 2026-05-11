@@ -12,6 +12,7 @@ import com.queryeer.backend.api.PluginHostServices;
 import com.queryeer.backend.api.PluginServiceRegistry;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.SchedulerService;
+import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 import com.queryeer.backend.core.security.SecuritySession;
 
 public final class BackendPlatformServices implements PluginHostServices
@@ -54,6 +55,7 @@ public final class BackendPlatformServices implements PluginHostServices
         InlineSchedulerService scheduler = new InlineSchedulerService(logger);
         PayloadMapper payloadMapper = new JacksonPayloadMapper(MapperUtils.MAPPER);
         PluginServiceRegistry services = new InMemoryPluginServiceRegistry();
+        services.register(IncrementalParseSessionService.class, new DefaultIncrementalParseSessionService());
 
         BackendPluginContext context = new DefaultBackendPluginContext(logger, config, queryEngines, fileRegistry, events, scheduler, payloadMapper, services);
 
@@ -71,6 +73,7 @@ public final class BackendPlatformServices implements PluginHostServices
         InlineSchedulerService scheduler = new InlineSchedulerService(logger);
         PayloadMapper payloadMapper = new JacksonPayloadMapper(MapperUtils.MAPPER);
         PluginServiceRegistry services = new InMemoryPluginServiceRegistry();
+        services.register(IncrementalParseSessionService.class, new DefaultIncrementalParseSessionService());
 
         BackendPluginContext context = new DefaultBackendPluginContext(logger, config, queryEngines, fileRegistry, events, scheduler, payloadMapper, services);
 

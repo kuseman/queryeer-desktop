@@ -4,9 +4,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -37,6 +39,7 @@ public final class BackendRunnerModule
     {
         int exitCode = 0;
         Map<String, String> config = resolveConfigValues();
+        preloadSqlServerNativeAuth(config);
 
         ClassLoader appClassLoader = BackendRunnerModule.class.getClassLoader();
         List<URL> sharedLibUrls = SharedLibraryLoader.collect(config.get("queryeer.app.dir"));
@@ -146,6 +149,55 @@ public final class BackendRunnerModule
             PluginResourceCloser.closeAll(discoveredPlugins, sharedLoader, services.logger());
         }
         return exitCode;
+    }
+
+    private void preloadSqlServerNativeAuth(Map<String, String> config)
+    {
+        String appDir = config.getOrDefault("queryeer.app.dir", ".");
+        Path libNativeDir = Path.of(appDir, "libNative");
+        if (!Files.isDirectory(libNativeDir))
+        {
+            System.err.println(withCorrelation("SQL Server native auth preload skipped (missing directory: " + libNativeDir + ")", null));
+            return;
+        }
+
+        List<Path> candidates = new ArrayList<>();
+        candidates.add(libNativeDir.resolve("mssql-jdbc_auth.dll"));
+        candidates.add(libNativeDir.resolve("sqljdbc_auth.dll"));
+
+        try (var stream = Files.list(libNativeDir))
+        {
+            stream.filter(path -> path.getFileName()
+                    .toString()
+                    .toLowerCase()
+                    .matches("mssql-jdbc_auth.*\\\\.dll"))
+                    .sorted(Comparator.reverseOrder())
+                    .forEach(candidates::add);
+        }
+        catch (IOException ignored)
+        {
+        }
+
+        for (Path candidate : candidates)
+        {
+            if (!Files.isRegularFile(candidate))
+            {
+                continue;
+            }
+            try
+            {
+                System.load(candidate.toAbsolutePath()
+                        .toString());
+                System.err.println(withCorrelation("Preloaded SQL Server native auth DLL from " + candidate.toAbsolutePath(), null));
+                return;
+            }
+            catch (UnsatisfiedLinkError e)
+            {
+                System.err.println(withCorrelation("SQL Server native auth preload attempt failed for " + candidate.toAbsolutePath() + ": " + e.getMessage(), null));
+            }
+        }
+
+        System.err.println(withCorrelation("SQL Server native auth preload skipped (no matching DLL in " + libNativeDir + ")", null));
     }
 
     static Map<String, String> resolveConfigValues()

@@ -2,12 +2,16 @@ package com.queryeer.backend.plugin.jdbc;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import com.queryeer.backend.api.BackendPlugin;
 import com.queryeer.backend.api.BackendPluginContext;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.PluginDescriptor;
+import com.queryeer.backend.api.parse.IncrementalParseFunction;
+import com.queryeer.backend.api.parse.IncrementalParseSessionService;
+import com.queryeer.backend.api.parse.ParseSessionSnapshot;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawlCoordinator;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawlPolicy;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawler;
@@ -16,6 +20,7 @@ import com.queryeer.backend.queryengine.jdbc.DefaultJdbcDialectRegistry;
 import com.queryeer.backend.queryengine.jdbc.DefaultJdbcRuntimeService;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
 import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
+import com.queryeer.backend.queryengine.sql.parser.TreeSitterSqlParseFunction;
 
 public final class JdbcBackendPlugin implements BackendPlugin
 {
@@ -63,7 +68,14 @@ public final class JdbcBackendPlugin implements BackendPlugin
         long idleTimeoutMs = parseDurationMs(context.config(), IDLE_TIMEOUT_KEY, DEFAULT_IDLE_TIMEOUT_MS);
         long reaperIntervalMs = parseDurationMs(context.config(), REAPER_INTERVAL_KEY, Math.max(1_000L, Math.min(idleTimeoutMs, TimeUnit.MINUTES.toMillis(5))));
         long schemaCrawlIntervalMs = parseDurationMs(context.config(), SCHEMA_CRAWL_INTERVAL_KEY, TimeUnit.MINUTES.toMillis(5));
-        JdbcQueryEngineProvider provider = new JdbcQueryEngineProvider(registry, connections, idleTimeoutMs, crawlCoordinator::onUsage, schemaStore, crawlCoordinator, context.payloadMapper());
+        IncrementalParseSessionService parseSessions = context.services()
+                .get(IncrementalParseSessionService.class);
+        if (parseSessions == null)
+        {
+            parseSessions = noOpParseSessions();
+        }
+        JdbcQueryEngineProvider provider = new JdbcQueryEngineProvider(registry, connections, idleTimeoutMs, crawlCoordinator::onUsage, schemaStore, crawlCoordinator, context.payloadMapper(),
+                parseSessions, new TreeSitterSqlParseFunction());
 
         context.scheduler()
                 .schedule("jdbc.file-session-reaper", () -> startReaperThread(provider, reaperIntervalMs));
@@ -141,5 +153,34 @@ public final class JdbcBackendPlugin implements BackendPlugin
             Thread.currentThread()
                     .interrupt();
         }
+    }
+
+    private static IncrementalParseSessionService noOpParseSessions()
+    {
+        return new IncrementalParseSessionService()
+        {
+            @Override
+            public ParseSessionSnapshot open(String engineId, String fileId, long version, String languageId, String text, IncrementalParseFunction parseFunction)
+            {
+                return null;
+            }
+
+            @Override
+            public ParseSessionSnapshot change(String engineId, String fileId, long version, String languageId, String text, IncrementalParseFunction parseFunction)
+            {
+                return null;
+            }
+
+            @Override
+            public void close(String engineId, String fileId)
+            {
+            }
+
+            @Override
+            public Optional<ParseSessionSnapshot> get(String engineId, String fileId)
+            {
+                return Optional.empty();
+            }
+        };
     }
 }

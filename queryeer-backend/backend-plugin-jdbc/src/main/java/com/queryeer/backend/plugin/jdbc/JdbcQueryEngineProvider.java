@@ -25,6 +25,8 @@ import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryPublisher;
 import com.queryeer.backend.api.SecuritySessionClosedException;
+import com.queryeer.backend.api.parse.IncrementalParseFunction;
+import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaActionHandler;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawlCoordinator;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaStore;
@@ -39,6 +41,7 @@ import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldDefinition
 import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldOption;
 import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldType;
 import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionSetupDefinition;
+import com.queryeer.backend.queryengine.sql.parser.TreeSitterSqlParseFunction;
 
 final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionHandler
 {
@@ -51,6 +54,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private static final String ACTION_SCHEMA_REFRESH = "jdbc.schema.refresh";
     private static final String ACTION_SCHEMA_FETCH = "jdbc.schema.fetch";
     private static final String ACTION_CONNECTION_SESSIONS = "jdbc.connection.sessions";
+    private static final String ACTION_SQL_PARSE_SNAPSHOT = "sql.parse.snapshot";
 
     private static final String ERROR_CODE_VALIDATION = "VALIDATION";
     private static final String ERROR_CODE_CANCELLED = "CANCELLED";
@@ -78,19 +82,23 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private final JdbcSchemaActionHandler schemaActions;
     private final long idleTimeoutMs;
     private final PayloadMapper payloadMapper;
+    private final IncrementalParseSessionService parseSessions;
+    private final IncrementalParseFunction parseFunction;
     private final Map<String, CancellableJdbcQueryExecutor> activeExecutors = new ConcurrentHashMap<>();
     private final Set<String> cancelledExecutionIds = ConcurrentHashMap.newKeySet();
     private final Map<String, FileSessionHandle> byFileId = new ConcurrentHashMap<>();
     private final Map<String, DeadSessionSnapshot> deadByFileId = new ConcurrentHashMap<>();
 
     JdbcQueryEngineProvider(JdbcDialectRegistry registry, DefaultJdbcConnections connections, long idleTimeoutMs, JdbcConnectionUsageListener usageListener, JdbcSchemaStore schemaStore,
-            JdbcSchemaCrawlCoordinator crawlCoordinator, PayloadMapper payloadMapper)
+            JdbcSchemaCrawlCoordinator crawlCoordinator, PayloadMapper payloadMapper, IncrementalParseSessionService parseSessions, IncrementalParseFunction parseFunction)
     {
         this.registry = registry;
         this.connections = connections;
         this.idleTimeoutMs = Math.max(0L, idleTimeoutMs);
         this.usageListener = usageListener;
         this.payloadMapper = payloadMapper;
+        this.parseSessions = parseSessions;
+        this.parseFunction = parseFunction;
         this.schemaActions = new JdbcSchemaActionHandler(payloadMapper, connections, schemaStore, crawlCoordinator);
     }
 
@@ -222,6 +230,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             case ACTION_SCHEMA_REFRESH -> schemaActions.refresh(payload);
             case ACTION_SCHEMA_FETCH -> schemaActions.fetch(payload);
             case ACTION_CONNECTION_SESSIONS -> connectionSessions();
+            case ACTION_SQL_PARSE_SNAPSHOT -> sqlParseSnapshot(fileId);
             case ACTION_ENGINE_CAPABILITIES -> engineCapabilities();
             default -> QueryEngineProvider.super.invoke(fileId, action, payload);
         };
@@ -248,7 +257,19 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private Object engineCapabilities()
     {
         return Map.of(KEY_ACTIONS, List.of(ACTION_ENGINE_CAPABILITIES, ACTION_CONNECTION_SETUP, ACTION_CONNECTION_DIALECTS, ACTION_CONNECTION_TEST, ACTION_SCHEMA_SNAPSHOT, ACTION_SCHEMA_REFRESH,
-                ACTION_SCHEMA_FETCH, ACTION_CONNECTION_SESSIONS));
+                ACTION_SCHEMA_FETCH, ACTION_CONNECTION_SESSIONS, ACTION_SQL_PARSE_SNAPSHOT));
+    }
+
+    private Object sqlParseSnapshot(String fileId)
+    {
+        if (fileId == null
+                || fileId.isBlank())
+        {
+            return Map.of();
+        }
+        return parseSessions.get(engineId(), fileId)
+                .map(snapshot -> Map.of("version", snapshot.version(), "languageId", snapshot.languageId(), "hasErrors", snapshot.hasErrors(), "attributes", snapshot.attributes()))
+                .orElseGet(Map::of);
     }
 
     private Object connectionSessions()
@@ -310,9 +331,33 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     }
 
     @Override
+    public void onOpen(FileSession session, String initialText)
+    {
+        JdbcConnection connection = connections.resolve(session.connectionId());
+        String languageId = connection.dialect()
+                .sqlGrammarId();
+        parseSessions.open(engineId(), session.fileId(), session.backendVersion(), languageId, initialText, parseFunctionFor(languageId));
+    }
+
+    @Override
+    public void onChange(FileSession session, long version, String text)
+    {
+        String languageId = parseSessions.get(engineId(), session.fileId())
+                .map(s -> s.languageId())
+                .orElse(TreeSitterSqlParseFunction.LANGUAGE_SQL);
+        parseSessions.change(engineId(), session.fileId(), version, languageId, text, parseFunctionFor(languageId));
+    }
+
+    @Override
     public void onClose(FileSession session)
     {
+        parseSessions.close(engineId(), session.fileId());
         closeFile(session.fileId());
+    }
+
+    private IncrementalParseFunction parseFunctionFor(String languageId)
+    {
+        return (_, text, previousState) -> parseFunction.parse(languageId, text, previousState);
     }
 
     void closeIdleConnections(long now)

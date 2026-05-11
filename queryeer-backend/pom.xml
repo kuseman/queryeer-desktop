@@ -19,7 +19,7 @@
         <spotless.plugin.version>2.43.0</spotless.plugin.version>
         <surefire.plugin.version>3.2.5</surefire.plugin.version>
         <jackson.version>2.18.2</jackson.version>
-        <junit.jupiter.version>5.11.0</junit.jupiter.version>
+        <junit.jupiter.version>6.0.3</junit.jupiter.version>
         <mockito.core.version>5.23.0</mockito.core.version>
         <queryeer.config.root>${project.basedir}</queryeer.config.root>
     </properties>
@@ -68,6 +68,7 @@
         <module>backend-contract</module>
         <module>backend-core</module>
         <module>backend-lib-queryengine-jdbc-foundation</module>
+        <module>backend-lib-queryengine-sql-parser</module>
         <module>backend-transport-stdio</module>
         <module>backend-runner</module>
         <module>backend-plugin-payloadbuilder</module>

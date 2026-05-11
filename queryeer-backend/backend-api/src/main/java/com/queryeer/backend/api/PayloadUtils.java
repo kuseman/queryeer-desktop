@@ -26,7 +26,7 @@ public final class PayloadUtils
             return trimmed.isEmpty() ? defaultValue
                     : trimmed;
         }
-        return null;
+        return defaultValue;
     }
 
     /** Trim provided value to null */

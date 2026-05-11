@@ -14,11 +14,21 @@ import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
 
 public interface JdbcDialect
 {
+    String DEFAULT_SQL_GRAMMAR_ID = "postgres";
+
     JdbcDialectMetadata metadata();
 
     JdbcQueryExecutor queryExecutor();
 
     JdbcSchemaResolver schemaResolver();
+
+    /**
+     * Grammar identifier used by SQL parser services.
+     */
+    default String sqlGrammarId()
+    {
+        return DEFAULT_SQL_GRAMMAR_ID;
+    }
 
     /**
      * Switches the given connection to the requested database/catalog before executing statements. Default implementation uses {@link Connection#setCatalog(String)}.
