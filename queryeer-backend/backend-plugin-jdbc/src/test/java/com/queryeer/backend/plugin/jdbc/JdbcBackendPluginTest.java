@@ -56,7 +56,7 @@ class JdbcBackendPluginTest
 
         Map<String, Object> map = (Map<String, Object>) result;
         Assertions.assertEquals(List.of("engine.capabilities", "jdbc.connection.setup", "jdbc.connection.dialects", "jdbc.connection.test", "jdbc.schema.snapshot", "jdbc.schema.refresh",
-                "jdbc.schema.fetch", "jdbc.connection.sessions"), map.get("actions"));
+                "jdbc.schema.fetch", "jdbc.connection.sessions", "sql.parse.snapshot"), map.get("actions"));
     }
 
     @SuppressWarnings("unchecked")

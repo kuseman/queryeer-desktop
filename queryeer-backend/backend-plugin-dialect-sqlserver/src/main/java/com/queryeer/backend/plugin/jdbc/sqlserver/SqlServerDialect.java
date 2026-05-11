@@ -41,6 +41,12 @@ public final class SqlServerDialect implements JdbcDialect
     }
 
     @Override
+    public String sqlGrammarId()
+    {
+        return "tsql";
+    }
+
+    @Override
     public String resolveSessionId(Connection connection) throws SQLException
     {
         try (Statement statement = connection.createStatement(); ResultSet rs = statement.executeQuery("select @@SPID"))

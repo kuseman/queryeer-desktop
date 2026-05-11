@@ -18,6 +18,7 @@ public final class JdbcCatalogProvider implements PayloadbuilderCatalogProvider
 {
     private static final String KEY_CONNECTION_ID = "connectionId";
     private static final String KEY_DATABASE = "database";
+    private static final String NO_USERNAME_DUMMY = System.getProperty("user.name");
     private static final String NO_PASSWORD_DUMMY = "__queryeer_no_password__";
     private static final JdbcCatalog CATALOG = new JdbcCatalog();
 
@@ -58,13 +59,14 @@ public final class JdbcCatalogProvider implements PayloadbuilderCatalogProvider
         querySession.setCatalogProperty(alias, JdbcCatalog.URL, jdbcConnection.dialect()
                 .buildUrl(jdbcConnection.properties()));
         querySession.setCatalogProperty(alias, JdbcCatalog.DATABASE, properties.get(KEY_DATABASE));
-        querySession.setCatalogProperty(alias, JdbcCatalog.USERNAME, jdbcConnection.properties()
-                .get(JdbcConnection.KEY_USERNAME));
 
-        // PLB required a password so we set a dummy for connections that doesn't use password like Windows Native auth
+        // PLB required a username/password so we set a dummy for connections that doesn't use password like Windows Native auth
+        String username = PayloadUtils.stringValue(jdbcConnection.properties()
+                .get(JdbcConnection.KEY_USERNAME), NO_USERNAME_DUMMY);
         String password = PayloadUtils.stringValue(jdbcConnection.properties()
                 .get(JdbcConnection.KEY_PASSWORD), NO_PASSWORD_DUMMY);
 
+        querySession.setCatalogProperty(alias, JdbcCatalog.USERNAME, username);
         querySession.setCatalogProperty(alias, JdbcCatalog.PASSWORD, password);
     }
 }

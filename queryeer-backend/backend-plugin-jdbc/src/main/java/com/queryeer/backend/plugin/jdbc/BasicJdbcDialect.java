@@ -24,6 +24,12 @@ final class BasicJdbcDialect implements JdbcDialect
     }
 
     @Override
+    public String sqlGrammarId()
+    {
+        return JdbcDialect.DEFAULT_SQL_GRAMMAR_ID;
+    }
+
+    @Override
     public String buildUrl(Map<String, Object> materializedProperties)
     {
         return PayloadUtils.stringValue(materializedProperties, JdbcConnection.KEY_URL);

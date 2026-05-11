@@ -13,7 +13,7 @@ import java.util.List;
 final class PluginClassLoaderFactory
 {
     private static final List<String> PARENT_FIRST_PREFIXES = List.of("java.", "javax.", "jdk.", "sun.", "com.queryeer.backend.api.", "com.queryeer.backend.contract.",
-            "com.queryeer.backend.queryengine.jdbc.");
+            "com.queryeer.backend.queryengine.jdbc.", "com.microsoft.sqlserver.jdbc.");
 
     private final SharedClassLoader sharedLoader;
 
