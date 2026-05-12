@@ -43,6 +43,7 @@ import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldDefinition
 import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldOption;
 import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldType;
 import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionSetupDefinition;
+import com.queryeer.backend.queryengine.sql.parser.SqlCompletionContext;
 import com.queryeer.backend.queryengine.sql.parser.SqlCompletionSupport;
 import com.queryeer.backend.queryengine.sql.parser.TreeSitterSqlParseFunction;
 
@@ -283,8 +284,12 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     }
 
     private List<Map<String, Object>> jdbcSemanticCompletions(SqlCompletionSupport.SqlCompletePayload payload, String fileId, SqlCompletionSupport.SqlCompleteCursor cursor, String prefix,
-            int replaceStartColumn, int maxItems)
+            int replaceStartColumn, int maxItems, SqlCompletionContext context)
     {
+        if (context != SqlCompletionContext.TABLE_REFERENCE)
+        {
+            return List.of();
+        }
         String connectionId = payload != null ? trimToNull(payload.connectionId())
                 : null;
         if (connectionId == null
