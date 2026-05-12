@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ExtensionSnapshot } from "../../core/plugin-runtime/ExtensionRegistry";
 import { KEYBINDINGS_SCHEMA_VERSION, type UserKeybindingsDocument } from "../../contracts/commands/Keybindings";
 import { createKeybindingService } from "./keybinding-service";
+import { createContextChain } from "./context-chain";
 
 function makeExtensions(): ExtensionSnapshot {
   return {
@@ -120,6 +121,60 @@ describe("createKeybindingService", () => {
 
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "F2" }));
     expect(executeCommand).toHaveBeenLastCalledWith("core.files.save");
+    service.dispose();
+  });
+
+  it("executes editorFocus keybinding while editor input is focused", async () => {
+    const executeCommand = vi.fn(async () => ({ commandId: "core.files.save", executed: true }));
+    const service = createKeybindingService({
+      executeCommand,
+      getUserKeybindings: async () => ({
+        version: KEYBINDINGS_SCHEMA_VERSION,
+        bindings: [{ commandId: "core.files.save", key: "Ctrl+D", when: "editorFocus", scope: "editor" }],
+        unbound: []
+      })
+    });
+
+    await service.initialize(makeExtensions());
+
+    const editorRoot = document.createElement("div");
+    editorRoot.setAttribute("data-context", "editor");
+    const input = document.createElement("textarea");
+    editorRoot.appendChild(input);
+    document.body.appendChild(editorRoot);
+    input.focus();
+
+    const event = new KeyboardEvent("keydown", { key: "d", ctrlKey: true, bubbles: true });
+    input.dispatchEvent(event);
+
+    expect(executeCommand).toHaveBeenCalledWith("core.files.save");
+
+    document.body.removeChild(editorRoot);
+    service.dispose();
+  });
+
+  it("treats editorTextFocus as editorFocus with context chain", async () => {
+    const executeCommand = vi.fn(async () => ({ commandId: "core.files.save", executed: true }));
+    const chain = createContextChain();
+    chain.register({
+      id: "editor-instance",
+      priority: 40,
+      context: { editorTextFocus: true, editorFocus: false, inputFocus: true }
+    });
+    const service = createKeybindingService({
+      executeCommand,
+      getUserKeybindings: async () => ({
+        version: KEYBINDINGS_SCHEMA_VERSION,
+        bindings: [{ commandId: "core.files.save", key: "Ctrl+Alt+K", when: "editorFocus", scope: "editor" }],
+        unbound: []
+      }),
+      contextChain: chain
+    });
+
+    await service.initialize(makeExtensions());
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, altKey: true, bubbles: true }));
+
+    expect(executeCommand).toHaveBeenCalledWith("core.files.save");
     service.dispose();
   });
 });

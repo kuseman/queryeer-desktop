@@ -79,7 +79,7 @@ export interface ShellApi {
   showDialogSave: (options?: { title?: string; defaultPath?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<{ canceled: boolean; filePath?: string }>;
   openBackendFile: (params: { fileId: string; uri: string; mimeType: string; engineBinding?: { engineId: string; connectionId?: string }; initialText?: string }) => Promise<{ fileId: string; backendVersion: number }>;
   closeBackendFile: (params: { fileId: string }) => Promise<{ fileId: string; accepted: boolean }>;
-  notifyBackendFileChange: (params: { fileId: string; version: number; text: string }) => Promise<void>;
+  notifyBackendFileChange: (params: { fileId: string; version: number; text: string, uri: string, mimeType: string, engineBinding?: { engineId: string; connectionId?: string }  }) => Promise<void>;
   notifyBackendSettingsModuleChanged: (params: { moduleId: string; version: number }) => Promise<void>;
   watchFile: (params: { uri: string; options: { recursive?: boolean } }) => Promise<{ subscriptionId: string }>;
   unwatchFile: (params: { subscriptionId: string }) => Promise<{ removed: boolean }>;

@@ -6,10 +6,8 @@ Quick fixes
 
 Large features in prio
 
-- [ ] Tree sitter foundation
-    - [ ] Code parsing => wiggly lines in monaco
-    - [ ] Code complete => register completion provider in monaco
-        - Investigate LPS in backend if that simplifies things
+- [ ] Code complete (Phase 2. Detect context)
+    - [ ] Columns
 - [ ] Table context menu contribution
     - Static items with when (based on value right clicked)
     - Also contributions that has an items supplier that will be used later on
@@ -45,6 +43,12 @@ Large features in prio
 - [ ] Modularize
     - Make sure all contributions have contracts and all API:s are located in a separate project
       that might end up on npmjs one day
+- [X] Code complete (Phase 1 no structure context)
+    - [X] Keywords
+    - [X] Tables
+- [X] Tree sitter foundation
+    - [X] Code parsing => wiggly lines in monaco (Won't do wiggly lines now)
+        - Investigate LPS in backend if that simplifies things
 - [X] Core.themes
     - Themes support
 - [ ] Payloadbuilder

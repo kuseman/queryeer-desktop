@@ -43,12 +43,12 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
             where d.state = 0
             order by d.name
             """;
-    private static final String SQL_SCHEMAS_BY_DATABASE = """
-            select s.name as schema_name
-            from sys.schemas s
-            where s.schema_id < 16384
-            order by s.name
-            """;
+    // private static final String SQL_SCHEMAS_BY_DATABASE = """
+    // select s.name as schema_name
+    // from sys.schemas s
+    // where s.schema_id < 16384
+    // order by s.name
+    // """;
     private static final String SQL_TABLES_AND_VIEWS = """
             select s.name as schema_name,
                    o.name as object_name,
@@ -58,6 +58,16 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
             where o.type in ('U','V')
               and o.is_ms_shipped = 0
               and (? is null or s.name = ?)
+             order by s.name, o.name
+             """;
+    private static final String SQL_TABLES_AND_VIEWS_ALL_SCHEMAS = """
+            select s.name as schema_name,
+                   o.name as object_name,
+                   o.type as object_type
+            from sys.objects o
+            join sys.schemas s on s.schema_id = o.schema_id
+            where o.type in ('U','V')
+              and o.is_ms_shipped = 0
             order by s.name, o.name
             """;
     private static final String SQL_COLUMNS = """
@@ -94,7 +104,7 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
         {
             return switch (scope)
             {
-                case SCOPE_DEEP -> resolveTablesScope(jdbcConnection, url, props, target);
+                case SCOPE_DEEP -> resolveDeepScope(jdbcConnection, url, props, target);
                 case SCOPE_TABLES -> resolveTablesScope(jdbcConnection, url, props, target);
                 case SCOPE_COLUMNS -> resolveColumnsScope(jdbcConnection, url, props, target);
                 default -> resolveTopScope(jdbcConnection);
@@ -104,6 +114,47 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
         {
             throw new RuntimeException(ERROR_SCHEMA_RESOLUTION + e.getMessage(), e);
         }
+    }
+
+    private List<JdbcSchemaObject> resolveDeepScope(Connection connection, String url, Properties baseProps, JdbcSchemaTarget target) throws SQLException
+    {
+        String targetDatabase = target != null ? trimToNull(target.database())
+                : null;
+        String targetSchema = target != null ? trimToNull(target.schema())
+                : null;
+        if (targetDatabase != null
+                && targetSchema != null)
+        {
+            return listTablesForDatabase(url, baseProps, targetDatabase, targetSchema);
+        }
+        List<String> databases = targetDatabase != null ? List.of(targetDatabase)
+                : listDatabases(connection);
+
+        List<JdbcSchemaObject> result = new ArrayList<>();
+        for (String database : databases)
+        {
+            List<JdbcSchemaObject> tableObjects = listTablesForDatabase(url, baseProps, database, targetSchema);
+            Map<String, List<JdbcSchemaObject>> bySchema = new java.util.LinkedHashMap<>();
+            for (JdbcSchemaObject table : tableObjects)
+            {
+                String schema = table.attributes() != null ? (String) table.attributes()
+                        .get(KEY_SCHEMA)
+                        : null;
+                String schemaKey = schema == null ? ""
+                        : schema;
+                bySchema.computeIfAbsent(schemaKey, _ -> new ArrayList<>())
+                        .add(table);
+            }
+
+            List<JdbcSchemaObject> schemaNodes = new ArrayList<>();
+            for (Map.Entry<String, List<JdbcSchemaObject>> entry : bySchema.entrySet())
+            {
+                String schemaName = entry.getKey();
+                schemaNodes.add(new JdbcSchemaObject(database + "." + schemaName, schemaName, KIND_SCHEMA, List.copyOf(entry.getValue()), Map.of(KEY_CATALOG, database)));
+            }
+            result.add(new JdbcSchemaObject(database, database, KIND_DATABASE, List.copyOf(schemaNodes), Map.of()));
+        }
+        return result;
     }
 
     private List<JdbcSchemaObject> resolveTopScope(Connection connection) throws SQLException
@@ -126,33 +177,20 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
                 : null;
         String schema = target != null ? trimToNull(target.schema())
                 : null;
-
-        List<JdbcSchemaObject> schemas = new ArrayList<>();
-
-        if (catalog != null
-                && schema == null)
+        if (catalog != null)
         {
-            try (Connection targetConnection = openForDatabase(url, baseProps, catalog);
-                    PreparedStatement statement = targetConnection.prepareStatement(SQL_SCHEMAS_BY_DATABASE);
-                    ResultSet rs = statement.executeQuery())
-            {
-                while (rs.next())
-                {
-                    String schemaName = rs.getString("schema_name");
-                    schemas.add(new JdbcSchemaObject(catalog + "." + schemaName, schemaName, KIND_SCHEMA, null, Map.of(KEY_CATALOG, catalog)));
-                }
-            }
-            return schemas;
+            return listTablesForDatabase(url, baseProps, catalog, schema);
         }
 
         List<JdbcSchemaObject> tables = new ArrayList<>();
-        Connection source = catalog != null ? openForDatabase(url, baseProps, catalog)
-                : connection;
-        try (Connection _ = source == connection ? null
-                : source; PreparedStatement statement = source.prepareStatement(SQL_TABLES_AND_VIEWS))
+        try (PreparedStatement statement = connection.prepareStatement(schema == null ? SQL_TABLES_AND_VIEWS_ALL_SCHEMAS
+                : SQL_TABLES_AND_VIEWS))
         {
-            statement.setString(1, schema);
-            statement.setString(2, schema);
+            if (schema != null)
+            {
+                statement.setString(1, schema);
+                statement.setString(2, schema);
+            }
             try (ResultSet rs = statement.executeQuery())
             {
                 while (rs.next())
@@ -162,16 +200,9 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
                     String objectType = rs.getString("object_type");
                     String kind = "V".equalsIgnoreCase(objectType) ? KIND_VIEW
                             : KIND_TABLE;
-                    String id = (catalog != null ? catalog + "."
-                            : "")
-                            + (schemaName != null ? schemaName + "."
-                                    : "")
-                            + tableName;
+                    String id = (schemaName != null ? schemaName + "."
+                            : "") + tableName;
                     Map<String, Object> attributes = new java.util.LinkedHashMap<>();
-                    if (catalog != null)
-                    {
-                        attributes.put(KEY_CATALOG, catalog);
-                    }
                     if (schemaName != null)
                     {
                         attributes.put(KEY_SCHEMA, schemaName);
@@ -244,6 +275,52 @@ final class SqlServerSchemaResolver implements JdbcSchemaResolver
             return n.intValue();
         }
         return null;
+    }
+
+    private static List<String> listDatabases(Connection connection) throws SQLException
+    {
+        List<String> databases = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(SQL_TOP_DATABASES); ResultSet resultSet = statement.executeQuery())
+        {
+            while (resultSet.next())
+            {
+                String database = trimToNull(resultSet.getString("database_name"));
+                if (database != null)
+                {
+                    databases.add(database);
+                }
+            }
+        }
+        return databases;
+    }
+
+    private static List<JdbcSchemaObject> listTablesForDatabase(String url, Properties baseProps, String database, String schemaFilter) throws SQLException
+    {
+        List<JdbcSchemaObject> tables = new ArrayList<>();
+        try (Connection databaseConnection = openForDatabase(url, baseProps, database);
+                PreparedStatement statement = databaseConnection.prepareStatement(schemaFilter == null ? SQL_TABLES_AND_VIEWS_ALL_SCHEMAS
+                        : SQL_TABLES_AND_VIEWS))
+        {
+            if (schemaFilter != null)
+            {
+                statement.setString(1, schemaFilter);
+                statement.setString(2, schemaFilter);
+            }
+            try (ResultSet rs = statement.executeQuery())
+            {
+                while (rs.next())
+                {
+                    String schemaName = rs.getString("schema_name");
+                    String tableName = rs.getString("object_name");
+                    String objectType = rs.getString("object_type");
+                    String kind = "V".equalsIgnoreCase(objectType) ? KIND_VIEW
+                            : KIND_TABLE;
+                    String id = database + "." + schemaName + "." + tableName;
+                    tables.add(new JdbcSchemaObject(id, tableName, kind, null, Map.of(KEY_CATALOG, database, KEY_SCHEMA, schemaName)));
+                }
+            }
+        }
+        return tables;
     }
 
     private static Connection openForDatabase(String url, Properties baseProps, String database) throws SQLException

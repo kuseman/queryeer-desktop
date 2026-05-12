@@ -1,5 +1,7 @@
 package com.queryeer.backend.plugin.payloadbuilder;
 
+import static java.util.Objects.requireNonNull;
+
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -17,6 +19,7 @@ import com.queryeer.backend.api.FileSessionHandler;
 import com.queryeer.backend.api.OutputEvent;
 import com.queryeer.backend.api.OutputSeverity;
 import com.queryeer.backend.api.PayloadMapper;
+import com.queryeer.backend.api.PayloadUtils;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryPublisher;
 import com.queryeer.backend.api.SecuritySessionClosedException;
@@ -24,6 +27,7 @@ import com.queryeer.backend.api.SettingsModule;
 import com.queryeer.backend.api.parse.IncrementalParseFunction;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
+import com.queryeer.backend.queryengine.sql.parser.SqlCompletionSupport;
 import com.queryeer.backend.queryengine.sql.parser.TreeSitterSqlParseFunction;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
@@ -71,19 +75,20 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
     private final IncrementalParseSessionService parseSessions;
     private final IncrementalParseFunction parseFunction;
 
-    public PayloadbuilderQueryEngineProvider(ConfigService configService, PayloadMapper payloadMapper, JdbcRuntimeService hdbcRuntimeService)
-    {
-        this(configService, payloadMapper, hdbcRuntimeService, null, null);
-    }
-
-    public PayloadbuilderQueryEngineProvider(ConfigService configService, PayloadMapper payloadMapper, JdbcRuntimeService hdbcRuntimeService, IncrementalParseSessionService parseSessions,
+    //@formatter:off
+    public PayloadbuilderQueryEngineProvider(
+            ConfigService configService,
+            PayloadMapper payloadMapper,
+            JdbcRuntimeService hdbcRuntimeService,
+            IncrementalParseSessionService parseSessions,
             IncrementalParseFunction parseFunction)
+    //@formatter:on
     {
-        this.configService = configService;
-        this.payloadMapper = payloadMapper;
-        this.catalogProviders = PayloadbuilderCatalogProviderRegistry.defaults(configService, payloadMapper, hdbcRuntimeService);
-        this.parseSessions = parseSessions;
-        this.parseFunction = parseFunction;
+        this.configService = requireNonNull(configService, "configService");
+        this.payloadMapper = requireNonNull(payloadMapper, "payloadMapper");
+        this.catalogProviders = PayloadbuilderCatalogProviderRegistry.defaults(configService, payloadMapper, requireNonNull(hdbcRuntimeService, "hdbcRuntimeService"));
+        this.parseSessions = requireNonNull(parseSessions, "parseSessions");
+        this.parseFunction = requireNonNull(parseFunction, "parseFunction");
     }
 
     @Override
@@ -226,9 +231,7 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
     {
         if ("sql.parse.snapshot".equals(action))
         {
-            if (parseSessions == null
-                    || fileId == null
-                    || fileId.isBlank())
+            if (PayloadUtils.isBlank(fileId))
             {
                 return Map.of();
             }
@@ -240,7 +243,16 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
         {
             return Map.of("actions", mergeActions(), "catalogIds", catalogProviders.catalogIds());
         }
+        if ("sql.complete".equals(action))
+        {
+            return sqlComplete(fileId, payload);
+        }
         return catalogProviders.invoke(action, payload);
+    }
+
+    private Object sqlComplete(String fileId, Object payload)
+    {
+        return SqlCompletionSupport.complete(payloadMapper, parseSessions, engineId(), fileId, payload);
     }
 
     private CatalogRegistry buildCatalogRegistry(PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
@@ -319,6 +331,7 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
         List<String> actions = new ArrayList<>();
         actions.add("engine.capabilities");
         actions.add("sql.parse.snapshot");
+        actions.add("sql.complete");
         actions.addAll(catalogProviders.actions());
         return actions;
     }
@@ -326,30 +339,19 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
     @Override
     public void onOpen(FileSession session, String initialText)
     {
-        if (parseSessions != null
-                && parseFunction != null)
-        {
-            parseSessions.open(engineId(), session.fileId(), session.backendVersion(), TreeSitterSqlParseFunction.LANGUAGE_SQL, initialText, parseFunction);
-        }
+        parseSessions.open(engineId(), session.fileId(), session.backendVersion(), TreeSitterSqlParseFunction.LANGUAGE_SQL, initialText, parseFunction);
     }
 
     @Override
     public void onChange(FileSession session, long version, String text)
     {
-        if (parseSessions != null
-                && parseFunction != null)
-        {
-            parseSessions.change(engineId(), session.fileId(), version, TreeSitterSqlParseFunction.LANGUAGE_SQL, text, parseFunction);
-        }
+        parseSessions.change(engineId(), session.fileId(), version, TreeSitterSqlParseFunction.LANGUAGE_SQL, text, parseFunction);
     }
 
     @Override
     public void onClose(FileSession session)
     {
-        if (parseSessions != null)
-        {
-            parseSessions.close(engineId(), session.fileId());
-        }
+        parseSessions.close(engineId(), session.fileId());
     }
 
     static int publishTupleVectorInChunks(QueryPublisher publisher, TupleVector tupleVector, int chunkSize)

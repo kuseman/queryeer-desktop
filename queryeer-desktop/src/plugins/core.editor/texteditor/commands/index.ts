@@ -310,7 +310,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.deleteLine",
     title: "Delete Line",
     handler: async () => {
-      const editor = registry.getActiveEditor();
+      const editor = registry.getCommandTargetEditor();
       const selection = editor?.getSelection();
       if (editor && selection) {
         editor.executeEdits([{

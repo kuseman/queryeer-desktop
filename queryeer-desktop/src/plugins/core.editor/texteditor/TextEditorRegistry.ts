@@ -86,12 +86,14 @@ export class TextEditorRegistry {
     // languageId is left undefined until the first focus event (matching original behaviour).
     const scopeCtx: {
       hasActiveTextEditor: boolean;
+      editorFocus: boolean;
       editorTextFocus: boolean;
       languageId: string | undefined;
       selectedText: string;
       hasSelection: boolean;
     } = {
       hasActiveTextEditor: true,
+      editorFocus: false,
       editorTextFocus: false,
       languageId: undefined,
       selectedText: "",
@@ -107,6 +109,7 @@ export class TextEditorRegistry {
     const onFocus = (): void => {
       if (this.scopeId && globalContextChain) {
         globalContextChain.activate(this.scopeId);
+        scopeCtx.editorFocus = true;
         scopeCtx.editorTextFocus = true;
         scopeCtx.languageId = api.getModel()?.languageId;
         publish();
@@ -114,6 +117,7 @@ export class TextEditorRegistry {
     };
 
     const onBlur = (): void => {
+      scopeCtx.editorFocus = false;
       scopeCtx.editorTextFocus = false;
       publish();
     };
@@ -181,7 +185,7 @@ export class TextEditorRegistry {
       this.scopeUnregister = globalContextChain.register({
         id: scopeId,
         priority: ContextPriority.EDITOR_INSTANCE,
-        context: { hasActiveTextEditor: true, editorTextFocus: false }
+        context: { hasActiveTextEditor: true, editorFocus: false, editorTextFocus: false }
       });
     }
 

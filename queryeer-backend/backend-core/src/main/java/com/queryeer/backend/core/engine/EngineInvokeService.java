@@ -1,5 +1,7 @@
 package com.queryeer.backend.core.engine;
 
+import java.util.Map;
+
 import com.queryeer.backend.api.ErrorMessages;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
@@ -47,23 +49,44 @@ public final class EngineInvokeService
         }
         catch (Exception e)
         {
-            throw new EngineInvokeException(BackendErrorCode.INTERNAL, ErrorMessages.buildFailureMessage(e));
+            throw new EngineInvokeException(BackendErrorCode.INTERNAL, ErrorMessages.buildFailureMessage(e), ErrorMessages.buildErrorDetails(e), e);
         }
     }
 
     public static final class EngineInvokeException extends RuntimeException
     {
         private final BackendErrorCode code;
+        private final Map<String, Object> details;
 
         EngineInvokeException(BackendErrorCode code, String message)
         {
             super(message);
             this.code = code;
+            this.details = null;
+        }
+
+        EngineInvokeException(BackendErrorCode code, String message, Throwable cause)
+        {
+            super(message, cause);
+            this.code = code;
+            this.details = null;
+        }
+
+        EngineInvokeException(BackendErrorCode code, String message, Map<String, Object> details, Throwable cause)
+        {
+            super(message, cause);
+            this.code = code;
+            this.details = details;
         }
 
         public BackendErrorCode code()
         {
             return code;
+        }
+
+        public Map<String, Object> details()
+        {
+            return details;
         }
     }
 }

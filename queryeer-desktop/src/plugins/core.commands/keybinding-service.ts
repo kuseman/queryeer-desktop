@@ -39,6 +39,9 @@ function shouldSkipForInput(when: string | undefined, contextInputFocus: boolean
     return false;
   }
   const expr = (when ?? "global").toLowerCase();
+  if (expr.includes("editorfocus")) {
+    return false;
+  }
   return !expr.includes("inputfocus");
 }
 
@@ -56,8 +59,12 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
       return;
     }
 
-    const contextSnapshot = options.contextChain?.getEffectiveContext() ?? contextKeys!.snapshot();
-    const inputFocus = Boolean(contextSnapshot.inputFocus);
+    const rawContextSnapshot = options.contextChain?.getEffectiveContext() ?? contextKeys!.snapshot();
+    const contextSnapshot = {
+      ...rawContextSnapshot,
+      editorFocus: Boolean(rawContextSnapshot.editorFocus || rawContextSnapshot.editorTextFocus)
+    };
+    const inputFocus = Boolean(rawContextSnapshot.inputFocus);
 
     const matched = [...resolved]
       .sort((a, b) => (b.order ?? 0) - (a.order ?? 0))

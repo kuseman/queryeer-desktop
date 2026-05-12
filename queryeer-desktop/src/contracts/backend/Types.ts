@@ -286,6 +286,50 @@ export type FileChangeNotification = {
   fileId: string;
   version: number;
   text: string;
+  uri?: string;
+  mimeType?: string;
+  engineBinding?: FileEngineBindingParams;
+};
+
+export type SqlCompleteInvokePayload = {
+  fileId?: string;
+  version?: number;
+  text?: string;
+  connectionId?: string;
+  database?: string;
+  cursor: { line: number; column: number };
+  trigger?: { kind: "invoke" | "triggerCharacter" | "retrigger"; character?: string };
+  limits?: { maxItems?: number };
+};
+
+export type SqlCompletionItem = {
+  label: string;
+  kind: string;
+  detail?: string;
+  documentation?: string;
+  sortText?: string;
+  filterText?: string;
+  insertText?: string;
+  insertTextFormat?: "plain" | "snippet";
+  commitCharacters?: string[];
+  replaceRange?: {
+    startLine: number;
+    startColumn: number;
+    endLine: number;
+    endColumn: number;
+  };
+  source?: string;
+};
+
+export type SqlCompleteInvokeResult = {
+  items: SqlCompletionItem[];
+  isIncomplete: boolean;
+  context?: {
+    fileId?: string;
+    requestedVersion?: number;
+    snapshotVersion?: number;
+    usedFallback?: boolean;
+  };
 };
 
 export type SettingsModuleChangedNotification = {

@@ -29,6 +29,7 @@ import com.queryeer.backend.api.parse.IncrementalParseFunction;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaActionHandler;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawlCoordinator;
+import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawlScope;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaStore;
 import com.queryeer.backend.queryengine.jdbc.CancellableJdbcQueryExecutor;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
@@ -37,10 +38,12 @@ import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryEventListener;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryRequest;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryResult;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcResultColumn;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldDefinition;
 import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldOption;
 import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldType;
 import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionSetupDefinition;
+import com.queryeer.backend.queryengine.sql.parser.SqlCompletionSupport;
 import com.queryeer.backend.queryengine.sql.parser.TreeSitterSqlParseFunction;
 
 final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionHandler
@@ -55,6 +58,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private static final String ACTION_SCHEMA_FETCH = "jdbc.schema.fetch";
     private static final String ACTION_CONNECTION_SESSIONS = "jdbc.connection.sessions";
     private static final String ACTION_SQL_PARSE_SNAPSHOT = "sql.parse.snapshot";
+    private static final String ACTION_SQL_COMPLETE = "sql.complete";
 
     private static final String ERROR_CODE_VALIDATION = "VALIDATION";
     private static final String ERROR_CODE_CANCELLED = "CANCELLED";
@@ -80,6 +84,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private final DefaultJdbcConnections connections;
     private final JdbcConnectionUsageListener usageListener;
     private final JdbcSchemaActionHandler schemaActions;
+    private final JdbcSchemaStore schemaStore;
     private final long idleTimeoutMs;
     private final PayloadMapper payloadMapper;
     private final IncrementalParseSessionService parseSessions;
@@ -89,8 +94,18 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private final Map<String, FileSessionHandle> byFileId = new ConcurrentHashMap<>();
     private final Map<String, DeadSessionSnapshot> deadByFileId = new ConcurrentHashMap<>();
 
-    JdbcQueryEngineProvider(JdbcDialectRegistry registry, DefaultJdbcConnections connections, long idleTimeoutMs, JdbcConnectionUsageListener usageListener, JdbcSchemaStore schemaStore,
-            JdbcSchemaCrawlCoordinator crawlCoordinator, PayloadMapper payloadMapper, IncrementalParseSessionService parseSessions, IncrementalParseFunction parseFunction)
+    //@formatter:off
+    JdbcQueryEngineProvider(
+            JdbcDialectRegistry registry,
+            DefaultJdbcConnections connections,
+            long idleTimeoutMs,
+            JdbcConnectionUsageListener usageListener,
+            JdbcSchemaStore schemaStore,
+            JdbcSchemaCrawlCoordinator crawlCoordinator,
+            PayloadMapper payloadMapper,
+            IncrementalParseSessionService parseSessions,
+            IncrementalParseFunction parseFunction)
+    //@formatter:on
     {
         this.registry = registry;
         this.connections = connections;
@@ -99,6 +114,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         this.payloadMapper = payloadMapper;
         this.parseSessions = parseSessions;
         this.parseFunction = parseFunction;
+        this.schemaStore = schemaStore;
         this.schemaActions = new JdbcSchemaActionHandler(payloadMapper, connections, schemaStore, crawlCoordinator);
     }
 
@@ -162,7 +178,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                 engineStatePatch.put("sessionId", sessionId);
             }
 
-            usageListener.onUsage(resolved.connectionId());
+            usageListener.onUsage(resolved.connectionId(), state.database());
             publisher.completed(System.currentTimeMillis() - startedAt, result.rowCount(), engineStatePatch);
         }
         catch (IllegalArgumentException e)
@@ -231,6 +247,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             case ACTION_SCHEMA_FETCH -> schemaActions.fetch(payload);
             case ACTION_CONNECTION_SESSIONS -> connectionSessions();
             case ACTION_SQL_PARSE_SNAPSHOT -> sqlParseSnapshot(fileId);
+            case ACTION_SQL_COMPLETE -> sqlComplete(fileId, payload);
             case ACTION_ENGINE_CAPABILITIES -> engineCapabilities();
             default -> QueryEngineProvider.super.invoke(fileId, action, payload);
         };
@@ -257,7 +274,154 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private Object engineCapabilities()
     {
         return Map.of(KEY_ACTIONS, List.of(ACTION_ENGINE_CAPABILITIES, ACTION_CONNECTION_SETUP, ACTION_CONNECTION_DIALECTS, ACTION_CONNECTION_TEST, ACTION_SCHEMA_SNAPSHOT, ACTION_SCHEMA_REFRESH,
-                ACTION_SCHEMA_FETCH, ACTION_CONNECTION_SESSIONS, ACTION_SQL_PARSE_SNAPSHOT));
+                ACTION_SCHEMA_FETCH, ACTION_CONNECTION_SESSIONS, ACTION_SQL_PARSE_SNAPSHOT, ACTION_SQL_COMPLETE));
+    }
+
+    private Object sqlComplete(String fileId, Object payload)
+    {
+        return SqlCompletionSupport.complete(payloadMapper, parseSessions, engineId(), fileId, payload, this::jdbcSemanticCompletions);
+    }
+
+    private List<Map<String, Object>> jdbcSemanticCompletions(SqlCompletionSupport.SqlCompletePayload payload, String fileId, SqlCompletionSupport.SqlCompleteCursor cursor, String prefix,
+            int replaceStartColumn, int maxItems)
+    {
+        String connectionId = payload != null ? trimToNull(payload.connectionId())
+                : null;
+        if (connectionId == null
+                && fileId != null)
+        {
+            FileSessionHandle fileSession = byFileId.get(fileId);
+            connectionId = fileSession == null ? null
+                    : trimToNull(fileSession.connectionId());
+        }
+        if (connectionId == null)
+        {
+            return List.of();
+        }
+        String selectedDatabase = payload == null ? null
+                : trimToNull(payload.database());
+        String normalizedSelectedDatabase = normalizeIdentifier(selectedDatabase);
+
+        try
+        {
+            usageListener.onUsage(connectionId, selectedDatabase);
+        }
+        catch (RuntimeException e)
+        {
+            // Completion should remain best-effort even if usage tracking fails.
+        }
+
+        List<JdbcSchemaObject> snapshot = schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP);
+        if (snapshot.isEmpty())
+        {
+            snapshot = schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.TOP);
+        }
+        if (snapshot.isEmpty())
+        {
+            try
+            {
+                JdbcConnection resolved = connections.resolve(connectionId);
+                snapshot = resolved.dialect()
+                        .schemaResolver()
+                        .resolveSchema(resolved, normalizedSelectedDatabase == null ? Map.of("scope", "tables")
+                                : Map.of("scope", "tables", "target", Map.of("database", selectedDatabase)));
+            }
+            catch (RuntimeException e)
+            {
+                return List.of();
+            }
+        }
+
+        List<String> tableNames = new ArrayList<>();
+        collectTableNames(snapshot, null, null, normalizedSelectedDatabase, tableNames);
+        return tableNames.stream()
+                .filter(name -> prefix.isBlank()
+                        || name.toLowerCase()
+                                .startsWith(prefix.toLowerCase()))
+                .distinct()
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .limit(maxItems)
+                .map(name -> Map.<String, Object>of("label", name, "kind", "table", "detail", "JDBC table", "insertText", name, "insertTextFormat", "plain", "source", "jdbc.schema", "replaceRange",
+                        Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column())))
+                .toList();
+    }
+
+    private static void collectTableNames(List<JdbcSchemaObject> nodes, String databaseName, String schemaName, String normalizedSelectedDatabase, List<String> target)
+    {
+        for (JdbcSchemaObject node : nodes)
+        {
+            String kind = trimToNull(node.kind());
+            String nextDatabase = databaseName;
+            String nextSchema = schemaName;
+            if ("database".equalsIgnoreCase(kind))
+            {
+                nextDatabase = trimToNull(node.name());
+            }
+            if ("schema".equalsIgnoreCase(kind))
+            {
+                nextSchema = trimToNull(node.name());
+            }
+            if ("table".equalsIgnoreCase(kind))
+            {
+                String normalizedNodeDatabase = normalizeIdentifier(nextDatabase);
+                if (normalizedSelectedDatabase != null
+                        && normalizedNodeDatabase != null
+                        && !normalizedSelectedDatabase.equals(normalizedNodeDatabase))
+                {
+                    continue;
+                }
+                String name = trimToNull(node.name());
+                if (name != null)
+                {
+                    String effectiveSchema = nextSchema;
+                    if (effectiveSchema == null
+                            && node.attributes() != null
+                            && node.attributes()
+                                    .get("schema") instanceof String attrSchema)
+                    {
+                        effectiveSchema = trimToNull(attrSchema);
+                    }
+                    target.add(effectiveSchema == null ? name
+                            : effectiveSchema + "." + name);
+                }
+            }
+            List<JdbcSchemaObject> children = node.children();
+            if (children != null
+                    && !children.isEmpty())
+            {
+                collectTableNames(children, nextDatabase, nextSchema, normalizedSelectedDatabase, target);
+            }
+        }
+    }
+
+    private static String normalizeIdentifier(String value)
+    {
+        String trimmed = trimToNull(value);
+        if (trimmed == null)
+        {
+            return null;
+        }
+        String unwrapped = trimmed;
+        if (unwrapped.startsWith("[")
+                && unwrapped.endsWith("]")
+                && unwrapped.length() > 1)
+        {
+            unwrapped = unwrapped.substring(1, unwrapped.length() - 1);
+        }
+        if ((unwrapped.startsWith("\"")
+                && unwrapped.endsWith("\""))
+                || (unwrapped.startsWith("`")
+                        && unwrapped.endsWith("`")
+                        || (unwrapped.startsWith("'")
+                                && unwrapped.endsWith("'"))))
+        {
+            if (unwrapped.length() > 1)
+            {
+                unwrapped = unwrapped.substring(1, unwrapped.length() - 1);
+            }
+        }
+        return unwrapped.trim()
+                .toLowerCase();
     }
 
     private Object sqlParseSnapshot(String fileId)
