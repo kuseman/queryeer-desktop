@@ -38,12 +38,18 @@ public final class JdbcSchemaCrawlCoordinator
 
     public void onUsage(String connectionId)
     {
+        onUsage(connectionId, null);
+    }
+
+    public void onUsage(String connectionId, String database)
+    {
         if (connectionId == null
                 || connectionId.isBlank())
         {
             return;
         }
         store.recordUsage(connectionId, JdbcSchemaCrawlScope.TOP, Instant.now());
+        store.recordUsage(connectionId, JdbcSchemaCrawlScope.DEEP, database, Instant.now());
     }
 
     public List<JdbcSchemaObject> refreshNow(String connectionId, JdbcSchemaCrawlScope scope, JdbcSchemaTarget target)
@@ -54,11 +60,6 @@ public final class JdbcSchemaCrawlCoordinator
             throw new IllegalArgumentException("connectionId is required");
         }
         JdbcConnection jdbcConnection = connections.resolve(connectionId);
-        if (scope == JdbcSchemaCrawlScope.DEEP
-                && target == null)
-        {
-            throw new IllegalArgumentException("target is required for scope=deep");
-        }
         crawlOne(jdbcConnection, scope, true, target, Instant.now());
         return store.latestSnapshot(connectionId, scope);
     }
@@ -74,6 +75,18 @@ public final class JdbcSchemaCrawlCoordinator
                 for (String connectionId : current)
                 {
                     crawlOneSilent(connectionId, JdbcSchemaCrawlScope.TOP, false, null, Instant.now());
+                    List<String> databaseKeys = store.databaseKeys(connectionId, JdbcSchemaCrawlScope.DEEP);
+                    if (databaseKeys.isEmpty())
+                    {
+                        crawlOneSilent(connectionId, JdbcSchemaCrawlScope.DEEP, false, null, Instant.now());
+                    }
+                    else
+                    {
+                        for (String database : databaseKeys)
+                        {
+                            crawlOneSilent(connectionId, JdbcSchemaCrawlScope.DEEP, false, new JdbcSchemaTarget(database, null), Instant.now());
+                        }
+                    }
                 }
             }
             catch (RuntimeException e)
@@ -100,13 +113,15 @@ public final class JdbcSchemaCrawlCoordinator
     private void crawlOne(JdbcConnection connection, JdbcSchemaCrawlScope scope, boolean force, JdbcSchemaTarget target, Instant now)
     {
         String connectionId = connection.connectionId();
+        String databaseKey = target != null ? target.database()
+                : null;
         if (!force
-                && !store.isDue(connectionId, scope, now))
+                && !store.isDue(connectionId, scope, databaseKey, now))
         {
             return;
         }
 
-        JdbcSchemaStore.CrawlState state = store.readState(connectionId, scope);
+        JdbcSchemaStore.CrawlState state = store.readState(connectionId, scope, databaseKey);
         boolean success = false;
         try
         {
@@ -123,7 +138,7 @@ public final class JdbcSchemaCrawlCoordinator
         long ms = policy.intervalFor(scope, nextState.usageScore(), nextState.enabled(), nextState.consecutiveFailures())
                 .toMillis();
         long jitteredMs = applyJitter(ms, connectionId);
-        store.updateState(connectionId, scope, nextState, now, now.plusMillis(Math.max(500L, jitteredMs)));
+        store.updateState(connectionId, scope, databaseKey, nextState, now, now.plusMillis(Math.max(500L, jitteredMs)));
     }
 
     private static void sleepQuietly(long millis)

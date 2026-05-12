@@ -73,25 +73,40 @@ public final class JdbcSchemaStore
 
     boolean isDue(String connectionId, JdbcSchemaCrawlScope scope, Instant now)
     {
-        CrawlState state = readState(connectionId, scope);
+        CrawlState state = readState(connectionId, scope, null);
+        return !now.isBefore(state.nextDueAt());
+    }
+
+    boolean isDue(String connectionId, JdbcSchemaCrawlScope scope, String databaseKey, Instant now)
+    {
+        CrawlState state = readState(connectionId, scope, databaseKey);
         return !now.isBefore(state.nextDueAt());
     }
 
     CrawlState readState(String connectionId, JdbcSchemaCrawlScope scope)
     {
+        return readState(connectionId, scope, null);
+    }
+
+    CrawlState readState(String connectionId, JdbcSchemaCrawlScope scope, String databaseKey)
+    {
         try (Connection connection = open(connectionId, scope))
         {
-            String sql = "select consecutive_failures, usage_score, enabled, next_due_at from crawl_state where state_id = 1";
-            try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet resultSet = statement.executeQuery())
+            String sql = "select consecutive_failures, usage_score, enabled, next_due_at from crawl_state where state_id = 1 and database_key = ?";
+            try (PreparedStatement statement = connection.prepareStatement(sql))
             {
-                if (!resultSet.next())
+                statement.setString(1, normalizeDatabaseKey(databaseKey));
+                try (ResultSet resultSet = statement.executeQuery())
                 {
-                    return initializeState(connection, Instant.now());
+                    if (!resultSet.next())
+                    {
+                        return initializeState(connection, normalizeDatabaseKey(databaseKey), Instant.now());
+                    }
+                    Instant nextDueAt = resultSet.getTimestamp(4) == null ? Instant.EPOCH
+                            : resultSet.getTimestamp(4)
+                                    .toInstant();
+                    return new CrawlState(resultSet.getInt(1), resultSet.getDouble(2), resultSet.getBoolean(3), nextDueAt);
                 }
-                Instant nextDueAt = resultSet.getTimestamp(4) == null ? Instant.EPOCH
-                        : resultSet.getTimestamp(4)
-                                .toInstant();
-                return new CrawlState(resultSet.getInt(1), resultSet.getDouble(2), resultSet.getBoolean(3), nextDueAt);
             }
         }
         catch (SQLException e)
@@ -102,19 +117,26 @@ public final class JdbcSchemaStore
 
     void recordUsage(String connectionId, JdbcSchemaCrawlScope scope, Instant now)
     {
+        recordUsage(connectionId, scope, null, now);
+    }
+
+    void recordUsage(String connectionId, JdbcSchemaCrawlScope scope, String databaseKey, Instant now)
+    {
         try (Connection connection = open(connectionId, scope))
         {
-            CrawlState state = readState(connectionId, scope);
-            Instant previousUse = readLastUsedAt(connection);
+            String normalized = normalizeDatabaseKey(databaseKey);
+            CrawlState state = readState(connectionId, scope, normalized);
+            Instant previousUse = readLastUsedAt(connection, normalized);
             double decayed = decay(state.usageScore(), previousUse, now);
             double nextScore = Math.min(1.0d, decayed + 0.30d);
             try (PreparedStatement statement = connection
-                    .prepareStatement("update crawl_state set usage_score = ?, last_attempt_at = ?, last_used_at = ?, next_due_at = coalesce(next_due_at, ?) where state_id = 1"))
+                    .prepareStatement("update crawl_state set usage_score = ?, last_attempt_at = ?, last_used_at = ?, next_due_at = coalesce(next_due_at, ?) where state_id = 1 and database_key = ?"))
             {
                 statement.setDouble(1, nextScore);
                 statement.setTimestamp(2, java.sql.Timestamp.from(now));
                 statement.setTimestamp(3, java.sql.Timestamp.from(now));
                 statement.setTimestamp(4, java.sql.Timestamp.from(Instant.EPOCH));
+                statement.setString(5, normalized);
                 statement.executeUpdate();
             }
         }
@@ -126,10 +148,26 @@ public final class JdbcSchemaStore
 
     void updateState(String connectionId, JdbcSchemaCrawlScope scope, CrawlState state, Instant attemptedAt, Instant nextDueAt)
     {
+        updateState(connectionId, scope, null, state, attemptedAt, nextDueAt);
+    }
+
+    void updateState(String connectionId, JdbcSchemaCrawlScope scope, String databaseKey, CrawlState state, Instant attemptedAt, Instant nextDueAt)
+    {
         try (Connection connection = open(connectionId, scope))
         {
-            try (PreparedStatement statement = connection.prepareStatement(
-                    "update crawl_state set consecutive_failures = ?, usage_score = ?, enabled = ?, last_attempt_at = ?, last_success_at = ?, last_failure_at = ?, next_due_at = ? where state_id = 1"))
+            String normalized = normalizeDatabaseKey(databaseKey);
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    update crawl_state
+                    set consecutive_failures = ?
+                    , usage_score = ?
+                    , enabled = ?
+                    , last_attempt_at = ?
+                    , last_success_at = ?
+                    , last_failure_at = ?
+                    , next_due_at = ?
+                    where state_id = 1
+                    and database_key = ?
+                    """))
             {
                 statement.setInt(1, state.consecutiveFailures());
                 statement.setDouble(2, state.usageScore());
@@ -140,6 +178,7 @@ public final class JdbcSchemaStore
                 statement.setTimestamp(6, state.consecutiveFailures() > 0 ? java.sql.Timestamp.from(attemptedAt)
                         : null);
                 statement.setTimestamp(7, java.sql.Timestamp.from(nextDueAt));
+                statement.setString(8, normalized);
                 statement.executeUpdate();
             }
         }
@@ -220,7 +259,8 @@ public final class JdbcSchemaStore
                     """);
             statement.execute("""
                     create table if not exists crawl_state (
-                      state_id int primary key,
+                      state_id int not null,
+                      database_key varchar(512) not null default '',
                       last_success_at timestamp,
                       last_attempt_at timestamp,
                       last_used_at timestamp,
@@ -228,19 +268,30 @@ public final class JdbcSchemaStore
                       consecutive_failures int not null,
                       usage_score double not null,
                       enabled boolean not null,
-                      next_due_at timestamp
+                      next_due_at timestamp,
+                      primary key(state_id, database_key)
                     )
                     """);
-            statement.execute("alter table crawl_state add column if not exists last_used_at timestamp");
         }
     }
 
-    private CrawlState initializeState(Connection connection, Instant now) throws SQLException
+    private CrawlState initializeState(Connection connection, String databaseKey, Instant now) throws SQLException
     {
-        try (PreparedStatement statement = connection.prepareStatement(
-                "insert into crawl_state(state_id, consecutive_failures, usage_score, enabled, next_due_at) select 1, 0, 0.0, true, ? where not exists (select 1 from crawl_state where state_id = 1)"))
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into crawl_state(state_id, database_key, consecutive_failures, usage_score, enabled, next_due_at)
+                select 1, ?, 0, 0.0, true, ?
+                where not exists
+                (
+                    select 1
+                    from crawl_state
+                    where state_id = 1
+                    and database_key = ?
+                )
+                """))
         {
-            statement.setTimestamp(1, java.sql.Timestamp.from(now));
+            statement.setString(1, databaseKey);
+            statement.setTimestamp(2, java.sql.Timestamp.from(now));
+            statement.setString(3, databaseKey);
             try
             {
                 statement.executeUpdate();
@@ -464,18 +515,52 @@ public final class JdbcSchemaStore
         }
     }
 
-    private static Instant readLastUsedAt(Connection connection) throws SQLException
+    private static Instant readLastUsedAt(Connection connection, String databaseKey) throws SQLException
     {
-        try (PreparedStatement statement = connection.prepareStatement("select last_used_at from crawl_state where state_id = 1"); ResultSet resultSet = statement.executeQuery())
+        try (PreparedStatement statement = connection.prepareStatement("select last_used_at from crawl_state where state_id = 1 and database_key = ?"))
         {
-            if (!resultSet.next())
+            statement.setString(1, databaseKey);
+            try (ResultSet resultSet = statement.executeQuery())
             {
-                return null;
+                if (!resultSet.next())
+                {
+                    return null;
+                }
+                java.sql.Timestamp timestamp = resultSet.getTimestamp(1);
+                return timestamp == null ? null
+                        : timestamp.toInstant();
             }
-            java.sql.Timestamp timestamp = resultSet.getTimestamp(1);
-            return timestamp == null ? null
-                    : timestamp.toInstant();
         }
+    }
+
+    List<String> databaseKeys(String connectionId, JdbcSchemaCrawlScope scope)
+    {
+        try (Connection connection = open(connectionId, scope);
+                PreparedStatement statement = connection.prepareStatement("select database_key from crawl_state where state_id = 1 and database_key <> '' order by database_key");
+                ResultSet resultSet = statement.executeQuery())
+        {
+            List<String> result = new ArrayList<>();
+            while (resultSet.next())
+            {
+                String value = resultSet.getString(1);
+                if (value != null
+                        && !value.isBlank())
+                {
+                    result.add(value);
+                }
+            }
+            return result;
+        }
+        catch (SQLException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static String normalizeDatabaseKey(String databaseKey)
+    {
+        return databaseKey == null ? ""
+                : databaseKey.trim();
     }
 
     private static double decay(double currentScore, Instant previousUse, Instant now)

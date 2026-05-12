@@ -56,7 +56,7 @@ class JdbcBackendPluginTest
 
         Map<String, Object> map = (Map<String, Object>) result;
         Assertions.assertEquals(List.of("engine.capabilities", "jdbc.connection.setup", "jdbc.connection.dialects", "jdbc.connection.test", "jdbc.schema.snapshot", "jdbc.schema.refresh",
-                "jdbc.schema.fetch", "jdbc.connection.sessions", "sql.parse.snapshot"), map.get("actions"));
+                "jdbc.schema.fetch", "jdbc.connection.sessions", "sql.parse.snapshot", "sql.complete"), map.get("actions"));
     }
 
     @SuppressWarnings("unchecked")
@@ -122,6 +122,29 @@ class JdbcBackendPluginTest
         Assertions.assertTrue(deepSnapshot.stream()
                 .map(Object::toString)
                 .anyMatch(text -> text.contains("FETCH_DEEP_VISIBLE")));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void sqlCompleteAcceptsConnectionIdPayload() throws Exception
+    {
+        QueryEngineProvider provider = activateAndGetProvider();
+        String jdbcUrl = "jdbc:h2:mem:test_fetch_deep_append;DB_CLOSE_DELAY=-1";
+
+        try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
+        {
+            statement.execute("create table completion_visible(id int)");
+        }
+
+        provider.invoke(null, "jdbc.schema.refresh", Map.of("connectionId", "jdbc-fetch-deep", "scope", "top"));
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete",
+                Map.of("fileId", "file-1", "version", 1L, "text", "", "connectionId", "jdbc-fetch-deep", "cursor", Map.of("line", 1, "column", 1), "limits", Map.of("maxItems", 50)));
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+        Assertions.assertFalse(items.isEmpty());
+        Assertions.assertTrue(items.stream()
+                .anyMatch(item -> "SELECT".equals(item.get("label"))));
     }
 
     @Test

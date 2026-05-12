@@ -30,6 +30,8 @@ type RowView = {
   title: string;
   category?: string;
   effectiveKeys: string[];
+  preferredWhen: string;
+  preferredScope: "global" | "editor" | "terminal" | "explorer";
   source: "default" | "user";
   isDisabled: boolean;
   hasConflict: boolean;
@@ -97,6 +99,8 @@ function createRows(
         title: command.title,
         category: command.category,
         effectiveKeys: effective.map((item) => item.key),
+        preferredWhen: effective[0]?.when ?? "global",
+        preferredScope: effective[0]?.scope ?? "global",
         source: effective[0]?.source ?? "default",
         isDisabled: commandDisabled.has(command.id) && effective.length === 0,
         hasConflict: (conflictByCommand.get(command.id)?.length ?? 0) > 0,
@@ -179,6 +183,14 @@ export function KeybindingsSettingsRenderer(_props: Props): JSX.Element {
     });
   }, [extensions, resolvedState, documentState, query, conflictsOnly, userOnly]);
 
+  const rowsByCommand = useMemo(() => {
+    const map = new Map<string, RowView>();
+    for (const row of rows) {
+      map.set(row.commandId, row);
+    }
+    return map;
+  }, [rows]);
+
   const persist = async (next: UserKeybindingsDocument) => {
     setIsSaving(true);
     setStatus(null);
@@ -196,14 +208,17 @@ export function KeybindingsSettingsRenderer(_props: Props): JSX.Element {
       setStatus("Shortcut is required");
       return;
     }
+    const row = rowsByCommand.get(commandId);
+    const when = row?.preferredWhen ?? "global";
+    const scope = row?.preferredScope ?? "global";
     const existingUnbound = documentState.unbound.filter((entry) => entry.commandId !== commandId);
     const next: UserKeybindingsDocument = {
       version: KEYBINDINGS_SCHEMA_VERSION,
       bindings: [
-        ...documentState.bindings.filter((binding) => !(binding.commandId === commandId && (binding.when ?? "global") === "global")),
-        { commandId, key, when: "global", scope: "global" }
+        ...documentState.bindings.filter((binding) => !(binding.commandId === commandId && (binding.when ?? "global") === when)),
+        { commandId, key, when, scope }
       ],
-      unbound: [...existingUnbound, { commandId, when: "global" }]
+      unbound: [...existingUnbound, { commandId, when }]
     };
     await persist(next);
     setEditingCommandId(null);

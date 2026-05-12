@@ -13,6 +13,7 @@ import { getOutlineRegistry } from "../../core/plugin-runtime/ExtensionRegistry"
 import { registerShortcuts } from "./shortcuts";
 import { setFilesRegistry } from "../core.commands/files-registry-accessor";
 import { ExpressionTesterRenderer } from "../core.commands/ExpressionTesterRenderer";
+import { setupSqlCompletionLanguage } from "./sql-completion-language";
 
 void React;
 
@@ -60,6 +61,7 @@ export const coreQueryEnginePlugin: Plugin = {
   activate: (context) => {
     const queryEngineService = getQueryEngineService();
     queryEngineService.initialize();
+    void setupSqlCompletionLanguage();
     queryTextRegistry.setFilesRegistry(context.files);
     setFilesRegistry(context.files);
     getEditorRegistryHost().registerContentRepository(queryTextRegistry);

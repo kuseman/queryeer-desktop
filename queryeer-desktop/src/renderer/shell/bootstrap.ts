@@ -25,6 +25,7 @@ import { initializeQuickCommandService } from "../../plugins/core.quickcommand/s
 import { setCommandContextChain } from "../../plugins/core.commands/command-context-accessor";
 import { setKeybindingsRuntimeState } from "../../plugins/core.commands/keybindings-runtime-accessor";
 import { requestMessageDialog } from "../../plugins/core.dialog/message-dialog-service";
+import { getRegisteredQueryExecutableEngines } from "../../plugins/core.queryengine/engine-registration";
 
 export async function bootstrapShell() {
   const chain = createContextChain();
@@ -45,6 +46,19 @@ export async function bootstrapShell() {
   // Wire all TextEditorRegistry instances so they can register EDITOR_INSTANCE scopes.
   setTextEditorContextChain(chain);
 
+  const resolveEffectiveEngineBinding = (file: FileEntity): FileEntity["engineBinding"] => {
+    if (file.engineBinding?.engineId) {
+      return file.engineBinding;
+    }
+    const inferred = getRegisteredQueryExecutableEngines().find((entry) =>
+      entry.mimeTypes.includes(file.mimeType)
+    );
+    if (!inferred) {
+      return undefined;
+    }
+    return { engineId: inferred.engineId };
+  };
+
   const backendSync: FileBackendSync = {
     openFile: async (file, initialText) => {
       if (!file.engineBinding) {
@@ -62,10 +76,14 @@ export async function bootstrapShell() {
       await window.appShell.closeBackendFile({ fileId: file.fileId });
     },
     changeFile: async (file, text) => {
+      const engineBinding = resolveEffectiveEngineBinding(file);
       await window.appShell.notifyBackendFileChange({
         fileId: file.fileId,
         version: file.version,
-        text
+        text,
+        uri: file.uri,
+        mimeType: file.mimeType,
+        engineBinding
       });
     }
   };
@@ -84,6 +102,8 @@ export async function bootstrapShell() {
   let workspaceService: RendererWorkspaceService | null = null;
   let filesRegistry: FilesRegistry | null = null;
   let fileMediator: FileMediator | null = null;
+  const pendingBackendFileChangeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const backendFileChangeDebounceMs = 175;
 
   const onFileChanged = (file: FileEntity, text: string): void => {
     getEditorRegistryHost().broadcastContentUpdate(file.uri, text);
@@ -238,6 +258,27 @@ export async function bootstrapShell() {
     const file = filesRegistry!.getFile(fileId);
     if (file) {
       workspaceService?.handleFileChanged(file, text);
+      const engineBinding = resolveEffectiveEngineBinding(file);
+      if (!engineBinding) {
+        return;
+      }
+      const existingTimer = pendingBackendFileChangeTimers.get(fileId);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+      }
+      const timer = setTimeout(() => {
+        pendingBackendFileChangeTimers.delete(fileId);
+        const latest = filesRegistry!.getFile(fileId);
+        if (!latest) {
+          return;
+        }
+        const latestBinding = resolveEffectiveEngineBinding(latest);
+        if (!latestBinding) {
+          return;
+        }
+        void backendSync.changeFile?.({ ...latest, engineBinding: latestBinding }, text);
+      }, backendFileChangeDebounceMs);
+      pendingBackendFileChangeTimers.set(fileId, timer);
     }
   });
 

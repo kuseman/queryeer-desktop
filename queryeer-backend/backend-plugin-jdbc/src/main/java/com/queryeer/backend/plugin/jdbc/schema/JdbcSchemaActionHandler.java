@@ -177,6 +177,15 @@ public final class JdbcSchemaActionHandler
 
             target = new JdbcSchemaTarget(incomingTarget != null ? trimToNull(incomingTarget.database())
                     : null, schema);
+
+            JdbcConnection resolved = connections.resolve(connectionId);
+            List<JdbcSchemaObject> fetched = resolved.dialect()
+                    .schemaResolver()
+                    .resolveSchema(resolved, Map.of(OPTION_SCOPE, SCOPE_TABLES, OPTION_TARGET, target));
+            List<JdbcSchemaObject> current = new ArrayList<>(schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP));
+            mergeTablesScope(current, target.database(), target.schema(), fetched);
+            schemaStore.persistSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP, current);
+            return current;
         }
 
         return crawlCoordinator.refreshNow(connectionId, crawlScope, target);

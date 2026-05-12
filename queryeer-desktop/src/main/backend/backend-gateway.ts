@@ -582,10 +582,13 @@ export class BackendGateway {
             const errorDetail = response.error.message
               ? `${response.error.code}: ${redactLogMessage(response.error.message)}`
               : response.error.code;
+            const details = response.error.details
+              ? redactLogMessage(JSON.stringify(response.error.details))
+              : null;
             this.appendLog(
               "error",
               "gateway",
-              `Request failed ${envelope.id} ${envelope.method}: ${errorDetail}`
+              `Request failed ${envelope.id} ${envelope.method}: ${errorDetail}${details ? ` details=${details}` : ""}`
             );
             reject(new BackendResponseError(response.error.code, response.error.message));
             return;
