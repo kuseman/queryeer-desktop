@@ -10,6 +10,10 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
 
+import org.treesitter.TSParser;
+import org.treesitter.TSTree;
+import org.treesitter.TreeSitterSql;
+
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 
@@ -58,9 +62,6 @@ public final class SqlCompletionSupport
                 linePrefix = line.substring(0, end);
             }
         }
-        String prefix = currentTokenPrefix(linePrefix);
-        int replaceStartColumn = Math.max(1, cursor.column() - prefix.length());
-
         long requestedVersion = params.version() == null ? 0L
                 : params.version();
         Long snapshotVersion = parseSessions.get(engineId, fileId)
@@ -72,6 +73,18 @@ public final class SqlCompletionSupport
         context.put("snapshotVersion", snapshotVersion);
         context.put("usedFallback", Boolean.FALSE);
 
+        SqlCompletionContext completionContext = SqlCompletionContext.OTHER;
+        if (!isBlank(params == null ? null
+                : params.text()))
+        {
+            TSTree tree = resolveTree(parseSessions, engineId, fileId, params.text());
+            if (tree != null)
+            {
+                completionContext = SqlContextDetector.detectContext(tree, cursor.line(), cursor.column());
+            }
+        }
+        context.put("completionContext", completionContext.name());
+
         int maxItems = params != null
                 && params.limits() != null
                 && params.limits()
@@ -79,8 +92,10 @@ public final class SqlCompletionSupport
                                 params.limits()
                                         .maxItems()))
                                 : 100;
+        String prefix = currentTokenPrefix(linePrefix);
+        int replaceStartColumn = Math.max(1, cursor.column() - prefix.length());
         List<Map<String, Object>> semanticItems = semanticProvider == null ? List.of()
-                : semanticProvider.provide(params, fileId, cursor, prefix, replaceStartColumn, maxItems);
+                : semanticProvider.provide(params, fileId, cursor, prefix, replaceStartColumn, maxItems, completionContext);
         Set<String> seenLabels = new LinkedHashSet<>();
         List<Map<String, Object>> items = semanticItems.stream()
                 .filter(item -> item != null
@@ -118,6 +133,19 @@ public final class SqlCompletionSupport
         return Map.of("items", items, "isIncomplete", false, "context", context);
     }
 
+    private static TSTree resolveTree(IncrementalParseSessionService parseSessions, String engineId, String fileId, String text)
+    {
+        // Always parse the text fresh. The session tree can be stale if the
+        // file.change notification hasn't arrived before sql.complete.
+        if (!isBlank(text))
+        {
+            TSParser parser = new TSParser();
+            parser.setLanguage(new TreeSitterSql());
+            return parser.parseString(null, text);
+        }
+        return null;
+    }
+
     private static String currentTokenPrefix(String linePrefix)
     {
         int start = linePrefix.length();
@@ -151,7 +179,7 @@ public final class SqlCompletionSupport
     @FunctionalInterface
     public interface SemanticCompletionProvider
     {
-        List<Map<String, Object>> provide(SqlCompletePayload payload, String fileId, SqlCompleteCursor cursor, String prefix, int replaceStartColumn, int maxItems);
+        List<Map<String, Object>> provide(SqlCompletePayload payload, String fileId, SqlCompleteCursor cursor, String prefix, int replaceStartColumn, int maxItems, SqlCompletionContext context);
     }
 
     private static Map<String, Object> withDefaultSortText(Map<String, Object> item, String defaultSortText)
