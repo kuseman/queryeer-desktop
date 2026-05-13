@@ -1,7 +1,28 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { filterMenuItemsByWhen } from "./menu-item-filter";
 
 describe("filterMenuItemsByWhen", () => {
+  const originalAppShell = window.appShell;
+
+  beforeEach(() => {
+    window.appShell = {
+      ...originalAppShell,
+      evaluateExpressionSync: (params) => {
+        if (params.expression === "hasActiveFile") {
+          return { ok: true as const, result: !!params.context.hasActiveFile };
+        }
+        if (params.expression === "backendHealthy") {
+          return { ok: true as const, result: !!params.context.backendHealthy };
+        }
+        return { ok: false as const, message: "unsupported expression" };
+      }
+    };
+  });
+
+  afterEach(() => {
+    window.appShell = originalAppShell;
+  });
+
   it("keeps matching items and required ancestors", () => {
     const filtered = filterMenuItemsByWhen(
       [

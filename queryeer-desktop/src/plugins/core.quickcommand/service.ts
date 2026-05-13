@@ -4,7 +4,8 @@ import type {
   QuickCommandProvider,
   QuickCommandRegistry
 } from "../../contracts/extensions/QuickCommandExtension";
-import { evaluateWhenExpression, type ContextValues } from "../core.commands/when-evaluator";
+import type { ContextValues } from "../core.commands/context-values";
+import { getExpressionRuntime } from "../core.expressions/runtime";
 import { fuzzyScore } from "./fuzzy-match";
 import { RecentlyUsedStore } from "./recently-used-store";
 
@@ -18,6 +19,7 @@ export class QuickCommandService {
   private readonly recentlyUsed = new RecentlyUsedStore();
   private state: PanelState = { open: false, query: "" };
   private readonly listeners: Listener[] = [];
+  private readonly runtime = getExpressionRuntime();
 
   public constructor(providers: QuickCommandProvider[], getContextValues?: () => ContextValues) {
     this.providers = providers;
@@ -27,7 +29,16 @@ export class QuickCommandService {
   public open(prefillQuery = "", options?: { when?: string }): void {
     if (options?.when && this.getContextValues) {
       const ctx = this.getContextValues();
-      if (!evaluateWhenExpression(options.when, ctx)) {
+      try {
+        if (!this.runtime.evaluateBooleanSync(options.when, ctx as Record<string, unknown>, {
+          mode: "when",
+          source: "quickcommand:open",
+          timeoutMs: 50,
+        })) {
+          return;
+        }
+      } catch (error) {
+        console.error(`[ExpressionRuntime][quickcommand] open failed :: ${options.when}`, error);
         return;
       }
     }
@@ -77,7 +88,21 @@ export class QuickCommandService {
     if (this.getContextValues) {
       const ctx = this.getContextValues();
       activeProviders = activeProviders.filter(
-        (p) => !p.when || evaluateWhenExpression(p.when, ctx)
+        (p) => {
+          if (!p.when || p.when.trim().length === 0 || p.when.trim() === "global") {
+            return true;
+          }
+          try {
+            return this.runtime.evaluateBooleanSync(p.when, ctx as Record<string, unknown>, {
+              mode: "when",
+              source: `quickcommand:provider:${p.label}`,
+              timeoutMs: 50,
+            });
+          } catch (error) {
+            console.error(`[ExpressionRuntime][quickcommand] provider '${p.label}' failed :: ${p.when}`, error);
+            return false;
+          }
+        }
       );
     }
 

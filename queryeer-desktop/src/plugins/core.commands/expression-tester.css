@@ -10,6 +10,11 @@
   gap: 8px;
 }
 
+.expr-tester-context-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .expr-tester-file-select {
   background: var(--surface-overlay-weak);
   border: 1px solid var(--border);
@@ -52,6 +57,9 @@
 }
 
 .expr-tester-context-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 5px 10px;
   background: var(--surface-overlay-weak);
   font-size: var(--ui-font-size-xs);
@@ -61,8 +69,25 @@
   letter-spacing: 0.05em;
 }
 
+.expr-tester-context-open {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-1);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: var(--ui-font-size-xs);
+  cursor: pointer;
+}
+
+.expr-tester-context-open:hover {
+  color: var(--text-0);
+  border-color: var(--accent-muted);
+}
+
 .expr-tester-context-body {
   padding: 6px 0;
+  max-height: 220px;
+  overflow: auto;
 }
 
 .expr-tester-context-group-label {
@@ -145,4 +170,63 @@
   font-size: var(--ui-font-size-sm);
   font-style: italic;
   padding: 8px 0;
+}
+
+.expr-tester-context-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.expr-tester-context-modal {
+  width: min(900px, 90vw);
+  height: min(70vh, 700px);
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.expr-tester-context-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--surface-overlay-weak);
+  border-bottom: 1px solid var(--border);
+}
+
+.expr-tester-context-close {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-1);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: var(--ui-font-size-xs);
+  cursor: pointer;
+}
+
+.expr-tester-context-close:hover {
+  color: var(--text-0);
+  border-color: var(--accent-muted);
+}
+
+.expr-tester-context-modal-text {
+  flex: 1;
+  width: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  background: var(--bg-0);
+  color: var(--text-0);
+  padding: 10px;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--ui-font-size-xs);
+  line-height: 1.45;
 }

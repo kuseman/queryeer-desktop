@@ -4,12 +4,12 @@ export type SymbolAction = {
   id: string;
   label: string;
   /**
-   * When-expression evaluated against the full context chain plus symbol.* variables:
+   * JS expression evaluated by ExpressionRuntime against the full context chain plus symbol.* variables:
    *   symbol.kind, symbol.name, symbol.detail
-   * plus all existing context variables (activeFileMimetype, activeFileMetadata.*, etc.)
+   * plus all existing context variables (activeFile.mimeType, activeFile.metadata.*, etc.)
    */
   when: string;
-  /** Query template. Supports ${symbol.name}, ${symbol.kind}, ${symbol.detail}. Unknown placeholders are left as-is. */
+   /** Query template evaluated by ExpressionRuntime template interpolation (${...}). */
   query: string;
   outputId?: string;
   order?: number;

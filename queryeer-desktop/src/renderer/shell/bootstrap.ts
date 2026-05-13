@@ -17,7 +17,7 @@ import { createBackendCommandContext } from "./backend-command-context";
 import { filterMenuItemsByWhen } from "../../plugins/core.menu/menu-item-filter";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import type { FileMediator } from "../../contracts/files/FileMediator";
-import { flattenContextObject } from "./context-value-flatten";
+import { inflateDottedKeys } from "./context-value-flatten";
 import { createContextChain } from "../../plugins/core.commands/context-chain";
 import { ContextPriority } from "../../plugins/core.commands/context-priority";
 import { createZoneFocusScope } from "../../plugins/core.commands/context-key-service";
@@ -135,9 +135,17 @@ export async function bootstrapShell() {
       : false;
     chain.update("activeFile", {
       hasActiveFile: activeFile != null,
-      activeFileMimeType: activeFile?.mimeType,
+      activeFile: activeFile
+        ? {
+            fileId: activeFile.fileId,
+            uri: activeFile.uri,
+            editorId: activeFile.editorId,
+            mimeType: activeFile.mimeType,
+            metadata: inflateDottedKeys(activeFile.metadata ?? {}),
+            engineBinding: activeFile.engineBinding,
+          }
+        : null,
       hasActiveQueryExecutableFile: isQueryExecutable,
-      ...flattenContextObject("activeFileMetadata", activeFile?.metadata)
     });
   };
   fileMediator.onActiveFileChanged(() => updateActiveFileScope());

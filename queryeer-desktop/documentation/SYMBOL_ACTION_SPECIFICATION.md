@@ -7,7 +7,7 @@ Add a rule-based query system that lets users configure context menu actions bou
 Example: a "Describe" action for SQL Server tables:
 
 - **Label**: Describe
-- **When**: `activeFileMimetype == 'application/sql' && activeFileMetadata.core.queryengine.jdbc.dialectId == 'sqlserver' && symbol.kind == 'table'`
+- **When**: `activeFile.mimeType == 'application/sql' && activeFile.metadata.core.queryengine.jdbc.dialectId == 'sqlserver' && symbol.kind == 'table'`
 - **Query**: `exec sp_help ${symbol.name}`
 
 ### Module ownership
@@ -25,7 +25,7 @@ The editor module provides a generic context menu extension point. The query eng
 2. **No action if a query is already running** on the active file.
 3. **Results route to a configurable output contributor** (defaults to primary table output). The current editor content is untouched.
 4. **Template interpolation uses `${symbol.kind}`, `${symbol.name}`, `${symbol.detail}`** — forward-compatible with future template engines. Unknown placeholders are left as-is (not stripped).
-5. **When-expression context variables** use dotted notation (`symbol.kind`, `symbol.name`, `symbol.detail`) consistent with the existing `activeFileMetadata.*` pattern. The existing `activeFileMetadata.core.queryengine.jdbc.dialectId` is already in the context chain — no new variable needed for dialect.
+5. **When-expression context variables** use dotted notation (`symbol.kind`, `symbol.name`, `symbol.detail`) and structured file context (`activeFile.metadata.*`). The existing `activeFile.metadata.core.queryengine.jdbc.dialectId` is already in the context chain — no new variable needed for dialect.
 6. **All actions are user-configured in settings** — no plugin-registered defaults. Settings use an advanced renderer under "Query Engine > Symbol Actions".
 7. **`SqlCompletionContext`** on the backend should be renamed to a more general name (e.g., `SqlParseContext`) since it will serve both completion and symbol navigation.
 
@@ -397,9 +397,9 @@ export type SymbolAction = {
   label: string;
   /** When-expression that must evaluate to true for this action to appear.
    *  Available context variables:
-   *    - activeFileMimetype
-   *    - activeFileMetadata.core.queryengine.jdbc.dialectId
-   *    - activeFileMetadata.core.queryengine.jdbc.database
+   *    - activeFile.mimeType
+   *    - activeFile.metadata.core.queryengine.jdbc.dialectId
+   *    - activeFile.metadata.core.queryengine.jdbc.database
    *    - symbol.kind   (injected at right-click)
    *    - symbol.detail  (injected at right-click)
    *    - symbol.name    (injected at right-click)
@@ -742,10 +742,10 @@ if (currentActions) {
 
 | Variable | Type | Source | Example |
 |----------|------|--------|---------|
-| `activeFileMimetype` | string | Bootstrap scope | `"application/sql"` |
-| `activeFileMetadata.core.queryengine.jdbc.dialectId` | string | ACTIVE_FILE scope (from metadata) | `"sqlserver"` |
-| `activeFileMetadata.core.queryengine.jdbc.database` | string | ACTIVE_FILE scope (from metadata) | `"master"` |
-| `activeFileMetadata.core.queryengine.jdbc.connectionTitle` | string | ACTIVE_FILE scope (from metadata) | `"Prod DB"` |
+| `activeFile.mimeType` | string | Bootstrap scope | `"application/sql"` |
+| `activeFile.metadata.core.queryengine.jdbc.dialectId` | string | ACTIVE_FILE scope (from metadata) | `"sqlserver"` |
+| `activeFile.metadata.core.queryengine.jdbc.database` | string | ACTIVE_FILE scope (from metadata) | `"master"` |
+| `activeFile.metadata.core.queryengine.jdbc.connectionTitle` | string | ACTIVE_FILE scope (from metadata) | `"Prod DB"` |
 | `hasActiveFile` | boolean | Bootstrap scope | `true` |
 | `hasActiveQueryExecutableFile` | boolean | Bootstrap scope | `true` |
 | `editorFocus` | boolean | EDITOR_INSTANCE scope | `true` |
@@ -759,22 +759,22 @@ if (currentActions) {
 | `symbol.detail` | string | Backend result `detail` field | `"TABLE"` |
 | `symbol.name` | string | Backend result `name` field | `"dbo.MyTable"` |
 
-These are injected by `SymbolActionProvider` via `contextChain.update()` and `flattenContextObject("symbol", { kind, name, detail })`, then cleared immediately after when-expression evaluation. Consistent with how `activeFileMetadata.*` is handled.
+These are injected by `SymbolActionProvider` as structured context (`symbol.kind`, `symbol.name`, `symbol.detail`) during evaluation.
 
 ### When-expression examples
 
 ```sql
 -- SQL Server: Describe a table
-activeFileMimetype == 'application/sql' && activeFileMetadata.core.queryengine.jdbc.dialectId == 'sqlserver' && symbol.kind == 'table'
+activeFile.mimeType == 'application/sql' && activeFile.metadata.core.queryengine.jdbc.dialectId == 'sqlserver' && symbol.kind == 'table'
 
 -- PostgreSQL: Show table DDL
-activeFileMimetype == 'application/sql' && activeFileMetadata.core.queryengine.jdbc.dialectId == 'postgres' && symbol.kind == 'table'
+activeFile.mimeType == 'application/sql' && activeFile.metadata.core.queryengine.jdbc.dialectId == 'postgres' && symbol.kind == 'table'
 
 -- Any SQL: Show object definition (not for columns)
-activeFileMimetype == 'application/sql' && symbol.kind != 'column'
+activeFile.mimeType == 'application/sql' && symbol.kind != 'column'
 
 -- SQL Server: Select top 100 from any table-like object
-activeFileMimetype == 'application/sql' && activeFileMetadata.core.queryengine.jdbc.dialectId == 'sqlserver' && symbol.kind.startsWith('table')
+activeFile.mimeType == 'application/sql' && activeFile.metadata.core.queryengine.jdbc.dialectId == 'sqlserver' && symbol.kind.startsWith('table')
 ```
 
 ### Template examples

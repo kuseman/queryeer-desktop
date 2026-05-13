@@ -51,7 +51,7 @@ import type {
 } from "../../contracts/extensions/TableOutputContextMenuExtension";
 import type { EditorHandle, EditorRegistry, EditorRegistryHost, EditorContentRepository } from "../../contracts/editor/EditorCapability";
 import type { Disposable } from "../../contracts/editor/EditorApi";
-import type { ContextValues } from "../../plugins/core.commands/when-evaluator";
+import type { ContextValues } from "../../plugins/core.commands/context-values";
 import { CommandBus } from "./CommandBus";
 import { FileRegistry } from "./FileRegistry";
 

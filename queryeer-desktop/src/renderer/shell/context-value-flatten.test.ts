@@ -1,32 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { flattenContextObject } from "./context-value-flatten";
+import { inflateDottedKeys } from "./context-value-flatten";
 
-describe("flattenContextObject", () => {
-  it("flattens nested object values into dotted context keys", () => {
-    const flattened = flattenContextObject("meta", {
-      core: {
-        queryengine: {
-          tabState: "running"
-        }
-      },
-      retries: 2,
-      enabled: true
+describe("inflateDottedKeys", () => {
+  it("inflates dotted key values into nested object paths", () => {
+    const inflated = inflateDottedKeys({
+      "meta.core.queryengine.tabState": "running",
+      "meta.retries": 2,
+      "meta.enabled": true
     });
 
-    expect(flattened["meta.core.queryengine.tabState"]).toBe("running");
-    expect(flattened["meta.retries"]).toBe(2);
-    expect(flattened["meta.enabled"]).toBe(true);
+    expect((inflated.meta as Record<string, unknown>).retries).toBe(2);
+    expect((inflated.meta as Record<string, unknown>).enabled).toBe(true);
+    expect((((inflated.meta as Record<string, unknown>).core as Record<string, unknown>).queryengine as Record<string, unknown>).tabState).toBe("running");
   });
 
-  it("ignores non-primitive leaf values", () => {
-    const flattened = flattenContextObject("meta", {
-      list: ["a"],
-      nested: {
-        value: undefined
-      }
+  it("preserves simple keys alongside dotted keys", () => {
+    const inflated = inflateDottedKeys({
+      hasActiveFile: true,
+      "activeFile.mimeType": "application/sql"
     });
 
-    expect(flattened["meta.list"]).toBeUndefined();
-    expect(flattened["meta.nested.value"]).toBeUndefined();
+    expect(inflated.hasActiveFile).toBe(true);
+    expect((inflated.activeFile as Record<string, unknown>).mimeType).toBe("application/sql");
   });
 });

@@ -28,6 +28,7 @@ import { defaultRecentFilesPath, RecentFilesStore } from "./recent-files/recent-
 import { SecurityService } from "./security/security-service.js";
 import { defaultSecurityDirPath, VaultStore } from "./security/vault-store.js";
 import { createBeforeQuitHandler } from "./app-shutdown.js";
+import { wireExpressionEvaluatorIpc } from "./expressions/expression-evaluator.js";
 
 const isDev = !app.isPackaged;
 
@@ -237,6 +238,7 @@ app.whenReady().then(() => {
   ipcMain.handle("shell:open-external", async (_event, { url }: { url: string }) => {
     await shell.openExternal(url);
   });
+  wireExpressionEvaluatorIpc(ipcMain);
 
   const sendWindowState = () => {
     if (!mainWindow) {

@@ -129,7 +129,9 @@ describe("bootstrapShell diagnostics wiring", () => {
       getRecentFiles: async () => [],
       addRecentFile: async () => ({ accepted: true }),
       removeRecentFile: async () => ({ removed: true }),
-      clearRecentFiles: async () => ({ cleared: true })
+      clearRecentFiles: async () => ({ cleared: true }),
+      evaluateExpression: async () => true,
+      evaluateExpressionSync: () => ({ ok: true, result: true })
     };
 
     (discoverPluginModules as MockedDiscovery).mockResolvedValue({

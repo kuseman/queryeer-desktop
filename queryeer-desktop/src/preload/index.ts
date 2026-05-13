@@ -180,6 +180,20 @@ type AppShellApi = {
     executionId: string;
     resultSetIndex: number;
   }) => Promise<{ exportPath: string }>;
+  evaluateExpression: (params: {
+    expression: string;
+    context: Record<string, unknown>;
+    functions: Record<string, unknown>;
+    timeoutMs: number;
+    source?: string;
+  }) => Promise<unknown>;
+  evaluateExpressionSync: (params: {
+    expression: string;
+    context: Record<string, unknown>;
+    functions: Record<string, unknown>;
+    timeoutMs: number;
+    source?: string;
+  }) => { ok: true; result: unknown } | { ok: false; message: string };
 };
 
 const appShellApi: AppShellApi = {
@@ -443,6 +457,12 @@ const appShellApi: AppShellApi = {
   },
   finalizeExportStream: async (params) => {
     return ipcRenderer.invoke("workspace:export-finalize", params);
+  },
+  evaluateExpression: async (params) => {
+    return ipcRenderer.invoke("expressions:evaluate", params);
+  },
+  evaluateExpressionSync: (params) => {
+    return ipcRenderer.sendSync("expressions:evaluate-sync", params);
   },
   onWindowStateChanged: (listener) => {
     const channel = "window:state-changed";

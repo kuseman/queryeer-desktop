@@ -41,18 +41,18 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
   },
   activate: (context) => {
     registerWhenExpressionVariables([
-      { name: "activeFileMetadata.core.queryengine.jdbc.database", type: "string", description: "Selected JDBC database name" },
-      { name: "activeFileMetadata.core.queryengine.jdbc.connectionTitle", type: "string", description: "Human-readable title of the active JDBC connection" },
-      { name: "activeFileMetadata.core.queryengine.jdbc.dialectId", type: "string", description: "SQL dialect of the active JDBC connection (e.g. 'sqlserver', 'postgresql')" },
-      { name: "activeFileMetadata.core.queryengine.jdbc.sessionConnection", type: "string", description: "Title of the JDBC connection that owns the active session" },
-      { name: "activeFileMetadata.core.queryengine.jdbc.sessionState", type: "string", description: "State of the JDBC session: 'alive', 'dead', or 'none'" },
+      { name: "activeFile.metadata.core.queryengine.jdbc.database", type: "string", description: "Selected JDBC database name" },
+      { name: "activeFile.metadata.core.queryengine.jdbc.connectionTitle", type: "string", description: "Human-readable title of the active JDBC connection" },
+      { name: "activeFile.metadata.core.queryengine.jdbc.dialectId", type: "string", description: "SQL dialect of the active JDBC connection (e.g. 'sqlserver', 'postgresql')" },
+      { name: "activeFile.metadata.core.queryengine.jdbc.sessionConnection", type: "string", description: "Title of the JDBC connection that owns the active session" },
+      { name: "activeFile.metadata.core.queryengine.jdbc.sessionState", type: "string", description: "State of the JDBC session: 'alive', 'dead', or 'none'" },
     ]);
 
     registerWhenExpressionTemplates([
       {
         name: "SQLServer Database",
         description: "Match SQL files using SQL Server against a specific selected database",
-        when: "activeFileMimeType == 'application/sql' && activeFileMetadata.core.queryengine.jdbc.dialectId == 'sqlserver' && activeFileMetadata.core.queryengine.jdbc.database == 'OrderService'"
+        when: "activeFile.mimeType == 'application/sql' && activeFile.metadata.core.queryengine.jdbc.dialectId == 'sqlserver' && activeFile.metadata.core.queryengine.jdbc.database == 'OrderService'"
       }
     ]);
 
@@ -63,7 +63,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       order: 10,
       action: {
         label: "Describe",
-        when: "activeFileMimeType == 'application/sql' && activeFileMetadata.core.queryengine.jdbc.dialectId == 'sqlserver' && (symbol.kind == 'table' || symbol.kind == 'view')",
+        when: "activeFile.mimeType == 'application/sql' && activeFile.metadata.core.queryengine.jdbc.dialectId == 'sqlserver' && (symbol.kind == 'table' || symbol.kind == 'view')",
         query: "exec sp_help '${symbol.name}'"
       }
     });
@@ -181,7 +181,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       title: "Select Database",
       category: "Quick Command",
       handler: () => {
-        getQuickCommandService()?.open("$", { when: "activeFileMimeType == 'application/sql'" });
+        getQuickCommandService()?.open("$", { when: "activeFile.mimeType == 'application/sql'" });
       }
     });
 
@@ -211,7 +211,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
           commandId: "core.queryengine.jdbc.navigation.refresh"
         }
       ],
-      when: "activeFileMimeType == 'application/sql'",
+      when: "activeFile.mimeType == 'application/sql'",
       render: () => <JdbcNavigationView context={context} />
     });
 

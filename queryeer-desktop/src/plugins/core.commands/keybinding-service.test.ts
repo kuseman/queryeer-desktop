@@ -1,8 +1,30 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExtensionSnapshot } from "../../core/plugin-runtime/ExtensionRegistry";
 import { KEYBINDINGS_SCHEMA_VERSION, type UserKeybindingsDocument } from "../../contracts/commands/Keybindings";
 import { createKeybindingService } from "./keybinding-service";
 import { createContextChain } from "./context-chain";
+
+const originalAppShell = window.appShell;
+
+beforeEach(() => {
+  window.appShell = {
+    ...window.appShell,
+    evaluateExpressionSync: (params) => {
+      try {
+        const keys = Object.keys(params.context);
+        const values = keys.map((key) => params.context[key]);
+        const runner = new Function(...keys, `return (${params.expression});`) as (...args: unknown[]) => unknown;
+        return { ok: true as const, result: runner(...values) };
+      } catch (error) {
+        return { ok: false as const, message: error instanceof Error ? error.message : String(error) };
+      }
+    }
+  };
+});
+
+afterEach(() => {
+  window.appShell = originalAppShell;
+});
 
 function makeExtensions(): ExtensionSnapshot {
   return {

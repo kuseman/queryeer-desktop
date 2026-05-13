@@ -120,6 +120,20 @@ export interface ShellApi {
   addRecentFile: (uri: string, maxCount?: number) => Promise<{ accepted: boolean }>;
   removeRecentFile: (uri: string) => Promise<{ removed: boolean }>;
   clearRecentFiles: () => Promise<{ cleared: boolean }>;
+  evaluateExpression: (params: {
+    expression: string;
+    context: Record<string, unknown>;
+    functions: Record<string, unknown>;
+    timeoutMs: number;
+    source?: string;
+  }) => Promise<unknown>;
+  evaluateExpressionSync: (params: {
+    expression: string;
+    context: Record<string, unknown>;
+    functions: Record<string, unknown>;
+    timeoutMs: number;
+    source?: string;
+  }) => { ok: true; result: unknown } | { ok: false; message: string };
 }
 
 declare global {

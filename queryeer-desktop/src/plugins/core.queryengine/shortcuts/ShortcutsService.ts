@@ -1,5 +1,5 @@
-import { evaluateWhenExpression } from "../../core.commands/when-evaluator";
 import { getCommandContext } from "../../core.commands/command-context-accessor";
+import { getExpressionRuntime } from "../../core.expressions/runtime";
 import { getCoreSettingsService } from "../../core.settings/service";
 import { getQueryEngineService } from "../QueryEngineService";
 import type { QueryShortcutsConfig, ShortcutRule } from "./shortcut-types";
@@ -18,6 +18,8 @@ export function getShortcutsService(): ShortcutsService {
 }
 
 export class ShortcutsService {
+  private readonly runtime = getExpressionRuntime();
+
   getConfig(): QueryShortcutsConfig {
     const raw = getCoreSettingsService()?.getValue(SHORTCUTS_SETTING_ID);
     return parseConfig(raw);
@@ -51,8 +53,13 @@ export class ShortcutsService {
       return true;
     }
     try {
-      return evaluateWhenExpression(rule.when, ctx as Record<string, string | number | boolean | undefined>);
-    } catch {
+      return this.runtime.evaluateBooleanSync(rule.when, ctx, {
+        mode: "when",
+        source: `shortcut:${rule.id}`,
+        timeoutMs: 50,
+      });
+    } catch (error) {
+      console.error(`[ExpressionRuntime][shortcuts] '${rule.id}' failed :: ${rule.when}`, error);
       return false;
     }
   }

@@ -18,7 +18,7 @@ export function createJdbcDatabaseQuickCommandProvider(
     prefix: "$",
     label: "Select Database",
     order: 15,
-    when: "activeFileMimeType == 'application/sql'",
+    when: "activeFile.mimeType == 'application/sql'",
     async getItems(_query, ctx) {
       const activeFile = ctx.activeFile;
       if (!activeFile) {
