@@ -1,8 +1,18 @@
 .when-expr-editor {
   position: relative;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 6px;
   overflow: visible;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  background: var(--surface-overlay-weak);
+}
+
+.when-expr-editor .monaco-editor,
+.when-expr-editor .monaco-editor .monaco-editor-background,
+.when-expr-editor .monaco-editor .margin {
+  background: var(--surface-overlay-weak) !important;
 }
 
 .when-expr-editor:focus-within {
@@ -19,18 +29,19 @@
 }
 
 .when-expr-info-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-3);
+  background: color-mix(in srgb, var(--surface-overlay-soft) 85%, transparent);
+  border: 1px solid var(--border);
+  color: var(--text-1);
   cursor: pointer;
   font-size: 13px;
   line-height: 1;
-  padding: 0 2px;
+  padding: 1px 4px;
   border-radius: 3px;
 }
 
 .when-expr-info-btn:hover {
-  color: var(--text-1);
+  color: var(--text-0);
+  border-color: var(--accent-muted);
 }
 
 .when-expr-info-panel {
@@ -97,6 +108,37 @@
 
 .when-expr-info-desc {
   color: var(--text-1);
+}
+
+.when-expr-info-desc code {
+  font-family: var(--font-mono, monospace);
+  color: var(--accent, #7aa2f7);
+  white-space: normal;
+  word-break: break-word;
+}
+
+.when-expr-info-action-cell {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.when-expr-info-insert-btn {
+  font-size: var(--ui-font-size-xs);
+  border: 1px solid var(--border);
+  background: var(--surface-overlay);
+  color: var(--text-1);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.when-expr-info-insert-btn:hover:not(:disabled) {
+  border-color: var(--accent-muted);
+}
+
+.when-expr-info-insert-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .when-expr-info-example {

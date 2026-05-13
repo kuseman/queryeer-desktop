@@ -1,6 +1,8 @@
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";
+import { registerWhenExpressionTemplates } from "../core.commands/when-expression-template-registry";
+import { registerSymbolActionTemplate } from "../core.queryengine/symbol-action-template-registry";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import { registerQueryExecutableEngine } from "../core.queryengine/engine-registration";
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../core.settings/service";
@@ -41,6 +43,26 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
       { name: "activeFileMetadata.core.queryengine.payloadbuilder.selectedEnvironment", type: "string", description: "Title of the selected PayloadBuilder environment (e.g. 'Production')" },
       { name: "activeFileMetadata.core.queryengine.payloadbuilder.defaultCatalogAlias", type: "string", description: "Default PayloadBuilder catalog alias for the file" },
     ]);
+
+    registerWhenExpressionTemplates([
+      {
+        name: "Payloadbuilder",
+        description: "Match Payloadbuilder files where Elasticsearch is default",
+        when: "activeFileMimeType == 'application/plbsql' && activeFileMetadata.core.queryengine.payloadbuilder.defaultCatalogAlias.lowe() == 'es'"
+      }
+    ]);
+
+    registerSymbolActionTemplate({
+      id: "core.queryengine.payloadbuilder.symbolAction.describe",
+      title: "Payloadbuilder Top 500",
+      description: "Top 500 row for a table",
+      order: 20,
+      action: {
+        label: "Describe",
+        when: "activeFileMimeType == 'application/plbsql' && (symbol.kind == 'table' || symbol.kind == 'view')",
+        query: "exec sp_help '${symbol.name}'"
+      }
+    });
 
     getPayloadbuilderCatalogStore().initialize(context.files);
     registerQueryExecutableEngine(context, {

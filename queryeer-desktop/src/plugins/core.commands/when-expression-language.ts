@@ -1,6 +1,7 @@
 import type * as monacoType from "monaco-editor";
 import type { CtxVar, CtxMethod } from "./when-expression-types";
 import { getRegisteredWhenExpressionVariables } from "./when-expression-variable-registry";
+import { getRegisteredWhenExpressionTemplates } from "./when-expression-template-registry";
 
 export type { CtxVar, CtxMethod };
 
@@ -113,6 +114,7 @@ export async function setupWhenExpressionLanguage(): Promise<void> {
         detail: `(${v.type})`,
         documentation: v.description,
         insertText: v.name,
+        sortText: `100_${v.name}`,
         range,
       }));
 
@@ -121,7 +123,17 @@ export async function setupWhenExpressionLanguage(): Promise<void> {
         { label: "false", kind: monaco.languages.CompletionItemKind.Keyword, insertText: "false", range },
       ];
 
-      return { suggestions: [...varSuggestions, ...keywordSuggestions] };
+      const templateSuggestions = getRegisteredWhenExpressionTemplates().map((template) => ({
+        label: template.name,
+        kind: monaco.languages.CompletionItemKind.Snippet,
+        detail: "When template",
+        documentation: template.description ?? template.when,
+        insertText: template.when,
+        sortText: `000_${template.name}`,
+        range,
+      }));
+
+      return { suggestions: [...templateSuggestions, ...varSuggestions, ...keywordSuggestions] };
     }
   });
 }

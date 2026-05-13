@@ -552,3 +552,14 @@ export type ICodeEditorFactory = {
   getOrCreateModel(uri: string): TextDocument | null;
   destroyModel(uri: string): void;
 };
+
+export type EditorContextMenuEvent = {
+  event: {
+    x: number;
+    y: number;
+  };
+  target: {
+    position: Position | null;
+    range: TextRange | null;
+  };
+};

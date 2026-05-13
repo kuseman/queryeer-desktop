@@ -11,6 +11,7 @@ import type { SettingsRegistry } from "../extensions/SettingsExtension.js";
 import type { QuickCommandRegistry } from "../extensions/QuickCommandExtension.js";
 import type { OutlineRegistry } from "../extensions/OutlineExtension.js";
 import type { EditorRegistry } from "../editor/EditorCapability.js";
+import type { ContextMenuRegistry } from "../extensions/ContextMenuExtension.js";
 import type { PluginManifest } from "./PluginManifest.js";
 
 export type Plugin = {
@@ -37,6 +38,7 @@ export type PluginContext = {
   quickcommand: QuickCommandRegistry;
   outline: OutlineRegistry;
   editors: EditorRegistry;
+  contextMenu: ContextMenuRegistry;
 };
 
 export type CommandExecutionResult = {

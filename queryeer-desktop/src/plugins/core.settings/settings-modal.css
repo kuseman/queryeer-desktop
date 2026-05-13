@@ -347,11 +347,17 @@
 
 .settings-list-editor-item-label {
   font-size: var(--ui-font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-list-editor-item-subtitle {
   color: var(--text-2);
   font-size: var(--ui-font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-list-editor-icon-button,
@@ -380,8 +386,69 @@
 .settings-list-editor-details {
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 10px;
+  padding: 16px;
   background: var(--surface-overlay-weak);
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
+}
+
+.settings-list-editor-placeholder {
+  color: var(--text-1);
+  font-size: var(--ui-font-size-sm);
+  padding: 8px 4px;
+}
+
+.settings-field {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-field + .settings-field {
+  margin-top: 16px;
+}
+
+.settings-field-label {
+  font-size: var(--ui-font-size-sm);
+  color: var(--text-1);
+  font-weight: 500;
+}
+
+.symbol-action-detail {
+  display: grid;
+  min-width: 0;
+}
+
+.symbol-action-detail .settings-field {
+  min-width: 0;
+}
+
+.symbol-action-detail .when-expr-editor {
+  width: min(560px, 100%);
+}
+
+.symbol-action-query-editor {
+  width: min(560px, 100%);
+  height: 180px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-overlay-weak);
+  overflow: hidden;
+}
+
+.symbol-action-query-editor:focus-within {
+  border-color: var(--accent-muted);
+}
+
+.symbol-action-template-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.symbol-action-template-toolbar .settings-field-input {
+  margin: 0;
 }
 
 .settings-mime-grid {

@@ -213,6 +213,7 @@ function createContext(args: {
         providers.push(provider);
       })
     },
+    contextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
     outline: {
       registerOutlineProvider: vi.fn(),
       registerSupplementaryOutlineProvider: vi.fn(),

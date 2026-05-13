@@ -56,7 +56,7 @@ class JdbcBackendPluginTest
 
         Map<String, Object> map = (Map<String, Object>) result;
         Assertions.assertEquals(List.of("engine.capabilities", "jdbc.connection.setup", "jdbc.connection.dialects", "jdbc.connection.test", "jdbc.schema.snapshot", "jdbc.schema.refresh",
-                "jdbc.schema.fetch", "jdbc.connection.sessions", "sql.parse.snapshot", "sql.complete"), map.get("actions"));
+                "jdbc.schema.fetch", "jdbc.connection.sessions", "sql.parse.snapshot", "sql.complete", "sql.symbolAtPosition"), map.get("actions"));
     }
 
     @SuppressWarnings("unchecked")
@@ -145,6 +145,45 @@ class JdbcBackendPluginTest
         Assertions.assertFalse(items.isEmpty());
         Assertions.assertTrue(items.stream()
                 .anyMatch(item -> "SELECT".equals(item.get("label"))));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void sqlSymbolAtPositionResolvesTableFromSchemaStore() throws Exception
+    {
+        QueryEngineProvider provider = activateAndGetProvider();
+        String jdbcUrl = "jdbc:h2:mem:test_symbol;DB_CLOSE_DELAY=-1";
+
+        try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
+        {
+            statement.execute("create table if not exists symbol_target(id int)");
+        }
+
+        provider.invoke(null, "jdbc.schema.refresh", Map.of("connectionId", "jdbc-symbol", "scope", "deep", "target", Map.of("schema", "PUBLIC")));
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.symbolAtPosition",
+                Map.of("text", "SELECT * FROM PUBLIC.SYMBOL_TARGET", "cursor", Map.of("line", 1, "column", 22), "connectionId", "jdbc-symbol"));
+
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals("table", result.get("kind"));
+        Assertions.assertNotNull(result.get("name"));
+        Assertions.assertTrue(result.get("name")
+                .toString()
+                .toUpperCase()
+                .contains("SYMBOL_TARGET"));
+    }
+
+    @Test
+    void sqlSymbolAtPositionReturnsNullWhenTokenNotInSchema() throws Exception
+    {
+        QueryEngineProvider provider = activateAndGetProvider();
+
+        provider.invoke(null, "jdbc.schema.refresh", Map.of("connectionId", "jdbc-symbol", "scope", "top"));
+
+        Object result = provider.invoke("file-1", "sql.symbolAtPosition",
+                Map.of("text", "SELECT * FROM totally_unknown_xyz", "cursor", Map.of("line", 1, "column", 20), "connectionId", "jdbc-symbol"));
+
+        Assertions.assertNull(result);
     }
 
     @Test
@@ -597,6 +636,12 @@ class JdbcBackendPluginTest
                                 "connectionId": "jdbc-live",
                                 "dialectId": "jdbc",
                                 "url": "jdbc:h2:mem:test_live;DB_CLOSE_DELAY=-1",
+                                "enabled": true
+                            },
+                            {
+                                "connectionId": "jdbc-symbol",
+                                "dialectId": "jdbc",
+                                "url": "jdbc:h2:mem:test_symbol;DB_CLOSE_DELAY=-1",
                                 "enabled": true
                             }
                         ]

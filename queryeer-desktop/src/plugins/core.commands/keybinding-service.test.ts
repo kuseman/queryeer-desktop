@@ -96,6 +96,36 @@ describe("createKeybindingService", () => {
     service.dispose();
   });
 
+  it("executes modified global keybinding when select input is focused", async () => {
+    const executeCommand = vi.fn(async () => ({ commandId: "core.files.save", executed: true }));
+    const service = createKeybindingService({
+      executeCommand,
+      getUserKeybindings: async () => ({
+        version: KEYBINDINGS_SCHEMA_VERSION,
+        bindings: [{ commandId: "core.files.save", key: "Ctrl+S", when: "global", scope: "global" }],
+        unbound: []
+      })
+    });
+
+    await service.initialize(makeExtensions());
+
+    const select = document.createElement("select");
+    const option = document.createElement("option");
+    option.value = "one";
+    option.text = "One";
+    select.appendChild(option);
+    document.body.appendChild(select);
+    select.focus();
+
+    const event = new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true });
+    select.dispatchEvent(event);
+
+    expect(executeCommand).toHaveBeenCalledWith("core.files.save");
+
+    document.body.removeChild(select);
+    service.dispose();
+  });
+
   it("reloads user keybindings on updateExtensions", async () => {
     const executeCommand = vi.fn(async () => ({ commandId: "core.commands.about", executed: true }));
     let current: UserKeybindingsDocument = {

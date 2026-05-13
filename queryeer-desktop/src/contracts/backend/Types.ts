@@ -291,6 +291,14 @@ export type FileChangeNotification = {
   engineBinding?: FileEngineBindingParams;
 };
 
+export type SymbolAtPositionInvokePayload = {
+  fileId?: string;
+  text?: string;
+  cursor: { line: number; column: number };
+  connectionId?: string;
+  database?: string;
+};
+
 export type SqlCompleteInvokePayload = {
   fileId?: string;
   version?: number;

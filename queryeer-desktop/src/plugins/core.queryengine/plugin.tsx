@@ -14,6 +14,13 @@ import { registerShortcuts } from "./shortcuts";
 import { setFilesRegistry } from "../core.commands/files-registry-accessor";
 import { ExpressionTesterRenderer } from "../core.commands/ExpressionTesterRenderer";
 import { setupSqlCompletionLanguage } from "./sql-completion-language";
+import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";
+import { createSymbolActionProvider } from "./symbol-action-provider";
+import { getSymbolActionRegistry, } from "./symbol-action-registry";
+import { SYMBOL_ACTIONS_SETTING_ID } from "./symbol-action-types";
+import type { SymbolAction } from "./symbol-action-types";
+import { SymbolActionsSettingsEditor } from "./symbol-action-settings";
+import { onCoreSettingsServiceInitialized } from "../core.settings/service";
 
 void React;
 
@@ -289,6 +296,70 @@ export const coreQueryEnginePlugin: Plugin = {
         defaultValue: null,
         advanced: { rendererId: "core.commands.expression-tester" }
       }]
+    });
+
+    // Symbol Actions: when-expression variables for context variable autocomplete
+    registerWhenExpressionVariables([
+      { name: "symbol.kind", type: "string", description: "Kind of symbol at cursor position (e.g. 'table', 'view', 'function', 'column')" },
+      { name: "symbol.name", type: "string", description: "Fully qualified name of symbol at cursor position (e.g. 'dbo.MyTable')" },
+      { name: "symbol.detail", type: "string", description: "Additional detail of symbol at cursor position (e.g. 'TABLE', 'VIEW')" }
+    ]);
+
+    // Symbol Actions: register context menu provider
+    const symbolActionProvider = createSymbolActionProvider(
+      context.files,
+      getEditorRegistryHost()
+    );
+    context.contextMenu.registerProvider(symbolActionProvider);
+
+    // Symbol Actions: settings
+    context.settings.registerAdvancedRenderer({
+      id: SYMBOL_ACTIONS_SETTING_ID,
+      render: ({ value, setValue, readonly }) => (
+        <SymbolActionsSettingsEditor value={value} setValue={setValue} readonly={readonly} />
+      )
+    });
+    context.settings.registerSettings({
+      moduleId: "core.queryengine",
+      title: "Query Engine",
+      settings: [
+        {
+          id: SYMBOL_ACTIONS_SETTING_ID,
+          moduleId: "core.queryengine",
+          title: "Symbol Actions",
+          description: "Context menu actions that appear when right-clicking on symbols (tables, views, functions) in SQL editors.",
+          sectionPath: ["Query Engine", "Symbol Actions"],
+          type: "json",
+          defaultValue: [],
+          advanced: { rendererId: SYMBOL_ACTIONS_SETTING_ID }
+        }
+      ]
+    });
+
+    // Sync symbol actions from settings to the runtime registry when the settings service is ready.
+    onCoreSettingsServiceInitialized((settingsService) => {
+      // Subscribe first so changes from syncRegistryModules (async) are captured.
+      settingsService.subscribe(() => {
+        const current = settingsService.getValue(SYMBOL_ACTIONS_SETTING_ID);
+        if (Array.isArray(current)) {
+          getSymbolActionRegistry().setActions(current as SymbolAction[]);
+        }
+      });
+
+      // refreshSchemaFromRegistry triggers rebuildEffectiveValues with the definition
+      // now in the registry. If the module doc was already loaded by loadPersistedModules,
+      // effectiveValues will contain the stored value after this call.
+      settingsService.refreshSchemaFromRegistry();
+
+      const initial = settingsService.getValue(SYMBOL_ACTIONS_SETTING_ID);
+      if (Array.isArray(initial)) {
+        getSymbolActionRegistry().setActions(initial as SymbolAction[]);
+      }
+
+      // syncRegistryModules handles the case where the module doc wasn't loaded yet
+      // (first run / not in index). When it loads a new doc it calls emitValuesChanged,
+      // which fires the subscribe callback above.
+      void settingsService.syncRegistryModules();
     });
   }
 };
