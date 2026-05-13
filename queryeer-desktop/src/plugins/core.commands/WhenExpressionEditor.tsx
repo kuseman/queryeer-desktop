@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import type * as monacoType from "monaco-editor";
-import { WHEN_LANGUAGE_ID, STRING_METHODS, getAllContextVariables, setupWhenExpressionLanguage, getMonaco } from "./when-expression-language";
+import { WHEN_LANGUAGE_ID, getAllContextVariables, setupWhenExpressionLanguage, getMonaco } from "./when-expression-language";
 import { getRegisteredWhenExpressionTemplates } from "./when-expression-template-registry";
 import "./when-expression-editor.css";
 
@@ -137,6 +137,7 @@ type WhenInfoPopoverProps = {
 
 function WhenInfoPopover({ readonly, onSelectTemplate }: WhenInfoPopoverProps): JSX.Element {
   const [open, setOpen] = useState(false);
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
   const btnRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const templates = getRegisteredWhenExpressionTemplates();
@@ -152,6 +153,16 @@ function WhenInfoPopover({ readonly, onSelectTemplate }: WhenInfoPopoverProps): 
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
 
+  useEffect(() => {
+    if (!open || !btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    setPanelStyle({
+      position: "fixed",
+      left: Math.min(rect.right, window.innerWidth - 620),
+      top: rect.bottom + 4,
+    });
+  }, [open]);
+
   return (
     <span className="when-expr-info-wrap">
       <button
@@ -161,7 +172,7 @@ function WhenInfoPopover({ readonly, onSelectTemplate }: WhenInfoPopoverProps): 
         onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
       >ⓘ</button>
       {open && (
-        <div ref={panelRef} className="when-expr-info-panel">
+        <div ref={panelRef} className="when-expr-info-panel" style={panelStyle}>
           {templates.length > 0 && (
             <div className="when-expr-info-section">
               <strong>Templates</strong>
@@ -207,22 +218,7 @@ function WhenInfoPopover({ readonly, onSelectTemplate }: WhenInfoPopoverProps): 
               </tbody>
             </table>
           </div>
-          <div className="when-expr-info-section">
-            <strong>String methods</strong>
-            <table className="when-expr-info-table">
-              <tbody>
-                {STRING_METHODS.map((m) => (
-                  <tr key={m.name}>
-                    <td className="when-expr-info-name">.{m.signature}</td>
-                    <td className="when-expr-info-desc" colSpan={2}>{m.description}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="when-expr-info-example">
-              Example: <code>activeFile.metadata.core.queryengine.jdbc.database.contains(&apos;prod&apos;)</code>
-            </div>
-          </div>
+
           <div className="when-expr-info-section">
             <strong>Operators</strong>
             <span className="when-expr-info-ops">

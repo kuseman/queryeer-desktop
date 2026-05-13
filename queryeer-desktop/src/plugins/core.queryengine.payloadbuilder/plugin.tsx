@@ -3,6 +3,7 @@ import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";
 import { registerWhenExpressionTemplates } from "../core.commands/when-expression-template-registry";
 import { registerSymbolActionTemplate } from "../core.queryengine/symbol-action-template-registry";
+import { registerTableActionTemplate } from "../core.queryengine.output.table/table-action-template-registry";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import { registerQueryExecutableEngine } from "../core.queryengine/engine-registration";
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../core.settings/service";
@@ -61,6 +62,20 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
         label: "Describe",
         when: "activeFile.mimeType == 'application/plbsql' && (symbol.kind == 'table' || symbol.kind == 'view')",
         query: "exec sp_help '${symbol.name}'"
+      }
+    });
+
+    registerTableActionTemplate({
+      id: "core.queryengine.payloadbuilder.tableAction.correlatedDocuments",
+      title: "Payloadbuilder Correlated Documents",
+      description: "Find documents correlated by a common ID within a ±5 minute window using @timestamp",
+      order: 10,
+      action: {
+        label: "Correlated documents of ${tableData.rows[tableData.primaryRowIndex].correlationId}",
+        when: "activeFile.mimeType == 'application/plbsql' && tableData.columns.some(c => c.name == 'correlationId') && tableData.columns.some(c => c.name == '@timestamp')",
+        query: "SELECT *\nFROM _doc\nWHERE correlationId = ${fn.sql.literal(tableData.rows[tableData.primaryRowIndex].correlationId)}\nAND \"@timestamp\" >= '${fn.date.add(tableData.rows[tableData.primaryRowIndex][\"@timestamp\"], \"minute\", -5)}'\nAND \"@timestamp\" <= '${fn.date.add(tableData.rows[tableData.primaryRowIndex][\"@timestamp\"], \"minute\", 5)}'",
+        mode: "render",
+        outputTarget: "newFile"
       }
     });
 
@@ -288,27 +303,33 @@ function syncPayloadbuilderMetadata(
   const meta = catalogStore.getCatalogMeta(fileId);
   const metadata = { ...(file.metadata ?? {}) };
 
-  if (meta.enabledAliases.length > 0) {
-    metadata[PLB_CTX_ENABLED_CATALOGS] = meta.enabledAliases.join(",");
-  } else {
-    delete metadata[PLB_CTX_ENABLED_CATALOGS];
-  }
+  // If the catalog store has no data for this file (all fields empty/default),
+  // preserve existing metadata — e.g. from a cloned file — instead of clearing it.
+  const hasCatalogData = meta.enabledAliases.length > 0 || !!meta.selectedEnvironmentId || !!meta.defaultCatalogAlias;
 
-  if (meta.selectedEnvironmentId) {
-    const envTitle = getPayloadbuilderEnvironments().find((e) => e.id === meta.selectedEnvironmentId)?.title;
-    if (envTitle) {
-      metadata[PLB_CTX_SELECTED_ENV] = envTitle;
+  if (hasCatalogData) {
+    if (meta.enabledAliases.length > 0) {
+      metadata[PLB_CTX_ENABLED_CATALOGS] = meta.enabledAliases.join(",");
+    } else {
+      delete metadata[PLB_CTX_ENABLED_CATALOGS];
+    }
+
+    if (meta.selectedEnvironmentId) {
+      const envTitle = getPayloadbuilderEnvironments().find((e) => e.id === meta.selectedEnvironmentId)?.title;
+      if (envTitle) {
+        metadata[PLB_CTX_SELECTED_ENV] = envTitle;
+      } else {
+        delete metadata[PLB_CTX_SELECTED_ENV];
+      }
     } else {
       delete metadata[PLB_CTX_SELECTED_ENV];
     }
-  } else {
-    delete metadata[PLB_CTX_SELECTED_ENV];
-  }
 
-  if (meta.defaultCatalogAlias) {
-    metadata[PLB_CTX_DEFAULT_CATALOG] = meta.defaultCatalogAlias;
-  } else {
-    delete metadata[PLB_CTX_DEFAULT_CATALOG];
+    if (meta.defaultCatalogAlias) {
+      metadata[PLB_CTX_DEFAULT_CATALOG] = meta.defaultCatalogAlias;
+    } else {
+      delete metadata[PLB_CTX_DEFAULT_CATALOG];
+    }
   }
 
   files.updateFile(fileId, { metadata });

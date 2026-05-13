@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  addFrontendLogEntry,
+  clearFrontendLogEntries,
   getConsolePanelVisible,
   getConsoleNotificationState,
+  getFrontendLogEntries,
   notifyConsoleErrorAppended,
   resetConsoleNotifications,
   setConsolePanelVisible,
@@ -65,5 +68,67 @@ describe("console-state", () => {
     notifyConsoleErrorAppended();
     resetConsoleNotifications();
     expect(getConsoleNotificationState().unseenErrorCount).toBe(0);
+  });
+
+  describe("frontend log entries", () => {
+    afterEach(() => {
+      clearFrontendLogEntries();
+    });
+
+    it("adds and retrieves frontend log entries", () => {
+      addFrontendLogEntry("error", "TestModule", "Something went wrong");
+      addFrontendLogEntry("warn", "TestModule", "Warning message");
+
+      const entries = getFrontendLogEntries();
+      expect(entries).toHaveLength(2);
+      expect(entries[0].level).toBe("error");
+      expect(entries[0].source).toBe("TestModule");
+      expect(entries[0].message).toBe("Something went wrong");
+      expect(entries[1].level).toBe("warn");
+      expect(entries[1].message).toBe("Warning message");
+    });
+
+    it("increments unseen error count when panel is hidden", () => {
+      setConsolePanelVisible(false);
+      const before = getConsoleNotificationState().unseenErrorCount;
+
+      addFrontendLogEntry("error", "TestModule", "Error");
+
+      expect(getConsoleNotificationState().unseenErrorCount).toBe(before + 1);
+    });
+
+    it("does NOT increment unseen error count when panel is visible", () => {
+      setConsolePanelVisible(true);
+      resetConsoleNotifications();
+
+      addFrontendLogEntry("error", "TestModule", "Error");
+
+      expect(getConsoleNotificationState().unseenErrorCount).toBe(0);
+    });
+
+    it("does not increment unseen count for non-error levels", () => {
+      setConsolePanelVisible(false);
+      const before = getConsoleNotificationState().unseenErrorCount;
+
+      addFrontendLogEntry("info", "TestModule", "Info message");
+      addFrontendLogEntry("warn", "TestModule", "Warning");
+
+      expect(getConsoleNotificationState().unseenErrorCount).toBe(before);
+    });
+
+    it("clears all frontend entries", () => {
+      addFrontendLogEntry("error", "TestModule", "Err");
+      expect(getFrontendLogEntries()).toHaveLength(1);
+
+      clearFrontendLogEntries();
+      expect(getFrontendLogEntries()).toHaveLength(0);
+    });
+
+    it("includes timestamp on each entry", () => {
+      addFrontendLogEntry("info", "Test", "msg");
+      const entry = getFrontendLogEntries()[0];
+      expect(entry.timestamp).toBeDefined();
+      expect(() => new Date(entry.timestamp)).not.toThrow();
+    });
   });
 });

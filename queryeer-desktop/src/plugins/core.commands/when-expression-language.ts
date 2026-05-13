@@ -38,14 +38,7 @@ export const CONTEXT_VARIABLES: CtxVar[] = [
   { name: "backendHealthy", type: "boolean", description: "True when the backend service is running and healthy" },
 ];
 
-export const STRING_METHODS: CtxMethod[] = [
-  { name: "contains", signature: "contains(substring)", description: "True if the string contains the given substring" },
-  { name: "startsWith", signature: "startsWith(prefix)", description: "True if the string starts with the given prefix" },
-  { name: "endsWith", signature: "endsWith(suffix)", description: "True if the string ends with the given suffix" },
-  { name: "matches", signature: "matches(regex)", description: "True if the string matches the given regular expression" },
-  { name: "lower", signature: "lower()", description: "Returns the string in lowercase — use with == or other methods" },
-  { name: "upper", signature: "upper()", description: "Returns the string in uppercase — use with == or other methods" },
-];
+export const STRING_METHODS: CtxMethod[] = [];
 
 type PathNode = {
   children: Set<string>;

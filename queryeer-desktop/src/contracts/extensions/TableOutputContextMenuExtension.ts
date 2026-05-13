@@ -19,6 +19,8 @@ export type TableOutputContextMenuContext = {
   resultSetIndex: number;
   columns: Column[];
   selection: TableOutputSelectionSnapshot;
+  /** Full cell values keyed by row index for all columns on rows that intersect the selection. Populated by the table grid. */
+  cellValuesByRow?: Record<number, unknown[]>;
 };
 
 export type TableOutputContextMenuItem = {
