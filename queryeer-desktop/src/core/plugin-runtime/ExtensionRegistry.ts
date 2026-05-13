@@ -45,6 +45,10 @@ import type {
   SymbolKind
 } from "../../contracts/extensions/OutlineExtension";
 import type { ContextMenuProvider, ContextMenuRegistry } from "../../contracts/extensions/ContextMenuExtension";
+import type {
+  TableOutputContextMenuProvider,
+  TableOutputContextMenuRegistry
+} from "../../contracts/extensions/TableOutputContextMenuExtension";
 import type { EditorHandle, EditorRegistry, EditorRegistryHost, EditorContentRepository } from "../../contracts/editor/EditorCapability";
 import type { Disposable } from "../../contracts/editor/EditorApi";
 import type { ContextValues } from "../../plugins/core.commands/when-evaluator";
@@ -54,6 +58,7 @@ import { FileRegistry } from "./FileRegistry";
 let outlineRegistryInstance: OutlineRegistry | undefined;
 let editorRegistryInstance: EditorRegistryHost | undefined;
 let contextMenuProvidersRef: ContextMenuProvider[] | null = null;
+let tableOutputContextMenuProvidersRef: TableOutputContextMenuProvider[] | null = null;
 
 export function getOutlineRegistry(): OutlineRegistry {
   if (!outlineRegistryInstance) {
@@ -75,6 +80,10 @@ export function getEditorRegistryHost(): EditorRegistryHost {
 
 export function getContextMenuProviders(): ContextMenuProvider[] {
   return contextMenuProvidersRef ?? [];
+}
+
+export function getTableOutputContextMenuProviders(): TableOutputContextMenuProvider[] {
+  return tableOutputContextMenuProvidersRef ?? [];
 }
 
 export type ExtensionSnapshot = {
@@ -222,11 +231,13 @@ export class ExtensionRegistry {
   private readonly supplementaryOutlineProviders = new Map<string, OutlineProviderRegistration[]>();
   private readonly editorRegistryHost = new EditorRegistryHostImpl();
   private contextMenuProviders: ContextMenuProvider[] = [];
+  private tableOutputContextMenuProviders: TableOutputContextMenuProvider[] = [];
 
   public constructor(getCommandContextValues?: () => ContextValues) {
     this.commandBus = new CommandBus(() => getCommandContextValues?.() ?? {});
     editorRegistryInstance = this.editorRegistryHost;
     contextMenuProvidersRef = this.contextMenuProviders;
+    tableOutputContextMenuProvidersRef = this.tableOutputContextMenuProviders;
   }
 
   public createCommandRegistry(): CommandRegistry {
@@ -475,6 +486,26 @@ export class ExtensionRegistry {
         const idx = this.contextMenuProviders.findIndex((p) => p.id === id);
         if (idx !== -1) {
           this.contextMenuProviders.splice(idx, 1);
+        }
+      }
+    };
+  }
+
+  public createTableOutputContextMenuRegistry(): TableOutputContextMenuRegistry {
+    return {
+      registerProvider: (provider: TableOutputContextMenuProvider) => {
+        const existing = this.tableOutputContextMenuProviders.findIndex((p) => p.id === provider.id);
+        if (existing !== -1) {
+          console.warn(`Table output context menu provider '${provider.id}' already registered; overwriting.`);
+          this.tableOutputContextMenuProviders.splice(existing, 1, provider);
+        } else {
+          this.tableOutputContextMenuProviders.push(provider);
+        }
+      },
+      unregisterProvider: (id: string) => {
+        const idx = this.tableOutputContextMenuProviders.findIndex((p) => p.id === id);
+        if (idx !== -1) {
+          this.tableOutputContextMenuProviders.splice(idx, 1);
         }
       }
     };

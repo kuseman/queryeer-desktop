@@ -9,20 +9,8 @@ Large features in prio
 - [ ] Code complete (Phase 2. Detect context)
     - [X] Tables
     - [ ] Columns
-- [ ] Link actions in text editor
-    - Rule based
-        - Regular context chain with mime type etc.
-        - New context chain added by text editor for token / language / symbol kind. Ie. table
-    - Configurable queries
-        - TOP 500
-        - Describe (sqlserver SP_HELP) (dialectId == 'sqlserver' && symbolKind == 'table')
-        - Count
-        - etc.
-- [ ] Table context menu contribution
-    - Static items with when (based on value right clicked)
-    - Also contributions that has an items supplier that will be used later on
-      for a rule based context menu item extension where the user can create dynamic queries
-      based on table click contents.
+- [ ] Table Query Actions
+    - User created menu item contributions that creates queries based on table selections 
 - [ ] JDBC Tree component Context menu
     - Context menu items default + dialect spcific
     - New query on connection / database
@@ -43,6 +31,20 @@ Large features in prio
 - [ ] Modularize
     - Make sure all contributions have contracts and all API:s are located in a separate project
       that might end up on npmjs one day
+- [X] Table context menu contribution
+    - Static items with when (based on value right clicked)
+    - Also contributions that has an items supplier that will be used later on
+      for a rule based context menu item extension where the user can create dynamic queries
+      based on table click contents.
+- [X] Link actions in text editor
+    - Rule based
+        - Regular context chain with mime type etc.
+        - New context chain added by text editor for token / language / symbol kind. Ie. table
+    - Configurable queries
+        - TOP 500
+        - Describe (sqlserver SP_HELP) (dialectId == 'sqlserver' && symbolKind == 'table')
+        - Count
+        - etc.
 - [X] Code complete (Phase 1 no structure context)
     - [X] Keywords
     - [X] Tables

@@ -131,7 +131,7 @@ export function Toolbar({
               <button
                 key={item.value}
                 type="button"
-                className="shell-toolbar-menu-item"
+                className="shell-context-menu__item shell-toolbar-menu-item"
                 onClick={() => {
                   contribution.onSelect(item.value);
                   setOpenMenuId(null);

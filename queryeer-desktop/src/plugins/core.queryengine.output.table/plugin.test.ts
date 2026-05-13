@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { buildClipboardGridFromRows, getCellValueForCopy, resolveCellDisplayValue, resolveFilterType } from "./plugin";
+import {
+  buildClipboardGridFromRows,
+  computeNextSelectionFromClick,
+  buildSelectionSnapshot,
+  createCopyAsCsvTableContextMenuProvider,
+  getCellValueForCopy,
+  resolveCellDisplayValue,
+  resolveFilterType,
+  isPrimaryMouseButton,
+  toCsvScalar,
+} from "./plugin";
 
 describe("table output column type filters", () => {
   it("maps numeric canonical types to number filter", () => {
@@ -59,5 +69,81 @@ describe("table output copy value extraction", () => {
       () => true
     );
     expect(grid[0][2].value).toBe("10.100000");
+  });
+});
+
+describe("table output selection snapshot", () => {
+  it("detects single-column selection", () => {
+    const snapshot = buildSelectionSnapshot(
+      {
+        rect: { rowStart: 0, rowEnd: 2, colIndexStart: 1, colIndexEnd: 1 },
+        cells: [],
+      },
+      [
+        { __values: ["id-1", "a"] },
+        { __values: ["id-2", "b"] },
+        { __values: ["id-3", "c"] },
+      ],
+      2
+    );
+    expect(snapshot.hasSelection).toBe(true);
+    expect(snapshot.isSingleColumnSelection).toBe(true);
+    expect(snapshot.selectedColumnIndexes).toEqual([1]);
+    expect(snapshot.selectedCells.map((cell) => cell.value)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("copy as csv table context action", () => {
+  it("escapes CSV scalar values", () => {
+    expect(toCsvScalar("a,b")).toBe('"a,b"');
+    expect(toCsvScalar('a"b')).toBe('"a""b"');
+    expect(toCsvScalar("plain")).toBe("plain");
+  });
+
+  it("contributes copy as csv with item-level rule", async () => {
+    const provider = createCopyAsCsvTableContextMenuProvider();
+    const items = await provider.getItems({
+      resultSetIndex: 0,
+      columns: [{ name: "c1", type: "string" }],
+      selection: {
+        hasSelection: true,
+        selectedCells: [{ rowIndex: 0, columnIndex: 0, value: "x" }],
+        selectedRowIndexes: [0],
+        selectedColumnIndexes: [0],
+        isSingleColumnSelection: true,
+        isSingleRowSelection: true,
+      },
+    });
+    expect(provider.when).toBe("tableSelection.hasSelection == true");
+    expect(items[0]?.when).toBe("tableSelection.isSingleColumnSelection == true");
+  });
+});
+
+describe("table output mouse button guard", () => {
+  it("accepts primary mouse button", () => {
+    expect(isPrimaryMouseButton({ button: 0 } as MouseEvent)).toBe(true);
+  });
+
+  it("rejects secondary mouse button", () => {
+    expect(isPrimaryMouseButton({ button: 2 } as MouseEvent)).toBe(false);
+  });
+
+  it("keeps existing multi-cell selection on right-click", () => {
+    const existing = {
+      rect: { rowStart: 0, rowEnd: 2, colIndexStart: 1, colIndexEnd: 1 },
+      cells: [{ row: 4, colIndex: 0 }],
+    };
+    const anchor = { row: 2, colIndex: 1 };
+    const next = computeNextSelectionFromClick({
+      mouseEvent: { button: 2 } as MouseEvent,
+      rowIndex: 8,
+      colIndex: 3,
+      totalCols: 5,
+      existing,
+      anchor,
+    });
+    expect(next.shouldApply).toBe(false);
+    expect(next.selection).toEqual(existing);
+    expect(next.anchor).toEqual(anchor);
   });
 });

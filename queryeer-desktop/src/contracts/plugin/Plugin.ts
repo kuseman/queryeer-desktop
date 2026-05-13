@@ -12,6 +12,7 @@ import type { QuickCommandRegistry } from "../extensions/QuickCommandExtension.j
 import type { OutlineRegistry } from "../extensions/OutlineExtension.js";
 import type { EditorRegistry } from "../editor/EditorCapability.js";
 import type { ContextMenuRegistry } from "../extensions/ContextMenuExtension.js";
+import type { TableOutputContextMenuRegistry } from "../extensions/TableOutputContextMenuExtension.js";
 import type { PluginManifest } from "./PluginManifest.js";
 
 export type Plugin = {
@@ -39,6 +40,7 @@ export type PluginContext = {
   outline: OutlineRegistry;
   editors: EditorRegistry;
   contextMenu: ContextMenuRegistry;
+  tableOutputContextMenu: TableOutputContextMenuRegistry;
 };
 
 export type CommandExecutionResult = {
