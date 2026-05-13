@@ -38,6 +38,7 @@ class JdbcSchemaCrawlerTest
 
         crawler.crawl(connection, JdbcSchemaCrawlScope.DEEP, new JdbcSchemaTarget("AdventureWorks2022", null, null));
 
+        @SuppressWarnings("unchecked")
         ArgumentCaptor<List<JdbcSchemaObject>> snapshotCaptor = ArgumentCaptor.forClass(List.class);
         verify(store).persistSnapshot(eq("jdbc-1"), eq(JdbcSchemaCrawlScope.DEEP), snapshotCaptor.capture());
 

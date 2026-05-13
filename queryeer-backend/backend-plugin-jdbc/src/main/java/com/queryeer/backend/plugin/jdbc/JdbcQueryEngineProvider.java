@@ -30,7 +30,7 @@ import com.queryeer.backend.api.parse.IncrementalParseFunction;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaActionHandler;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawlCoordinator;
-import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawlScope;
+import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaNavigator;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaStore;
 import com.queryeer.backend.queryengine.jdbc.CancellableJdbcQueryExecutor;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
@@ -39,7 +39,6 @@ import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryEventListener;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryRequest;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryResult;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcResultColumn;
-import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldDefinition;
 import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldOption;
 import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldType;
@@ -87,7 +86,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private final DefaultJdbcConnections connections;
     private final JdbcConnectionUsageListener usageListener;
     private final JdbcSchemaActionHandler schemaActions;
-    private final JdbcSchemaStore schemaStore;
+    private final JdbcSchemaNavigator schemaNavigator;
     private final long idleTimeoutMs;
     private final PayloadMapper payloadMapper;
     private final IncrementalParseSessionService parseSessions;
@@ -117,7 +116,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         this.payloadMapper = payloadMapper;
         this.parseSessions = parseSessions;
         this.parseFunction = parseFunction;
-        this.schemaStore = schemaStore;
+        this.schemaNavigator = new JdbcSchemaNavigator(connections, schemaStore);
         this.schemaActions = new JdbcSchemaActionHandler(payloadMapper, connections, schemaStore, crawlCoordinator);
     }
 
@@ -305,7 +304,6 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         }
         String selectedDatabase = payload == null ? null
                 : trimToNull(payload.database());
-        String normalizedSelectedDatabase = normalizeIdentifier(selectedDatabase);
 
         try
         {
@@ -316,29 +314,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             // Completion should remain best-effort even if usage tracking fails.
         }
 
-        List<JdbcSchemaObject> snapshot = schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP);
-        if (snapshot.isEmpty())
-        {
-            snapshot = schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.TOP);
-        }
-        if (snapshot.isEmpty())
-        {
-            try
-            {
-                JdbcConnection resolved = connections.resolve(connectionId);
-                snapshot = resolved.dialect()
-                        .schemaResolver()
-                        .resolveSchema(resolved, normalizedSelectedDatabase == null ? Map.of("scope", "tables")
-                                : Map.of("scope", "tables", "target", Map.of("database", selectedDatabase)));
-            }
-            catch (RuntimeException e)
-            {
-                return List.of();
-            }
-        }
-
-        List<String> tableNames = new ArrayList<>();
-        collectTableNames(snapshot, null, null, normalizedSelectedDatabase, tableNames);
+        List<String> tableNames = schemaNavigator.tableNamesForCompletion(connectionId, selectedDatabase);
         return tableNames.stream()
                 .filter(name -> prefix.isBlank()
                         || name.toLowerCase()
@@ -349,84 +325,6 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                 .map(name -> Map.<String, Object>of("label", name, "kind", "table", "detail", "JDBC table", "insertText", name, "insertTextFormat", "plain", "source", "jdbc.schema", "replaceRange",
                         Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column())))
                 .toList();
-    }
-
-    private static void collectTableNames(List<JdbcSchemaObject> nodes, String databaseName, String schemaName, String normalizedSelectedDatabase, List<String> target)
-    {
-        for (JdbcSchemaObject node : nodes)
-        {
-            String kind = trimToNull(node.kind());
-            String nextDatabase = databaseName;
-            String nextSchema = schemaName;
-            if ("database".equalsIgnoreCase(kind))
-            {
-                nextDatabase = trimToNull(node.name());
-            }
-            if ("schema".equalsIgnoreCase(kind))
-            {
-                nextSchema = trimToNull(node.name());
-            }
-            if ("table".equalsIgnoreCase(kind))
-            {
-                String normalizedNodeDatabase = normalizeIdentifier(nextDatabase);
-                if (normalizedSelectedDatabase != null
-                        && normalizedNodeDatabase != null
-                        && !normalizedSelectedDatabase.equals(normalizedNodeDatabase))
-                {
-                    continue;
-                }
-                String name = trimToNull(node.name());
-                if (name != null)
-                {
-                    String effectiveSchema = nextSchema;
-                    if (effectiveSchema == null
-                            && node.attributes() != null
-                            && node.attributes()
-                                    .get("schema") instanceof String attrSchema)
-                    {
-                        effectiveSchema = trimToNull(attrSchema);
-                    }
-                    target.add(effectiveSchema == null ? name
-                            : effectiveSchema + "." + name);
-                }
-            }
-            List<JdbcSchemaObject> children = node.children();
-            if (children != null
-                    && !children.isEmpty())
-            {
-                collectTableNames(children, nextDatabase, nextSchema, normalizedSelectedDatabase, target);
-            }
-        }
-    }
-
-    private static String normalizeIdentifier(String value)
-    {
-        String trimmed = trimToNull(value);
-        if (trimmed == null)
-        {
-            return null;
-        }
-        String unwrapped = trimmed;
-        if (unwrapped.startsWith("[")
-                && unwrapped.endsWith("]")
-                && unwrapped.length() > 1)
-        {
-            unwrapped = unwrapped.substring(1, unwrapped.length() - 1);
-        }
-        if ((unwrapped.startsWith("\"")
-                && unwrapped.endsWith("\""))
-                || (unwrapped.startsWith("`")
-                        && unwrapped.endsWith("`")
-                        || (unwrapped.startsWith("'")
-                                && unwrapped.endsWith("'"))))
-        {
-            if (unwrapped.length() > 1)
-            {
-                unwrapped = unwrapped.substring(1, unwrapped.length() - 1);
-            }
-        }
-        return unwrapped.trim()
-                .toLowerCase();
     }
 
     private Object sqlSymbolAtPosition(String fileId, Object payload)
@@ -457,99 +355,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         {
             return null;
         }
-        String normalizedDatabase = normalizeIdentifier(params.database());
-        List<JdbcSchemaObject> snapshot = schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP);
-        if (snapshot.isEmpty())
-        {
-            snapshot = schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.TOP);
-        }
-        return findSymbolInSchema(snapshot, token, normalizedDatabase);
-    }
-
-    private static Map<String, Object> findSymbolInSchema(List<JdbcSchemaObject> snapshot, String rawToken, String normalizedDatabase)
-    {
-        if (isBlank(rawToken))
-        {
-            return null;
-        }
-        // Split on dot BEFORE normalizing so that bracketed segments like [dbo].[t1]
-        // are normalized individually rather than stripping outer brackets from the
-        // whole string (which would produce "dbo].[t1" for "[dbo].[t1]").
-        String[] parts = rawToken.split("\\.", 2);
-        String lookupTable = normalizeIdentifier(parts.length == 2 ? parts[1]
-                : parts[0]);
-        String lookupSchema = parts.length == 2 ? normalizeIdentifier(parts[0])
-                : null;
-        if (isBlank(lookupTable))
-        {
-            return null;
-        }
-        return searchSchemaTree(snapshot, null, null, normalizedDatabase, lookupSchema, lookupTable);
-    }
-
-    private static Map<String, Object> searchSchemaTree(List<JdbcSchemaObject> nodes, String databaseName, String schemaName, String filterDatabase, String filterSchema, String lookupTable)
-    {
-        for (JdbcSchemaObject node : nodes)
-        {
-            String kind = trimToNull(node.kind());
-            if (kind == null)
-            {
-                continue;
-            }
-            String nextDatabase = databaseName;
-            String nextSchema = schemaName;
-            if ("database".equalsIgnoreCase(kind))
-            {
-                nextDatabase = trimToNull(node.name());
-            }
-            else if ("schema".equalsIgnoreCase(kind))
-            {
-                nextSchema = trimToNull(node.name());
-            }
-            else if ("table".equalsIgnoreCase(kind)
-                    || "view".equalsIgnoreCase(kind))
-            {
-                if (filterDatabase != null
-                        && nextDatabase != null
-                        && !filterDatabase.equals(normalizeIdentifier(nextDatabase)))
-                {
-                    continue;
-                }
-                String effectiveSchema = nextSchema;
-                if (effectiveSchema == null
-                        && node.attributes() != null
-                        && node.attributes()
-                                .get("schema") instanceof String attrSchema)
-                {
-                    effectiveSchema = trimToNull(attrSchema);
-                }
-                String tableName = trimToNull(node.name());
-                if (tableName != null
-                        && normalizeIdentifier(tableName).equals(lookupTable))
-                {
-                    if (filterSchema != null
-                            && effectiveSchema != null
-                            && !filterSchema.equals(normalizeIdentifier(effectiveSchema)))
-                    {
-                        continue;
-                    }
-                    String displayName = effectiveSchema != null ? effectiveSchema + "." + tableName
-                            : tableName;
-                    return Map.of("kind", kind.toLowerCase(), "name", displayName, "detail", kind.toUpperCase());
-                }
-            }
-            List<JdbcSchemaObject> children = node.children();
-            if (children != null
-                    && !children.isEmpty())
-            {
-                Map<String, Object> result = searchSchemaTree(children, nextDatabase, nextSchema, filterDatabase, filterSchema, lookupTable);
-                if (result != null)
-                {
-                    return result;
-                }
-            }
-        }
-        return null;
+        return schemaNavigator.findSymbol(connectionId, token, params.database());
     }
 
     private Object sqlParseSnapshot(String fileId)
