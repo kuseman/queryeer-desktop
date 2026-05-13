@@ -11,7 +11,11 @@
           "name": "id",
           "type": "int"
         }
-      ]
+      ],
+      "metadata": {
+        "connectionTitle": "Test Connection",
+        "database": "testdb"
+      }
     }
   }
 }

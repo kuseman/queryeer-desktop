@@ -2,6 +2,7 @@ package com.queryeer.backend.transport.stdio;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import com.queryeer.backend.api.OutputEvent;
 import com.queryeer.backend.api.QueryPublisher;
@@ -38,6 +39,12 @@ final class TransportQueryPublisher implements QueryPublisher
     @Override
     public void resultSetStart(List<String> columnNames, List<String> columnTypes)
     {
+        resultSetStart(columnNames, columnTypes, Map.of());
+    }
+
+    @Override
+    public void resultSetStart(List<String> columnNames, List<String> columnTypes, java.util.Map<String, String> metadata)
+    {
         currentResultSetIndex = nextResultSetIndex++;
         List<ColumnDefinition> columns = new ArrayList<>();
         for (int i = 0; i < columnNames.size(); i++)
@@ -45,7 +52,7 @@ final class TransportQueryPublisher implements QueryPublisher
             columns.add(new ColumnDefinition(columnNames.get(i), i < columnTypes.size() ? columnTypes.get(i)
                     : "any"));
         }
-        notificationPublisher.publishForQuery(executionId, "queryengine.chunkStart", new QueryChunkStartNotification(executionId, currentResultSetIndex, new ResultSchema(columns)));
+        notificationPublisher.publishForQuery(executionId, "queryengine.chunkStart", new QueryChunkStartNotification(executionId, currentResultSetIndex, new ResultSchema(columns, metadata)));
     }
 
     @Override

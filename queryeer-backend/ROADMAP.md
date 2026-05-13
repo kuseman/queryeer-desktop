@@ -31,6 +31,7 @@ Large features in prio
 - [ ] Modularize
     - Make sure all contributions have contracts and all API:s are located in a separate project
       that might end up on npmjs one day
+- [ ] Create a distribution flow. Github etc.
 - [X] Table Query Actions
     - User created menu item contributions that creates queries based on table selections 
 - [X] Table context menu contribution

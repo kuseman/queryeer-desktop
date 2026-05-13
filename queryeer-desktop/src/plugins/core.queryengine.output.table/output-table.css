@@ -175,3 +175,30 @@ body.table-output-resizing {
   text-decoration: underline;
   cursor: pointer;
 }
+
+/* Result set metadata displayed above each table grid */
+.result-set-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 4px 10px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.result-set-metadata-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--ui-font-size-sm);
+}
+
+.result-set-metadata-key {
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.result-set-metadata-value {
+  color: var(--text-0);
+}

@@ -219,14 +219,14 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
               progress: { percent: p.percent, message: p.message }
             }));
           } else if (event.method === "queryengine.chunkStart") {
-            const p = event.params as { resultSetIndex: number; schema: { columns: Array<{ name: string; type: ColumnType }> } };
+            const p = event.params as { resultSetIndex: number; schema: { columns: Array<{ name: string; type: ColumnType }>; metadata?: Record<string, string> } };
             updateOutputContextForFile(targetFileId, (prev) => {
               if (prev.resultSets.some((rs) => rs.resultSetIndex === p.resultSetIndex)) return prev;
               return {
                 ...prev,
                 resultSets: [
                   ...prev.resultSets,
-                  { resultSetIndex: p.resultSetIndex, schema: p.schema, rows: [], rowLimitExceeded: false }
+                  { resultSetIndex: p.resultSetIndex, schema: p.schema, metadata: p.schema.metadata, rows: [], rowLimitExceeded: false }
                 ]
               };
             });
