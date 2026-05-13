@@ -8,6 +8,7 @@ import type { OutputContext, Column } from "../../contracts/extensions/OutputExt
 import { DEFAULT_OUTPUT_LIMITS } from "../../contracts/extensions/OutputExtension";
 import { getOutputRegistry } from "../core.queryengine/output/OutputRegistry";
 import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistryImpl";
+import { getTableOutputContextMenuProviders } from "../../core/plugin-runtime/ExtensionRegistry";
 import { defineStateKey } from "../../contracts/files/FileStateRegistry";
 import { writeToClipboard } from "./clipboard/ClipboardRegistry";
 import { computeSelection, extendSelection, isCellSelected, isRowSelected, getBoundingBox } from "./clipboard/CellSelectionModel";
@@ -25,6 +26,16 @@ import {
   resolveTableLinkAction,
 } from "./table-link-actions";
 import { getThemeService } from "../core.themes/runtime";
+import { evaluateWhenExpression } from "../core.commands/when-evaluator";
+import { getCommandContext } from "../core.commands/command-context-accessor";
+import { flattenContextObject } from "../../renderer/shell/context-value-flatten";
+import type {
+  TableOutputContextMenuContext,
+  TableOutputContextMenuItem,
+  TableOutputContextMenuProvider,
+  TableOutputSelectionSnapshot,
+} from "../../contracts/extensions/TableOutputContextMenuExtension";
+import { ContextMenuSurface } from "../../renderer/components/ContextMenuSurface";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -78,6 +89,137 @@ function toGridColumns(columns: Column[]): GridColumn[] {
 type GridRowData = {
   __values: unknown[];
 };
+
+export function toCsvScalar(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const text = typeof value === "string" ? value : String(value);
+  if (/[",\r\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+export function isPrimaryMouseButton(event: MouseEvent | null): boolean {
+  return event == null || event.button === 0;
+}
+
+export type SelectionClickInput = {
+  mouseEvent: MouseEvent | null;
+  rowIndex: number;
+  colIndex: number;
+  totalCols: number;
+  existing: SelectionModel | null;
+  anchor: SelectionAnchor | null;
+};
+
+export type SelectionClickResult = {
+  shouldApply: boolean;
+  selection: SelectionModel | null;
+  anchor: SelectionAnchor | null;
+};
+
+export function computeNextSelectionFromClick(input: SelectionClickInput): SelectionClickResult {
+  const { mouseEvent, rowIndex, colIndex, totalCols, existing, anchor } = input;
+  if (!isPrimaryMouseButton(mouseEvent)) {
+    return { shouldApply: false, selection: existing, anchor };
+  }
+
+  const shift = !!mouseEvent?.shiftKey;
+  const ctrl = !!(mouseEvent?.ctrlKey || mouseEvent?.metaKey);
+
+  let nextSelection: SelectionModel | null = existing;
+  let nextAnchor: SelectionAnchor | null = anchor;
+  if (shift && ctrl) {
+    const prevRect = existing?.rect ?? computeSelection({ row: rowIndex, colIndex }, { row: rowIndex, colIndex }, totalCols);
+    nextSelection = { rect: extendSelection(prevRect, { row: rowIndex, colIndex }, totalCols), cells: existing?.cells ?? [] };
+    nextAnchor = { row: rowIndex, colIndex };
+  } else if (shift) {
+    if (anchor !== null) {
+      nextSelection = { rect: computeSelection(anchor, { row: rowIndex, colIndex }, totalCols), cells: existing?.cells ?? [] };
+    }
+  } else if (ctrl) {
+    const cells = existing?.cells ?? [];
+    const already = cells.some((c) => c.row === rowIndex && c.colIndex === colIndex);
+    nextSelection = { rect: existing?.rect ?? null, cells: already ? cells : [...cells, { row: rowIndex, colIndex }] };
+    nextAnchor = { row: rowIndex, colIndex };
+  } else {
+    nextAnchor = { row: rowIndex, colIndex };
+    nextSelection = { rect: computeSelection({ row: rowIndex, colIndex }, { row: rowIndex, colIndex }, totalCols), cells: [] };
+  }
+
+  return { shouldApply: true, selection: nextSelection, anchor: nextAnchor };
+}
+
+export function buildSelectionSnapshot(
+  model: SelectionModel,
+  rowsByIndex: Array<GridRowData | undefined>,
+  totalCols: number
+): TableOutputSelectionSnapshot {
+  const box = getBoundingBox(model, totalCols);
+  if (!box) {
+    return {
+      hasSelection: false,
+      selectedCells: [],
+      selectedRowIndexes: [],
+      selectedColumnIndexes: [],
+      isSingleColumnSelection: false,
+      isSingleRowSelection: false,
+    };
+  }
+
+  const selectedCells: TableOutputSelectionSnapshot["selectedCells"] = [];
+  const rowSet = new Set<number>();
+  const colSet = new Set<number>();
+  for (let row = box.rowStart; row <= box.rowEnd; row++) {
+    for (let col = box.colIndexStart; col <= box.colIndexEnd; col++) {
+      if (!isCellSelected(model, row, col)) continue;
+      rowSet.add(row);
+      colSet.add(col);
+      selectedCells.push({ rowIndex: row, columnIndex: col, value: getCellValueForCopy(rowsByIndex[row], col) });
+    }
+  }
+  const selectedRowIndexes = [...rowSet].sort((a, b) => a - b);
+  const selectedColumnIndexes = [...colSet].sort((a, b) => a - b);
+  return {
+    hasSelection: selectedCells.length > 0,
+    selectedCells,
+    selectedRowIndexes,
+    selectedColumnIndexes,
+    isSingleColumnSelection: selectedColumnIndexes.length === 1,
+    isSingleRowSelection: selectedRowIndexes.length === 1,
+  };
+}
+
+async function resolveTableContextMenuItems(
+  providers: TableOutputContextMenuProvider[],
+  context: TableOutputContextMenuContext
+): Promise<TableOutputContextMenuItem[][]> {
+  const baseContext = getCommandContext();
+  const tableContext = flattenContextObject("tableSelection", {
+    hasSelection: context.selection.hasSelection,
+    selectedCellCount: context.selection.selectedCells.length,
+    selectedRowCount: context.selection.selectedRowIndexes.length,
+    selectedColumnCount: context.selection.selectedColumnIndexes.length,
+    isSingleColumnSelection: context.selection.isSingleColumnSelection,
+    isSingleRowSelection: context.selection.isSingleRowSelection,
+  });
+  const mergedContext = { ...baseContext, ...tableContext };
+
+  const sections = await Promise.all(providers.map(async (provider) => {
+    try {
+      if (provider.when && !evaluateWhenExpression(provider.when, mergedContext)) {
+        return [] as TableOutputContextMenuItem[];
+      }
+      const items = await provider.getItems(context);
+      return items
+        .filter((item) => !item.when || evaluateWhenExpression(item.when, mergedContext))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    } catch {
+      return [] as TableOutputContextMenuItem[];
+    }
+  }));
+  return sections.filter((section) => section.length > 0);
+}
 
 export function getCellValueForCopy(rowData: GridRowData | undefined, columnIndex: number): unknown {
   if (!rowData || !Array.isArray(rowData.__values)) {
@@ -186,6 +328,7 @@ function TableGrid({ resultSetIndex, schema, rows, fileId, onPreviewValue }: Tab
   const bindingRef = useRef<string>("");
   const gridColumns = useMemo(() => toGridColumns(schema.columns), [schema.columns]);
   const [isDarkTheme, setIsDarkTheme] = useState<boolean>(() => (getThemeService()?.getActiveThemeMode() ?? "dark") === "dark");
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; sections: TableOutputContextMenuItem[][]; loading?: boolean } | null>(null);
 
   useEffect(() => {
     const themeService = getThemeService();
@@ -333,6 +476,7 @@ function TableGrid({ resultSetIndex, schema, rows, fileId, onPreviewValue }: Tab
   const onCellMouseDown = useCallback(
     (e: CellMouseDownEvent) => {
       const me = e.event as MouseEvent | null;
+      if (!isPrimaryMouseButton(me)) return;
       if (me?.shiftKey || me?.ctrlKey || me?.metaKey) return;
       const colId = e.column.getColId();
       const colIndex = colId === ROW_NUMBER_COL_ID ? -1 : gridColumns.findIndex((c) => c.key === colId);
@@ -393,34 +537,19 @@ function TableGrid({ resultSetIndex, schema, rows, fileId, onPreviewValue }: Tab
         }
       }
 
-      const shift = !!me?.shiftKey;
-      const ctrl = !!(me?.ctrlKey || me?.metaKey);
-      const existing = selectionRef.current;
-
-      let newSel: SelectionModel | null = existing;
-      if (shift && ctrl) {
-        // Ctrl+Shift: expand the rectangle bounding box to include this cell.
-        const prevRect = existing?.rect ?? computeSelection({ row: rowIndex, colIndex }, { row: rowIndex, colIndex }, totalCols);
-        newSel = { rect: extendSelection(prevRect, { row: rowIndex, colIndex }, totalCols), cells: existing?.cells ?? [] };
-        anchorRef.current = { row: rowIndex, colIndex };
-      } else if (shift) {
-        // Shift only: extend rectangle from anchor, anchor stays.
-        if (anchorRef.current !== null) {
-          newSel = { rect: computeSelection(anchorRef.current, { row: rowIndex, colIndex }, totalCols), cells: existing?.cells ?? [] };
-        }
-      } else if (ctrl) {
-        // Ctrl only: add this single cell without expanding any bounding box. Anchor moves here.
-        const cells = existing?.cells ?? [];
-        const already = cells.some((c) => c.row === rowIndex && c.colIndex === colIndex);
-        newSel = { rect: existing?.rect ?? null, cells: already ? cells : [...cells, { row: rowIndex, colIndex }] };
-        anchorRef.current = { row: rowIndex, colIndex };
-      } else {
-        // Plain click: new 1×1 selection, clear everything.
-        anchorRef.current = { row: rowIndex, colIndex };
-        newSel = { rect: computeSelection({ row: rowIndex, colIndex }, { row: rowIndex, colIndex }, totalCols), cells: [] };
+      const next = computeNextSelectionFromClick({
+        mouseEvent: me,
+        rowIndex,
+        colIndex,
+        totalCols,
+        existing: selectionRef.current,
+        anchor: anchorRef.current,
+      });
+      if (!next.shouldApply) {
+        return;
       }
-
-      applySelection(newSel, e.api);
+      anchorRef.current = next.anchor;
+      applySelection(next.selection, e.api);
     },
     [schema, gridColumns, applySelection, onPreviewValue]
   );
@@ -522,6 +651,44 @@ function TableGrid({ resultSetIndex, schema, rows, fileId, onPreviewValue }: Tab
     return () => el.removeEventListener("keydown", handler, true);
   }, [schema]);
 
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const openContextMenu = (e: MouseEvent) => {
+      const model = selectionRef.current;
+      const api = apiRef.current;
+      if (!model || !api) return;
+      e.preventDefault();
+      setContextMenu({ x: e.clientX, y: e.clientY, sections: [], loading: true });
+
+      const box = getBoundingBox(model, schema.columns.length);
+      if (!box) {
+        setContextMenu(null);
+        return;
+      }
+      const rowsByIndex: Array<GridRowData | undefined> = [];
+      for (let r = box.rowStart; r <= box.rowEnd; r++) {
+        rowsByIndex[r] = api.getDisplayedRowAtIndex(r)?.data as GridRowData | undefined;
+      }
+      const selection = buildSelectionSnapshot(model, rowsByIndex, schema.columns.length);
+      const menuContext: TableOutputContextMenuContext = {
+        resultSetIndex,
+        columns: schema.columns,
+        selection,
+      };
+      void resolveTableContextMenuItems(getTableOutputContextMenuProviders(), menuContext).then((sections) => {
+        if (sections.length === 0) {
+          setContextMenu(null);
+          return;
+        }
+        setContextMenu({ x: e.clientX, y: e.clientY, sections, loading: false });
+      });
+    };
+
+    el.addEventListener("contextmenu", openContextMenu, true);
+    return () => el.removeEventListener("contextmenu", openContextMenu, true);
+  }, [resultSetIndex, schema.columns]);
+
   return (
     <div ref={containerRef} style={{ height: "100%", width: "100%" }}>
       <AgGridReact
@@ -539,6 +706,19 @@ function TableGrid({ resultSetIndex, schema, rows, fileId, onPreviewValue }: Tab
         rowBuffer={30}
         suppressMovableColumns={false}
       />
+      {contextMenu && (
+        <ContextMenuSurface
+          x={contextMenu.x}
+          y={contextMenu.y}
+          sections={contextMenu.sections.map((section) => section.map((item) => ({
+            id: item.id,
+            label: item.label,
+            onSelect: item.run,
+          })))}
+          loading={contextMenu.loading}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }
@@ -815,6 +995,33 @@ function resolveStackedGridHeightPx(rowCount: number, maxVisibleRows: number): n
   return STACKED_GRID_HEADER_HEIGHT_PX + (visibleRows * STACKED_GRID_ROW_HEIGHT_PX) + STACKED_GRID_EXTRA_CHROME_PX;
 }
 
+export function createCopyAsCsvTableContextMenuProvider(): TableOutputContextMenuProvider {
+  return {
+    id: "core.queryengine.output.table.contextMenu.copyAsCsv",
+    when: "tableSelection.hasSelection == true",
+    async getItems(context) {
+      return [
+        {
+          id: "core.queryengine.output.table.contextMenu.copyAsCsv.item",
+          label: "Copy as CSV",
+          order: 100,
+          when: "tableSelection.isSingleColumnSelection == true",
+          run: async () => {
+            if (!context.selection.isSingleColumnSelection) {
+              return;
+            }
+            const values = context.selection.selectedCells
+              .slice()
+              .sort((a, b) => a.rowIndex - b.rowIndex)
+              .map((cell) => toCsvScalar(cell.value));
+            await navigator.clipboard.writeText(values.join(","));
+          }
+        }
+      ];
+    }
+  };
+}
+
 export const coreQueryEngineOutputTablePlugin: Plugin = {
   manifest: {
     id: "core.queryengine.output.table",
@@ -826,6 +1033,7 @@ export const coreQueryEngineOutputTablePlugin: Plugin = {
     requiredCapabilities: ["query.engine"]
   },
   activate: (context) => {
+    context.tableOutputContextMenu.registerProvider(createCopyAsCsvTableContextMenuProvider());
     context.settings.registerSettings({
       moduleId: "core.queryengine.output.table",
       title: "Query Output Table",

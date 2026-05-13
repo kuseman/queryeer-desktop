@@ -220,7 +220,7 @@ export function EditorTabs({
       )}
       {contextMenu && (
         <div
-          className="shell-tab-context-menu"
+          className="shell-context-menu shell-tab-context-menu"
           style={{
             left: contextMenu.x,
             top: contextMenu.y
@@ -230,7 +230,7 @@ export function EditorTabs({
           {allActions.map((action) => (
             <div
               key={action.id}
-              className="shell-tab-context-menu-item"
+              className="shell-context-menu__item shell-tab-context-menu-item"
               onClick={() => handleActionClick(action)}
             >
               {action.icon && <span className={`shell-tab-context-menu-icon ${action.icon}`} />}

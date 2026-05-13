@@ -56,12 +56,44 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
 
   const showEditorContextMenu = useCallback((x: number, y: number, position: { lineNumber: number; column: number } | null) => {
     const requestId = ++contextMenuRequestIdRef.current;
-    const editor = editorRef.current;
+    const pasteFromClipboardFallback = async () => {
+      const editor = editorRef.current;
+      if (!editor) {
+        return;
+      }
+      const text = await navigator.clipboard.readText();
+      if (text.length === 0) {
+        return;
+      }
+      const selection = editor.getSelection();
+      if (!selection) {
+        return;
+      }
+      editor.executeEdits("context-menu-paste", [{ range: selection, text, forceMoveMarkers: true }]);
+    };
+
+    const runEditorCommand = (commandId: string) => {
+      const editor = editorRef.current;
+      if (!editor) {
+        return;
+      }
+      editor.focus();
+      if (commandId === "editor.action.clipboardPasteAction") {
+        void pasteFromClipboardFallback();
+        return;
+      }
+      try {
+        const result = editor.trigger(null, commandId, null);
+        void Promise.resolve(result).catch(() => {});
+      } catch {
+        return;
+      }
+    };
     const builtins: ContextMenuItem[] = [
-      { id: "__cut__", label: "Cut", run: () => editor?.trigger(null, "editor.action.clipboardCutAction", null) },
-      { id: "__copy__", label: "Copy", run: () => editor?.trigger(null, "editor.action.clipboardCopyAction", null) },
-      { id: "__paste__", label: "Paste", run: () => editor?.trigger(null, "editor.action.clipboardPasteAction", null) },
-      { id: "__format__", label: "Format Document", run: () => editor?.trigger(null, "editor.action.formatDocument", null) },
+      { id: "__cut__", label: "Cut", run: () => runEditorCommand("editor.action.clipboardCutAction") },
+      { id: "__copy__", label: "Copy", run: () => runEditorCommand("editor.action.clipboardCopyAction") },
+      { id: "__paste__", label: "Paste", run: () => runEditorCommand("editor.action.clipboardPasteAction") },
+      { id: "__format__", label: "Format Document", run: () => runEditorCommand("editor.action.formatDocument") },
     ];
 
     setContextMenu({ x, y, sections: [], loading: true });
