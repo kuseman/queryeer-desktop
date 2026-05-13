@@ -363,7 +363,7 @@ describe("FileMediator.saveFile", () => {
     expect(showSaveDialog).toHaveBeenCalledWith({
       title: "Save Query",
       defaultPath: "Query1.sql",
-      filters: [{ name: "SQL Files", extensions: ["sql"] }]
+      filters: [{ name: "File", extensions: ["sql"] }]
     });
     expect(writeFile).toHaveBeenCalledWith(
       "file:///C:/Users/test/Query1.sql",

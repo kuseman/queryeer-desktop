@@ -171,11 +171,13 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
       const cloneFromFile = createOptions?.cloneFromFileId
         ? filesRegistry.getFile(createOptions.cloneFromFileId)
         : undefined;
-      const counter = nextUntitledCounter();
       const extension = normalizeExtension(
         createOptions?.extension ?? extensionFromMimeType(createOptions?.mimeType ?? cloneFromFile?.mimeType)
       );
-      const uri = `untitled:Untitled${counter}.${extension}`;
+      const fileName = createOptions?.title
+        ? `${createOptions.title}.${extension}`
+        : `Untitled${nextUntitledCounter()}.${extension}`;
+      const uri = `untitled:${fileName}`;
       const mimeType =
         createOptions?.mimeType ??
         cloneFromFile?.mimeType ??
@@ -191,6 +193,11 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
           ? { ...cloneFromFile.persistentViewState }
           : undefined
       });
+
+      // Clone metadata (e.g. defaultCatalogAlias) from source file
+      if (cloneFromFile?.metadata) {
+        filesRegistry.updateFile(file.fileId, { metadata: { ...cloneFromFile.metadata } });
+      }
 
       return file;
     },
@@ -226,10 +233,11 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
         if (!showSaveDialog) {
           return;
         }
+        const ext = extensionFromMimeType(file.mimeType);
         const dialogResult = await showSaveDialog({
           title: "Save Query",
           defaultPath: file.uri.replace(/^untitled:/, "") || undefined,
-          filters: [{ name: "SQL Files", extensions: ["sql"] }]
+          filters: [{ name: "File", extensions: [ext] }]
         });
         if (dialogResult.canceled || !dialogResult.filePath) {
           return;

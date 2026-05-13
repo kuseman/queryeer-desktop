@@ -8,7 +8,10 @@ import {
   getConsoleNotificationState,
   notifyConsoleErrorAppended,
   setConsolePanelVisible,
-  subscribeConsoleNotification
+  subscribeConsoleNotification,
+  getFrontendLogEntries,
+  clearFrontendLogEntries,
+  type FrontendLogEntry,
 } from "./console-state";
 
 export const CONSOLE_PANEL_TAB_ID = "core.panel.console.tab";
@@ -189,6 +192,7 @@ function ConsolePanel() {
   const [entries, setEntries] = useState<BackendLogEntry[]>([]);
   const [displayedLines, setDisplayedLines] = useState<string[]>([]);
   const [levelFilter, setLevelFilter] = useState<BackendLogLevel>("info");
+  const [frontendEntries, setFrontendEntries] = useState<FrontendLogEntry[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -262,12 +266,20 @@ function ConsolePanel() {
     };
   }, []);
 
+  // Subscribe to frontend log entry changes
+  useEffect(() => {
+    setFrontendEntries(getFrontendLogEntries());
+    return subscribeConsoleNotification(() => {
+      setFrontendEntries(getFrontendLogEntries());
+    });
+  }, []);
+
   const threshold = useMemo(() => LOG_LEVEL_ORDER[levelFilter], [levelFilter]);
 
   useEffect(() => {
     const nextLines: string[] = [];
     for (const entry of entries) {
-      const key = `${entry.timestamp}-${entry.level}-${entry.source}-${entry.message}`;
+      const key = `backend-${entry.timestamp}-${entry.level}-${entry.source}-${entry.message}`;
       if (renderedKeysRef.current.has(key)) {
         continue;
       }
@@ -280,16 +292,32 @@ function ConsolePanel() {
       const line = `[${time}] [${entry.level.toUpperCase()}] [${entry.source}] ${entry.message}`;
       nextLines.push(color ? `${color}${line}${ANSI_RESET}` : line);
     }
+    for (const entry of frontendEntries) {
+      const key = `frontend-${entry.timestamp}-${entry.level}-${entry.source}-${entry.message}`;
+      if (renderedKeysRef.current.has(key)) {
+        continue;
+      }
+      renderedKeysRef.current.add(key);
+      if (LOG_LEVEL_ORDER[entry.level] < threshold) {
+        continue;
+      }
+      const time = formatLocalIsoDateTime(entry.timestamp);
+      const color = LOG_LEVEL_COLOR[entry.level];
+      const line = `[${time}] [${entry.level.toUpperCase()}] [FRONTEND:${entry.source}] ${entry.message}`;
+      nextLines.push(color ? `${color}${line}${ANSI_RESET}` : line);
+    }
     if (nextLines.length > 0) {
       setDisplayedLines((previous) => [...previous, ...nextLines]);
     }
-  }, [entries, threshold]);
+  }, [entries, frontendEntries, threshold]);
 
   const clearConsole = async () => {
     clearCutoffMsRef.current = Date.now();
     renderedKeysRef.current.clear();
     setEntries([]);
     setDisplayedLines([]);
+    clearFrontendLogEntries();
+    setFrontendEntries([]);
     await window.appShell.clearBackendLogs();
   };
 

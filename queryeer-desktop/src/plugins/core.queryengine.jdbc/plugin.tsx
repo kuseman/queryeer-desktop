@@ -18,6 +18,7 @@ import { writeJdbcContextMetadata } from "./jdbc-metadata";
 import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";
 import { registerWhenExpressionTemplates } from "../core.commands/when-expression-template-registry";
 import { registerSymbolActionTemplate } from "../core.queryengine/symbol-action-template-registry";
+import { registerTableActionTemplate } from "../core.queryengine.output.table/table-action-template-registry";
 import { getQuickCommandService } from "../core.quickcommand/service";
 import { createJdbcDatabaseQuickCommandProvider } from "./jdbc-database-quick-command";
 import { getJdbcDatabaseCache } from "./jdbc-database-cache";
@@ -65,6 +66,20 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
         label: "Describe",
         when: "activeFile.mimeType == 'application/sql' && activeFile.metadata.core.queryengine.jdbc.dialectId == 'sqlserver' && (symbol.kind == 'table' || symbol.kind == 'view')",
         query: "exec sp_help '${symbol.name}'"
+      }
+    });
+
+    registerTableActionTemplate({
+      id: "core.queryengine.jdbc.tableAction.correlatedDocuments",
+      title: "SQLServer Correlated Documents",
+      description: "Find rows correlated by a common ID within a ±5 minute window",
+      order: 10,
+      action: {
+        label: "Correlated documents of ${tableData.rows[tableData.primaryRowIndex].correlationId}",
+        when: "activeFile.mimeType == 'application/sql' && tableData.columns.some(c => c.name == 'correlationId') && tableData.columns.some(c => c.name == '@timestamp')",
+        query: "SELECT * FROM _doc\nWHERE correlationId = ${fn.sql.literal(tableData.rows[tableData.primaryRowIndex].correlationId)}\nAND [@timestamp] >= '${fn.date.add(tableData.rows[tableData.primaryRowIndex][\"@timestamp\"], \"minute\", -5)}'\nAND [@timestamp] <= '${fn.date.add(tableData.rows[tableData.primaryRowIndex][\"@timestamp\"], \"minute\", 5)}'",
+        mode: "execute",
+        outputTarget: "output"
       }
     });
 

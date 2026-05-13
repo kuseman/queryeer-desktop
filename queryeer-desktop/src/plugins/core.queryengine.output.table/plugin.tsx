@@ -35,6 +35,12 @@ import type {
 } from "../../contracts/extensions/TableOutputContextMenuExtension";
 import { ContextMenuSurface } from "../../renderer/components/ContextMenuSurface";
 import { getExpressionRuntime } from "../core.expressions/runtime";
+import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";
+import { TABLE_ACTIONS_SETTING_ID } from "./table-action-types";
+import type { TableAction } from "./table-action-types";
+import { getTableActionRegistry } from "./table-action-registry";
+import { createTableActionProvider } from "./table-action-provider";
+import { TableActionsSettingsEditor } from "./table-action-settings";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -203,6 +209,8 @@ async function resolveTableContextMenuItems(
       selectedColumnCount: context.selection.selectedColumnIndexes.length,
       isSingleColumnSelection: context.selection.isSingleColumnSelection,
       isSingleRowSelection: context.selection.isSingleRowSelection,
+      columns: context.columns,
+      columnNames: context.columns.map((c) => c.name),
     }
   };
   const mergedContext = { ...baseContext, ...tableContext };
@@ -499,16 +507,11 @@ function TableGrid({ resultSetIndex, schema, rows, fileId, onPreviewValue }: Tab
     [fileId]
   );
 
-  const onCellMouseDown = useCallback(
-    (e: CellMouseDownEvent) => {
-      const me = e.event as MouseEvent | null;
-      if (!isPrimaryMouseButton(me)) return;
-      if (me?.shiftKey || me?.ctrlKey || me?.metaKey) return;
+  const selectSingleCell = useCallback(
+    (e: CellMouseDownEvent | CellClickedEvent) => {
       const colId = e.column.getColId();
       const colIndex = colId === ROW_NUMBER_COL_ID ? -1 : gridColumns.findIndex((c) => c.key === colId);
       const rowIndex = e.node.rowIndex ?? 0;
-      isDraggingRef.current = true;
-      didDragMoveRef.current = false;
       anchorRef.current = { row: rowIndex, colIndex };
       applySelection(
         { rect: computeSelection({ row: rowIndex, colIndex }, { row: rowIndex, colIndex }, schema.columns.length), cells: [] },
@@ -516,6 +519,31 @@ function TableGrid({ resultSetIndex, schema, rows, fileId, onPreviewValue }: Tab
       );
     },
     [schema.columns.length, gridColumns, applySelection]
+  );
+
+  const onCellMouseDown = useCallback(
+    (e: CellMouseDownEvent) => {
+      const me = e.event as MouseEvent | null;
+      if (!isPrimaryMouseButton(me)) {
+        // Right-click: select the cell only if it's outside the current selection,
+        // otherwise keep the existing selection intact
+        if (me?.button === 2) {
+          const colId = e.column.getColId();
+          const colIndex = colId === ROW_NUMBER_COL_ID ? -1 : gridColumns.findIndex((c) => c.key === colId);
+          const rowIndex = e.node.rowIndex ?? 0;
+          const model = selectionRef.current;
+          if (!model || !isCellSelected(model, rowIndex, colIndex)) {
+            selectSingleCell(e);
+          }
+        }
+        return;
+      }
+      if (me?.shiftKey || me?.ctrlKey || me?.metaKey) return;
+      isDraggingRef.current = true;
+      didDragMoveRef.current = false;
+      selectSingleCell(e);
+    },
+    [gridColumns, selectSingleCell]
   );
 
   const onCellMouseOver = useCallback(
@@ -697,10 +725,18 @@ function TableGrid({ resultSetIndex, schema, rows, fileId, onPreviewValue }: Tab
         rowsByIndex[r] = api.getDisplayedRowAtIndex(r)?.data as GridRowData | undefined;
       }
       const selection = buildSelectionSnapshot(model, rowsByIndex, schema.columns.length);
+      const cellValuesByRow: Record<number, unknown[]> = {};
+      for (const ri of selection.selectedRowIndexes) {
+        const data = rowsByIndex[ri];
+        if (data?.__values) {
+          cellValuesByRow[ri] = data.__values;
+        }
+      }
       const menuContext: TableOutputContextMenuContext = {
         resultSetIndex,
         columns: schema.columns,
         selection,
+        cellValuesByRow,
       };
       void resolveTableContextMenuItems(getTableOutputContextMenuProviders(), menuContext).then((sections) => {
         if (sections.length === 0) {
@@ -1060,6 +1096,27 @@ export const coreQueryEngineOutputTablePlugin: Plugin = {
   },
   activate: (context) => {
     context.tableOutputContextMenu.registerProvider(createCopyAsCsvTableContextMenuProvider());
+    context.tableOutputContextMenu.registerProvider(createTableActionProvider(context));
+
+    // Register when-expression variables for autocomplete in table action editors
+    registerWhenExpressionVariables([
+      { name: "tableSelection.columns", type: "string", description: "Array<{name, type}> — Columns of the current table selection" },
+      { name: "tableSelection.columnNames", type: "string", description: "string[] — Column names of the current table selection" },
+      { name: "tableData", type: "string", description: "Full table selection data. Access cell values via tableData.rows[tableData.primaryRowIndex].columnName" },
+      { name: "tableData.rows", type: "string", description: "Record<string, unknown>[] — Selected rows keyed by column name. e.g. tableData.rows[0].correlationId" },
+      { name: "tableData.columns", type: "string", description: "{name: string, type: string}[] — Column metadata" },
+      { name: "tableData.primaryRowIndex", type: "number", description: "Index of the first selected row" },
+      { name: "tableData.selectedRowIndexes", type: "string", description: "number[] — All selected row indices" },
+      { name: "tableData.selectedColumnIndexes", type: "string", description: "number[] — All selected column indices" },
+    ]);
+
+    // Register table actions settings UI
+    context.settings.registerAdvancedRenderer({
+      id: TABLE_ACTIONS_SETTING_ID,
+      render: ({ value, setValue, readonly }) => (
+        <TableActionsSettingsEditor value={value} setValue={setValue} readonly={readonly} />
+      )
+    });
     context.settings.registerSettings({
       moduleId: "core.queryengine.output.table",
       title: "Query Output Table",
@@ -1090,6 +1147,17 @@ export const coreQueryEngineOutputTablePlugin: Plugin = {
           defaultValue: 500,
           constraints: { min: 10, max: 1000000 },
         },
+        {
+          id: TABLE_ACTIONS_SETTING_ID,
+          moduleId: "core.queryengine.output.table",
+          title: "Table Actions",
+          description: "Context menu actions that appear when right-clicking on table cell selections. Actions can execute generated queries or render template results.",
+          sectionPath: ["Query Engine", "Table Actions"],
+          tags: ["query", "table", "actions", "context menu", "template"],
+          type: "json",
+          defaultValue: [],
+          advanced: { rendererId: TABLE_ACTIONS_SETTING_ID }
+        },
       ],
     });
 
@@ -1100,6 +1168,19 @@ export const coreQueryEngineOutputTablePlugin: Plugin = {
     }
     onCoreSettingsServiceInitialized((service) => {
       service.refreshSchemaFromRegistry();
+
+      // Sync table actions from settings to the runtime registry
+      service.subscribe(() => {
+        const current = service.getValue(TABLE_ACTIONS_SETTING_ID);
+        if (Array.isArray(current)) {
+          getTableActionRegistry().setActions(current as TableAction[]);
+        }
+      });
+      const initial = service.getValue(TABLE_ACTIONS_SETTING_ID);
+      if (Array.isArray(initial)) {
+        getTableActionRegistry().setActions(initial as TableAction[]);
+      }
+
       void service.syncRegistryModules();
     });
 

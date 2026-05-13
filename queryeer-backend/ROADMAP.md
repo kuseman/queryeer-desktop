@@ -9,11 +9,11 @@ Large features in prio
 - [ ] Code complete (Phase 2. Detect context)
     - [X] Tables
     - [ ] Columns
-- [ ] Table Query Actions
-    - User created menu item contributions that creates queries based on table selections 
-- [ ] JDBC Tree component Context menu
-    - Context menu items default + dialect spcific
-    - New query on connection / database
+- [ ] JDBC Tree navigation fixes
+    - All tables without schema below database should be a meta level above
+      with views/tables/procedures etc.
+    - Context menu items 
+        - New query on connection / database
 - [ ] Graph visualization framework
     - Query plan
     - Procedure call tree
@@ -31,6 +31,8 @@ Large features in prio
 - [ ] Modularize
     - Make sure all contributions have contracts and all API:s are located in a separate project
       that might end up on npmjs one day
+- [X] Table Query Actions
+    - User created menu item contributions that creates queries based on table selections 
 - [X] Table context menu contribution
     - Static items with when (based on value right clicked)
     - Also contributions that has an items supplier that will be used later on

@@ -20,6 +20,8 @@ export type FileMediator = {
     extension?: string;
     mimeType?: string;
     cloneFromFileId?: string | null;
+    /** Display name for the tab (without extension). Defaults to "Untitled". */
+    title?: string;
   }) => Promise<FileEntity>;
   getUntitledCounter: () => number;
   setUntitledCounter: (counter: number) => void;

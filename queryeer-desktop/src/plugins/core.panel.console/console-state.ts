@@ -1,7 +1,16 @@
+import type { BackendLogLevel } from "../../contracts/backend";
+
 type Listener = () => void;
 
 type ConsoleNotificationState = {
   unseenErrorCount: number;
+};
+
+export type FrontendLogEntry = {
+  timestamp: string;
+  level: BackendLogLevel;
+  source: string;
+  message: string;
 };
 
 const state: ConsoleNotificationState = {
@@ -11,6 +20,24 @@ const state: ConsoleNotificationState = {
 let consolePanelVisible = false;
 
 const listeners = new Set<Listener>();
+
+const frontendLogs: FrontendLogEntry[] = [];
+
+export function addFrontendLogEntry(level: BackendLogLevel, source: string, message: string): void {
+  frontendLogs.push({ timestamp: new Date().toISOString(), level, source, message });
+  if (level === "error" && !consolePanelVisible) {
+    state.unseenErrorCount += 1;
+  }
+  emit();
+}
+
+export function getFrontendLogEntries(): FrontendLogEntry[] {
+  return frontendLogs.slice();
+}
+
+export function clearFrontendLogEntries(): void {
+  frontendLogs.length = 0;
+}
 
 function emit(): void {
   for (const listener of listeners) {
