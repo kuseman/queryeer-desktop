@@ -10,6 +10,12 @@ public interface QueryPublisher
     /** Called once per result set to announce its schema before any rows are sent. */
     void resultSetStart(List<String> columnNames, List<String> columnTypes);
 
+    /** Called once per result set to announce its schema with metadata before any rows are sent. Default implementation delegates to the three-parameter overload without metadata. */
+    default void resultSetStart(List<String> columnNames, List<String> columnTypes, java.util.Map<String, String> metadata)
+    {
+        resultSetStart(columnNames, columnTypes);
+    }
+
     /** Called one or more times after {@link #resultSetStart} to stream row batches. */
     void resultSetRows(List<List<Object>> rows);
 

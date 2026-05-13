@@ -785,6 +785,22 @@ function TableGrid({ resultSetIndex, schema, rows, fileId, onPreviewValue }: Tab
   );
 }
 
+function ResultSetMetadata({ metadata }: { metadata?: Record<string, string> }): JSX.Element | null {
+  if (!metadata || Object.keys(metadata).length === 0) {
+    return null;
+  }
+  return (
+    <div className="result-set-metadata">
+      {Object.entries(metadata).map(([key, value]) => (
+        <span key={key} className="result-set-metadata-item">
+          <span className="result-set-metadata-key">{key}</span>
+          <span className="result-set-metadata-value">{value}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function TableOutputView({ context, onPreviewValue }: { context: OutputContext; onPreviewValue: (options: { title: string; value: string; mimeType?: string }) => void }): JSX.Element {
   const tableSettings = resolveOutputTableSettings();
   const isStacked = tableSettings.viewMode === "stacked";
@@ -974,6 +990,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
                 {context.resultSets.map((resultSet) => (
                   <section key={resultSet.resultSetIndex} className="table-output-stacked-section" data-result-set-index={resultSet.resultSetIndex}>
                     <header className="table-output-stacked-header">Result {resultSet.resultSetIndex + 1}</header>
+                    <ResultSetMetadata metadata={resultSet.metadata} />
                     {(() => {
                       const defaultHeight = resolveStackedGridHeightPx(resultSet.rows.length, tableSettings.stackedMaxRows);
                       const resolvedHeight = stackedGridHeightsByResultSet[resultSet.resultSetIndex] ?? defaultHeight;
@@ -1023,6 +1040,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
           )
         : (
             <>
+              <ResultSetMetadata metadata={activeSet.metadata} />
               <div className="table-output-grid">
                 <TableGrid
                   resultSetIndex={activeSet.resultSetIndex}

@@ -219,6 +219,7 @@ export type QueryChunkStartNotification = {
   resultSetIndex: number;
   schema: {
     columns: Array<{ name: string; type: QueryColumnType }>;
+    metadata?: Record<string, string>;
   };
 };
 

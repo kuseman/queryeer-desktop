@@ -26,6 +26,11 @@ export type ResultSet = {
   schema: { columns: Column[] };
   rows: unknown[][];
   /**
+   * Optional metadata key/value pairs describing this result set
+   * (e.g. connection title, database name).
+   */
+  metadata?: Record<string, string>;
+  /**
    * True once in-memory rows hit DEFAULT_OUTPUT_LIMITS.maxRows.
    * All rows beyond the limit are streamed to exportPath instead of held in memory.
    */

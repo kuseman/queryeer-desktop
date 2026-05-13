@@ -407,6 +407,34 @@ Success result:
 
 ## 6. Notifications (v1)
 
+## 6.1a `queryengine.chunkStart`
+
+Announces a new result set and its schema before any rows are streamed. Sent once per result set.
+
+```json
+{
+  "queryExecutionId": "qx-001",
+  "resultSetIndex": 0,
+  "schema": {
+    "columns": [
+      { "name": "id", "type": "int" },
+      { "name": "name", "type": "string" }
+    ],
+    "metadata": {
+      "connectionTitle": "My Production DB",
+      "database": "appdb"
+    }
+  }
+}
+```
+
+Rules:
+
+- `resultSetIndex` is zero-based and monotonically increasing per `queryExecutionId`.
+- `schema.columns[*].type` MUST be one of: `string`, `boolean`, `int`, `long`, `decimal`, `float`, `double`, `datetime`, `datetimeoffset`, `object`, `array`, `table`, `any`, `null`.
+- `schema.metadata` is optional. When present, it contains arbitrary string key/value pairs describing the result set (for example connection title, database name). The frontend displays these above the table grid.
+- Backends with richer/native type systems MUST map to this canonical set before emitting notifications.
+
 ## 6.1 `queryengine.progress`
 
 ```json

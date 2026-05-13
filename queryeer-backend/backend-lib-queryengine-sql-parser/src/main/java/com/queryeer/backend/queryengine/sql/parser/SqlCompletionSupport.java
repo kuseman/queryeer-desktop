@@ -148,21 +148,6 @@ public final class SqlCompletionSupport
         return null;
     }
 
-    /**
-     * Always parse the text fresh for identifier lookup. The session tree can hold a snapshot built from a different document version, and tree-sitter-java node methods (getStartByte/getEndByte)
-     * silently return 0 for nodes in such a stale tree, causing lookups to fail.
-     */
-    private static TSTree resolveTreeForIdentifier(IncrementalParseSessionService parseSessions, String engineId, String fileId, String text)
-    {
-        if (isBlank(text))
-        {
-            return null;
-        }
-        TSParser parser = new TSParser();
-        parser.setLanguage(new TreeSitterSql());
-        return parser.parseString(null, text);
-    }
-
     private static String currentTokenPrefix(String linePrefix)
     {
         int start = linePrefix.length();
@@ -212,7 +197,7 @@ public final class SqlCompletionSupport
         {
             return null;
         }
-        TSTree tree = resolveTreeForIdentifier(parseSessions, engineId, fileId, text);
+        TSTree tree = resolveTree(parseSessions, engineId, fileId, text);
         if (tree == null)
         {
             return null;

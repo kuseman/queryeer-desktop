@@ -9,6 +9,7 @@ import static com.queryeer.backend.plugin.jdbc.JdbcUtils.rollbackAndClose;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -154,20 +155,28 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             sessionId = resolveSessionId(fileId, resolved, sessionId);
             rememberSessionId(fileId, sessionId);
 
-            Connection sessionConnection = acquire(fileId, resolved);
-            JdbcQueryRequest request = new JdbcQueryRequest(queryExecutionId, fileId, text, resolved.connectionId(), resolved.properties(), sessionConnection, state.database(), resolved.dialect());
-
             if (resolved.dialect()
                     .queryExecutor() instanceof CancellableJdbcQueryExecutor cancellable)
             {
                 activeExecutors.put(queryExecutionId, cancellable);
             }
 
+            Map<String, String> resultSetMeta = new LinkedHashMap<>();
+            if (resolved.title() != null)
+            {
+                resultSetMeta.put("Connection", resolved.title());
+            }
+            if (state.database() != null)
+            {
+                resultSetMeta.put("Database", state.database());
+            }
+            Connection sessionConnection = acquire(fileId, resolved);
+            JdbcQueryRequest request = new JdbcQueryRequest(queryExecutionId, fileId, text, resolved.connectionId(), resolved.properties(), sessionConnection, state.database(), resolved.dialect());
             JdbcQueryResult result = resolved.dialect()
                     .queryExecutor()
-                    .execute(request, new TransportJdbcQueryEventListener(publisher));
+                    .execute(request, new TransportJdbcQueryEventListener(publisher, resultSetMeta));
 
-            Map<String, Object> engineStatePatch = new java.util.LinkedHashMap<>();
+            Map<String, Object> engineStatePatch = new LinkedHashMap<>();
             if (result.engineState() != null)
             {
                 engineStatePatch.putAll(result.engineState());
@@ -382,10 +391,12 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private static final class TransportJdbcQueryEventListener implements JdbcQueryEventListener
     {
         private final QueryPublisher publisher;
+        private final java.util.Map<String, String> metadata;
 
-        private TransportJdbcQueryEventListener(QueryPublisher publisher)
+        private TransportJdbcQueryEventListener(QueryPublisher publisher, java.util.Map<String, String> metadata)
         {
             this.publisher = publisher;
+            this.metadata = metadata;
         }
 
         @Override
@@ -396,7 +407,8 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                     .toList(),
                     columns.stream()
                             .map(c -> c.type())
-                            .toList());
+                            .toList(),
+                    metadata);
         }
 
         @Override
