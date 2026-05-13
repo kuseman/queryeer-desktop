@@ -1,9 +1,28 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QuickCommandService } from "./service";
 import type { QuickCommandContext, QuickCommandItem, QuickCommandProvider } from "../../contracts/extensions/QuickCommandExtension";
 
+const originalAppShell = window.appShell;
+
 beforeEach(() => {
   localStorage.clear();
+  window.appShell = {
+    ...window.appShell,
+    evaluateExpressionSync: (params) => {
+      try {
+        const keys = Object.keys(params.context);
+        const values = keys.map((key) => params.context[key]);
+        const runner = new Function(...keys, `return (${params.expression});`) as (...args: unknown[]) => unknown;
+        return { ok: true as const, result: runner(...values) };
+      } catch (error) {
+        return { ok: false as const, message: error instanceof Error ? error.message : String(error) };
+      }
+    }
+  };
+});
+
+afterEach(() => {
+  window.appShell = originalAppShell;
 });
 
 function makeCtx(overrides: Partial<QuickCommandContext> = {}): QuickCommandContext {
@@ -61,21 +80,21 @@ describe("QuickCommandService.open / close", () => {
   });
 
   it("opens when when-expression is true", () => {
-    const svc = new QuickCommandService([], () => ({ activeFileMimeType: "application/sql" }));
-    svc.open("$", { when: "activeFileMimeType == 'application/sql'" });
+    const svc = new QuickCommandService([], () => ({ activeFile: { mimeType: "application/sql" } }));
+    svc.open("$", { when: "activeFile.mimeType == 'application/sql'" });
     expect(svc.getState().open).toBe(true);
     expect(svc.getState().query).toBe("$");
   });
 
   it("does not open when when-expression is false", () => {
-    const svc = new QuickCommandService([], () => ({ activeFileMimeType: "text/plain" }));
-    svc.open("$", { when: "activeFileMimeType == 'application/sql'" });
+    const svc = new QuickCommandService([], () => ({ activeFile: { mimeType: "text/plain" } }));
+    svc.open("$", { when: "activeFile.mimeType == 'application/sql'" });
     expect(svc.getState().open).toBe(false);
   });
 
   it("opens regardless of when-expression when no getContextValues is supplied", () => {
     const svc = new QuickCommandService([]);
-    svc.open("$", { when: "activeFileMimeType == 'application/sql'" });
+    svc.open("$", { when: "activeFile.mimeType == 'application/sql'" });
     expect(svc.getState().open).toBe(true);
   });
 });

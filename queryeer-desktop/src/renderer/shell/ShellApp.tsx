@@ -22,6 +22,7 @@ import { confirmCloseDirtyFile } from "./close-file-guard";
 import { requestMessageDialog } from "../../plugins/core.dialog/message-dialog-service";
 import { filterSidebarViews } from "./sidebar-view-filter";
 import { filterToolbarActions } from "./toolbar-action-filter";
+import { inflateDottedKeys } from "./context-value-flatten";
 import { subscribeOpenPanelRequests } from "./layout-panel-events";
 import { getOutlineRegistry } from "../../core/plugin-runtime/ExtensionRegistry";
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../../plugins/core.settings/service";
@@ -214,7 +215,16 @@ export function ShellApp({
     return {
       hasOpenFiles: openFileIds.length > 0,
       hasActiveFile: activeFileForViewContext != null,
-      activeFileMimeType: activeFileForViewContext?.mimeType,
+      activeFile: activeFileForViewContext
+        ? {
+            fileId: activeFileForViewContext.fileId,
+            uri: activeFileForViewContext.uri,
+            editorId: activeFileForViewContext.editorId,
+            mimeType: activeFileForViewContext.mimeType,
+            metadata: inflateDottedKeys(activeFileForViewContext.metadata ?? {}),
+            engineBinding: activeFileForViewContext.engineBinding,
+          }
+        : null,
       activeFileEditorId: activeFileForViewContext?.editorId,
       hasActiveQueryExecutableFile,
       outlineSupported

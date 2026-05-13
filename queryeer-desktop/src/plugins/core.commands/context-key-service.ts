@@ -1,4 +1,4 @@
-import type { ContextValues } from "./when-evaluator";
+import type { ContextValues } from "./context-values";
 import type { ContextChain } from "./context-chain";
 import { ContextPriority } from "./context-priority";
 

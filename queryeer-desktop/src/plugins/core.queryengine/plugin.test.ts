@@ -339,13 +339,13 @@ describe("core.queryengine plugin", () => {
     expect(registerCommandMock).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "core.queryengine.execute",
-        enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFileMetadata.core.queryengine.tabState != 'running'"
+        enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFile?.metadata?.core?.queryengine?.tabState != 'running'"
       })
     );
     expect(registerCommandMock).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "core.queryengine.cancel",
-        enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFileMetadata.core.queryengine.tabState == 'running'"
+        enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFile?.metadata?.core?.queryengine?.tabState == 'running'"
       })
     );
 

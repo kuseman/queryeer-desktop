@@ -226,7 +226,7 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
     expect(registerViewMock).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "core.queryengine.payloadbuilder.catalogs",
-        when: "activeFileMimeType == 'application/plbsql'"
+        when: "activeFile.mimeType == 'application/plbsql'"
       })
     );
   });

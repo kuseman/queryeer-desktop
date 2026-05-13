@@ -1,4 +1,4 @@
-import type { ContextValues } from "../../plugins/core.commands/when-evaluator";
+import type { ContextValues } from "../../plugins/core.commands/context-values";
 
 export type BackendCommandContext = {
   snapshot: () => ContextValues;

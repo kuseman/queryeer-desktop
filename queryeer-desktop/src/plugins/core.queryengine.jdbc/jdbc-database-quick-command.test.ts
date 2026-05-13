@@ -216,6 +216,6 @@ describe("createJdbcDatabaseQuickCommandProvider", () => {
     expect(provider.prefix).toBe("$");
     expect(provider.label).toBe("Select Database");
     expect(provider.order).toBe(15);
-    expect(provider.when).toBe("activeFileMimeType == 'application/sql'");
+    expect(provider.when).toBe("activeFile.mimeType == 'application/sql'");
   });
 });

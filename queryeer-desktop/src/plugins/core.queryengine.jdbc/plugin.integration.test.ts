@@ -417,7 +417,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
     expect(provider.prefix).toBe("$");
     expect(provider.label).toBe("Select Database");
     expect(provider.order).toBe(15);
-    expect(provider.when).toBe("activeFileMimeType == 'application/sql'");
+    expect(provider.when).toBe("activeFile.mimeType == 'application/sql'");
     expect(typeof provider.getItems).toBe("function");
   });
 
@@ -455,7 +455,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
     const handler = commandCall![0].handler as () => void;
     handler();
 
-    expect(mocks.openQuickCommandMock).toHaveBeenCalledWith("$", { when: "activeFileMimeType == 'application/sql'" });
+    expect(mocks.openQuickCommandMock).toHaveBeenCalledWith("$", { when: "activeFile.mimeType == 'application/sql'" });
   });
 
   it("applies connection color to tab header style for JDBC files", () => {

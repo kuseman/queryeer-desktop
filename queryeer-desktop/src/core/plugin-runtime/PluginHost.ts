@@ -11,7 +11,7 @@ import {
 } from "./FileMediator";
 import type { PluginDiagnostics } from "./PluginDiagnostics";
 import { PluginRegistry } from "./PluginRegistry";
-import type { ContextValues } from "../../plugins/core.commands/when-evaluator";
+import type { ContextValues } from "../../plugins/core.commands/context-values";
 import {
   orderPluginsByDependencies,
   validateDependencies,

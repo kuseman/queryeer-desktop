@@ -1,4 +1,4 @@
-import type { ContextValues } from "./when-evaluator";
+import type { ContextValues } from "./context-values";
 
 export type ContextScope = {
   readonly id: string;

@@ -10,7 +10,7 @@ import {
   type KeybindingDiagnostics,
   type ResolvedKeybinding
 } from "./keybinding-resolver";
-import { evaluateWhenExpression } from "./when-evaluator";
+import { getExpressionRuntime } from "../core.expressions/runtime";
 import { updateKeybindingLabels } from "./keybinding-label-accessor";
 
 export type KeybindingService = {
@@ -54,6 +54,7 @@ function shouldSkipForInput(when: string | undefined, contextInputFocus: boolean
 
 export function createKeybindingService(options: KeybindingServiceOptions): KeybindingService {
   const contextKeys = options.contextChain ? null : createContextKeyService();
+  const runtime = getExpressionRuntime();
   let resolved: ResolvedKeybinding[] = [];
   let diagnostics: KeybindingDiagnostics = {
     invalidUserBindings: [],
@@ -82,7 +83,20 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
         if (shouldSkipForInput(binding.when, inputFocus, binding.key)) {
           return false;
         }
-        return evaluateWhenExpression(binding.when, contextSnapshot);
+        const expression = binding.when;
+        if (!expression || expression.trim().length === 0 || expression.trim() === "global") {
+          return true;
+        }
+        try {
+          return runtime.evaluateBooleanSync(expression, contextSnapshot as Record<string, unknown>, {
+            mode: "when",
+            source: `keybinding:${binding.id}`,
+            timeoutMs: 50,
+          });
+        } catch (error) {
+          console.error(`[ExpressionRuntime][keybinding] '${binding.id}' failed :: ${expression}`, error);
+          return false;
+        }
       });
 
     if (!matched) {

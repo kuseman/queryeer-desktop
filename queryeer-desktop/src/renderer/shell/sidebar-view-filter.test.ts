@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { LayoutViewContribution } from "../../contracts/extensions/LayoutExtension";
 import { filterSidebarViews } from "./sidebar-view-filter";
 
@@ -14,6 +14,31 @@ function view(partial: Partial<LayoutViewContribution> & Pick<LayoutViewContribu
 }
 
 describe("filterSidebarViews", () => {
+  const originalAppShell = window.appShell;
+
+  beforeEach(() => {
+    window.appShell = {
+      ...originalAppShell,
+      evaluateExpressionSync: (params) => {
+        const activeFile = params.context.activeFile as { mimeType?: string } | undefined;
+        if (params.expression === "hasActiveFile") {
+          return { ok: true as const, result: !!params.context.hasActiveFile };
+        }
+        if (params.expression === "activeFile.mimeType == 'application/sql'") {
+          return { ok: true as const, result: activeFile?.mimeType === "application/sql" };
+        }
+        if (params.expression === "activeFile.mimeType == 'text/plain'") {
+          return { ok: true as const, result: activeFile?.mimeType === "text/plain" };
+        }
+        return { ok: false as const, message: "unsupported expression" };
+      }
+    };
+  });
+
+  afterEach(() => {
+    window.appShell = originalAppShell;
+  });
+
   it("returns only views matching zone and when clause", () => {
     const views = [
       view({ id: "always", defaultZone: "primarySidebar", order: 3 }),
@@ -34,12 +59,12 @@ describe("filterSidebarViews", () => {
 
   it("supports comparing active file metadata context keys", () => {
     const views = [
-      view({ id: "sql", when: "activeFileMimeType == 'application/sql'" }),
-      view({ id: "text", when: "activeFileMimeType == 'text/plain'" })
+      view({ id: "sql", when: "activeFile.mimeType == 'application/sql'" }),
+      view({ id: "text", when: "activeFile.mimeType == 'text/plain'" })
     ];
 
     const filtered = filterSidebarViews(views, "primarySidebar", {
-      activeFileMimeType: "application/sql"
+      activeFile: { mimeType: "application/sql" }
     }).map((v) => v.id);
 
     expect(filtered).toEqual(["sql"]);

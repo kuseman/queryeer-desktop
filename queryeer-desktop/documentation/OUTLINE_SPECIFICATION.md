@@ -52,7 +52,7 @@ Add a `core.outline` extension that provides a **secondary sidebar panel** showi
 
 ```
 ShellApp computes viewContext
-  → outlineSupported = outlineRegistry.hasProvider(activeFileMimeType)
+  → outlineSupported = outlineRegistry.hasProvider(activeFile.mimeType)
   → LayoutViewContribution when: "outlineSupported"
   → sidebar filter hides/shows the panel
 ```
@@ -612,7 +612,7 @@ const outlineSupported = activeFileForViewContext
 return {
   hasOpenFiles: openFileIds.length > 0,
   hasActiveFile: activeFileForViewContext != null,
-  activeFileMimeType: activeFileForViewContext?.mimeType,
+  activeFile: activeFileForViewContext ? { mimeType: activeFileForViewContext.mimeType, ... } : null,
   activeFileEditorId: activeFileForViewContext?.editorId,
   hasActiveQueryExecutableFile,
   outlineSupported  // ← NEW
@@ -621,7 +621,7 @@ return {
 
 `getOutlineRegistry()` is a module-level singleton accessor (like `getTextEditorRegistry()`). It is populated during plugin activation before ShellApp mounts, so no initialization ordering issue.
 
-The memo dependency array remains the same — `activeFileMimeType` changes already trigger re-computation.
+The memo dependency array remains the same — active file changes already trigger re-computation.
 
 ---
 

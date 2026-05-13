@@ -1,5 +1,6 @@
 import type { CommandExecutionResult } from "../../contracts/plugin/Plugin";
-import { evaluateWhenExpression, type ContextValues } from "../../plugins/core.commands/when-evaluator";
+import type { ContextValues } from "../../plugins/core.commands/context-values";
+import { getExpressionRuntime } from "../../plugins/core.expressions/runtime";
 
 type CommandHandler = () => void | Promise<void>;
 
@@ -10,6 +11,7 @@ type CommandEntry = {
 
 export class CommandBus {
   private readonly commands = new Map<string, CommandEntry>();
+  private readonly runtime = getExpressionRuntime();
 
   public constructor(private readonly getContextValues?: () => ContextValues) {}
 
@@ -33,8 +35,13 @@ export class CommandBus {
       return true;
     }
     try {
-      return evaluateWhenExpression(entry.enablement, this.getContextValues?.() ?? {});
-    } catch {
+      return this.runtime.evaluateBooleanSync(entry.enablement, this.getContextValues?.() ?? {}, {
+        mode: "when",
+        source: `commandbus:${commandId}`,
+        timeoutMs: 50,
+      });
+    } catch (error) {
+      console.error(`[ExpressionRuntime][commandbus] '${commandId}' failed :: ${entry.enablement}`, error);
       return false;
     }
   }

@@ -220,7 +220,7 @@ function WhenInfoPopover({ readonly, onSelectTemplate }: WhenInfoPopoverProps): 
               </tbody>
             </table>
             <div className="when-expr-info-example">
-              Example: <code>activeFileMetadata.core.queryengine.jdbc.database.contains(&apos;prod&apos;)</code>
+              Example: <code>activeFile.metadata.core.queryengine.jdbc.database.contains(&apos;prod&apos;)</code>
             </div>
           </div>
           <div className="when-expr-info-section">

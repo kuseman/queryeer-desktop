@@ -3,10 +3,9 @@ import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { SymbolAction, SymbolAtPositionResult } from "./symbol-action-types";
 import { resolveSymbolAtPosition } from "./symbol-action-invoke";
 import { getSymbolActionRegistry } from "./symbol-action-registry";
-import { evaluateWhenExpression } from "../core.commands/when-evaluator";
 import { getCommandContext } from "../core.commands/command-context-accessor";
-import { flattenContextObject } from "../../renderer/shell/context-value-flatten";
 import { getQueryEngineService } from "./QueryEngineService";
+import { getExpressionRuntime } from "../core.expressions/runtime";
 
 type SymbolActionProviderDeps = {
   getFile: (fileId: string) => FileEntity | undefined;
@@ -43,21 +42,36 @@ export class SymbolActionProvider implements ContextMenuProvider {
     // Merge symbol variables into the effective context for when-expression evaluation.
     // This avoids mutating the context chain scope (which would wipe focus/language state).
     const baseContext = getCommandContext();
-    const symbolContext = flattenContextObject("symbol", {
-      kind: symbol.kind,
-      name: symbol.name,
-      detail: symbol.detail ?? ""
-    });
+    const symbolContext = {
+      symbol: {
+        kind: symbol.kind,
+        name: symbol.name,
+        detail: symbol.detail ?? ""
+      }
+    };
     const mergedContext = { ...baseContext, ...symbolContext };
 
     const actions = getSymbolActionRegistry().getSymbolActions();
-    const matchingActions = actions.filter((action) => {
-      try {
-        return evaluateWhenExpression(action.when, mergedContext);
-      } catch {
-        return false;
+    const runtime = getExpressionRuntime();
+    const matchingActions: SymbolAction[] = [];
+    for (const action of actions) {
+      const expr = action.when?.trim();
+      if (!expr) {
+        matchingActions.push(action);
+        continue;
       }
-    });
+      try {
+        const visible = await runtime.evaluateBoolean(expr, mergedContext, {
+          mode: "when",
+          source: `symbol-action:${action.id}:when`,
+        });
+        if (visible) {
+          matchingActions.push(action);
+        }
+      } catch {
+        // Invalid expressions hide the action.
+      }
+    }
 
     return matchingActions.map((action) => ({
       id: `symbol-${action.id}`,
@@ -74,17 +88,19 @@ export class SymbolActionProvider implements ContextMenuProvider {
     symbol: SymbolAtPositionResult,
     fileId: string
   ): Promise<void> {
-    const query = interpolateQuery(action.query, symbol);
+    const runtime = getExpressionRuntime();
+    const query = await runtime.renderTemplate(action.query, {
+      symbol: {
+        kind: symbol.kind,
+        name: symbol.name,
+        detail: symbol.detail ?? ""
+      }
+    }, {
+      mode: "template",
+      source: `symbol-action:${action.id}:query`
+    });
     await this.deps.executeQuery(fileId, query);
   }
-}
-
-function interpolateQuery(template: string, symbol: SymbolAtPositionResult): string {
-  return template
-    .replace(/\$\{symbol\.name\}/g, symbol.name)
-    .replace(/\$\{symbol\.kind\}/g, symbol.kind)
-    .replace(/\$\{symbol\.detail\}/g, symbol.detail ?? "");
-  // Unknown ${...} placeholders are intentionally left as-is for forward compatibility.
 }
 
 export function createSymbolActionProvider(

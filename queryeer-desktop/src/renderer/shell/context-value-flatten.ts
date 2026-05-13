@@ -1,32 +1,34 @@
-import type { ContextValues } from "../../plugins/core.commands/when-evaluator";
+export function inflateDottedKeys(flat: Record<string, unknown>): Record<string, unknown> {
+  const root: Record<string, unknown> = {};
 
-type Primitive = string | number | boolean | undefined;
-
-function isPrimitive(value: unknown): value is Primitive {
-  return (
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean" ||
-    value === undefined
-  );
-}
-
-export function flattenContextObject(prefix: string, value: unknown): ContextValues {
-  const result: ContextValues = {};
-
-  const walk = (path: string, current: unknown): void => {
-    if (isPrimitive(current)) {
-      result[path] = current;
-      return;
+  for (const [key, value] of Object.entries(flat)) {
+    if (!key.includes(".")) {
+      if (!(key in root)) {
+        root[key] = value;
+      }
+      continue;
     }
-    if (!current || typeof current !== "object" || Array.isArray(current)) {
-      return;
-    }
-    for (const [key, next] of Object.entries(current as Record<string, unknown>)) {
-      walk(`${path}.${key}`, next);
-    }
-  };
 
-  walk(prefix, value);
-  return result;
+    const segments = key.split(".");
+    let cursor: Record<string, unknown> = root;
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i];
+      if (!segment) break;
+
+      const isLast = i === segments.length - 1;
+      if (isLast) {
+        if (!(segment in cursor)) {
+          cursor[segment] = value;
+        }
+      } else {
+        const next = cursor[segment];
+        if (!next || typeof next !== "object" || Array.isArray(next)) {
+          cursor[segment] = {};
+        }
+        cursor = cursor[segment] as Record<string, unknown>;
+      }
+    }
+  }
+
+  return root;
 }

@@ -39,16 +39,16 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
   },
   activate: (context) => {
     registerWhenExpressionVariables([
-      { name: "activeFileMetadata.core.queryengine.payloadbuilder.enabledCatalogs", type: "string", description: "Comma-separated enabled PayloadBuilder catalog aliases (e.g. 'es1,oss2')" },
-      { name: "activeFileMetadata.core.queryengine.payloadbuilder.selectedEnvironment", type: "string", description: "Title of the selected PayloadBuilder environment (e.g. 'Production')" },
-      { name: "activeFileMetadata.core.queryengine.payloadbuilder.defaultCatalogAlias", type: "string", description: "Default PayloadBuilder catalog alias for the file" },
+      { name: "activeFile.metadata.core.queryengine.payloadbuilder.enabledCatalogs", type: "string", description: "Comma-separated enabled PayloadBuilder catalog aliases (e.g. 'es1,oss2')" },
+      { name: "activeFile.metadata.core.queryengine.payloadbuilder.selectedEnvironment", type: "string", description: "Title of the selected PayloadBuilder environment (e.g. 'Production')" },
+      { name: "activeFile.metadata.core.queryengine.payloadbuilder.defaultCatalogAlias", type: "string", description: "Default PayloadBuilder catalog alias for the file" },
     ]);
 
     registerWhenExpressionTemplates([
       {
         name: "Payloadbuilder",
         description: "Match Payloadbuilder files where Elasticsearch is default",
-        when: "activeFileMimeType == 'application/plbsql' && activeFileMetadata.core.queryengine.payloadbuilder.defaultCatalogAlias.lowe() == 'es'"
+        when: "activeFile.mimeType == 'application/plbsql' && activeFile.metadata.core.queryengine.payloadbuilder.defaultCatalogAlias.toLowerCase() == 'es'"
       }
     ]);
 
@@ -59,7 +59,7 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
       order: 20,
       action: {
         label: "Describe",
-        when: "activeFileMimeType == 'application/plbsql' && (symbol.kind == 'table' || symbol.kind == 'view')",
+        when: "activeFile.mimeType == 'application/plbsql' && (symbol.kind == 'table' || symbol.kind == 'view')",
         query: "exec sp_help '${symbol.name}'"
       }
     });
@@ -210,7 +210,7 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
           commandId: "core.queryengine.payloadbuilder.catalogs.openSettings"
         }
       ],
-      when: "activeFileMimeType == 'application/plbsql'",
+      when: "activeFile.mimeType == 'application/plbsql'",
       render: () => <PayloadbuilderCatalogSidebar editorRegistryHost={getEditorRegistryHost()} />
     });
 

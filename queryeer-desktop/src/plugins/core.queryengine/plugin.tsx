@@ -12,7 +12,6 @@ import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegist
 import { getOutlineRegistry } from "../../core/plugin-runtime/ExtensionRegistry";
 import { registerShortcuts } from "./shortcuts";
 import { setFilesRegistry } from "../core.commands/files-registry-accessor";
-import { ExpressionTesterRenderer } from "../core.commands/ExpressionTesterRenderer";
 import { setupSqlCompletionLanguage } from "./sql-completion-language";
 import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";
 import { createSymbolActionProvider } from "./symbol-action-provider";
@@ -179,7 +178,7 @@ export const coreQueryEnginePlugin: Plugin = {
       id: "core.queryengine.execute",
       title: "Execute Query",
       category: "Query",
-      enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFileMetadata.core.queryengine.tabState != 'running'",
+      enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFile?.metadata?.core?.queryengine?.tabState != 'running'",
       handler: async () => {
         queryEngineService.requestExecute();
       }
@@ -189,7 +188,7 @@ export const coreQueryEnginePlugin: Plugin = {
       id: "core.queryengine.cancel",
       title: "Cancel Query",
       category: "Query",
-      enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFileMetadata.core.queryengine.tabState == 'running'",
+      enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFile?.metadata?.core?.queryengine?.tabState == 'running'",
       handler: async () => {
         queryEngineService.requestCancel();
       }
@@ -278,25 +277,6 @@ export const coreQueryEnginePlugin: Plugin = {
     });
 
     registerShortcuts(context);
-
-    context.settings.registerAdvancedRenderer({
-      id: "core.commands.expression-tester",
-      render: (props) => <ExpressionTesterRenderer {...props} />
-    });
-    context.settings.registerSettings({
-      moduleId: "core.commands",
-      title: "When Expressions",
-      settings: [{
-        id: "core.commands.expression-tester.dummy",
-        moduleId: "core.commands",
-        title: "Expression Tester",
-        description: "Test when-expressions against the context of any open file.",
-        sectionPath: ["Expression Tester"],
-        type: "json",
-        defaultValue: null,
-        advanced: { rendererId: "core.commands.expression-tester" }
-      }]
-    });
 
     // Symbol Actions: when-expression variables for context variable autocomplete
     registerWhenExpressionVariables([

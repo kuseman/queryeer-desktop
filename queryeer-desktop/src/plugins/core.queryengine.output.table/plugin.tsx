@@ -26,9 +26,7 @@ import {
   resolveTableLinkAction,
 } from "./table-link-actions";
 import { getThemeService } from "../core.themes/runtime";
-import { evaluateWhenExpression } from "../core.commands/when-evaluator";
 import { getCommandContext } from "../core.commands/command-context-accessor";
-import { flattenContextObject } from "../../renderer/shell/context-value-flatten";
 import type {
   TableOutputContextMenuContext,
   TableOutputContextMenuItem,
@@ -36,6 +34,7 @@ import type {
   TableOutputSelectionSnapshot,
 } from "../../contracts/extensions/TableOutputContextMenuExtension";
 import { ContextMenuSurface } from "../../renderer/components/ContextMenuSurface";
+import { getExpressionRuntime } from "../core.expressions/runtime";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -194,26 +193,53 @@ async function resolveTableContextMenuItems(
   providers: TableOutputContextMenuProvider[],
   context: TableOutputContextMenuContext
 ): Promise<TableOutputContextMenuItem[][]> {
+  const runtime = getExpressionRuntime();
   const baseContext = getCommandContext();
-  const tableContext = flattenContextObject("tableSelection", {
-    hasSelection: context.selection.hasSelection,
-    selectedCellCount: context.selection.selectedCells.length,
-    selectedRowCount: context.selection.selectedRowIndexes.length,
-    selectedColumnCount: context.selection.selectedColumnIndexes.length,
-    isSingleColumnSelection: context.selection.isSingleColumnSelection,
-    isSingleRowSelection: context.selection.isSingleRowSelection,
-  });
+  const tableContext = {
+    tableSelection: {
+      hasSelection: context.selection.hasSelection,
+      selectedCellCount: context.selection.selectedCells.length,
+      selectedRowCount: context.selection.selectedRowIndexes.length,
+      selectedColumnCount: context.selection.selectedColumnIndexes.length,
+      isSingleColumnSelection: context.selection.isSingleColumnSelection,
+      isSingleRowSelection: context.selection.isSingleRowSelection,
+    }
+  };
   const mergedContext = { ...baseContext, ...tableContext };
 
   const sections = await Promise.all(providers.map(async (provider) => {
     try {
-      if (provider.when && !evaluateWhenExpression(provider.when, mergedContext)) {
+      if (
+        provider.when
+        && !await runtime.evaluateBoolean(provider.when, mergedContext, {
+          mode: "when",
+          source: `table-context-menu:provider:${provider.id}`,
+          timeoutMs: 50,
+        })
+      ) {
         return [] as TableOutputContextMenuItem[];
       }
       const items = await provider.getItems(context);
-      return items
-        .filter((item) => !item.when || evaluateWhenExpression(item.when, mergedContext))
-        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      const visibleItems: TableOutputContextMenuItem[] = [];
+      for (const item of items) {
+        if (!item.when) {
+          visibleItems.push(item);
+          continue;
+        }
+        try {
+          const visible = await runtime.evaluateBoolean(item.when, mergedContext, {
+            mode: "when",
+            source: `table-context-menu:item:${provider.id}:${item.id}`,
+            timeoutMs: 50,
+          });
+          if (visible) {
+            visibleItems.push(item);
+          }
+        } catch (error) {
+          console.error(`[ExpressionRuntime][table] item '${provider.id}:${item.id}' failed :: ${item.when}`, error);
+        }
+      }
+      return visibleItems.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     } catch {
       return [] as TableOutputContextMenuItem[];
     }

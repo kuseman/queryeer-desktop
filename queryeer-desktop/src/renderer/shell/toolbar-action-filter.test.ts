@@ -1,8 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { LayoutToolbarContribution } from "../../contracts/extensions/LayoutExtension";
 import { filterToolbarActions } from "./toolbar-action-filter";
 
 describe("filterToolbarActions", () => {
+  const originalAppShell = window.appShell;
+
+  beforeEach(() => {
+    window.appShell = {
+      ...originalAppShell,
+      evaluateExpressionSync: (params) => {
+        if (params.expression === "hasActiveFile") {
+          return { ok: true as const, result: !!params.context.hasActiveFile };
+        }
+        return { ok: false as const, message: "unsupported" };
+      }
+    };
+  });
+
+  afterEach(() => {
+    window.appShell = originalAppShell;
+  });
+
   it("filters toolbar actions by when and order", () => {
     const actions: LayoutToolbarContribution[] = [
       { id: "b", type: "action", order: 20, commandId: "cmd.b", when: "hasActiveFile" },

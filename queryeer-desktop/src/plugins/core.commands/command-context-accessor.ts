@@ -1,5 +1,5 @@
 import type { ContextChain } from "./context-chain";
-import type { ContextValues } from "./when-evaluator";
+import type { ContextValues } from "./context-values";
 
 let chain: ContextChain | null = null;
 
