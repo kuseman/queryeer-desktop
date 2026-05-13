@@ -47,6 +47,26 @@ vi.mock("../../core/plugin-runtime/ExtensionRegistry", () => ({
   })
 }));
 
+vi.mock("../core.commands/when-expression-variable-registry", () => ({
+  registerWhenExpressionVariables: vi.fn()
+}));
+
+vi.mock("./symbol-action-provider", () => ({
+  createSymbolActionProvider: vi.fn(() => ({ id: "core.queryengine.symbolActions", getItems: async () => [] }))
+}));
+
+vi.mock("./symbol-action-registry", () => ({
+  getSymbolActionRegistry: vi.fn(() => ({ getSymbolActions: () => [], setActions: vi.fn(), onDidChangeActions: vi.fn() }))
+}));
+
+vi.mock("./symbol-action-settings", () => ({
+  SymbolActionsSettingsEditor: vi.fn(() => null)
+}));
+
+vi.mock("../core.settings/service", () => ({
+  onCoreSettingsServiceInitialized: vi.fn()
+}));
+
 import { coreQueryEnginePlugin } from "./plugin";
 
 function makeFile(overrides: Partial<FileEntity> = {}): FileEntity {
@@ -171,6 +191,7 @@ function createContext(file: FileEntity): PluginContext {
       getAdvancedValidator: vi.fn()
     },
     quickcommand: { registerProvider: vi.fn() },
+    contextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
     outline: {
       registerOutlineProvider: vi.fn(),
       registerSupplementaryOutlineProvider: vi.fn(),

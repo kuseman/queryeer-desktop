@@ -501,6 +501,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
             editorRegistryHost={editorRegistryHost}
             outlineRegistry={outlineRegistry}
             editorId="core.queryengine"
+            openContextMenuOnModifierClick
           />
         </div>
 

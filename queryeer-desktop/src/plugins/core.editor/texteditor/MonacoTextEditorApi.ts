@@ -16,6 +16,7 @@ import type {
   EditorLayoutInfo,
   EditorMouseEvent
 } from "./types";
+import type { EditorContextMenuEvent } from "../../../contracts/editor/EditorApi";
 import { TextEditorApi } from "./TextEditorApi";
 
 let monacoModule: typeof monacoType | null = null;
@@ -647,6 +648,33 @@ export class MonacoTextEditorApi extends TextEditorApi {
             endColumn: e.target.range.endColumn
           } : null,
           selection: null
+        }
+      });
+    });
+    return { dispose: () => d.dispose() };
+  }
+
+  onContextMenu(callback: (event: EditorContextMenuEvent) => void): Disposable {
+    if (!this.editor) return { dispose: () => {} };
+    if (typeof this.editor.onContextMenu !== "function") return { dispose: () => {} };
+    const d = this.editor.onContextMenu((e) => {
+      callback({
+        event: {
+          x: e.event.posx,
+          y: e.event.posy
+        },
+        target: {
+          position: e.target.position
+            ? { lineNumber: e.target.position.lineNumber, column: e.target.position.column }
+            : null,
+          range: e.target.range
+            ? {
+                startLineNumber: e.target.range.startLineNumber,
+                startColumn: e.target.range.startColumn,
+                endLineNumber: e.target.range.endLineNumber,
+                endColumn: e.target.range.endColumn
+              }
+            : null
         }
       });
     });

@@ -16,6 +16,8 @@ import { JdbcNavigationView } from "./JdbcNavigationView";
 import { JDBC_NAV_DB_KEY, type JdbcSelectedDatabase } from "./jdbc-navigation-types";
 import { writeJdbcContextMetadata } from "./jdbc-metadata";
 import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";
+import { registerWhenExpressionTemplates } from "../core.commands/when-expression-template-registry";
+import { registerSymbolActionTemplate } from "../core.queryengine/symbol-action-template-registry";
 import { getQuickCommandService } from "../core.quickcommand/service";
 import { createJdbcDatabaseQuickCommandProvider } from "./jdbc-database-quick-command";
 import { getJdbcDatabaseCache } from "./jdbc-database-cache";
@@ -45,6 +47,26 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       { name: "activeFileMetadata.core.queryengine.jdbc.sessionConnection", type: "string", description: "Title of the JDBC connection that owns the active session" },
       { name: "activeFileMetadata.core.queryengine.jdbc.sessionState", type: "string", description: "State of the JDBC session: 'alive', 'dead', or 'none'" },
     ]);
+
+    registerWhenExpressionTemplates([
+      {
+        name: "SQLServer Database",
+        description: "Match SQL files using SQL Server against a specific selected database",
+        when: "activeFileMimeType == 'application/sql' && activeFileMetadata.core.queryengine.jdbc.dialectId == 'sqlserver' && activeFileMetadata.core.queryengine.jdbc.database == 'OrderService'"
+      }
+    ]);
+
+    registerSymbolActionTemplate({
+      id: "core.queryengine.jdbc.symbolAction.sqlserverDescribe",
+      title: "SQLServer Describe",
+      description: "Describe a table or view in SQL Server",
+      order: 10,
+      action: {
+        label: "Describe",
+        when: "activeFileMimeType == 'application/sql' && activeFileMetadata.core.queryengine.jdbc.dialectId == 'sqlserver' && (symbol.kind == 'table' || symbol.kind == 'view')",
+        query: "exec sp_help '${symbol.name}'"
+      }
+    });
 
     registerQueryExecutableEngine(context, {
       engineId: "jdbc",

@@ -16,6 +16,7 @@ import type {
   EditorLayoutInfo,
   EditorMouseEvent
 } from "./types";
+import type { EditorContextMenuEvent } from "../../../contracts/editor/EditorApi";
 
 export abstract class TextEditorApi {
   abstract getModel(): TextDocument | null;
@@ -112,6 +113,7 @@ export abstract class TextEditorApi {
   abstract onDidLayoutChange(callback: (layoutInfo: EditorLayoutInfo) => void): Disposable;
   abstract onMouseDown(callback: (event: EditorMouseEvent) => void): Disposable;
   abstract onMouseUp(callback: (event: EditorMouseEvent) => void): Disposable;
+  abstract onContextMenu(callback: (event: EditorContextMenuEvent) => void): Disposable;
 
   abstract layout(width: number, height: number): void;
   abstract focus(): void;

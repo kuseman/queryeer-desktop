@@ -104,6 +104,7 @@ export function buildMonacoCreateOptions(
     insertSpaces: settings.insertSpaces,
     renderWhitespace: settings.renderWhitespace,
     cursorBlinking: settings.cursorBlinking,
+    contextmenu: false,
     model: null
   };
 }

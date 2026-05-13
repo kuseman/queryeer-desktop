@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import type * as monacoType from "monaco-editor";
 import { WHEN_LANGUAGE_ID, STRING_METHODS, getAllContextVariables, setupWhenExpressionLanguage, getMonaco } from "./when-expression-language";
+import { getRegisteredWhenExpressionTemplates } from "./when-expression-template-registry";
 import "./when-expression-editor.css";
 
 void React;
@@ -122,17 +123,23 @@ export function InlineMonacoEditor({ value, onChange, language, height, readonly
     editorRef.current?.updateOptions({ readOnly: readonly });
   }, [readonly]);
 
-  return <div ref={containerRef} style={isFlex ? { flex: 1, minHeight: 0 } : { height: height as number }} />;
+  return <div ref={containerRef} style={isFlex ? { flex: 1, minHeight: 0, minWidth: 0, width: "100%", maxWidth: "100%" } : { height: height as number, minWidth: 0, width: "100%", maxWidth: "100%" }} />;
 }
 
 // ---------------------------------------------------------------------------
 // WhenInfoPopover — floating panel listing all context variables and methods
 // ---------------------------------------------------------------------------
 
-function WhenInfoPopover(): JSX.Element {
+type WhenInfoPopoverProps = {
+  readonly?: boolean;
+  onSelectTemplate: (templateWhen: string) => void;
+};
+
+function WhenInfoPopover({ readonly, onSelectTemplate }: WhenInfoPopoverProps): JSX.Element {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const templates = getRegisteredWhenExpressionTemplates();
 
   useEffect(() => {
     if (!open) return;
@@ -155,6 +162,37 @@ function WhenInfoPopover(): JSX.Element {
       >ⓘ</button>
       {open && (
         <div ref={panelRef} className="when-expr-info-panel">
+          {templates.length > 0 && (
+            <div className="when-expr-info-section">
+              <strong>Templates</strong>
+              <table className="when-expr-info-table">
+                <tbody>
+                  {templates.map((template) => (
+                    <tr key={`${template.name}-${template.when}`}>
+                      <td className="when-expr-info-name">{template.name}</td>
+                      <td className="when-expr-info-desc">
+                        <code>{template.when}</code>
+                        {template.description && <div>{template.description}</div>}
+                      </td>
+                      <td className="when-expr-info-action-cell">
+                        <button
+                          type="button"
+                          className="when-expr-info-insert-btn"
+                          disabled={readonly}
+                          onClick={() => {
+                            onSelectTemplate(template.when);
+                            setOpen(false);
+                          }}
+                        >
+                          Insert
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           <div className="when-expr-info-section">
             <strong>Context variables</strong>
             <table className="when-expr-info-table">
@@ -209,9 +247,10 @@ export type WhenExpressionEditorProps = {
   onChange: (value: string) => void;
   height?: number;
   readonly?: boolean;
+  wordWrap?: boolean;
 };
 
-export function WhenExpressionEditor({ value, onChange, height, readonly }: WhenExpressionEditorProps): JSX.Element {
+export function WhenExpressionEditor({ value, onChange, height, readonly, wordWrap = false }: WhenExpressionEditorProps): JSX.Element {
   useEffect(() => {
     void setupWhenExpressionLanguage();
   }, []);
@@ -223,10 +262,10 @@ export function WhenExpressionEditor({ value, onChange, height, readonly }: When
         onChange={onChange}
         language={WHEN_LANGUAGE_ID}
         height={height ?? 32}
-        wordWrap={false}
+        wordWrap={wordWrap}
         readonly={readonly}
       />
-      <WhenInfoPopover />
+      <WhenInfoPopover readonly={readonly} onSelectTemplate={onChange} />
     </div>
   );
 }

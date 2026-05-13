@@ -31,11 +31,18 @@ function isFunctionKeybinding(key: string): boolean {
   return /(^|\+)(F([1-9]|1[0-9]|2[0-4]))$/i.test(key);
 }
 
+function hasModifierKeybinding(key: string): boolean {
+  return /(^|\+)(Ctrl|Cmd|Meta|Alt|Option|Shift)(\+|$)/i.test(key);
+}
+
 function shouldSkipForInput(when: string | undefined, contextInputFocus: boolean, key: string): boolean {
   if (!contextInputFocus) {
     return false;
   }
   if (isFunctionKeybinding(key)) {
+    return false;
+  }
+  if (hasModifierKeybinding(key)) {
     return false;
   }
   const expr = (when ?? "global").toLowerCase();

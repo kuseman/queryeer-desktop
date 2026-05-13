@@ -123,6 +123,7 @@ function createContext(file?: FileEntity) {
       getAdvancedValidator: vi.fn()
     },
     quickcommand: { registerProvider: vi.fn() },
+    contextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
     outline: {
       registerOutlineProvider: vi.fn(),
       registerSupplementaryOutlineProvider: vi.fn(),

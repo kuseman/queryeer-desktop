@@ -10,7 +10,9 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
 
+import org.treesitter.TSNode;
 import org.treesitter.TSParser;
+import org.treesitter.TSPoint;
 import org.treesitter.TSTree;
 import org.treesitter.TreeSitterSql;
 
@@ -146,6 +148,21 @@ public final class SqlCompletionSupport
         return null;
     }
 
+    /**
+     * Always parse the text fresh for identifier lookup. The session tree can hold a snapshot built from a different document version, and tree-sitter-java node methods (getStartByte/getEndByte)
+     * silently return 0 for nodes in such a stale tree, causing lookups to fail.
+     */
+    private static TSTree resolveTreeForIdentifier(IncrementalParseSessionService parseSessions, String engineId, String fileId, String text)
+    {
+        if (isBlank(text))
+        {
+            return null;
+        }
+        TSParser parser = new TSParser();
+        parser.setLanguage(new TreeSitterSql());
+        return parser.parseString(null, text);
+    }
+
     private static String currentTokenPrefix(String linePrefix)
     {
         int start = linePrefix.length();
@@ -180,6 +197,159 @@ public final class SqlCompletionSupport
     public interface SemanticCompletionProvider
     {
         List<Map<String, Object>> provide(SqlCompletePayload payload, String fileId, SqlCompleteCursor cursor, String prefix, int replaceStartColumn, int maxItems, SqlCompletionContext context);
+    }
+
+    /**
+     * Returns the SQL identifier text at the given 1-indexed cursor position, or {@code null} if none. Handles plain identifiers, quoted/bracketed identifiers, and qualified names (schema.table)
+     *
+     * <p>
+     * Always parses {@code text} fresh; the session tree is not used here because tree-sitter-java node byte-position methods return 0 for nodes from a snapshot built on a different document version.
+     */
+    public static String identifierAtPosition(IncrementalParseSessionService parseSessions, String engineId, String fileId, String text, int line, int column)
+    {
+        if (line <= 0
+                || column <= 0)
+        {
+            return null;
+        }
+        TSTree tree = resolveTreeForIdentifier(parseSessions, engineId, fileId, text);
+        if (tree == null)
+        {
+            return null;
+        }
+        // TSPoint is 0-indexed
+        TSPoint pt = new TSPoint(line - 1, column - 1);
+        TSNode node = tree.getRootNode()
+                .getNamedDescendantForPointRange(pt, pt);
+        if (node == null
+                || node.isNull())
+        {
+            return null;
+        }
+        // Guard: if the deepest node's own text is not identifier-like (e.g. an ERROR
+        // node spanning multiple tokens, or the cursor landed on whitespace), fall back
+        // to raw-text scanning which is immune to tree-sitter byte-range issues.
+        int leafStart = node.getStartByte();
+        int leafEnd = node.getEndByte();
+        if (leafEnd > text.length()
+                || leafStart >= leafEnd
+                || !isIdentifierText(text.substring(leafStart, leafEnd)))
+        {
+            return identifierTextAtCursor(text, line, column);
+        }
+        // Walk up to the widest ancestor whose full text is still a single identifier
+        // (no whitespace or structural chars). This captures qualified names like
+        // schema.table where the leaf node is the table identifier but the parent
+        // object_reference spans the whole qualified name.
+        TSNode best = node;
+        TSNode parent = node.getParent();
+        while (parent != null
+                && !parent.isNull())
+        {
+            // CSOFF
+            int pStart = parent.getStartByte();
+            int pEnd = parent.getEndByte();
+            // CSON
+            if (pEnd > text.length())
+            {
+                break;
+            }
+            if (!isIdentifierText(text.substring(pStart, pEnd)))
+            {
+                break;
+            }
+            best = parent;
+            parent = parent.getParent();
+        }
+        int start = best.getStartByte();
+        int end = best.getEndByte();
+        if (start < 0
+                || end > text.length()
+                || start >= end)
+        {
+            return null;
+        }
+        return text.substring(start, end)
+                .trim();
+    }
+
+    /**
+     * Extracts the SQL identifier surrounding the 1-indexed cursor position using raw-text scanning, without relying on tree-sitter node byte ranges. Used as a fallback when the tree-sitter node is
+     * an ERROR node (which can span multiple tokens) or has an unusable byte range.
+     */
+    private static String identifierTextAtCursor(String text, int line, int column)
+    {
+        if (isBlank(text)
+                || line <= 0
+                || column <= 0)
+        {
+            return null;
+        }
+        String[] lines = text.split("\\R", -1);
+        if (line > lines.length)
+        {
+            return null;
+        }
+        String lineText = lines[line - 1];
+        // col0 is the 0-indexed cursor position, clamped to line length
+        int col0 = Math.min(column - 1, lineText.length());
+        // If the cursor sits on a non-identifier character (e.g. whitespace between
+        // two tokens) rather than at the end of the line, there is no identifier here.
+        if (col0 < lineText.length()
+                && !isIdentifierChar(lineText.charAt(col0)))
+        {
+            return null;
+        }
+        // Backward scan for the prefix
+        int prefixStart = col0;
+        while (prefixStart > 0
+                && isIdentifierChar(lineText.charAt(prefixStart - 1)))
+        {
+            prefixStart--;
+        }
+        // Forward scan for the suffix
+        int suffixEnd = col0;
+        while (suffixEnd < lineText.length()
+                && isIdentifierChar(lineText.charAt(suffixEnd)))
+        {
+            suffixEnd++;
+        }
+        if (prefixStart >= suffixEnd)
+        {
+            return null;
+        }
+        String identifier = lineText.substring(prefixStart, suffixEnd);
+        return isIdentifierText(identifier) ? identifier
+                : null;
+    }
+
+    /** Returns true if the string looks like a plain or qualified SQL identifier (no whitespace or structural chars). */
+    private static boolean isIdentifierText(String s)
+    {
+        if (s == null
+                || s.isBlank())
+        {
+            return false;
+        }
+        for (int i = 0; i < s.length(); i++)
+        {
+            if (!isIdentifierChar(s.charAt(i)))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isIdentifierChar(char c)
+    {
+        return Character.isLetterOrDigit(c)
+                || c == '_'
+                || c == '.'
+                || c == '['
+                || c == ']'
+                || c == '"'
+                || c == '`';
     }
 
     private static Map<String, Object> withDefaultSortText(Map<String, Object> item, String defaultSortText)

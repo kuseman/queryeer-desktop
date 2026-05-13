@@ -1,5 +1,6 @@
 package com.queryeer.backend.plugin.jdbc;
 
+import static com.queryeer.backend.api.PayloadUtils.isBlank;
 import static com.queryeer.backend.api.PayloadUtils.stringValue;
 import static com.queryeer.backend.api.PayloadUtils.trimToNull;
 import static com.queryeer.backend.plugin.jdbc.JdbcUtils.closeQuietly;
@@ -60,6 +61,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private static final String ACTION_CONNECTION_SESSIONS = "jdbc.connection.sessions";
     private static final String ACTION_SQL_PARSE_SNAPSHOT = "sql.parse.snapshot";
     private static final String ACTION_SQL_COMPLETE = "sql.complete";
+    private static final String ACTION_SQL_SYMBOL_AT_POSITION = "sql.symbolAtPosition";
 
     private static final String ERROR_CODE_VALIDATION = "VALIDATION";
     private static final String ERROR_CODE_CANCELLED = "CANCELLED";
@@ -133,13 +135,11 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         JdbcConnection resolved = null;
         try
         {
-            if (text == null
-                    || text.isBlank())
+            if (isBlank(text))
             {
                 throw new IllegalArgumentException(ERROR_SQL_TEXT_REQUIRED);
             }
-            if (fileId == null
-                    || fileId.isBlank())
+            if (isBlank(fileId))
             {
                 throw new IllegalArgumentException(ERROR_FILE_ID_REQUIRED);
             }
@@ -173,8 +173,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             {
                 engineStatePatch.putAll(result.engineState());
             }
-            if (sessionId != null
-                    && !sessionId.isBlank())
+            if (!isBlank(sessionId))
             {
                 engineStatePatch.put("sessionId", sessionId);
             }
@@ -249,6 +248,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             case ACTION_CONNECTION_SESSIONS -> connectionSessions();
             case ACTION_SQL_PARSE_SNAPSHOT -> sqlParseSnapshot(fileId);
             case ACTION_SQL_COMPLETE -> sqlComplete(fileId, payload);
+            case ACTION_SQL_SYMBOL_AT_POSITION -> sqlSymbolAtPosition(fileId, payload);
             case ACTION_ENGINE_CAPABILITIES -> engineCapabilities();
             default -> QueryEngineProvider.super.invoke(fileId, action, payload);
         };
@@ -275,7 +275,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private Object engineCapabilities()
     {
         return Map.of(KEY_ACTIONS, List.of(ACTION_ENGINE_CAPABILITIES, ACTION_CONNECTION_SETUP, ACTION_CONNECTION_DIALECTS, ACTION_CONNECTION_TEST, ACTION_SCHEMA_SNAPSHOT, ACTION_SCHEMA_REFRESH,
-                ACTION_SCHEMA_FETCH, ACTION_CONNECTION_SESSIONS, ACTION_SQL_PARSE_SNAPSHOT, ACTION_SQL_COMPLETE));
+                ACTION_SCHEMA_FETCH, ACTION_CONNECTION_SESSIONS, ACTION_SQL_PARSE_SNAPSHOT, ACTION_SQL_COMPLETE, ACTION_SQL_SYMBOL_AT_POSITION));
     }
 
     private Object sqlComplete(String fileId, Object payload)
@@ -429,10 +429,132 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                 .toLowerCase();
     }
 
+    private Object sqlSymbolAtPosition(String fileId, Object payload)
+    {
+        SqlSymbolAtPositionPayload params = payloadMapper.convert(payload, SqlSymbolAtPositionPayload.class);
+        if (params == null
+                || params.cursor() == null)
+        {
+            return null;
+        }
+        String token = SqlCompletionSupport.identifierAtPosition(parseSessions, engineId(), fileId, params.text(), params.cursor()
+                .line(),
+                params.cursor()
+                        .column());
+        if (token == null)
+        {
+            return null;
+        }
+        String connectionId = trimToNull(params.connectionId());
+        if (connectionId == null
+                && fileId != null)
+        {
+            FileSessionHandle fileSession = byFileId.get(fileId);
+            connectionId = fileSession == null ? null
+                    : trimToNull(fileSession.connectionId());
+        }
+        if (connectionId == null)
+        {
+            return null;
+        }
+        String normalizedDatabase = normalizeIdentifier(params.database());
+        List<JdbcSchemaObject> snapshot = schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP);
+        if (snapshot.isEmpty())
+        {
+            snapshot = schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.TOP);
+        }
+        return findSymbolInSchema(snapshot, token, normalizedDatabase);
+    }
+
+    private static Map<String, Object> findSymbolInSchema(List<JdbcSchemaObject> snapshot, String rawToken, String normalizedDatabase)
+    {
+        if (isBlank(rawToken))
+        {
+            return null;
+        }
+        // Split on dot BEFORE normalizing so that bracketed segments like [dbo].[t1]
+        // are normalized individually rather than stripping outer brackets from the
+        // whole string (which would produce "dbo].[t1" for "[dbo].[t1]").
+        String[] parts = rawToken.split("\\.", 2);
+        String lookupTable = normalizeIdentifier(parts.length == 2 ? parts[1]
+                : parts[0]);
+        String lookupSchema = parts.length == 2 ? normalizeIdentifier(parts[0])
+                : null;
+        if (isBlank(lookupTable))
+        {
+            return null;
+        }
+        return searchSchemaTree(snapshot, null, null, normalizedDatabase, lookupSchema, lookupTable);
+    }
+
+    private static Map<String, Object> searchSchemaTree(List<JdbcSchemaObject> nodes, String databaseName, String schemaName, String filterDatabase, String filterSchema, String lookupTable)
+    {
+        for (JdbcSchemaObject node : nodes)
+        {
+            String kind = trimToNull(node.kind());
+            if (kind == null)
+            {
+                continue;
+            }
+            String nextDatabase = databaseName;
+            String nextSchema = schemaName;
+            if ("database".equalsIgnoreCase(kind))
+            {
+                nextDatabase = trimToNull(node.name());
+            }
+            else if ("schema".equalsIgnoreCase(kind))
+            {
+                nextSchema = trimToNull(node.name());
+            }
+            else if ("table".equalsIgnoreCase(kind)
+                    || "view".equalsIgnoreCase(kind))
+            {
+                if (filterDatabase != null
+                        && nextDatabase != null
+                        && !filterDatabase.equals(normalizeIdentifier(nextDatabase)))
+                {
+                    continue;
+                }
+                String effectiveSchema = nextSchema;
+                if (effectiveSchema == null
+                        && node.attributes() != null
+                        && node.attributes()
+                                .get("schema") instanceof String attrSchema)
+                {
+                    effectiveSchema = trimToNull(attrSchema);
+                }
+                String tableName = trimToNull(node.name());
+                if (tableName != null
+                        && normalizeIdentifier(tableName).equals(lookupTable))
+                {
+                    if (filterSchema != null
+                            && effectiveSchema != null
+                            && !filterSchema.equals(normalizeIdentifier(effectiveSchema)))
+                    {
+                        continue;
+                    }
+                    String displayName = effectiveSchema != null ? effectiveSchema + "." + tableName
+                            : tableName;
+                    return Map.of("kind", kind.toLowerCase(), "name", displayName, "detail", kind.toUpperCase());
+                }
+            }
+            List<JdbcSchemaObject> children = node.children();
+            if (children != null
+                    && !children.isEmpty())
+            {
+                Map<String, Object> result = searchSchemaTree(children, nextDatabase, nextSchema, filterDatabase, filterSchema, lookupTable);
+                if (result != null)
+                {
+                    return result;
+                }
+            }
+        }
+        return null;
+    }
+
     private Object sqlParseSnapshot(String fileId)
     {
-        if (fileId == null
-                || fileId.isBlank())
+        if (isBlank(fileId))
         {
             return Map.of();
         }
@@ -603,15 +725,13 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     {
         AcquiredConnection acquired = acquireWithStatus(fileId, resolved);
         if (!acquired.createdNew()
-                && currentSessionId != null
-                && !currentSessionId.isBlank())
+                && !isBlank(currentSessionId))
         {
             return currentSessionId;
         }
         String resolvedSessionId = resolved.dialect()
                 .resolveSessionId(acquired.connection());
-        if (resolvedSessionId == null
-                || resolvedSessionId.isBlank())
+        if (isBlank(resolvedSessionId))
         {
             return currentSessionId;
         }
@@ -620,8 +740,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
 
     private void rememberSessionId(String fileId, String sessionId)
     {
-        if (sessionId == null
-                || sessionId.isBlank())
+        if (isBlank(sessionId))
         {
             return;
         }
@@ -699,6 +818,14 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     }
 
     private record AcquiredConnection(Connection connection, boolean createdNew)
+    {
+    }
+
+    private record SqlSymbolAtPositionPayload(String fileId, String text, SymbolCursor cursor, String connectionId, String database)
+    {
+    }
+
+    private record SymbolCursor(int line, int column)
     {
     }
 }

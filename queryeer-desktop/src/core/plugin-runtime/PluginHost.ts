@@ -114,7 +114,8 @@ export class PluginHost {
       settings: this.extensionRegistry.createSettingsRegistry(),
       quickcommand: this.extensionRegistry.createQuickCommandRegistry(),
       outline: this.extensionRegistry.createOutlineRegistry(),
-      editors: this.extensionRegistry.createEditorRegistry()
+      editors: this.extensionRegistry.createEditorRegistry(),
+      contextMenu: this.extensionRegistry.createContextMenuRegistry()
     };
 
     for (const plugin of orderedPlugins) {

@@ -7,7 +7,17 @@ Quick fixes
 Large features in prio
 
 - [ ] Code complete (Phase 2. Detect context)
+    - [X] Tables
     - [ ] Columns
+- [ ] Link actions in text editor
+    - Rule based
+        - Regular context chain with mime type etc.
+        - New context chain added by text editor for token / language / symbol kind. Ie. table
+    - Configurable queries
+        - TOP 500
+        - Describe (sqlserver SP_HELP) (dialectId == 'sqlserver' && symbolKind == 'table')
+        - Count
+        - etc.
 - [ ] Table context menu contribution
     - Static items with when (based on value right clicked)
     - Also contributions that has an items supplier that will be used later on
@@ -16,16 +26,6 @@ Large features in prio
 - [ ] JDBC Tree component Context menu
     - Context menu items default + dialect spcific
     - New query on connection / database
-- [ ] Link actions in text editor
-    - Queryengine specific
-        - Payloadbuilder
-        - Jdbc
-    - Rule based on token type.
-    - Configurable queries based on token type + current file, properties etc.
-        - TOP 500
-        - Describe (sqlserver SP_HELP)
-        - Count
-        - etc.
 - [ ] Graph visualization framework
     - Query plan
     - Procedure call tree

@@ -2,6 +2,7 @@ package com.queryeer.backend.plugin.jdbc.schema;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -89,25 +90,47 @@ public final class JdbcSchemaCrawler
         JdbcSchemaObject dbNode = upsertChild(roots, new JdbcSchemaObject("database:" + db, db, "database", List.of(), Map.of()));
         List<JdbcSchemaObject> dbChildren = mutableChildren(dbNode);
 
-        String inferredSchema = schema;
-        if ((inferredSchema == null
-                || inferredSchema.isBlank())
-                && !fetched.isEmpty())
+        if (schema != null
+                && !schema.isBlank())
         {
-            Object attr = fetched.get(0)
-                    .attributes()
-                    .get("schema");
-            inferredSchema = attr instanceof String s ? s
-                    : null;
+            JdbcSchemaObject schemaNode = upsertChild(dbChildren, new JdbcSchemaObject(db + "." + schema, schema, "schema", List.of(), Map.of("catalog", db)));
+            List<JdbcSchemaObject> schemaChildren = mutableChildren(schemaNode);
+            mergeInto(schemaChildren, fetched);
+            replaceNode(dbChildren, schemaNode, withChildren(schemaNode, schemaChildren));
+            replaceNode(roots, dbNode, withChildren(dbNode, dbChildren));
+            return;
         }
-        String schemaName = inferredSchema == null
-                || inferredSchema.isBlank() ? "public"
-                        : inferredSchema;
-        JdbcSchemaObject schemaNode = upsertChild(dbChildren, new JdbcSchemaObject(db + "." + schemaName, schemaName, "schema", List.of(), Map.of("catalog", db)));
-        List<JdbcSchemaObject> schemaChildren = mutableChildren(schemaNode);
-        mergeInto(schemaChildren, fetched);
-        replaceNode(dbChildren, schemaNode, withChildren(schemaNode, schemaChildren));
+
+        Map<String, List<JdbcSchemaObject>> bySchema = new LinkedHashMap<>();
+        for (JdbcSchemaObject item : fetched)
+        {
+            String schemaName = schemaName(item);
+            bySchema.computeIfAbsent(schemaName, _ -> new ArrayList<>())
+                    .add(item);
+        }
+
+        for (Map.Entry<String, List<JdbcSchemaObject>> entry : bySchema.entrySet())
+        {
+            String schemaName = entry.getKey();
+            JdbcSchemaObject schemaNode = upsertChild(dbChildren, new JdbcSchemaObject(db + "." + schemaName, schemaName, "schema", List.of(), Map.of("catalog", db)));
+            List<JdbcSchemaObject> schemaChildren = mutableChildren(schemaNode);
+            mergeInto(schemaChildren, entry.getValue());
+            replaceNode(dbChildren, schemaNode, withChildren(schemaNode, schemaChildren));
+        }
+
         replaceNode(roots, dbNode, withChildren(dbNode, dbChildren));
+    }
+
+    private static String schemaName(JdbcSchemaObject object)
+    {
+        Object attr = object.attributes()
+                .get("schema");
+        if (attr instanceof String s
+                && !s.isBlank())
+        {
+            return s;
+        }
+        return "public";
     }
 
     private static List<JdbcSchemaObject> mutableChildren(JdbcSchemaObject node)

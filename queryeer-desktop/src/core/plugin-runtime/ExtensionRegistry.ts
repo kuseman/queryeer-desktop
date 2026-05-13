@@ -44,6 +44,7 @@ import type {
   OutlineSymbol,
   SymbolKind
 } from "../../contracts/extensions/OutlineExtension";
+import type { ContextMenuProvider, ContextMenuRegistry } from "../../contracts/extensions/ContextMenuExtension";
 import type { EditorHandle, EditorRegistry, EditorRegistryHost, EditorContentRepository } from "../../contracts/editor/EditorCapability";
 import type { Disposable } from "../../contracts/editor/EditorApi";
 import type { ContextValues } from "../../plugins/core.commands/when-evaluator";
@@ -52,6 +53,7 @@ import { FileRegistry } from "./FileRegistry";
 
 let outlineRegistryInstance: OutlineRegistry | undefined;
 let editorRegistryInstance: EditorRegistryHost | undefined;
+let contextMenuProvidersRef: ContextMenuProvider[] | null = null;
 
 export function getOutlineRegistry(): OutlineRegistry {
   if (!outlineRegistryInstance) {
@@ -69,6 +71,10 @@ export function getEditorRegistryHost(): EditorRegistryHost {
     throw new Error("EditorRegistryHost not initialized");
   }
   return editorRegistryInstance;
+}
+
+export function getContextMenuProviders(): ContextMenuProvider[] {
+  return contextMenuProvidersRef ?? [];
 }
 
 export type ExtensionSnapshot = {
@@ -215,10 +221,12 @@ export class ExtensionRegistry {
   private readonly outlineProviders = new Map<string, OutlineProviderRegistration>();
   private readonly supplementaryOutlineProviders = new Map<string, OutlineProviderRegistration[]>();
   private readonly editorRegistryHost = new EditorRegistryHostImpl();
+  private contextMenuProviders: ContextMenuProvider[] = [];
 
   public constructor(getCommandContextValues?: () => ContextValues) {
     this.commandBus = new CommandBus(() => getCommandContextValues?.() ?? {});
     editorRegistryInstance = this.editorRegistryHost;
+    contextMenuProvidersRef = this.contextMenuProviders;
   }
 
   public createCommandRegistry(): CommandRegistry {
@@ -450,6 +458,26 @@ export class ExtensionRegistry {
 
   public createEditorRegistry(): EditorRegistry {
     return this.editorRegistryHost;
+  }
+
+  public createContextMenuRegistry(): ContextMenuRegistry {
+    return {
+      registerProvider: (provider: ContextMenuProvider) => {
+        const existing = this.contextMenuProviders.findIndex((p) => p.id === provider.id);
+        if (existing !== -1) {
+          console.warn(`Context menu provider '${provider.id}' already registered; overwriting.`);
+          this.contextMenuProviders.splice(existing, 1, provider);
+        } else {
+          this.contextMenuProviders.push(provider);
+        }
+      },
+      unregisterProvider: (id: string) => {
+        const idx = this.contextMenuProviders.findIndex((p) => p.id === id);
+        if (idx !== -1) {
+          this.contextMenuProviders.splice(idx, 1);
+        }
+      }
+    };
   }
 
   public createDialogRegistry(): DialogRegistry {
