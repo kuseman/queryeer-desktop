@@ -29,9 +29,11 @@ import com.queryeer.backend.api.QueryPublisher;
 import com.queryeer.backend.api.SecuritySessionClosedException;
 import com.queryeer.backend.api.parse.IncrementalParseFunction;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
+import com.queryeer.backend.plugin.jdbc.schema.JdbcConnectionHealth;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaActionHandler;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawlCoordinator;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaNavigator;
+import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaRouter;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaStore;
 import com.queryeer.backend.queryengine.jdbc.CancellableJdbcQueryExecutor;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
@@ -106,6 +108,8 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             JdbcSchemaStore schemaStore,
             JdbcSchemaCrawlCoordinator crawlCoordinator,
             PayloadMapper payloadMapper,
+            JdbcSchemaRouter router,
+            JdbcConnectionHealth connectionHealth,
             IncrementalParseSessionService parseSessions,
             IncrementalParseFunction parseFunction)
     //@formatter:on
@@ -117,8 +121,8 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         this.payloadMapper = payloadMapper;
         this.parseSessions = parseSessions;
         this.parseFunction = parseFunction;
-        this.schemaNavigator = new JdbcSchemaNavigator(connections, schemaStore);
-        this.schemaActions = new JdbcSchemaActionHandler(payloadMapper, connections, schemaStore, crawlCoordinator);
+        this.schemaNavigator = new JdbcSchemaNavigator(connections, schemaStore, router, connectionHealth);
+        this.schemaActions = new JdbcSchemaActionHandler(payloadMapper, connections, router, schemaStore, crawlCoordinator, connectionHealth);
     }
 
     @Override
@@ -210,7 +214,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             }
             else
             {
-                java.util.Map<String, Object> details = new java.util.LinkedHashMap<>();
+                Map<String, Object> details = new LinkedHashMap<>();
                 if (sessionId != null)
                 {
                     details.put("sessionId", sessionId);
@@ -364,7 +368,15 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         {
             return null;
         }
-        return schemaNavigator.findSymbol(connectionId, token, params.database());
+        String selectedDatabase = trimToNull(params.database());
+        try
+        {
+            usageListener.onUsage(connectionId, selectedDatabase);
+        }
+        catch (RuntimeException ignored)
+        {
+        }
+        return schemaNavigator.findSymbol(connectionId, token, selectedDatabase);
     }
 
     private Object sqlParseSnapshot(String fileId)
@@ -391,9 +403,9 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private static final class TransportJdbcQueryEventListener implements JdbcQueryEventListener
     {
         private final QueryPublisher publisher;
-        private final java.util.Map<String, String> metadata;
+        private final Map<String, String> metadata;
 
-        private TransportJdbcQueryEventListener(QueryPublisher publisher, java.util.Map<String, String> metadata)
+        private TransportJdbcQueryEventListener(QueryPublisher publisher, Map<String, String> metadata)
         {
             this.publisher = publisher;
             this.metadata = metadata;

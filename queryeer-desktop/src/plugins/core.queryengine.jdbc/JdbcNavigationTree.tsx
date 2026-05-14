@@ -25,15 +25,36 @@ export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDa
     void store.expandNode(rootNodeId, { silent: true });
   }, [store, activeFileConnectionId]);
 
-  // Auto-expand to active file database when linkToActiveFile is on
+  // Auto-expand databases_container then target database
   useEffect(() => {
     if (!store.getState().linkToActiveFile || !activeFileConnectionId || !activeFileDatabase) return;
     const rootNode = store.getNode(`${activeFileConnectionId}::__root__`);
     if (!rootNode?.isLoaded) return;
-    for (const dbNodeId of rootNode.childIds) {
-      const dbNode = store.getNode(dbNodeId);
-      if (dbNode?.name === activeFileDatabase) {
-        void store.expandNode(dbNodeId, { silent: true });
+
+    const databasesNode = rootNode.childIds
+      .map((id) => store.getNode(id))
+      .find((n) => n?.kind === "databases_container");
+    if (!databasesNode) return;
+
+    if (!databasesNode.isLoaded) {
+      void store.expandNode(databasesNode.id, { silent: true }).then(() => {
+        const refreshed = store.getNode(databasesNode.id);
+        if (!refreshed?.isLoaded) return;
+        for (const dbId of refreshed.childIds) {
+          const db = store.getNode(dbId);
+          if (db?.name === activeFileDatabase) {
+            void store.expandNode(dbId, { silent: true });
+            break;
+          }
+        }
+      });
+      return;
+    }
+
+    for (const dbId of databasesNode.childIds) {
+      const db = store.getNode(dbId);
+      if (db?.name === activeFileDatabase) {
+        void store.expandNode(dbId, { silent: true });
         break;
       }
     }
@@ -43,20 +64,14 @@ export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDa
   useEffect(() => {
     const service = getBackendStatusService();
     return service.subscribe((status) => {
-      if (status.state === "healthy" && prevBackendStateRef.current !== "healthy" && store.getState().linkToActiveFile && activeFileConnectionId) {
+      if (
+        status.state === "healthy"
+        && prevBackendStateRef.current !== "healthy"
+        && store.getState().linkToActiveFile
+        && activeFileConnectionId
+      ) {
         const rootNodeId = `${activeFileConnectionId}::__root__`;
-        void store.expandNode(rootNodeId, { silent: true }).then(() => {
-          if (!activeFileDatabase) return;
-          const rootNode = store.getNode(rootNodeId);
-          if (!rootNode?.isLoaded) return;
-          for (const dbNodeId of rootNode.childIds) {
-            const dbNode = store.getNode(dbNodeId);
-            if (dbNode?.name === activeFileDatabase) {
-              void store.expandNode(dbNodeId, { silent: true });
-              break;
-            }
-          }
-        });
+        void store.expandNode(rootNodeId, { silent: true });
       }
       prevBackendStateRef.current = status.state;
     });
@@ -113,8 +128,10 @@ function TreeNodeRow({ nodeId, store, depth, dialectId, onNodeClick }: NodeRowPr
   const node = store.getNode(nodeId);
   if (!node) return null;
 
-  const hasChildren = node.childIds.length > 0 || (!node.isLoaded && node.kind !== "column" && node.kind !== "primary_key" && node.kind !== "foreign_key" && node.kind !== "index");
-  const chevron = hasChildren ? (node.isExpanded ? "▼" : "▶") : "  ";
+  // Property nodes are always leaf. Other nodes are expandable only if they
+  // have children or may have children (not yet loaded, or loaded with children).
+  const isExpandable = node.nodeType !== "property" && (node.isLoading || !node.isLoaded || node.childIds.length > 0);
+  const chevron = isExpandable ? (node.isExpanded ? "▼" : "▶") : "  ";
   const icon = getNodeIcon(node.kind, node.attributes, dialectId);
   const label = formatNodeLabel(node);
 
@@ -124,15 +141,19 @@ function TreeNodeRow({ nodeId, store, depth, dialectId, onNodeClick }: NodeRowPr
         data-testid="jdbc-tree-node"
         className={`jdbc-nav-node${node.isLoading ? " is-loading" : ""}${node.loadError ? " has-error" : ""}`}
         style={{ paddingLeft: `${depth * 16 + 4}px` }}
-        onClick={() => onNodeClick(nodeId)}
+        onClick={() => isExpandable && onNodeClick(nodeId)}
         role="treeitem"
         aria-expanded={node.isExpanded}
       >
         <span className="jdbc-nav-node-chevron">{chevron}</span>
         <span className="jdbc-nav-node-icon">{icon}</span>
-        <span className="jdbc-nav-node-name">{label}</span>
+        <span className="jdbc-nav-node-name">
+          <span className={`jdbc-nav-node-label jdbc-nav-label-${node.nodeType}`}>{label}</span>
+        </span>
         {node.isLoading && (
-          <span data-testid="jdbc-tree-loading" className="jdbc-nav-node-loading">…</span>
+          <span data-testid="jdbc-tree-loading" className="jdbc-nav-node-loading">
+            <span className="jdbc-nav-node-spinner" />
+          </span>
         )}
         {node.loadError && (
           <span className="jdbc-nav-node-error" title={node.loadError}>⚠</span>
@@ -153,9 +174,22 @@ function TreeNodeRow({ nodeId, store, depth, dialectId, onNodeClick }: NodeRowPr
 }
 
 function formatNodeLabel(node: JdbcTreeNode): string {
+  if (node.nodeType === "object" && node.fullName && node.fullName !== node.name) {
+    return node.fullName;
+  }
   if (node.kind !== "column") {
     return node.name;
   }
+  // Inline constraint indicators
+  const icons: string[] = [];
+  if (node.attributes.primaryKey) icons.push("🔑");
+  if (node.attributes.foreignKey) icons.push("⇒");
+  const iconStr = icons.length > 0 ? ` ${icons.join("")}` : "";
+  // FK reference annotation:  → schema.table(column)
+  const fkRef =
+    node.attributes.foreignKey && typeof node.attributes.referencesTable === "string"
+      ? `\u00a0→\u00a0${node.attributes.referencesTable}${typeof node.attributes.referencesColumn === "string" ? `(${node.attributes.referencesColumn})` : ""}`
+      : "";
   const type = typeof node.attributes.type === "string" ? node.attributes.type : "unknown";
   const size = typeof node.attributes.size === "number" ? node.attributes.size : undefined;
   const precision = typeof node.attributes.precision === "number" ? node.attributes.precision : undefined;
@@ -163,7 +197,7 @@ function formatNodeLabel(node: JdbcTreeNode): string {
   const qualifiedType = formatQualifiedType(type, size, precision, scale);
   const nullableRaw = typeof node.attributes.nullable === "string" ? node.attributes.nullable.trim().toLowerCase() : "";
   const nullable = nullableRaw === "no" || nullableRaw === "false" || nullableRaw === "not null" ? "not null" : "null";
-  return `${node.name} ${qualifiedType} ${nullable}`;
+  return `${node.name}${iconStr}${fkRef} ${qualifiedType} ${nullable}`;
 }
 
 function formatQualifiedType(type: string, size?: number, precision?: number, scale?: number): string {

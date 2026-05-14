@@ -12,9 +12,11 @@ import com.queryeer.backend.api.PluginDescriptor;
 import com.queryeer.backend.api.parse.IncrementalParseFunction;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 import com.queryeer.backend.api.parse.ParseSessionSnapshot;
+import com.queryeer.backend.plugin.jdbc.schema.JdbcConnectionHealth;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawlCoordinator;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawlPolicy;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawler;
+import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaRouter;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaStore;
 import com.queryeer.backend.queryengine.jdbc.DefaultJdbcDialectRegistry;
 import com.queryeer.backend.queryengine.jdbc.DefaultJdbcRuntimeService;
@@ -63,8 +65,11 @@ public final class JdbcBackendPlugin implements BackendPlugin
         context.services()
                 .register(JdbcRuntimeService.class, new DefaultJdbcRuntimeService(registry, connections));
         JdbcSchemaStore schemaStore = new JdbcSchemaStore(resolveSchemaCacheDir(context.config()));
-        JdbcSchemaCrawler schemaCrawler = new JdbcSchemaCrawler(schemaStore);
-        JdbcSchemaCrawlCoordinator crawlCoordinator = new JdbcSchemaCrawlCoordinator(connections, schemaCrawler, schemaStore, new JdbcSchemaCrawlPolicy(), context.logger());
+        DefaultJdbcSchemaResolver defaultResolver = new DefaultJdbcSchemaResolver();
+        JdbcSchemaRouter router = new JdbcSchemaRouter(defaultResolver);
+        JdbcConnectionHealth connectionHealth = new JdbcConnectionHealth();
+        JdbcSchemaCrawler schemaCrawler = new JdbcSchemaCrawler(schemaStore, router);
+        JdbcSchemaCrawlCoordinator crawlCoordinator = new JdbcSchemaCrawlCoordinator(connections, schemaCrawler, schemaStore, new JdbcSchemaCrawlPolicy(), context.logger(), connectionHealth);
         long idleTimeoutMs = parseDurationMs(context.config(), IDLE_TIMEOUT_KEY, DEFAULT_IDLE_TIMEOUT_MS);
         long reaperIntervalMs = parseDurationMs(context.config(), REAPER_INTERVAL_KEY, Math.max(1_000L, Math.min(idleTimeoutMs, TimeUnit.MINUTES.toMillis(5))));
         long schemaCrawlIntervalMs = parseDurationMs(context.config(), SCHEMA_CRAWL_INTERVAL_KEY, TimeUnit.MINUTES.toMillis(5));
@@ -74,8 +79,8 @@ public final class JdbcBackendPlugin implements BackendPlugin
         {
             parseSessions = noOpParseSessions();
         }
-        JdbcQueryEngineProvider provider = new JdbcQueryEngineProvider(registry, connections, idleTimeoutMs, crawlCoordinator::onUsage, schemaStore, crawlCoordinator, context.payloadMapper(),
-                parseSessions, new TreeSitterSqlParseFunction());
+        JdbcQueryEngineProvider provider = new JdbcQueryEngineProvider(registry, connections, idleTimeoutMs, crawlCoordinator::onUsage, schemaStore, crawlCoordinator, context.payloadMapper(), router,
+                connectionHealth, parseSessions, new TreeSitterSqlParseFunction());
 
         context.scheduler()
                 .schedule("jdbc.file-session-reaper", () -> startReaperThread(provider, reaperIntervalMs));

@@ -1,6 +1,7 @@
 package com.queryeer.backend.plugin.jdbc;
 
 import static com.queryeer.backend.api.PayloadUtils.trimToNull;
+import static com.queryeer.backend.queryengine.jdbc.JdbcConnection.KEY_USERNAME;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -86,6 +87,11 @@ public final class DefaultJdbcConnections implements JdbcConnections
         {
             props.put(KEY_PASSWORD, config.materializeSecrets(stored.password));
         }
+        if (stored.username != null)
+        {
+            props.put(KEY_USERNAME, stored.username);
+
+        }
         // Seal it
         props = Collections.unmodifiableMap(props);
 
@@ -118,7 +124,7 @@ public final class DefaultJdbcConnections implements JdbcConnections
     }
 
     /** Represents a connection on disk, raw information. */
-    private record StoredConnection(String connectionId, String title, String dialectId, Boolean enabled, String url, Object password, Map<String, Object> properties, long version)
+    private record StoredConnection(String connectionId, String title, String dialectId, Boolean enabled, String url, String username, Object password, Map<String, Object> properties, long version)
     {
         @SuppressWarnings("unused")
         StoredConnection

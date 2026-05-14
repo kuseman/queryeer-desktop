@@ -45,6 +45,7 @@ export function JdbcNavigationView({ context }: Props) {
     <div className="jdbc-nav-view">
       {activeFileId ? (
         <JdbcConnectionSelector
+          key={activeFileId}
           fileId={activeFileId}
           fileMediator={context.fileMediator}
           filesRegistry={context.files}

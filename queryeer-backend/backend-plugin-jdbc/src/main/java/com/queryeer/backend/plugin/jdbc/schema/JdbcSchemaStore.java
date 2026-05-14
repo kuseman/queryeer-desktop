@@ -10,6 +10,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -587,8 +588,8 @@ public final class JdbcSchemaStore
 
     private List<JdbcSchemaObject> mapRows(List<Row> rows)
     {
-        Map<String, List<JdbcSchemaObject>> byParent = new java.util.LinkedHashMap<>();
-        Map<String, JdbcSchemaObject> byId = new java.util.LinkedHashMap<>();
+        Map<String, List<JdbcSchemaObject>> byParent = new LinkedHashMap<>();
+        Map<String, JdbcSchemaObject> byId = new LinkedHashMap<>();
         for (Row row : rows)
         {
             Map<String, Object> attrs = parseAttributes(row.attributesJson());

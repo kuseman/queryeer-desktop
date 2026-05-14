@@ -1,5 +1,7 @@
 package com.queryeer.backend.plugin.jdbc;
 
+import java.util.Iterator;
+import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 
 import com.queryeer.backend.api.LoggerService;
@@ -25,7 +27,7 @@ final class ServiceLoaderJdbcDialectDiscovery implements JdbcDialectDiscovery
         {
             ServiceLoader<JdbcDialectContributor> contributors = ServiceLoader.load(JdbcDialectContributor.class, dialectClassLoader);
 
-            java.util.Iterator<JdbcDialectContributor> it = contributors.iterator();
+            Iterator<JdbcDialectContributor> it = contributors.iterator();
             while (true)
             {
                 JdbcDialectContributor contributor;
@@ -37,7 +39,7 @@ final class ServiceLoaderJdbcDialectDiscovery implements JdbcDialectDiscovery
                     }
                     contributor = it.next();
                 }
-                catch (java.util.ServiceConfigurationError e)
+                catch (ServiceConfigurationError e)
                 {
                     logger.warn("Failed to load JDBC dialect contributor (skipping): " + e.getMessage());
                     continue;

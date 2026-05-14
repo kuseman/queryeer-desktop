@@ -1,7 +1,6 @@
 package com.queryeer.backend.plugin.jdbc.schema;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,73 +12,39 @@ import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaTarget;
 public final class JdbcSchemaCrawler
 {
     private final JdbcSchemaStore store;
+    private final JdbcSchemaRouter router;
 
-    public JdbcSchemaCrawler(JdbcSchemaStore store)
+    public JdbcSchemaCrawler(JdbcSchemaStore store, JdbcSchemaRouter router)
     {
         this.store = store;
+        this.router = router;
     }
 
     void crawl(JdbcConnection connection, JdbcSchemaCrawlScope scope, JdbcSchemaTarget target)
     {
-        if (scope == JdbcSchemaCrawlScope.DEEP
-                && target != null
-                && target.database() != null
-                && !target.database()
-                        .isBlank())
+        if (scope == JdbcSchemaCrawlScope.DEEP)
         {
-            List<JdbcSchemaObject> fetched = fetchTables(connection, target);
+            // Skip if no database target — would only resolve to useless folder shells
+            if (target == null
+                    || target.database() == null
+                    || target.database()
+                            .isBlank())
+            {
+                return;
+            }
+            // Pass null target to router — target.matches rejects rows when schema is null,
+            // which would filter out ALL tables. mergeTablesScope handles grouping by schema.
+            List<JdbcSchemaObject> fetched = router.resolve(connection, "tables_folder", target.schema() != null ? target
+                    : null);
             List<JdbcSchemaObject> current = new ArrayList<>(store.latestSnapshot(connection.connectionId(), JdbcSchemaCrawlScope.DEEP));
             mergeTablesScope(current, target.database(), target.schema(), fetched);
             store.persistSnapshot(connection.connectionId(), JdbcSchemaCrawlScope.DEEP, current);
             return;
         }
 
-        Map<String, Object> options = new HashMap<>();
-        options.put("scope", scope.name()
-                .toLowerCase());
-        if (target != null)
-        {
-            Map<String, Object> targetOptions = new HashMap<>();
-            if (target.database() != null
-                    && !target.database()
-                            .isBlank())
-            {
-                targetOptions.put("database", target.database());
-            }
-            if (target.schema() != null
-                    && !target.schema()
-                            .isBlank())
-            {
-                targetOptions.put("schema", target.schema());
-            }
-            if (!targetOptions.isEmpty())
-            {
-                options.put("target", targetOptions);
-            }
-        }
-        List<JdbcSchemaObject> objects = connection.dialect()
-                .schemaResolver()
-                .resolveSchema(connection, options);
+        List<JdbcSchemaObject> objects = router.resolve(connection, "databases_container", target);
 
         store.persistSnapshot(connection.connectionId(), scope, objects);
-    }
-
-    private static List<JdbcSchemaObject> fetchTables(JdbcConnection connection, JdbcSchemaTarget target)
-    {
-        Map<String, Object> options = new HashMap<>();
-        options.put("scope", "tables");
-        Map<String, Object> targetOptions = new HashMap<>();
-        targetOptions.put("database", target.database());
-        if (target.schema() != null
-                && !target.schema()
-                        .isBlank())
-        {
-            targetOptions.put("schema", target.schema());
-        }
-        options.put("target", targetOptions);
-        return connection.dialect()
-                .schemaResolver()
-                .resolveSchema(connection, options);
     }
 
     private static void mergeTablesScope(List<JdbcSchemaObject> roots, String database, String schema, List<JdbcSchemaObject> fetched)

@@ -15,11 +15,15 @@ public final class JdbcSchemaNavigator
 {
     private final DefaultJdbcConnections connections;
     private final JdbcSchemaStore schemaStore;
+    private final JdbcSchemaRouter router;
+    private final JdbcConnectionHealth connectionHealth;
 
-    public JdbcSchemaNavigator(DefaultJdbcConnections connections, JdbcSchemaStore schemaStore)
+    public JdbcSchemaNavigator(DefaultJdbcConnections connections, JdbcSchemaStore schemaStore, JdbcSchemaRouter router, JdbcConnectionHealth connectionHealth)
     {
         this.connections = connections;
         this.schemaStore = schemaStore;
+        this.router = router;
+        this.connectionHealth = connectionHealth;
     }
 
     public List<String> tableNamesForCompletion(String connectionId, String selectedDatabase)
@@ -38,25 +42,59 @@ public final class JdbcSchemaNavigator
             return null;
         }
         String normalizedDatabase = normalizeIdentifier(selectedDatabase);
+        // Try DEEP cache first
         List<JdbcSchemaObject> snapshot = loadCachedSnapshot(connectionId);
-        return findSymbolInSchema(snapshot, rawToken, normalizedDatabase);
+        Map<String, Object> result = findSymbolInSchema(snapshot, rawToken, normalizedDatabase);
+        if (result != null)
+        {
+            return result;
+        }
+        // Skip live fallback for known-broken connections
+        if (connectionId == null
+                || !connectionHealth.isHealthy(connectionId))
+        {
+            return null;
+        }
+        try
+        {
+            JdbcConnection resolved = connections.resolve(connectionId);
+            // Pass null target — target.matches rejects rows when schema is null
+            List<JdbcSchemaObject> liveSnapshot = router.resolve(resolved, "tables_folder", null);
+            return findSymbolInSchema(liveSnapshot, rawToken, normalizedDatabase);
+        }
+        catch (RuntimeException e)
+        {
+            return null;
+        }
     }
 
     private List<JdbcSchemaObject> loadSnapshotForLookup(String connectionId, String selectedDatabase, String normalizedSelectedDatabase)
     {
-        List<JdbcSchemaObject> snapshot = loadCachedSnapshot(connectionId);
-        if (!snapshot.isEmpty())
+        // Use DEEP cache first (fast, no live connection). Only use it if it
+        // actually contains table data — broken crawl data with folder shells only
+        // (all rows filtered by null-schema target.matches) is useless for completion.
+        List<JdbcSchemaObject> snapshot = schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP);
+        if (!snapshot.isEmpty()
+                && containsTableData(snapshot))
         {
             return snapshot;
         }
 
+        // Skip live fallback for known-broken connections
+        if (!connectionHealth.isHealthy(connectionId))
+        {
+            return List.of();
+        }
         try
         {
             JdbcConnection resolved = connections.resolve(connectionId);
-            return resolved.dialect()
-                    .schemaResolver()
-                    .resolveSchema(resolved, normalizedSelectedDatabase == null ? Map.of("scope", "tables")
-                            : Map.of("scope", "tables", "target", Map.of("database", selectedDatabase)));
+            List<JdbcSchemaObject> result = new ArrayList<>();
+            // Pass null target — target.matches rejects rows when schema is null,
+            // which would filter out ALL tables. Database filtering is handled by
+            // the caller (collectTableNames) via normalizedSelectedDatabase.
+            result.addAll(router.resolve(resolved, "tables_folder", null));
+            result.addAll(router.resolve(resolved, "views_folder", null));
+            return result;
         }
         catch (RuntimeException e)
         {
@@ -64,14 +102,28 @@ public final class JdbcSchemaNavigator
         }
     }
 
+    private static boolean containsTableData(List<JdbcSchemaObject> nodes)
+    {
+        for (JdbcSchemaObject node : nodes)
+        {
+            String kind = node.kind();
+            if ("table".equals(kind)
+                    || "view".equals(kind))
+            {
+                return true;
+            }
+            if (node.children() != null
+                    && containsTableData(node.children()))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private List<JdbcSchemaObject> loadCachedSnapshot(String connectionId)
     {
-        List<JdbcSchemaObject> snapshot = schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP);
-        if (snapshot.isEmpty())
-        {
-            snapshot = schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.TOP);
-        }
-        return snapshot;
+        return schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP);
     }
 
     private static Map<String, Object> findSymbolInSchema(List<JdbcSchemaObject> snapshot, String rawToken, String normalizedDatabase)
@@ -99,7 +151,13 @@ public final class JdbcSchemaNavigator
             }
 
             NodePath nextPath = path;
-            if ("database".equalsIgnoreCase(kind))
+            // CONTAINER/FOLDER nodes are transparent — recurse without path change
+            if (kind.endsWith("_container")
+                    || kind.endsWith("_folder"))
+            {
+                // fall through to children recursion below
+            }
+            else if ("database".equalsIgnoreCase(kind))
             {
                 nextPath = path.withDatabase(trimToNull(node.name()));
             }
@@ -154,15 +212,23 @@ public final class JdbcSchemaNavigator
         {
             String kind = trimToNull(node.kind());
             NodePath nextPath = path;
-            if ("database".equalsIgnoreCase(kind))
+
+            // CONTAINER/FOLDER nodes are transparent — recurse without path change
+            if (kind.endsWith("_container")
+                    || kind.endsWith("_folder"))
+            {
+                // fall through to children recursion
+            }
+            else if ("database".equalsIgnoreCase(kind))
             {
                 nextPath = path.withDatabase(trimToNull(node.name()));
             }
-            if ("schema".equalsIgnoreCase(kind))
+            else if ("schema".equalsIgnoreCase(kind))
             {
                 nextPath = nextPath.withSchema(trimToNull(node.name()));
             }
-            if ("table".equalsIgnoreCase(kind))
+            if ("table".equalsIgnoreCase(kind)
+                    || "view".equalsIgnoreCase(kind))
             {
                 String normalizedNodeDatabase = normalizeIdentifier(nextPath.database());
                 if (normalizedSelectedDatabase != null

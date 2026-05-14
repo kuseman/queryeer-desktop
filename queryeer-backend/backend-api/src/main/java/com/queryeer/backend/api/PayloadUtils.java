@@ -47,6 +47,15 @@ public final class PayloadUtils
                 || string.isBlank();
     }
 
+    public static Integer toNullableInteger(Object value)
+    {
+        if (value instanceof Number n)
+        {
+            return n.intValue();
+        }
+        return null;
+    }
+
     public static <T> T getIfNull(T value, T defaultValue)
     {
         return value != null ? value

@@ -12,10 +12,16 @@ export type JdbcTreeNodeContributor = {
 
 const DEFAULT_ICONS: Record<string, string> = {
   connection: "⊙",
+  databases_container: "🗄",
   database: "⊞",
+  schemas_container: "📂",
   schema: "○",
+  tables_folder: "▤",
+  views_folder: "◫",
+  procedures_folder: "⚙",
   table: "▤",
   view: "◫",
+  procedure: "⚙",
   column: "▸",
   primary_key: "🔑",
   foreign_key: "⇒",
