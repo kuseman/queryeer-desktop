@@ -10,16 +10,24 @@ Large features in prio
     - [X] Tables
     - [ ] Columns
 - [ ] JDBC Tree navigation fixes
-    - All tables without schema below database should be a meta level above
-      with views/tables/procedures etc.
-    - Context menu items 
+    - [X] All tables without schema below database should be a meta level above
+          with views/tables/procedures etc.
+    - Context menu items contributor per kind
         - New query on connection / database
 - [ ] Graph visualization framework
     - Query plan
     - Procedure call tree
-    - Schema
+    - Schema overview
+    - Vertices / edges
+    - Properties panel
+    - Hoover tooltip support
+- [ ] SQLServer query plan
+    - Parse XML
+    - Convert to a common plan model
+    - Actions in toolbar by dialect (Estimated / Actual)
 - [ ] Hoover table / etc.
     - Show popup with schema
+    - Settings turn on/off
 - [ ] Action in JDBC navigation
     - Rulebased actions based on node type etc
         - SQLServer + Procedure => sp_helptext
@@ -27,11 +35,16 @@ Large features in prio
 - [ ] About dialog
     - Queryeer changelog
     - Modules changelog (Payloadbuilder)
-- [ ] Backend builtin modules should be discovered normally but with targer/classes as source class path etc.
+- [ ] Backend builtin modules should be discovered normally but with target/classes as source class path etc.
+   - [ ] Runtime services plugins. Put on top of class loader chain. Load libraries etc. See queryeer-backend\SHARED_RUNTIME_PLUGINS.md
 - [ ] Modularize
     - Make sure all contributions have contracts and all API:s are located in a separate project
       that might end up on npmjs one day
 - [ ] Create a distribution flow. Github etc.
+    - [ ] jlink
+    - [ ] matrix releases
+    - [ ] change log (app bundled)
+    - [ ] change log (gitgub release)
 - [X] Table Query Actions
     - User created menu item contributions that creates queries based on table selections 
 - [X] Table context menu contribution

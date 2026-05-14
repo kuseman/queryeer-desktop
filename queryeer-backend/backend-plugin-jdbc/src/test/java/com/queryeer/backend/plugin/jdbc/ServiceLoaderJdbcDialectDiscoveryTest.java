@@ -23,7 +23,6 @@ import com.queryeer.backend.queryengine.jdbc.JdbcDialectMetadata;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryExecutor;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryResult;
-import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
 
 class ServiceLoaderJdbcDialectDiscoveryTest
 {
@@ -75,12 +74,6 @@ class ServiceLoaderJdbcDialectDiscoveryTest
                 public JdbcQueryExecutor queryExecutor()
                 {
                     return (_, _) -> new JdbcQueryResult(0, java.util.Map.of());
-                }
-
-                @Override
-                public JdbcSchemaResolver schemaResolver()
-                {
-                    return (_, _) -> java.util.List.of();
                 }
 
                 @Override

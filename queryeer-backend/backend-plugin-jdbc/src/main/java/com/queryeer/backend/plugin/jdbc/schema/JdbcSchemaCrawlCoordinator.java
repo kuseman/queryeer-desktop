@@ -2,6 +2,8 @@ package com.queryeer.backend.plugin.jdbc.schema;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 import com.queryeer.backend.api.LoggerService;
 import com.queryeer.backend.api.SecuritySessionClosedException;
@@ -17,14 +19,31 @@ public final class JdbcSchemaCrawlCoordinator
     private final JdbcSchemaStore store;
     private final JdbcSchemaCrawlPolicy policy;
     private final LoggerService logger;
+    private final JdbcConnectionHealth connectionHealth;
+    private final Executor usageExecutor;
 
-    public JdbcSchemaCrawlCoordinator(DefaultJdbcConnections connections, JdbcSchemaCrawler crawler, JdbcSchemaStore store, JdbcSchemaCrawlPolicy policy, LoggerService logger)
+    public JdbcSchemaCrawlCoordinator(DefaultJdbcConnections connections, JdbcSchemaCrawler crawler, JdbcSchemaStore store, JdbcSchemaCrawlPolicy policy, LoggerService logger,
+            JdbcConnectionHealth connectionHealth)
+    {
+        this(connections, crawler, store, policy, logger, connectionHealth, Executors.newSingleThreadExecutor(r ->
+        {
+            Thread t = new Thread(r, "jdbc-usage-recorder");
+            t.setDaemon(true);
+            return t;
+        }));
+    }
+
+    // Package-private for tests — allows injecting a synchronous executor
+    JdbcSchemaCrawlCoordinator(DefaultJdbcConnections connections, JdbcSchemaCrawler crawler, JdbcSchemaStore store, JdbcSchemaCrawlPolicy policy, LoggerService logger,
+            JdbcConnectionHealth connectionHealth, Executor usageExecutor)
     {
         this.connections = connections;
         this.crawler = crawler;
         this.store = store;
         this.policy = policy;
         this.logger = logger;
+        this.connectionHealth = connectionHealth;
+        this.usageExecutor = usageExecutor;
     }
 
     public void start(long intervalMs)
@@ -48,8 +67,19 @@ public final class JdbcSchemaCrawlCoordinator
         {
             return;
         }
-        store.recordUsage(connectionId, JdbcSchemaCrawlScope.TOP, Instant.now());
-        store.recordUsage(connectionId, JdbcSchemaCrawlScope.DEEP, database, Instant.now());
+        String cid = connectionId;
+        String db = database;
+        usageExecutor.execute(() ->
+        {
+            try
+            {
+                store.recordUsage(cid, JdbcSchemaCrawlScope.TOP, Instant.now());
+                store.recordUsage(cid, JdbcSchemaCrawlScope.DEEP, db, Instant.now());
+            }
+            catch (RuntimeException ignored)
+            {
+            }
+        });
     }
 
     public List<JdbcSchemaObject> refreshNow(String connectionId, JdbcSchemaCrawlScope scope, JdbcSchemaTarget target)
@@ -101,6 +131,12 @@ public final class JdbcSchemaCrawlCoordinator
     {
         try
         {
+            // Skip known-broken connections for background crawl operations
+            if (!force
+                    && !connectionHealth.isHealthy(connectionId))
+            {
+                return;
+            }
             JdbcConnection connection = connections.resolve(connectionId);
             crawlOne(connection, scope, force, target, now);
         }
@@ -127,10 +163,12 @@ public final class JdbcSchemaCrawlCoordinator
         {
             crawler.crawl(connection, scope, target);
             success = true;
+            connectionHealth.onSuccess(connectionId);
         }
         catch (RuntimeException e)
         {
             logger.warn("Schema crawl failed for connection " + connectionId + ": " + e.getMessage());
+            connectionHealth.onFailure(connectionId);
         }
 
         JdbcSchemaStore.CrawlState nextState = success ? state.onSuccess()

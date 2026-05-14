@@ -4,7 +4,8 @@ import { getConfiguredJdbcConnections } from "./jdbc-settings";
 import type {
   JdbcConnectionTreeEntry,
   JdbcSchemaObject,
-  JdbcTreeNode
+  JdbcTreeNode,
+  NodeType
 } from "./jdbc-navigation-types";
 
 type JdbcNavigationStoreState = {
@@ -44,6 +45,7 @@ export class JdbcNavigationStore {
           id: rootNodeId,
           connectionId: conn.connectionId,
           kind: "connection",
+          nodeType: "structural",
           name: conn.title ?? "Untitled connection",
           attributes: {},
           isExpanded: false,
@@ -55,7 +57,6 @@ export class JdbcNavigationStore {
       }
     }
 
-    // Remove root nodes for connections that are no longer configured
     const activeRootIds = new Set(newEntries.map((e) => e.rootNodeId));
     for (const [id, node] of newNodeMap) {
       if (node.kind === "connection" && !activeRootIds.has(id)) {
@@ -116,7 +117,6 @@ export class JdbcNavigationStore {
     const node = this.state.nodeMap.get(nodeId);
     if (!node) return;
     const newNodeMap = new Map(this.state.nodeMap);
-    // Remove old children
     this.removeChildSubtrees(nodeId, newNodeMap);
     newNodeMap.set(nodeId, {
       ...newNodeMap.get(nodeId)!,
@@ -156,54 +156,16 @@ export class JdbcNavigationStore {
 
   private async fetchChildren(node: JdbcTreeNode, options?: { silent?: boolean }): Promise<JdbcSchemaObject[]> {
     const service = getQueryEngineService();
-    if (node.kind === "connection") {
-      return (await service.invoke({
-        engineId: "jdbc",
-        action: "jdbc.schema.fetch",
-        payload: {
-          connectionId: node.connectionId,
-          scope: "top"
-        }
-      }, { silent: options?.silent })) as JdbcSchemaObject[];
-    }
-    if (node.kind === "schema") {
-      return (await service.invoke({
-        engineId: "jdbc",
-        action: "jdbc.schema.fetch",
-        payload: {
-          connectionId: node.connectionId,
-          scope: "tables",
-          target: { database: node.attributes.catalog as string, schema: node.name }
-        }
-      }, { silent: options?.silent })) as JdbcSchemaObject[];
-    }
-    if (node.kind === "database") {
-      return (await service.invoke({
-        engineId: "jdbc",
-        action: "jdbc.schema.fetch",
-        payload: {
-          connectionId: node.connectionId,
-          scope: "tables",
-          target: { database: node.name }
-        }
-      }, { silent: options?.silent })) as JdbcSchemaObject[];
-    }
-    if (node.kind === "table" || node.kind === "view") {
-      return (await service.invoke({
-        engineId: "jdbc",
-        action: "jdbc.schema.fetch",
-        payload: {
-          connectionId: node.connectionId,
-          scope: "columns",
-          target: {
-            database: node.attributes.catalog as string,
-            schema: node.attributes.schema as string,
-            table: node.name
-          }
-        }
-      }, { silent: options?.silent })) as JdbcSchemaObject[];
-    }
-    return [];
+    const target = buildTarget(node);
+    return (await service.invoke({
+      engineId: "jdbc",
+      action: "jdbc.schema.fetch",
+      payload: {
+        connectionId: node.connectionId,
+        parentKind: node.kind,
+        target: target ?? undefined
+      }
+    }, { silent: options?.silent })) as JdbcSchemaObject[];
   }
 
   private materializeNodes(
@@ -214,11 +176,9 @@ export class JdbcNavigationStore {
     const ids: string[] = [];
     for (const obj of objects) {
       const nodeId = `${connectionId}::${obj.id}`;
-      const isLeaf = obj.kind === "column" || obj.kind === "primary_key" || obj.kind === "foreign_key" || obj.kind === "index";
-      const isTableOrView = obj.kind === "table" || obj.kind === "view";
-      // some dialects return database->schema inline on top scope, others return only databases
+      const nodeType: NodeType = obj.nodeType ?? inferNodeType(obj.kind);
+      const isLeaf = nodeType === "property";
       const hasInlineChildren = (obj.children ?? []).length > 0;
-      const isLoaded = isLeaf || (obj.kind === "database" && hasInlineChildren);
       const children = obj.children ?? [];
       const childIds =
         children.length > 0
@@ -228,10 +188,12 @@ export class JdbcNavigationStore {
         id: nodeId,
         connectionId,
         kind: obj.kind,
+        nodeType,
         name: obj.name,
+        fullName: obj.fullName,
         attributes: obj.attributes,
         isExpanded: false,
-        isLoaded: isLoaded || (isTableOrView ? false : childIds.length > 0),
+        isLoaded: isLeaf || hasInlineChildren,
         isLoading: false,
         loadError: undefined,
         childIds
@@ -274,6 +236,44 @@ export class JdbcNavigationStore {
   }
 }
 
+function inferNodeType(kind: string): NodeType {
+  switch (kind) {
+    case "connection":
+    case "database":
+    case "schema":
+      return "structural";
+    case "column":
+    case "primary_key":
+    case "foreign_key":
+    case "index":
+      return "property";
+    default:
+      if (kind.endsWith("_container")) return "container";
+      if (kind.endsWith("_folder")) return "folder";
+      return "object";
+  }
+}
+
+function buildTarget(node: JdbcTreeNode): Record<string, string> | undefined {
+  const target: Record<string, string> = {};
+
+  if (node.kind === "database") {
+    target.database = node.name;
+  } else if (node.kind === "schema") {
+    if (node.attributes.catalog) target.database = node.attributes.catalog as string;
+    target.schema = node.name;
+  } else {
+    if (node.attributes.catalog) target.database = node.attributes.catalog as string;
+    if (node.attributes.schema) target.schema = node.attributes.schema as string;
+  }
+
+  if (node.kind === "table" || node.kind === "view") {
+    target.table = node.name;
+  }
+
+  return Object.keys(target).length > 0 ? target : undefined;
+}
+
 let instance: JdbcNavigationStore | undefined;
 
 export function getJdbcNavigationStore(): JdbcNavigationStore {
@@ -282,5 +282,3 @@ export function getJdbcNavigationStore(): JdbcNavigationStore {
   }
   return instance;
 }
-
-

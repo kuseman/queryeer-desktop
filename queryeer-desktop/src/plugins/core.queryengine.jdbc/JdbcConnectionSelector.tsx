@@ -67,17 +67,19 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
     []
   );
 
-  // Load databases on mount when connection is already set
-  useEffect(() => {
-    if (connectionId) {
-      void loadDatabases(connectionId, { silent: true });
-    }
-  }, []);
-
   // Sync context metadata on mount so restored workspace state is immediately visible.
   useEffect(() => {
     writeJdbcContextMetadata(fileId, connectionId || undefined, selectedDatabase || undefined, filesRegistry);
   }, []);
+
+  // Load databases when connectionId changes (mount, file switch, external connection change)
+  useEffect(() => {
+    if (connectionId) {
+      void loadDatabases(connectionId, { silent: true });
+    } else {
+      setDatabases([]);
+    }
+  }, [connectionId, loadDatabases]);
 
   // Re-sync with file entity when it changes externally
   useEffect(() => {

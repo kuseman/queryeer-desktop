@@ -170,7 +170,7 @@ public final class BackendRunnerModule
             stream.filter(path -> path.getFileName()
                     .toString()
                     .toLowerCase()
-                    .matches("mssql-jdbc_auth.*\\\\.dll"))
+                    .matches("mssql-jdbc_auth.*\\.dll"))
                     .sorted(Comparator.reverseOrder())
                     .forEach(candidates::add);
         }

@@ -21,20 +21,28 @@ export function createJdbcDatabaseQuickCommandProvider(
     when: "activeFile.mimeType == 'application/sql'",
     async getItems(_query, ctx) {
       const activeFile = ctx.activeFile;
-      if (!activeFile) {
-        return [];
-      }
+      if (!activeFile) return [];
 
       const connections = getConfiguredJdbcConnections().filter((c) => c.enabled);
-      if (connections.length === 0) {
-        return [];
-      }
+      if (connections.length === 0) return [];
 
       const cache = getJdbcDatabaseCache();
 
+      // Use cached data first (instant). For connections without fresh data,
+      // trigger load with a short timeout — broken connections fail fast after
+      // the first attempt (60s failure cooldown in the cache).
       const results = await Promise.all(
         connections.map(async (conn) => {
-          const databases = await cache.load(conn.connectionId);
+          // Instant hit?
+          const cached = cache.get(conn.connectionId);
+          if (cached !== undefined) {
+            return { connectionId: conn.connectionId, title: conn.title ?? conn.connectionId, databases: cached };
+          }
+          // Race load against 5s timeout to avoid blocking on unreachable servers
+          const databases = await Promise.race([
+            cache.load(conn.connectionId),
+            new Promise<string[]>((resolve) => setTimeout(() => resolve([]), 5000))
+          ]);
           return { connectionId: conn.connectionId, title: conn.title ?? conn.connectionId, databases };
         })
       );
@@ -47,8 +55,8 @@ export function createJdbcDatabaseQuickCommandProvider(
             title: `${result.title} / — no databases —`,
             description: "Select connection only",
             action: async () => {
-              await context.fileMediator.bindEngine(activeFile.fileId, "jdbc", result.connectionId);
               context.files.setEditorState(activeFile.fileId, JDBC_NAV_DB_KEY, undefined);
+              await context.fileMediator.bindEngine(activeFile.fileId, "jdbc", result.connectionId);
               writeJdbcContextMetadata(activeFile.fileId, result.connectionId, undefined, context.files);
               refocusActiveEditor();
             }
@@ -60,11 +68,11 @@ export function createJdbcDatabaseQuickCommandProvider(
             id: `jdbc.db.${result.connectionId}::${db}`,
             title: `${result.title} / ${db}`,
             action: async () => {
-              await context.fileMediator.bindEngine(activeFile.fileId, "jdbc", result.connectionId);
               context.files.setEditorState(activeFile.fileId, JDBC_NAV_DB_KEY, {
                 connectionId: result.connectionId,
                 database: db
               } satisfies JdbcSelectedDatabase);
+              await context.fileMediator.bindEngine(activeFile.fileId, "jdbc", result.connectionId);
               writeJdbcContextMetadata(activeFile.fileId, result.connectionId, db, context.files);
               refocusActiveEditor();
             }

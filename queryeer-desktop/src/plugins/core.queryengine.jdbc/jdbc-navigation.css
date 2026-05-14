@@ -132,9 +132,25 @@
 }
 
 .jdbc-nav-node-loading {
-  color: var(--text-muted, #888);
   margin-left: 4px;
-  font-style: italic;
+  display: inline-flex;
+  align-items: center;
+}
+
+.jdbc-nav-node-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid transparent;
+  border-top-color: var(--text-muted, #888);
+  border-radius: 50%;
+  animation: jdbc-nav-spin 0.5s linear infinite;
+}
+
+@keyframes jdbc-nav-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .jdbc-nav-node-error {

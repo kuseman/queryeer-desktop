@@ -1,113 +1,112 @@
 package com.queryeer.backend.plugin.jdbc.schema;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.plugin.jdbc.DefaultJdbcConnections;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
+import com.queryeer.backend.queryengine.jdbc.JdbcTreeBranch;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaTarget;
 
 public final class JdbcSchemaActionHandler
 {
-    private static final String SCOPE_TOP = "top";
-    private static final String SCOPE_DEEP = "deep";
-    private static final String SCOPE_TABLES = "tables";
-    private static final String SCOPE_COLUMNS = "columns";
-    private static final String DEFAULT_DATABASE_NODE = "default";
-
-    private static final String OPTION_SCOPE = "scope";
-    private static final String OPTION_TARGET = "target";
-
     private static final String ERROR_CONNECTION_ID_REQUIRED = "connectionId is required";
     private static final String ERROR_TARGET_SCHEMA_REQUIRED = "target.schema is required for scope=deep";
 
     private final PayloadMapper payloadMapper;
     private final DefaultJdbcConnections connections;
+    private final JdbcSchemaRouter router;
     private final JdbcSchemaStore schemaStore;
     private final JdbcSchemaCrawlCoordinator crawlCoordinator;
-    private final ExecutorService persistExecutor;
-    private final Set<PersistTaskKey> pendingPersistKeys;
+    private final JdbcConnectionHealth connectionHealth;
 
-    public JdbcSchemaActionHandler(PayloadMapper payloadMapper, DefaultJdbcConnections connections, JdbcSchemaStore schemaStore, JdbcSchemaCrawlCoordinator crawlCoordinator)
+    public JdbcSchemaActionHandler(PayloadMapper payloadMapper, DefaultJdbcConnections connections, JdbcSchemaRouter router, JdbcSchemaStore schemaStore, JdbcSchemaCrawlCoordinator crawlCoordinator,
+            JdbcConnectionHealth connectionHealth)
     {
         this.payloadMapper = payloadMapper;
         this.connections = connections;
+        this.router = router;
         this.schemaStore = schemaStore;
         this.crawlCoordinator = crawlCoordinator;
-        this.persistExecutor = Executors.newSingleThreadExecutor(r ->
-        {
-            Thread thread = new Thread(r, "jdbc-schema-fetch-persist");
-            thread.setDaemon(true);
-            return thread;
-        });
-        this.pendingPersistKeys = ConcurrentHashMap.newKeySet();
+        this.connectionHealth = connectionHealth;
     }
 
     public Object fetch(Object payload)
     {
         JdbcSchemaFetchPayload params = payloadMapper.convert(payload, JdbcSchemaFetchPayload.class);
-        JdbcConnection resolved = connections.resolve(params.connectionId());
+        String connectionId = params.connectionId();
+        JdbcConnection resolved = connections.resolve(connectionId);
 
-        Map<String, Object> options = new java.util.HashMap<>();
-        if (params.scope() != null)
+        String parentKind = params.parentKind() != null ? params.parentKind()
+                : params.scope();
+        if (parentKind == null)
         {
-            options.put(OPTION_SCOPE, params.scope());
-        }
-        if (params.target() != null)
-        {
-            options.put(OPTION_TARGET, params.target());
+            parentKind = "connection";
         }
 
-        List<JdbcSchemaObject> result = resolved.dialect()
-                .schemaResolver()
-                .resolveSchema(resolved, options);
-        persistDeepCacheFromFetchAsync(resolved.connectionId(), params, result);
-        return result;
-    }
-
-    private void persistDeepCacheFromFetchAsync(String connectionId, JdbcSchemaFetchPayload params, List<JdbcSchemaObject> fetched)
-    {
-        PersistTaskKey key = persistTaskKey(connectionId, params);
-        if (!pendingPersistKeys.add(key))
-        {
-            return;
-        }
-
-        persistExecutor.submit(() ->
-        {
-            try
-            {
-                persistDeepCacheFromFetch(connectionId, params, fetched);
-            }
-            finally
-            {
-                pendingPersistKeys.remove(key);
-            }
-        });
-    }
-
-    private static PersistTaskKey persistTaskKey(String connectionId, JdbcSchemaFetchPayload params)
-    {
-        String scope = trimToNull(params.scope());
         JdbcSchemaTarget target = params.target();
-        String database = target != null ? trimToNull(target.database())
-                : null;
-        String schema = target != null ? trimToNull(target.schema())
-                : null;
-        String table = target != null ? trimToNull(target.table())
-                : null;
-        return new PersistTaskKey(connectionId, scope, database, schema, table);
-    }
+        // "connection" and "databases_container" are semantically equivalent for routing
+        String resolveKind = "connection".equals(parentKind) ? "databases_container"
+                : parentKind;
+        List<JdbcSchemaObject> result;
+        try
+        {
+            result = new ArrayList<>(router.resolve(resolved, resolveKind, target));
+            connectionHealth.onSuccess(connectionId);
+        }
+        catch (RuntimeException e)
+        {
+            connectionHealth.onFailure(connectionId);
+            throw e;
+        }
 
-    private record PersistTaskKey(String connectionId, String scope, String database, String schema, String table)
-    {
+        // Merge dialect tree branches at connection level
+        if ("connection".equals(parentKind))
+        {
+            for (JdbcTreeBranch branch : resolved.dialect()
+                    .treeBranches())
+            {
+                if ("connection".equals(branch.parentKind()))
+                {
+                    result.add(new JdbcSchemaObject(branch.kind() + ":" + resolved.connectionId(), branch.displayName(), branch.kind(), branch.nodeType(), null, null, Map.of()));
+                }
+            }
+        }
+        // Merge dialect tree branches at schema level (additional folders)
+        else if ("schema".equals(parentKind))
+        {
+            for (JdbcTreeBranch branch : resolved.dialect()
+                    .treeBranches())
+            {
+                if ("schema".equals(branch.parentKind()))
+                {
+                    Map<String, Object> attrs = new LinkedHashMap<>();
+                    if (target != null)
+                    {
+                        if (target.database() != null)
+                        {
+                            attrs.put("catalog", target.database());
+                        }
+                        if (target.schema() != null)
+                        {
+                            attrs.put("schema", target.schema());
+                        }
+                    }
+                    // Include schema context in identifier so folders under different schemas don't collide
+                    String schemaSuffix = (target != null
+                            && target.schema() != null ? "." + target.schema()
+                                    : "");
+                    result.add(
+                            new JdbcSchemaObject(branch.kind() + ":" + resolved.connectionId() + schemaSuffix, branch.displayName(), branch.kind(), branch.nodeType(), null, null, Map.copyOf(attrs)));
+                }
+            }
+        }
+
+        return result;
     }
 
     public Object snapshot(Object payload)
@@ -120,7 +119,7 @@ public final class JdbcSchemaActionHandler
         }
 
         String scope = trimToNull(params.scope());
-        JdbcSchemaCrawlScope crawlScope = SCOPE_DEEP.equalsIgnoreCase(scope) ? JdbcSchemaCrawlScope.DEEP
+        JdbcSchemaCrawlScope crawlScope = "deep".equalsIgnoreCase(scope) ? JdbcSchemaCrawlScope.DEEP
                 : JdbcSchemaCrawlScope.TOP;
         List<JdbcSchemaObject> snapshot = schemaStore.latestSnapshot(connectionId, crawlScope);
         if (!snapshot.isEmpty()
@@ -151,17 +150,17 @@ public final class JdbcSchemaActionHandler
         String scope = trimToNull(params.scope());
         JdbcSchemaCrawlScope crawlScope;
         if (scope == null
-                || SCOPE_TOP.equalsIgnoreCase(scope))
+                || "top".equalsIgnoreCase(scope))
         {
             crawlScope = JdbcSchemaCrawlScope.TOP;
         }
-        else if (SCOPE_DEEP.equalsIgnoreCase(scope))
+        else if ("deep".equalsIgnoreCase(scope))
         {
             crawlScope = JdbcSchemaCrawlScope.DEEP;
         }
         else
         {
-            throw new IllegalArgumentException("scope must be one of: " + SCOPE_TOP + ", " + SCOPE_DEEP);
+            throw new IllegalArgumentException("scope must be one of: top, deep");
         }
 
         JdbcSchemaTarget target = null;
@@ -179,9 +178,7 @@ public final class JdbcSchemaActionHandler
                     : null, schema);
 
             JdbcConnection resolved = connections.resolve(connectionId);
-            List<JdbcSchemaObject> fetched = resolved.dialect()
-                    .schemaResolver()
-                    .resolveSchema(resolved, Map.of(OPTION_SCOPE, SCOPE_TABLES, OPTION_TARGET, target));
+            List<JdbcSchemaObject> fetched = router.resolve(resolved, "tables_folder", target);
             List<JdbcSchemaObject> current = new ArrayList<>(schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP));
             mergeTablesScope(current, target.database(), target.schema(), fetched);
             schemaStore.persistSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP, current);
@@ -191,55 +188,13 @@ public final class JdbcSchemaActionHandler
         return crawlCoordinator.refreshNow(connectionId, crawlScope, target);
     }
 
-    private void persistDeepCacheFromFetch(String connectionId, JdbcSchemaFetchPayload params, List<JdbcSchemaObject> fetched)
-    {
-        if (fetched == null
-                || fetched.isEmpty())
-        {
-            return;
-        }
-
-        String scope = trimToNull(params.scope());
-        if (!SCOPE_TABLES.equalsIgnoreCase(scope)
-                && !SCOPE_COLUMNS.equalsIgnoreCase(scope))
-        {
-            return;
-        }
-
-        try
-        {
-            List<JdbcSchemaObject> current = new ArrayList<>(schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP));
-            JdbcSchemaTarget target = params.target();
-            String database = target != null ? trimToNull(target.database())
-                    : null;
-            String schema = target != null ? trimToNull(target.schema())
-                    : null;
-            String table = target != null ? trimToNull(target.table())
-                    : null;
-
-            if (SCOPE_TABLES.equalsIgnoreCase(scope))
-            {
-                mergeTablesScope(current, database, schema, fetched);
-            }
-            else
-            {
-                mergeColumnsScope(current, database, schema, table, fetched);
-            }
-
-            schemaStore.persistSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP, current);
-        }
-        catch (RuntimeException ignored)
-        {
-        }
-    }
-
     private static void mergeTablesScope(List<JdbcSchemaObject> roots, String database, String schema, List<JdbcSchemaObject> fetched)
     {
         String db = database != null ? database
                 : inferDatabase(fetched);
         if (db == null)
         {
-            db = DEFAULT_DATABASE_NODE;
+            db = "default";
         }
 
         JdbcSchemaObject dbNode = upsertChild(roots, new JdbcSchemaObject("database:" + db, db, "database", List.of(), Map.of()));
@@ -255,32 +210,6 @@ public final class JdbcSchemaActionHandler
         JdbcSchemaObject schemaNode = upsertChild(dbChildren, new JdbcSchemaObject(db + "." + schema, schema, "schema", List.of(), Map.of("catalog", db)));
         List<JdbcSchemaObject> schemaChildren = mutableChildren(schemaNode);
         mergeInto(schemaChildren, fetched);
-        replaceNode(dbChildren, schemaNode, withChildren(schemaNode, schemaChildren));
-        replaceNode(roots, dbNode, withChildren(dbNode, dbChildren));
-    }
-
-    private static void mergeColumnsScope(List<JdbcSchemaObject> roots, String database, String schema, String table, List<JdbcSchemaObject> fetched)
-    {
-        String db = database != null ? database
-                : inferDatabase(fetched);
-        if (db == null)
-        {
-            db = DEFAULT_DATABASE_NODE;
-        }
-        if (schema == null
-                || table == null)
-        {
-            return;
-        }
-
-        JdbcSchemaObject dbNode = upsertChild(roots, new JdbcSchemaObject("database:" + db, db, "database", List.of(), Map.of()));
-        List<JdbcSchemaObject> dbChildren = mutableChildren(dbNode);
-        JdbcSchemaObject schemaNode = upsertChild(dbChildren, new JdbcSchemaObject(db + "." + schema, schema, "schema", List.of(), Map.of("catalog", db)));
-        List<JdbcSchemaObject> schemaChildren = mutableChildren(schemaNode);
-        JdbcSchemaObject tableNode = upsertChild(schemaChildren, new JdbcSchemaObject(db + "." + schema + "." + table, table, "table", List.of(), Map.of("catalog", db, "schema", schema)));
-        List<JdbcSchemaObject> tableChildren = mutableChildren(tableNode);
-        mergeInto(tableChildren, fetched);
-        replaceNode(schemaChildren, tableNode, withChildren(tableNode, tableChildren));
         replaceNode(dbChildren, schemaNode, withChildren(schemaNode, schemaChildren));
         replaceNode(roots, dbNode, withChildren(dbNode, dbChildren));
     }
@@ -302,7 +231,7 @@ public final class JdbcSchemaActionHandler
 
     private static List<JdbcSchemaObject> mutableChildren(JdbcSchemaObject node)
     {
-        return new java.util.ArrayList<>(node.children() == null ? List.of()
+        return new ArrayList<>(node.children() == null ? List.of()
                 : node.children());
     }
 
@@ -329,10 +258,10 @@ public final class JdbcSchemaActionHandler
 
     private static JdbcSchemaObject upsertChild(List<JdbcSchemaObject> target, JdbcSchemaObject candidate)
     {
-        int index = indexOf(target, candidate);
-        if (index >= 0)
+        int idx = indexOf(target, candidate);
+        if (idx >= 0)
         {
-            return target.get(index);
+            return target.get(idx);
         }
         target.add(candidate);
         return candidate;
@@ -356,10 +285,10 @@ public final class JdbcSchemaActionHandler
 
     private static void replaceNode(List<JdbcSchemaObject> list, JdbcSchemaObject oldNode, JdbcSchemaObject updatedNode)
     {
-        int index = indexOf(list, oldNode);
-        if (index >= 0)
+        int idx = indexOf(list, oldNode);
+        if (idx >= 0)
         {
-            list.set(index, updatedNode);
+            list.set(idx, updatedNode);
         }
     }
 

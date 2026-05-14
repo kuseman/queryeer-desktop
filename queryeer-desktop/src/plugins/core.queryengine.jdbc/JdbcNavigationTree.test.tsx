@@ -43,15 +43,54 @@ const connB: JdbcConnectionDefinition = {
   enabled: true
 };
 
-const topResult = [
+const databasesContainerResult = [
   {
-    id: "database:mydb",
-    name: "mydb",
-    kind: "database",
+    id: "__databases__",
+    name: "Databases",
+    kind: "databases_container",
+    nodeType: "container",
     children: [
-      { id: "schema:mydb|public", name: "public", kind: "schema", children: [], attributes: { catalog: "mydb" } }
+      {
+        id: "database:mydb",
+        name: "mydb",
+        kind: "database",
+        nodeType: "structural",
+        children: null,
+        attributes: {}
+      }
     ],
     attributes: {}
+  }
+];
+
+const schemasContainerResult = [
+  {
+    id: "__schemas__:mydb",
+    name: "Schemas",
+    kind: "schemas_container",
+    nodeType: "container",
+    children: [
+      {
+        id: "schema:mydb|public",
+        name: "public",
+        kind: "schema",
+        nodeType: "structural",
+        children: null,
+        attributes: { catalog: "mydb" }
+      }
+    ],
+    attributes: {}
+  }
+];
+
+const folderResult = [
+  {
+    id: "__tables_folder__",
+    name: "Tables",
+    kind: "tables_folder",
+    nodeType: "folder",
+    children: null,
+    attributes: { catalog: "mydb", schema: "public" }
   }
 ];
 
@@ -60,7 +99,9 @@ const tablesResult = [
     id: "table:mydb|public:users",
     name: "users",
     kind: "table",
-    children: [],
+    nodeType: "object",
+    fullName: "public.users",
+    children: null,
     attributes: { catalog: "mydb", schema: "public" }
   }
 ];
@@ -70,14 +111,16 @@ const columnsResult = [
     id: "column:mydb|public:users:id",
     name: "id",
     kind: "column",
-    children: [],
+    nodeType: "property",
+    children: null,
     attributes: { type: "decimal", nullable: "NO", ordinal: 1, precision: 18, scale: 2 }
   },
   {
     id: "column:mydb|public:users:name",
     name: "name",
     kind: "column",
-    children: [],
+    nodeType: "property",
+    children: null,
     attributes: { type: "varchar", nullable: "YES", ordinal: 2, size: -1, precision: 0, scale: 0 }
   }
 ];
@@ -125,7 +168,7 @@ describe("JdbcNavigationTree", () => {
 
   it("clicking connection root node calls store.expandNode", async () => {
     mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
-    mocks.invokeMock.mockResolvedValue(topResult);
+    mocks.invokeMock.mockResolvedValue(databasesContainerResult);
     store.loadConnectionRoots();
 
     await act(async () => {
@@ -148,10 +191,9 @@ describe("JdbcNavigationTree", () => {
 
   it("auto-expands to active connection when linkToActiveFile is true", async () => {
     mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
-    mocks.invokeMock.mockResolvedValue(topResult);
+    mocks.invokeMock.mockResolvedValue(databasesContainerResult);
     store.loadConnectionRoots();
 
-    // linkToActiveFile defaults to true
     expect(store.getState().linkToActiveFile).toBe(true);
 
     await act(async () => {
@@ -175,9 +217,9 @@ describe("JdbcNavigationTree", () => {
 
   it("does NOT auto-expand when linkToActiveFile is false", async () => {
     mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
-    mocks.invokeMock.mockResolvedValue(topResult);
+    mocks.invokeMock.mockResolvedValue(databasesContainerResult);
     store.loadConnectionRoots();
-    store.toggleLinkToActiveFile(); // flip to false
+    store.toggleLinkToActiveFile();
 
     await act(async () => {
       root.render(
@@ -220,7 +262,7 @@ describe("JdbcNavigationTree", () => {
     expect(container.querySelector("[data-testid='jdbc-tree-loading']")).not.toBeNull();
 
     await act(async () => {
-      resolveLoad(topResult);
+      resolveLoad(databasesContainerResult);
     });
 
     expect(container.querySelector("[data-testid='jdbc-tree-loading']")).toBeNull();
@@ -228,7 +270,7 @@ describe("JdbcNavigationTree", () => {
 
   it("auto-expands active connection when backend becomes healthy", async () => {
     mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
-    mocks.invokeMock.mockResolvedValue(topResult);
+    mocks.invokeMock.mockResolvedValue(databasesContainerResult);
     store.loadConnectionRoots();
 
     const expandSpy = vi.spyOn(store, "expandNode");
@@ -245,10 +287,8 @@ describe("JdbcNavigationTree", () => {
 
     await act(async () => {});
 
-    // Clear spy calls from initial mount effect
     expandSpy.mockClear();
 
-    // Simulate backend going down then healthy again
     await act(async () => {
       for (const listener of mocks.backendStatusListeners) {
         listener({ state: "unavailable" });
@@ -264,17 +304,19 @@ describe("JdbcNavigationTree", () => {
     await act(async () => {});
 
     expect(expandSpy).toHaveBeenCalledWith("conn-a::__root__", { silent: true });
-    expect(expandSpy).toHaveBeenCalledWith("conn-a::database:mydb", { silent: true });
   });
 
   it("renders column label with type and nullability", async () => {
     mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
     mocks.invokeMock
-      .mockResolvedValueOnce(topResult)
+      .mockResolvedValueOnce(databasesContainerResult)
+      .mockResolvedValueOnce(schemasContainerResult)
+      .mockResolvedValueOnce(folderResult)
       .mockResolvedValueOnce(tablesResult)
       .mockResolvedValueOnce(columnsResult);
     store.loadConnectionRoots();
 
+    // Walk tree: connection -> databases_container -> database -> schemas_container -> schema -> folder -> table
     await act(async () => {
       root.render(
         <JdbcNavigationTree
@@ -286,19 +328,28 @@ describe("JdbcNavigationTree", () => {
     });
 
     const rows = () => container.querySelectorAll<HTMLElement>("[data-testid='jdbc-tree-node']");
-    await act(async () => {
-      rows()[0]!.click();
-    });
-    await act(async () => {
-      rows()[1]!.click();
-    });
-    await act(async () => {
-      rows()[2]!.click();
-    });
-    await act(async () => {
-      const usersRow = Array.from(rows()).find((r) => r.textContent?.includes("users"));
-      usersRow?.click();
-    });
+
+    // Click connection
+    await act(async () => { rows()[0]!.click(); });
+
+    // Click databases_container (child index 1)
+    await act(async () => { rows()[1]!.click(); });
+
+    // Click database (child index 2)
+    await act(async () => { rows()[2]!.click(); });
+
+    // Click schemas_container (child index 3)
+    await act(async () => { rows()[3]!.click(); });
+
+    // Click schema (child index 4)
+    await act(async () => { rows()[4]!.click(); });
+
+    // Click tables_folder (child index 5)
+    await act(async () => { rows()[5]!.click(); });
+
+    // Find users table row and click
+    const usersRow = Array.from(rows()).find((r) => r.textContent?.includes("public.users"));
+    await act(async () => { usersRow?.click(); });
 
     expect(container.textContent).toContain("id decimal(18,2) not null");
     expect(container.textContent).toContain("name varchar(max) null");

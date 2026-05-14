@@ -104,24 +104,40 @@ class JdbcBackendPluginTest
 
     @SuppressWarnings("unchecked")
     @Test
-    void schemaFetchTablesAppendsIntoDeepSnapshotCache() throws Exception
+    void schemaFetchReturnsTablesDirectlyWithoutDeepCachePersist() throws Exception
     {
         QueryEngineProvider provider = activateAndGetProvider();
         String jdbcUrl = "jdbc:h2:mem:test_fetch_deep_append;DB_CLOSE_DELAY=-1";
 
         try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
         {
-            statement.execute("create table fetch_deep_visible(id int)");
+            statement.execute("create table fetch_direct_visible(id int)");
         }
 
-        Object fetched = provider.invoke(null, "jdbc.schema.fetch", Map.of("connectionId", "jdbc-fetch-deep", "scope", "tables", "target", Map.of("schema", "PUBLIC")));
+        Object fetched = provider.invoke(null, "jdbc.schema.fetch", Map.of("connectionId", "jdbc-fetch-deep", "parentKind", "tables_folder", "target", Map.of("schema", "PUBLIC")));
         Assertions.assertNotNull(fetched);
-
-        Thread.sleep(Duration.ofMillis(500));
-        List<Object> deepSnapshot = (List<Object>) provider.invoke(null, "jdbc.schema.snapshot", Map.of("connectionId", "jdbc-fetch-deep", "scope", "deep"));
-        Assertions.assertTrue(deepSnapshot.stream()
+        List<Object> items = (List<Object>) fetched;
+        Assertions.assertTrue(items.stream()
                 .map(Object::toString)
-                .anyMatch(text -> text.contains("FETCH_DEEP_VISIBLE")));
+                .anyMatch(text -> text.contains("FETCH_DIRECT_VISIBLE")));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void schemaFetchWithConnectionParentKindReturnsMutableListForDialectBranchMerge() throws Exception
+    {
+        // Regression: router.resolve() returns an immutable list, but the action handler
+        // must be able to add dialect tree branches to it (e.g. Security container).
+        // This test verifies the fetch does not throw UnsupportedOperationException.
+        QueryEngineProvider provider = activateAndGetProvider();
+
+        Object fetched = provider.invoke(null, "jdbc.schema.fetch", Map.of("connectionId", "jdbc-fetch-deep", "parentKind", "connection"));
+        Assertions.assertNotNull(fetched);
+        List<Object> items = (List<Object>) fetched;
+        // Must contain at least the databases_container node
+        Assertions.assertTrue(items.stream()
+                .map(Object::toString)
+                .anyMatch(text -> text.contains("databases_container")));
     }
 
     @SuppressWarnings("unchecked")
@@ -145,6 +161,35 @@ class JdbcBackendPluginTest
         Assertions.assertFalse(items.isEmpty());
         Assertions.assertTrue(items.stream()
                 .anyMatch(item -> "SELECT".equals(item.get("label"))));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void sqlCompleteIncludesTableNamesViaLiveFallbackWhenDeepCacheIsEmpty() throws Exception
+    {
+        // Regression: navigator.loadSnapshotForLookup falls through to live query
+        // when DEEP cache is empty. The fallback must return tables (and views).
+        QueryEngineProvider provider = activateAndGetProvider();
+        String jdbcUrl = "jdbc:h2:mem:test_fetch_deep_append;DB_CLOSE_DELAY=-1";
+
+        try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
+        {
+            statement.execute("create table table_complete_test(id int)");
+            statement.execute("create view view_complete_test as select * from table_complete_test");
+        }
+
+        // Refresh TOP only (DEEP cache remains empty)
+        provider.invoke(null, "jdbc.schema.refresh", Map.of("connectionId", "jdbc-fetch-deep", "scope", "top"));
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete",
+                Map.of("fileId", "file-1", "version", 1L, "text", "SELECT * FROM ", "connectionId", "jdbc-fetch-deep", "cursor", Map.of("line", 1, "column", 15), "limits", Map.of("maxItems", 50)));
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+        // Table names from live fallback should be present (table_complete_test, and may include fetch_direct_visible)
+        Assertions.assertTrue(items.stream()
+                .map(item -> String.valueOf(item.get("label")))
+                .anyMatch(label -> label.toUpperCase()
+                        .contains("TABLE_COMPLETE_TEST")));
     }
 
     @SuppressWarnings("unchecked")
@@ -184,6 +229,67 @@ class JdbcBackendPluginTest
                 Map.of("text", "SELECT * FROM totally_unknown_xyz", "cursor", Map.of("line", 1, "column", 20), "connectionId", "jdbc-symbol"));
 
         Assertions.assertNull(result);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void sqlCompleteWithDatabaseParamReturnsTablesViaLiveFallback() throws Exception
+    {
+        // Regression: when selectedDatabase is set but no schema, the fallback previously
+        // created JdbcSchemaTarget(database, null). target.matches() returns false when
+        // schema is null, filtering out ALL tables. Null target must be passed instead.
+        QueryEngineProvider provider = activateAndGetProvider();
+        String jdbcUrl = "jdbc:h2:mem:test_fetch_deep_append;DB_CLOSE_DELAY=-1";
+
+        try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
+        {
+            statement.execute("create table db_filter_test(id int)");
+        }
+
+        // Only TOP refresh (DEEP cache stays empty)
+        provider.invoke(null, "jdbc.schema.refresh", Map.of("connectionId", "jdbc-fetch-deep", "scope", "top"));
+
+        // Complete with explicit database parameter — this previously caused ALL tables
+        // to be filtered out because the fallback target had schema=null
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete", Map.of("fileId", "file-1", "version", 1L, "text", "SELECT * FROM ", "connectionId",
+                "jdbc-fetch-deep", "database", "TEST", "cursor", Map.of("line", 1, "column", 15), "limits", Map.of("maxItems", 50)));
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+        Assertions.assertTrue(items.stream()
+                .map(item -> String.valueOf(item.get("label")))
+                .anyMatch(label -> label.toUpperCase()
+                        .contains("DB_FILTER_TEST")),
+                "Table should appear in completion even when database filter is set, " + items.stream()
+                        .map(i -> String.valueOf(i.get("label")))
+                        .toList());
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void sqlSymbolAtPositionResolvesTableViaLiveFallbackWhenDeepCacheEmpty() throws Exception
+    {
+        // Regression: findSymbol had no live fallback — if DEEP cache was empty,
+        // symbol lookup always returned null for all dialects. Now it falls through
+        // to live resolve when cache is empty.
+        QueryEngineProvider provider = activateAndGetProvider();
+        String jdbcUrl = "jdbc:h2:mem:test_fetch_deep_append;DB_CLOSE_DELAY=-1";
+
+        try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
+        {
+            statement.execute("create table symbol_live_target(id int)");
+        }
+
+        // NO refresh at all — DEEP cache empty, TOP cache empty
+        // Symbol lookup must still find the table via live fallback
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.symbolAtPosition",
+                Map.of("text", "SELECT * FROM SYMBOL_LIVE_TARGET", "cursor", Map.of("line", 1, "column", 22), "connectionId", "jdbc-fetch-deep"));
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals("table", result.get("kind"));
+        Assertions.assertNotNull(result.get("name"));
+        Assertions.assertTrue(result.get("name")
+                .toString()
+                .toUpperCase()
+                .contains("SYMBOL_LIVE_TARGET"));
     }
 
     @Test

@@ -5,6 +5,6 @@ import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaTarget;
 /**
  * Payload for {@code jdbc.schema.fetch} engine action.
  */
-public record JdbcSchemaFetchPayload(String connectionId, String scope, JdbcSchemaTarget target)
+public record JdbcSchemaFetchPayload(String connectionId, String parentKind, String scope, JdbcSchemaTarget target)
 {
 }

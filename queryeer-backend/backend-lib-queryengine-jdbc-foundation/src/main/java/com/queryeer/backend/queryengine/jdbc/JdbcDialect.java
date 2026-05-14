@@ -6,6 +6,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -20,7 +21,23 @@ public interface JdbcDialect
 
     JdbcQueryExecutor queryExecutor();
 
-    JdbcSchemaResolver schemaResolver();
+    /**
+     * Returns per-parentKind schema resolvers that override the default behavior. Keys are parentKind strings (e.g. "tables_folder", "schema"). Parent kinds not present in the map fall through to the
+     * default resolver.
+     */
+    default Map<String, JdbcSchemaResolver> branchResolvers()
+    {
+        return Map.of();
+    }
+
+    /**
+     * Returns additional tree branches contributed by this dialect. Branches can attach at the connection level (siblings of databases_container) or at the schema level (additional folders alongside
+     * tables_folder, views_folder).
+     */
+    default List<JdbcTreeBranch> treeBranches()
+    {
+        return List.of();
+    }
 
     /**
      * Grammar identifier used by SQL parser services.
@@ -83,7 +100,16 @@ public interface JdbcDialect
         {
             properties.setProperty("password", password);
         }
-        return DriverManager.getConnection(url, properties);
+        int previousLoginTimeout = DriverManager.getLoginTimeout();
+        DriverManager.setLoginTimeout(15);
+        try
+        {
+            return DriverManager.getConnection(url, properties);
+        }
+        finally
+        {
+            DriverManager.setLoginTimeout(previousLoginTimeout);
+        }
     }
 
     /**

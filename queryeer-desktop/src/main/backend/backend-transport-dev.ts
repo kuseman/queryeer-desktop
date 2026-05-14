@@ -45,6 +45,7 @@ export class DevBackendTransport extends StdioBackendTransportBase {
         "backend-runner",
         "-am",
         "-DskipTests=true",
+        "-Dspotless.check.skip=true",
         "install"
       ]);
       this.state.dependenciesPrepared = true;

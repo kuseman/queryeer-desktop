@@ -18,6 +18,7 @@ export function QuickCommandHost({ filesRegistry, fileMediator }: QuickCommandHo
     () => service?.getState() ?? { open: false, query: "" }
   );
   const [items, setItems] = useState<QuickCommandItem[]>([]);
+  const [loading, setLoading] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -46,17 +47,24 @@ export function QuickCommandHost({ filesRegistry, fileMediator }: QuickCommandHo
     }
 
     const counter = ++resolveCounterRef.current;
+    setLoading(true);
 
     void (async () => {
-      const activeFileId = fileMediator?.getActiveFileId() ?? null;
-      const ctx = {
-        activeFile: activeFileId != null ? filesRegistry?.getFile(activeFileId) : undefined,
-        openFiles: filesRegistry?.listFiles() ?? []
-      };
-      const resolved = await service.resolveItems(panelState.query, ctx);
-      if (counter === resolveCounterRef.current) {
-        setItems(resolved);
-        setSelectedIndex(0);
+      try {
+        const activeFileId = fileMediator?.getActiveFileId() ?? null;
+        const ctx = {
+          activeFile: activeFileId != null ? filesRegistry?.getFile(activeFileId) : undefined,
+          openFiles: filesRegistry?.listFiles() ?? []
+        };
+        const resolved = await service.resolveItems(panelState.query, ctx);
+        if (counter === resolveCounterRef.current) {
+          setItems(resolved);
+          setSelectedIndex(0);
+        }
+      } finally {
+        if (counter === resolveCounterRef.current) {
+          setLoading(false);
+        }
       }
     })();
   }, [panelState.open, panelState.query, service]);
@@ -146,7 +154,12 @@ export function QuickCommandHost({ filesRegistry, fileMediator }: QuickCommandHo
           role="listbox"
           aria-label="Commands"
         >
-          {items.length === 0 && (
+          {items.length === 0 && loading && (
+            <li className="quick-command-empty quick-command-loading">
+              <span className="quick-command-spinner" /> Loading…
+            </li>
+          )}
+          {items.length === 0 && !loading && (
             <li className="quick-command-empty">No results</li>
           )}
           {items.map((item, idx) => (

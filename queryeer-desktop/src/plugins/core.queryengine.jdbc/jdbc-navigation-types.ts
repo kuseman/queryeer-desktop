@@ -1,7 +1,11 @@
+export type NodeType = "container" | "structural" | "folder" | "object" | "property";
+
 export type JdbcSchemaObject = {
   id: string;
   name: string;
   kind: string;
+  nodeType?: NodeType;
+  fullName?: string;
   children?: JdbcSchemaObject[] | null;
   attributes: Record<string, unknown>;
 };
@@ -10,7 +14,9 @@ export type JdbcTreeNode = {
   id: string;
   connectionId: string;
   kind: string;
+  nodeType: NodeType;
   name: string;
+  fullName?: string;
   attributes: Record<string, unknown>;
   isExpanded: boolean;
   isLoaded: boolean;

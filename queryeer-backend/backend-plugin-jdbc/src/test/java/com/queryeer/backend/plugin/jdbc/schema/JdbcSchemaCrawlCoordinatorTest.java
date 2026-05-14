@@ -19,6 +19,11 @@ import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
 
 class JdbcSchemaCrawlCoordinatorTest
 {
+    private static JdbcConnectionHealth health()
+    {
+        return new JdbcConnectionHealth();
+    }
+
     @Test
     void onUsageRecordsTopAndDeepScopes()
     {
@@ -27,7 +32,7 @@ class JdbcSchemaCrawlCoordinatorTest
         JdbcSchemaStore store = mock(JdbcSchemaStore.class);
         JdbcSchemaCrawlPolicy policy = mock(JdbcSchemaCrawlPolicy.class);
         LoggerService logger = mock(LoggerService.class);
-        JdbcSchemaCrawlCoordinator coordinator = new JdbcSchemaCrawlCoordinator(connections, crawler, store, policy, logger);
+        JdbcSchemaCrawlCoordinator coordinator = new JdbcSchemaCrawlCoordinator(connections, crawler, store, policy, logger, health(), Runnable::run);
 
         coordinator.onUsage("jdbc-1");
 
@@ -50,7 +55,7 @@ class JdbcSchemaCrawlCoordinatorTest
         when(policy.intervalFor(eq(JdbcSchemaCrawlScope.DEEP), anyDouble(), eq(true), eq(0))).thenReturn(java.time.Duration.ofMinutes(1));
         when(store.latestSnapshot("jdbc-1", JdbcSchemaCrawlScope.DEEP)).thenReturn(List.of());
 
-        JdbcSchemaCrawlCoordinator coordinator = new JdbcSchemaCrawlCoordinator(connections, crawler, store, policy, logger);
+        JdbcSchemaCrawlCoordinator coordinator = new JdbcSchemaCrawlCoordinator(connections, crawler, store, policy, logger, health());
 
         coordinator.refreshNow("jdbc-1", JdbcSchemaCrawlScope.DEEP, null);
 

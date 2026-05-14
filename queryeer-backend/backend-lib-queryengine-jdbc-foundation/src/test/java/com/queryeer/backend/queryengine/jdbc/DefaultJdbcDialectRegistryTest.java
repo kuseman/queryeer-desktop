@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryExecutor;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryResult;
-import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
 
 class DefaultJdbcDialectRegistryTest
 {
@@ -76,12 +75,6 @@ class DefaultJdbcDialectRegistryTest
             public JdbcQueryExecutor queryExecutor()
             {
                 return (_, _) -> new JdbcQueryResult(0, Map.of());
-            }
-
-            @Override
-            public JdbcSchemaResolver schemaResolver()
-            {
-                return (_, _) -> List.of();
             }
 
             @Override
