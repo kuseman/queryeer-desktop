@@ -191,7 +191,7 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
                 String schema = rs.getString(2);
                 String name = rs.getString(3);
                 if (target != null
-                        && !target.matches(catalog, schema))
+                        && !targetMatches(target, catalog, schema))
                 {
                     continue;
                 }
@@ -201,6 +201,29 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
             }
         }
         return result;
+    }
+
+    /**
+     * Checks whether a row with the given catalog and schema matches the target filter. Unlike {@link JdbcSchemaTarget#matches(String, String)}, this handles the case where the target has a database
+     * but no schema by filtering on database only.
+     */
+    static boolean targetMatches(JdbcSchemaTarget target, String candidateCatalog, String candidateSchema)
+    {
+        if (target.schema() != null
+                && !target.schema()
+                        .isBlank())
+        {
+            return target.matches(candidateCatalog, candidateSchema);
+        }
+        if (target.database() != null
+                && !target.database()
+                        .isBlank())
+        {
+            return target.database()
+                    .equalsIgnoreCase(candidateCatalog == null ? ""
+                            : candidateCatalog);
+        }
+        return true;
     }
 
     private List<JdbcSchemaObject> readViews(Connection jdbc, JdbcSchemaTarget target) throws SQLException
@@ -220,7 +243,7 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
                 String schema = rs.getString(2);
                 String name = rs.getString(3);
                 if (target != null
-                        && !target.matches(catalog, schema))
+                        && !targetMatches(target, catalog, schema))
                 {
                     continue;
                 }
@@ -250,7 +273,7 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
                 String specificName = rs.getString(3);
                 String routineName = rs.getString(4);
                 if (target != null
-                        && !target.matches(catalog, schema))
+                        && !targetMatches(target, catalog, schema))
                 {
                     continue;
                 }

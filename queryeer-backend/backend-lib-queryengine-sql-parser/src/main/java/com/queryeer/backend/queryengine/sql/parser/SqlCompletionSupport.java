@@ -75,14 +75,15 @@ public final class SqlCompletionSupport
         context.put("snapshotVersion", snapshotVersion);
         context.put("usedFallback", Boolean.FALSE);
 
+        TSTree tree = null;
         SqlCompletionContext completionContext = SqlCompletionContext.OTHER;
         if (!isBlank(params == null ? null
                 : params.text()))
         {
-            TSTree tree = resolveTree(parseSessions, engineId, fileId, params.text());
+            tree = resolveTree(parseSessions, engineId, fileId, params.text());
             if (tree != null)
             {
-                completionContext = SqlContextDetector.detectContext(tree, cursor.line(), cursor.column());
+                completionContext = SqlContextDetector.detectContext(tree, params.text(), cursor.line(), cursor.column());
             }
         }
         context.put("completionContext", completionContext.name());
@@ -96,8 +97,13 @@ public final class SqlCompletionSupport
                                 : 100;
         String prefix = currentTokenPrefix(linePrefix);
         int replaceStartColumn = Math.max(1, cursor.column() - prefix.length());
+        // Extract aliases scoped to the statement containing the cursor
+        // (not the entire tree — prevents bleeding across statements)
+        Map<String, String> aliases = (tree != null
+                && completionContext == SqlCompletionContext.COLUMN_REFERENCE) ? extractAliases(tree, params.text(), cursor.line(), cursor.column())
+                        : Map.of();
         List<Map<String, Object>> semanticItems = semanticProvider == null ? List.of()
-                : semanticProvider.provide(params, fileId, cursor, prefix, replaceStartColumn, maxItems, completionContext);
+                : semanticProvider.provide(params, fileId, cursor, prefix, replaceStartColumn, maxItems, completionContext, aliases);
         Set<String> seenLabels = new LinkedHashSet<>();
         List<Map<String, Object>> items = semanticItems.stream()
                 .filter(item -> item != null
@@ -135,15 +141,36 @@ public final class SqlCompletionSupport
         return Map.of("items", items, "isIncomplete", false, "context", context);
     }
 
+    // -- Alias extraction --
+
+    /**
+     * Walks the tree-sitter AST to extract table aliases from FROM/JOIN clauses using a TSQuery, falling back to text-based regex scanning when the tree cannot be parsed (ERROR nodes).
+     *
+     * @param line cursor line (1-indexed)
+     * @param column cursor column (1-indexed)
+     * @return Map of alias → table name (as written in SQL, e.g. "schema.table" or just "table"). Unaliased tables are included with their own name as the alias key.
+     */
+    public static Map<String, String> extractAliases(TSTree tree, String text, int line, int column)
+    {
+        if (tree == null
+                || isBlank(text))
+        {
+            return Map.of();
+        }
+        return SqlRelationExtractor.extractAliases(text, line, column);
+    }
+
     private static TSTree resolveTree(IncrementalParseSessionService parseSessions, String engineId, String fileId, String text)
     {
         // Always parse the text fresh. The session tree can be stale if the
         // file.change notification hasn't arrived before sql.complete.
         if (!isBlank(text))
         {
-            TSParser parser = new TSParser();
-            parser.setLanguage(new TreeSitterSql());
-            return parser.parseString(null, text);
+            try (TSParser parser = new TSParser())
+            {
+                parser.setLanguage(new TreeSitterSql());
+                return parser.parseString(null, text);
+            }
         }
         return null;
     }
@@ -181,7 +208,8 @@ public final class SqlCompletionSupport
     @FunctionalInterface
     public interface SemanticCompletionProvider
     {
-        List<Map<String, Object>> provide(SqlCompletePayload payload, String fileId, SqlCompleteCursor cursor, String prefix, int replaceStartColumn, int maxItems, SqlCompletionContext context);
+        List<Map<String, Object>> provide(SqlCompletePayload payload, String fileId, SqlCompleteCursor cursor, String prefix, int replaceStartColumn, int maxItems, SqlCompletionContext context,
+                Map<String, String> aliases);
     }
 
     /**

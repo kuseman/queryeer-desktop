@@ -21,6 +21,12 @@ import com.queryeer.backend.api.parse.ParseSessionSnapshot;
 
 class SqlCompletionSupportTest
 {
+    private final TSParser parser = new TSParser();
+
+    {
+        parser.setLanguage(new TreeSitterSql());
+    }
+
     @SuppressWarnings("unchecked")
     @Test
     void completeHandlesMissingSnapshotWithoutThrowing()
@@ -38,6 +44,142 @@ class SqlCompletionSupportTest
         assertEquals(null, context.get("snapshotVersion"));
         assertEquals(Boolean.FALSE, context.get("usedFallback"));
         assertInstanceOf(List.class, map.get("items"));
+    }
+
+    // -- Alias extraction tests --
+
+    @Test
+    void extractAliasesReturnsEmptyForNullTree()
+    {
+        assertEquals(Map.of(), SqlCompletionSupport.extractAliases(null, "SELECT * FROM t1", 1, 1));
+    }
+
+    @Test
+    void extractAliasesReturnsEmptyForBlankText()
+    {
+        TSTree tree = parser.parseString(null, "SELECT * FROM t1");
+        assertEquals(Map.of(), SqlCompletionSupport.extractAliases(tree, "", 1, 1));
+    }
+
+    @Test
+    void extractAliasesWithExplicitAlias()
+    {
+        TSTree tree = parser.parseString(null, "SELECT * FROM my_table a");
+        Map<String, String> aliases = SqlCompletionSupport.extractAliases(tree, "SELECT * FROM my_table a", 1, 1);
+        assertEquals(Map.of("a", "my_table"), aliases);
+    }
+
+    @Test
+    void extractAliasesWithAsKeyword()
+    {
+        TSTree tree = parser.parseString(null, "SELECT * FROM my_table AS a");
+        Map<String, String> aliases = SqlCompletionSupport.extractAliases(tree, "SELECT * FROM my_table AS a", 1, 1);
+        assertEquals(Map.of("a", "my_table"), aliases);
+    }
+
+    @Test
+    void extractAliasesWithImplicitAlias()
+    {
+        TSTree tree = parser.parseString(null, "SELECT * FROM my_table");
+        Map<String, String> aliases = SqlCompletionSupport.extractAliases(tree, "SELECT * FROM my_table", 1, 1);
+        assertEquals(Map.of("my_table", "my_table"), aliases);
+    }
+
+    @Test
+    void extractAliasesWithJoin()
+    {
+        TSTree tree = parser.parseString(null, "SELECT * FROM t1 a JOIN t2 b ON a.x = b.y");
+        Map<String, String> aliases = SqlCompletionSupport.extractAliases(tree, "SELECT * FROM t1 a JOIN t2 b ON a.x = b.y", 1, 1);
+        assertEquals(Map.of("a", "t1", "b", "t2"), aliases);
+    }
+
+    @Test
+    void extractAliasesWithQualifiedTable()
+    {
+        TSTree tree = parser.parseString(null, "SELECT * FROM dbo.my_table a");
+        Map<String, String> aliases = SqlCompletionSupport.extractAliases(tree, "SELECT * FROM dbo.my_table a", 1, 1);
+        assertEquals(Map.of("a", "dbo.my_table"), aliases);
+    }
+
+    @Test
+    void extractAliasesWithMixedExplicitAndImplicit()
+    {
+        TSTree tree = parser.parseString(null, "SELECT * FROM t1 a, t2");
+        Map<String, String> aliases = SqlCompletionSupport.extractAliases(tree, "SELECT * FROM t1 a, t2", 1, 1);
+        assertEquals(Map.of("a", "t1", "t2", "t2"), aliases);
+    }
+
+    @Test
+    void extractAliasesWithPartialSql()
+    {
+        // Incomplete SQL with an ERROR node — text-based regex fallback should find the alias
+        TSTree tree = parser.parseString(null, "SELECT a. FROM t1 a");
+        Map<String, String> aliases = SqlCompletionSupport.extractAliases(tree, "SELECT a. FROM t1 a", 1, 1);
+        assertEquals(Map.of("a", "t1"), aliases);
+    }
+
+    @Test
+    void extractAliasesWithCursorInSelectListBeforeFrom()
+    {
+        String sql = "SELECT na\nFROM public.orders o";
+        TSTree tree = parser.parseString(null, sql);
+        Map<String, String> aliases = SqlCompletionSupport.extractAliases(tree, sql, 1, 10);
+        assertEquals(Map.of("o", "public.orders"), aliases);
+    }
+
+    @Test
+    void extractAliasesWithInsertTargetColumnList()
+    {
+        String sql = "INSERT INTO tableB (";
+        TSTree tree = parser.parseString(null, sql);
+        Map<String, String> aliases = SqlCompletionSupport.extractAliases(tree, sql, 1, 21);
+        assertEquals(Map.of("tableB", "tableB"), aliases);
+    }
+
+    @Test
+    void extractAliasesWithInsertTargetBetweenParentheses()
+    {
+        String sql = "INSERT INTO public.orders()";
+        TSTree tree = parser.parseString(null, sql);
+        Map<String, String> aliases = SqlCompletionSupport.extractAliases(tree, sql, 1, 27);
+        assertEquals(Map.of("public.orders", "public.orders"), aliases);
+    }
+
+    @Test
+    void extractAliasesKeywordNotCapturedAsAlias()
+    {
+        // WHERE should NOT be captured as an alias for my_table
+        TSTree tree = parser.parseString(null, "SELECT * FROM my_table WHERE x = 1");
+        Map<String, String> aliases = SqlCompletionSupport.extractAliases(tree, "SELECT * FROM my_table WHERE x = 1", 1, 1);
+        assertEquals(Map.of("my_table", "my_table"), aliases, "WHERE should not be captured as an alias");
+    }
+
+    @Test
+    void extractAliasesJoinKeywordNotCapturedAsAlias()
+    {
+        // ON should NOT be captured as an alias for t2
+        TSTree tree = parser.parseString(null, "SELECT * FROM t1 JOIN t2 ON t1.x = t2.y");
+        Map<String, String> aliases = SqlCompletionSupport.extractAliases(tree, "SELECT * FROM t1 JOIN t2 ON t1.x = t2.y", 1, 1);
+        assertEquals(Map.of("t1", "t1", "t2", "t2"), aliases, "ON should not be captured as an alias");
+    }
+
+    @Test
+    void extractAliasesGroupByKeywordNotCaptured()
+    {
+        TSTree tree = parser.parseString(null, "SELECT * FROM my_table GROUP BY name");
+        Map<String, String> aliases = SqlCompletionSupport.extractAliases(tree, "SELECT * FROM my_table GROUP BY name", 1, 1);
+        assertEquals(Map.of("my_table", "my_table"), aliases, "GROUP BY should not affect alias extraction");
+    }
+
+    @Test
+    void extractAliasesScopedByCursorStatement()
+    {
+        String sql = "SELECT * FROM first_table ft WHERE ft.id = 1\nSELECT s. FROM second_table s";
+        TSTree tree = parser.parseString(null, sql);
+
+        Map<String, String> aliases = SqlCompletionSupport.extractAliases(tree, sql, 2, 9);
+
+        assertEquals(Map.of("s", "second_table"), aliases);
     }
 
     @Test
@@ -81,16 +223,18 @@ class SqlCompletionSupportTest
     void identifierAtPositionUsesCachedTreeWhenAvailable()
     {
         String sql = "SELECT * FROM my_table";
-        TSParser parser = new TSParser();
-        parser.setLanguage(new TreeSitterSql());
-        TSTree cachedTree = parser.parseString(null, sql);
-        ParseSessionSnapshot snapshot = new ParseSessionSnapshot("jdbc", "file-cached", 1L, "sql", false, cachedTree, Map.of());
+        try (TSParser parser = new TSParser())
+        {
+            parser.setLanguage(new TreeSitterSql());
+            TSTree cachedTree = parser.parseString(null, sql);
+            ParseSessionSnapshot snapshot = new ParseSessionSnapshot("jdbc", "file-cached", 1L, "sql", false, cachedTree, Map.of());
 
-        IncrementalParseSessionService sessions = new StubParseSessionService(snapshot);
+            IncrementalParseSessionService sessions = new StubParseSessionService(snapshot);
 
-        // Cursor on 'my_table' (column 15)
-        String result = SqlCompletionSupport.identifierAtPosition(sessions, "jdbc", "file-cached", sql, 1, 15);
-        assertEquals("my_table", result);
+            // Cursor on 'my_table' (column 15)
+            String result = SqlCompletionSupport.identifierAtPosition(sessions, "jdbc", "file-cached", sql, 1, 15);
+            assertEquals("my_table", result);
+        }
     }
 
     private static final class PassthroughPayloadMapper implements PayloadMapper

@@ -37,6 +37,16 @@ const connections: JdbcConnectionDefinition[] = [
   { connectionId: "conn-b", title: "DB Beta", dialectId: "jdbc", url: "jdbc:h2:b", enabled: true }
 ];
 
+const topSnapshot = [
+  {
+    id: "__databases__",
+    name: "Databases",
+    kind: "databases_container",
+    children: [{ id: "database:db1", name: "db1", kind: "database", children: null, attributes: {} }],
+    attributes: {}
+  }
+];
+
 function makeFile(overrides: Partial<FileEntity> = {}): FileEntity {
   return {
     fileId: "file-1",
@@ -152,8 +162,46 @@ describe("JdbcConnectionSelector", () => {
     expect(mocks.invokeMock).toHaveBeenCalledWith(
       {
         engineId: "jdbc",
+        action: "jdbc.schema.refresh",
+        payload: { connectionId: "conn-a", scope: "top", mode: "due", waitForCompletion: false }
+      },
+      { silent: true }
+    );
+    expect(mocks.invokeMock).toHaveBeenCalledWith(
+      {
+        engineId: "jdbc",
         action: "jdbc.schema.snapshot",
         payload: { connectionId: "conn-a", scope: "top" }
+      },
+      { silent: true }
+    );
+  });
+
+  it("prewarms selected database schema without blocking", async () => {
+    const file = makeFile({ engineBinding: { engineId: "jdbc", connectionId: "conn-a" } });
+    const filesRegistry = makeFilesRegistry(file);
+    const fileMediator = makeFileMediator(file);
+    mocks.invokeMock.mockResolvedValue(topSnapshot);
+
+    await act(async () => {
+      root.render(
+        <JdbcConnectionSelector fileId="file-1" fileMediator={fileMediator} filesRegistry={filesRegistry} />
+      );
+    });
+
+    await act(async () => {});
+
+    const select = container.querySelector<HTMLSelectElement>("[data-testid='jdbc-database-select']")!;
+    await act(async () => {
+      select.value = "db1";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    expect(mocks.invokeMock).toHaveBeenCalledWith(
+      {
+        engineId: "jdbc",
+        action: "jdbc.schema.refresh",
+        payload: { connectionId: "conn-a", scope: "deep", target: { database: "db1" }, mode: "due", waitForCompletion: false }
       },
       { silent: true }
     );

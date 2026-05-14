@@ -30,7 +30,6 @@ class JdbcSchemaCrawlerTest
         JdbcSchemaResolver resolver = mock(JdbcSchemaResolver.class);
         JdbcConnection connection = new JdbcConnection("jdbc-1", "title", dialect, Map.of());
 
-        // Wire dialect's branchResolvers to return the mock resolver for tables_folder
         when(dialect.branchResolvers()).thenReturn(Map.of("tables_folder", resolver));
         when(store.latestSnapshot("jdbc-1", JdbcSchemaCrawlScope.DEEP)).thenReturn(List.of());
         when(resolver.resolveSchema(eq(connection), anyMap()))

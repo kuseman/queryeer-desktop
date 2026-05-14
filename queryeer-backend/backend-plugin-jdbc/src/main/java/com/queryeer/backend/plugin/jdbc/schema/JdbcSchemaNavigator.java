@@ -35,6 +35,138 @@ public final class JdbcSchemaNavigator
         return tableNames;
     }
 
+    /**
+     * Returns column names for the given table. First tries the cached DEEP snapshot (which now includes columns), then falls back to live JDBC.
+     */
+    public List<String> columnNamesForTable(String connectionId, String tableName, String selectedDatabase)
+    {
+        return columnNamesForTables(connectionId, List.of(tableName), selectedDatabase).getOrDefault(tableName, List.of());
+    }
+
+    /**
+     * Returns column names for multiple tables in a single snapshot load. This avoids opening the H2 store (via {@link #loadSnapshotForLookup}) once per table.
+     */
+    public Map<String, List<String>> columnNamesForTables(String connectionId, List<String> tableNames, String selectedDatabase)
+    {
+        Map<String, List<String>> result = new java.util.LinkedHashMap<>();
+        if (tableNames == null
+                || tableNames.isEmpty())
+        {
+            return result;
+        }
+        String normalizedSelectedDatabase = normalizeIdentifier(selectedDatabase);
+        List<JdbcSchemaObject> snapshot = loadSnapshotForLookup(connectionId, selectedDatabase, normalizedSelectedDatabase);
+        for (String tableName : tableNames)
+        {
+            result.put(tableName, collectColumnNames(snapshot, tableName));
+        }
+        return result;
+    }
+
+    /** Walks the schema tree to find a table node by name and collect its column names. */
+    private static List<String> collectColumnNames(List<JdbcSchemaObject> nodes, String lookupTable)
+    {
+        String normalizedLookup = normalizeIdentifier(lookupTable);
+        if (normalizedLookup == null)
+        {
+            return List.of();
+        }
+        String[] parts = lookupTable.split("\\.", 2);
+        String lookupName = parts.length == 2 ? parts[1]
+                : parts[0];
+        String lookupSchema = parts.length == 2 ? parts[0]
+                : null;
+        String normalizedLookupName = normalizeIdentifier(lookupName);
+        String normalizedLookupSchema = lookupSchema != null ? normalizeIdentifier(lookupSchema)
+                : null;
+        List<String> result = new ArrayList<>();
+        collectColumnNamesRecursive(nodes, new NodePath(null, null), normalizedLookupName, normalizedLookupSchema, result);
+        return result;
+    }
+
+    private static void collectColumnNamesRecursive(List<JdbcSchemaObject> nodes, NodePath path, String normalizedLookupTable, String normalizedLookupSchema, List<String> target)
+    {
+        for (JdbcSchemaObject node : nodes)
+        {
+            String kind = trimToNull(node.kind());
+            NodePath nextPath = path;
+
+            if (kind == null)
+            {
+                continue;
+            }
+
+            if (kind.endsWith("_container")
+                    || kind.endsWith("_folder"))
+            {
+                // fall through to children recursion
+            }
+            else if ("database".equalsIgnoreCase(kind))
+            {
+                nextPath = path.withDatabase(trimToNull(node.name()));
+            }
+            else if ("schema".equalsIgnoreCase(kind))
+            {
+                nextPath = nextPath.withSchema(trimToNull(node.name()));
+            }
+
+            if ("table".equalsIgnoreCase(kind)
+                    || "view".equalsIgnoreCase(kind))
+            {
+                String name = trimToNull(node.name());
+                if (name != null
+                        && normalizeIdentifier(name).equals(normalizedLookupTable))
+                {
+                    // If a schema qualifier was specified, check it
+                    if (normalizedLookupSchema != null)
+                    {
+                        String effectiveSchema = effectiveSchema(nextPath.schema(), node);
+                        if (effectiveSchema == null
+                                || !normalizeIdentifier(effectiveSchema).equals(normalizedLookupSchema))
+                        {
+                            // Schema mismatch — continue searching
+                            List<JdbcSchemaObject> children = node.children();
+                            if (children != null
+                                    && !children.isEmpty())
+                            {
+                                collectColumnNamesRecursive(children, nextPath, normalizedLookupTable, normalizedLookupSchema, target);
+                            }
+                            continue;
+                        }
+                    }
+                    // Found the table — collect columns
+                    if (node.children() != null)
+                    {
+                        for (JdbcSchemaObject child : node.children())
+                        {
+                            if ("column".equalsIgnoreCase(trimToNull(child.kind())))
+                            {
+                                String colName = trimToNull(child.name());
+                                if (colName != null)
+                                {
+                                    target.add(colName);
+                                }
+                            }
+                        }
+                    }
+                    return; // Stop searching once the table is found
+                }
+            }
+
+            List<JdbcSchemaObject> children = node.children();
+            if (children != null
+                    && !children.isEmpty())
+            {
+                collectColumnNamesRecursive(children, nextPath, normalizedLookupTable, normalizedLookupSchema, target);
+                // If we found columns in this subtree, stop
+                if (!target.isEmpty())
+                {
+                    return;
+                }
+            }
+        }
+    }
+
     public Map<String, Object> findSymbol(String connectionId, String rawToken, String selectedDatabase)
     {
         if (isBlank(rawToken))
@@ -80,26 +212,27 @@ public final class JdbcSchemaNavigator
             return snapshot;
         }
 
-        // Skip live fallback for known-broken connections
-        if (!connectionHealth.isHealthy(connectionId))
-        {
-            return List.of();
-        }
-        try
-        {
-            JdbcConnection resolved = connections.resolve(connectionId);
-            List<JdbcSchemaObject> result = new ArrayList<>();
-            // Pass null target — target.matches rejects rows when schema is null,
-            // which would filter out ALL tables. Database filtering is handled by
-            // the caller (collectTableNames) via normalizedSelectedDatabase.
-            result.addAll(router.resolve(resolved, "tables_folder", null));
-            result.addAll(router.resolve(resolved, "views_folder", null));
-            return result;
-        }
-        catch (RuntimeException e)
-        {
-            return List.of();
-        }
+        return List.of();
+        // // Skip live fallback for known-broken connections
+        // if (!connectionHealth.isHealthy(connectionId))
+        // {
+        // return List.of();
+        // }
+        // try
+        // {
+        // JdbcConnection resolved = connections.resolve(connectionId);
+        // List<JdbcSchemaObject> result = new ArrayList<>();
+        // // Pass null target — target.matches rejects rows when schema is null,
+        // // which would filter out ALL tables. Database filtering is handled by
+        // // the caller (collectTableNames) via normalizedSelectedDatabase.
+        // result.addAll(router.resolve(resolved, "tables_folder", null));
+        // result.addAll(router.resolve(resolved, "views_folder", null));
+        // return result;
+        // }
+        // catch (RuntimeException e)
+        // {
+        // return List.of();
+        // }
     }
 
     private static boolean containsTableData(List<JdbcSchemaObject> nodes)

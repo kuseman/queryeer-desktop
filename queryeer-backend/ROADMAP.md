@@ -6,14 +6,6 @@ Quick fixes
 
 Large features in prio
 
-- [ ] Code complete (Phase 2. Detect context)
-    - [X] Tables
-    - [ ] Columns
-- [ ] JDBC Tree navigation fixes
-    - [X] All tables without schema below database should be a meta level above
-          with views/tables/procedures etc.
-    - Context menu items contributor per kind
-        - New query on connection / database
 - [ ] Graph visualization framework
     - Query plan
     - Procedure call tree
@@ -22,16 +14,27 @@ Large features in prio
     - Properties panel
     - Hoover tooltip support
 - [ ] SQLServer query plan
+    - Pre.req. Graph visualization framework done
     - Parse XML
     - Convert to a common plan model
     - Actions in toolbar by dialect (Estimated / Actual)
+- [ ] JDBC Panel extension fixes
+    - Add a new panel with schema status/statistics per connection. Actions like force crawl etc.
+- [ ] JDBC Tree navigation fixes
+    - [X] All tables without schema below database should be a meta level above
+          with views/tables/procedures etc.
+    - [ ] Context menu items contributor per kind
+        - New query on connection / database
 - [ ] Hoover table / etc.
     - Show popup with schema
     - Settings turn on/off
-- [ ] Action in JDBC navigation
+- [ ] User actions in JDBC navigation
+    - Pre.req. Tree content menu contribution done
     - Rulebased actions based on node type etc
         - SQLServer + Procedure => sp_helptext
         - etc.
+    - [-] Investigate if this can be merged into Symbol Actions so with a toggle system
+          where to show the action (editor / tree) will be hard  becuase the context is completly different activefile vs node in tree
 - [ ] About dialog
     - Queryeer changelog
     - Modules changelog (Payloadbuilder)
@@ -45,6 +48,9 @@ Large features in prio
     - [ ] matrix releases
     - [ ] change log (app bundled)
     - [ ] change log (gitgub release)
+- [X] Code complete (Phase 2. Detect context)
+    - [X] Tables
+    - [X] Columns
 - [X] Table Query Actions
     - User created menu item contributions that creates queries based on table selections 
 - [X] Table context menu contribution

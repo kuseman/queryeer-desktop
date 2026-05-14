@@ -84,6 +84,7 @@ describe("editor settings mapping", () => {
     expect(createOptions.wordWrap).toBe("wordWrapColumn");
     expect(createOptions.minimap).toEqual({ enabled: false });
     expect(createOptions.tabSize).toBe(8);
+    expect(createOptions.fixedOverflowWidgets).toBe(true);
     expect(updateOptions.wordWrap).toBe("wordWrapColumn");
     expect(updateOptions.minimap).toEqual({ enabled: false });
     expect(modelUpdateOptions.tabSize).toBe(8);

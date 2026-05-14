@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaTarget;
 
 class DefaultJdbcSchemaResolverTest
 {
@@ -109,5 +110,41 @@ class DefaultJdbcSchemaResolverTest
 
         // IDs must be different
         Assertions.assertNotEquals(publicTablesId, pgTablesId, "folder IDs must differ across schemas to prevent node map collisions");
+    }
+
+    // -- targetMatches tests --
+
+    @Test
+    void targetMatchesDatabaseOnlyWhenSchemaIsNull()
+    {
+        JdbcSchemaTarget target = new JdbcSchemaTarget("MyDB", null);
+        Assertions.assertTrue(DefaultJdbcSchemaResolver.targetMatches(target, "MyDB", "dbo"));
+        Assertions.assertTrue(DefaultJdbcSchemaResolver.targetMatches(target, "MyDB", "ANYTHING"));
+        Assertions.assertFalse(DefaultJdbcSchemaResolver.targetMatches(target, "OtherDB", "dbo"));
+    }
+
+    @Test
+    void targetMatchesAcceptsAllWhenTargetHasNoFilter()
+    {
+        JdbcSchemaTarget target = new JdbcSchemaTarget(null, null, null);
+        Assertions.assertTrue(DefaultJdbcSchemaResolver.targetMatches(target, "AnyDB", "AnySchema"));
+        Assertions.assertTrue(DefaultJdbcSchemaResolver.targetMatches(target, null, null));
+    }
+
+    @Test
+    void targetMatchesDelegatesToStandardWhenSchemaIsSet()
+    {
+        JdbcSchemaTarget target = new JdbcSchemaTarget("MyDB", "dbo", null);
+        Assertions.assertTrue(DefaultJdbcSchemaResolver.targetMatches(target, "MyDB", "dbo"));
+        Assertions.assertFalse(DefaultJdbcSchemaResolver.targetMatches(target, "OtherDB", "dbo"));
+        Assertions.assertFalse(DefaultJdbcSchemaResolver.targetMatches(target, "MyDB", "other"));
+    }
+
+    @Test
+    void targetMatchesHandlesCaseInsensitiveDatabase()
+    {
+        JdbcSchemaTarget target = new JdbcSchemaTarget("mydb", null);
+        Assertions.assertTrue(DefaultJdbcSchemaResolver.targetMatches(target, "MYDB", "dbo"));
+        Assertions.assertTrue(DefaultJdbcSchemaResolver.targetMatches(target, "MyDb", "dbo"));
     }
 }
