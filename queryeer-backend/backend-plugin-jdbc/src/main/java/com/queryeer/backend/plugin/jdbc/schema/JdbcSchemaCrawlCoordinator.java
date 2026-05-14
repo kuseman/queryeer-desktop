@@ -73,8 +73,16 @@ public final class JdbcSchemaCrawlCoordinator
         {
             try
             {
-                store.recordUsage(cid, JdbcSchemaCrawlScope.TOP, Instant.now());
-                store.recordUsage(cid, JdbcSchemaCrawlScope.DEEP, db, Instant.now());
+                Instant now = Instant.now();
+                store.recordUsage(cid, JdbcSchemaCrawlScope.TOP, now);
+                store.recordUsage(cid, JdbcSchemaCrawlScope.DEEP, db, now);
+
+                crawlOneSilent(cid, JdbcSchemaCrawlScope.TOP, false, null, Instant.now());
+                if (db != null
+                        && !db.isBlank())
+                {
+                    crawlOneSilent(cid, JdbcSchemaCrawlScope.DEEP, false, new JdbcSchemaTarget(db, null), Instant.now());
+                }
             }
             catch (RuntimeException ignored)
             {
@@ -91,6 +99,24 @@ public final class JdbcSchemaCrawlCoordinator
         }
         JdbcConnection jdbcConnection = connections.resolve(connectionId);
         crawlOne(jdbcConnection, scope, true, target, Instant.now());
+        return store.latestSnapshot(connectionId, scope);
+    }
+
+    public List<JdbcSchemaObject> refreshDue(String connectionId, JdbcSchemaCrawlScope scope, JdbcSchemaTarget target, boolean wait)
+    {
+        if (connectionId == null
+                || connectionId.isBlank())
+        {
+            throw new IllegalArgumentException("connectionId is required");
+        }
+        if (wait)
+        {
+            crawlOneSilent(connectionId, scope, false, target, Instant.now());
+        }
+        else
+        {
+            usageExecutor.execute(() -> crawlOneSilent(connectionId, scope, false, target, Instant.now()));
+        }
         return store.latestSnapshot(connectionId, scope);
     }
 

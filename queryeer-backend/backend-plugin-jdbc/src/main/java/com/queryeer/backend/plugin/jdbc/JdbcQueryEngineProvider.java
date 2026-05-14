@@ -296,12 +296,13 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     }
 
     private List<Map<String, Object>> jdbcSemanticCompletions(SqlCompletionSupport.SqlCompletePayload payload, String fileId, SqlCompletionSupport.SqlCompleteCursor cursor, String prefix,
-            int replaceStartColumn, int maxItems, SqlCompletionContext context)
+            int replaceStartColumn, int maxItems, SqlCompletionContext context, Map<String, String> aliases)
     {
-        if (context != SqlCompletionContext.TABLE_REFERENCE)
+        if (context == SqlCompletionContext.OTHER)
         {
             return List.of();
         }
+
         String connectionId = payload != null ? trimToNull(payload.connectionId())
                 : null;
         if (connectionId == null
@@ -327,16 +328,85 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             // Completion should remain best-effort even if usage tracking fails.
         }
 
-        List<String> tableNames = schemaNavigator.tableNamesForCompletion(connectionId, selectedDatabase);
-        return tableNames.stream()
-                .filter(name -> prefix.isBlank()
-                        || name.toLowerCase()
-                                .startsWith(prefix.toLowerCase()))
-                .distinct()
-                .sorted(String.CASE_INSENSITIVE_ORDER)
+        if (context == SqlCompletionContext.TABLE_REFERENCE)
+        {
+            List<String> tableNames = schemaNavigator.tableNamesForCompletion(connectionId, selectedDatabase);
+            return tableNames.stream()
+                    .filter(name -> prefix.isBlank()
+                            || name.toLowerCase()
+                                    .startsWith(prefix.toLowerCase()))
+                    .distinct()
+                    .sorted(String.CASE_INSENSITIVE_ORDER)
+                    .limit(maxItems)
+                    .map(name -> Map.<String, Object>of("label", name, "kind", "table", "detail", "JDBC table", "insertText", name, "insertTextFormat", "plain", "source", "jdbc.schema",
+                            "replaceRange", Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column())))
+                    .toList();
+        }
+
+        // -- COLUMN_REFERENCE context --
+        // Batch-resolve all required tables' columns in a single H2 snapshot load
+        List<String> tableNames;
+        List<Map<String, Object>> columnItems = new ArrayList<>();
+        java.util.Set<String> seenLower = new java.util.HashSet<>();
+
+        if (prefix.contains("."))
+        {
+            int dotIndex = prefix.lastIndexOf('.');
+            String partialColumn = prefix.substring(dotIndex + 1);
+            String qualifier = prefix.substring(0, dotIndex);
+            String resolvedTable = aliases.getOrDefault(qualifier, qualifier);
+            tableNames = List.of(resolvedTable);
+            Map<String, List<String>> allTableColumns = schemaNavigator.columnNamesForTables(connectionId, tableNames, selectedDatabase);
+            for (String col : allTableColumns.getOrDefault(resolvedTable, List.of()))
+            {
+                if ((partialColumn.isBlank()
+                        || col.toLowerCase()
+                                .startsWith(partialColumn.toLowerCase()))
+                        && seenLower.add(col.toLowerCase()))
+                {
+                    String insertText = qualifier + "." + col;
+                    columnItems.add(Map.<String, Object>of("label", insertText, "kind", "column", "detail", "JDBC column", "insertText", insertText, "insertTextFormat", "plain", "source",
+                            "jdbc.schema", "replaceRange", Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column())));
+                }
+            }
+        }
+        else
+        {
+            // Build a map of table name → alias for the insertText prefix
+            java.util.Map<String, String> tableToAlias = new java.util.LinkedHashMap<>();
+            for (java.util.Map.Entry<String, String> entry : aliases.entrySet())
+            {
+                tableToAlias.put(entry.getValue(), entry.getKey());
+            }
+            tableNames = List.copyOf(tableToAlias.keySet());
+            Map<String, List<String>> allTableColumns = schemaNavigator.columnNamesForTables(connectionId, tableNames, selectedDatabase);
+            for (java.util.Map.Entry<String, List<String>> entry : allTableColumns.entrySet())
+            {
+                String tableName = entry.getKey();
+                String alias = tableToAlias.get(tableName);
+                for (String col : entry.getValue())
+                {
+                    // Only prefix with alias when the table has an explicit alias
+                    String displayPrefix = (alias != null
+                            && !alias.equals(tableName)) ? alias
+                                    : null;
+                    String prefixed = displayPrefix != null ? displayPrefix + "." + col
+                            : col;
+                    if ((prefix.isBlank()
+                            || col.toLowerCase()
+                                    .startsWith(prefix.toLowerCase()))
+                            && seenLower.add(prefixed.toLowerCase()))
+                    {
+                        columnItems.add(Map.<String, Object>of("label", prefixed, "kind", "column", "detail", "JDBC column", "insertText", prefixed, "insertTextFormat", "plain", "source",
+                                "jdbc.schema", "replaceRange", Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column())));
+                    }
+                }
+            }
+        }
+
+        return columnItems.stream()
+                .sorted((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(String.valueOf(a.get("label")), String.valueOf(b.get("label"))))
                 .limit(maxItems)
-                .map(name -> Map.<String, Object>of("label", name, "kind", "table", "detail", "JDBC table", "insertText", name, "insertTextFormat", "plain", "source", "jdbc.schema", "replaceRange",
-                        Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column())))
                 .toList();
     }
 

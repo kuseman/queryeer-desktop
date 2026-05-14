@@ -2,7 +2,9 @@ package com.queryeer.backend.plugin.jdbc.schema;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -18,6 +20,7 @@ import com.queryeer.backend.queryengine.jdbc.JdbcDialect;
 import com.queryeer.backend.queryengine.jdbc.JdbcTreeBranch;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaTarget;
 import com.queryeer.backend.queryengine.jdbc.schema.NodeType;
 
 class JdbcSchemaActionHandlerTest
@@ -52,5 +55,34 @@ class JdbcSchemaActionHandlerTest
         assertTrue(items.stream()
                 .anyMatch(i -> "security_container".equals(i.kind())));
         assertEquals(2, items.size()); // databases_container + security_container
+    }
+
+    @Test
+    void refreshDueTopDelegatesToCoordinatorWithoutBlocking()
+    {
+        DefaultJdbcConnections connections = mock(DefaultJdbcConnections.class);
+        JdbcSchemaRouter router = new JdbcSchemaRouter(new DefaultJdbcSchemaResolver());
+        JdbcSchemaStore store = mock(JdbcSchemaStore.class);
+        JdbcSchemaCrawlCoordinator coordinator = mock(JdbcSchemaCrawlCoordinator.class);
+        JdbcSchemaActionHandler handler = new JdbcSchemaActionHandler(TestPayloadMapper.INSTANCE, connections, router, store, coordinator, new JdbcConnectionHealth());
+
+        handler.refresh(Map.of("connectionId", "conn-1", "scope", "top", "mode", "due", "waitForCompletion", false));
+
+        verify(coordinator).refreshDue("conn-1", JdbcSchemaCrawlScope.TOP, null, false);
+    }
+
+    @Test
+    void refreshDueDeepAcceptsDatabaseOnlyTarget()
+    {
+        DefaultJdbcConnections connections = mock(DefaultJdbcConnections.class);
+        JdbcSchemaRouter router = new JdbcSchemaRouter(new DefaultJdbcSchemaResolver());
+        JdbcSchemaStore store = mock(JdbcSchemaStore.class);
+        JdbcSchemaCrawlCoordinator coordinator = mock(JdbcSchemaCrawlCoordinator.class);
+        JdbcSchemaActionHandler handler = new JdbcSchemaActionHandler(TestPayloadMapper.INSTANCE, connections, router, store, coordinator, new JdbcConnectionHealth());
+
+        handler.refresh(Map.of("connectionId", "conn-1", "scope", "deep", "mode", "due", "waitForCompletion", false, "target", Map.of("database", "db1")));
+
+        verify(coordinator).refreshDue(eq("conn-1"), eq(JdbcSchemaCrawlScope.DEEP), org.mockito.ArgumentMatchers.argThat((JdbcSchemaTarget target) -> "db1".equals(target.database())
+                && target.schema() == null), eq(false));
     }
 }

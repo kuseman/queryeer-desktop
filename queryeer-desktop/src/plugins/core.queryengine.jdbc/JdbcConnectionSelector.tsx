@@ -6,6 +6,7 @@ import { JDBC_NAV_DB_KEY, type JdbcSelectedDatabase } from "./jdbc-navigation-ty
 import { getConfiguredJdbcConnections } from "./jdbc-settings";
 import { writeJdbcContextMetadata } from "./jdbc-metadata";
 import { getJdbcDatabaseCache } from "./jdbc-database-cache";
+import { prewarmJdbcDatabaseSchema, prewarmJdbcTopSchema } from "./jdbc-schema-prewarm";
 
 function readSelectedDatabase(
   filesRegistry: FilesRegistry,
@@ -75,6 +76,7 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
   // Load databases when connectionId changes (mount, file switch, external connection change)
   useEffect(() => {
     if (connectionId) {
+      prewarmJdbcTopSchema(connectionId);
       void loadDatabases(connectionId, { silent: true });
     } else {
       setDatabases([]);
@@ -127,6 +129,7 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
         database: db
       } satisfies JdbcSelectedDatabase);
       writeJdbcContextMetadata(fileId, currentConnId, db, filesRegistry);
+      prewarmJdbcDatabaseSchema(currentConnId, db);
     } else {
       filesRegistry.setEditorState(fileId, JDBC_NAV_DB_KEY, undefined);
       writeJdbcContextMetadata(fileId, currentConnId || undefined, undefined, filesRegistry);

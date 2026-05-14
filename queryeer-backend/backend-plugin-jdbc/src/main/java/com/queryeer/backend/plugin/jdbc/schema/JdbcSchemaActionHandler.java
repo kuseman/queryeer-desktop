@@ -1,5 +1,9 @@
 package com.queryeer.backend.plugin.jdbc.schema;
 
+import static com.queryeer.backend.api.PayloadUtils.isBlank;
+import static com.queryeer.backend.api.PayloadUtils.stringValue;
+import static com.queryeer.backend.api.PayloadUtils.trimToNull;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -121,21 +125,7 @@ public final class JdbcSchemaActionHandler
         String scope = trimToNull(params.scope());
         JdbcSchemaCrawlScope crawlScope = "deep".equalsIgnoreCase(scope) ? JdbcSchemaCrawlScope.DEEP
                 : JdbcSchemaCrawlScope.TOP;
-        List<JdbcSchemaObject> snapshot = schemaStore.latestSnapshot(connectionId, crawlScope);
-        if (!snapshot.isEmpty()
-                || crawlScope != JdbcSchemaCrawlScope.TOP)
-        {
-            return snapshot;
-        }
-
-        try
-        {
-            return crawlCoordinator.refreshNow(connectionId, JdbcSchemaCrawlScope.TOP, null);
-        }
-        catch (RuntimeException e)
-        {
-            return snapshot;
-        }
+        return schemaStore.latestSnapshot(connectionId, crawlScope);
     }
 
     public Object refresh(Object payload)
@@ -164,25 +154,43 @@ public final class JdbcSchemaActionHandler
         }
 
         JdbcSchemaTarget target = null;
+        JdbcSchemaTarget incomingTarget = params.target();
+        String mode = trimToNull(params.mode());
+        boolean dueMode = "due".equalsIgnoreCase(mode);
+        boolean waitForCompletion = params.waitForCompletion() == null
+                || params.waitForCompletion();
         if (crawlScope == JdbcSchemaCrawlScope.DEEP)
         {
-            JdbcSchemaTarget incomingTarget = params.target();
             String schema = incomingTarget != null ? trimToNull(incomingTarget.schema())
                     : null;
-            if (schema == null)
+            String database = incomingTarget != null ? trimToNull(incomingTarget.database())
+                    : null;
+            if (schema == null
+                    && !dueMode)
             {
                 throw new IllegalArgumentException(ERROR_TARGET_SCHEMA_REQUIRED);
             }
 
-            target = new JdbcSchemaTarget(incomingTarget != null ? trimToNull(incomingTarget.database())
-                    : null, schema);
+            target = new JdbcSchemaTarget(database, schema);
+
+            if (dueMode)
+            {
+                return crawlCoordinator.refreshDue(connectionId, crawlScope, target, waitForCompletion);
+            }
 
             JdbcConnection resolved = connections.resolve(connectionId);
             List<JdbcSchemaObject> fetched = router.resolve(resolved, "tables_folder", target);
+            // Expand each table to include column children in the snapshot
+            List<JdbcSchemaObject> expanded = expandTableColumns(resolved, fetched);
             List<JdbcSchemaObject> current = new ArrayList<>(schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP));
-            mergeTablesScope(current, target.database(), target.schema(), fetched);
+            mergeTablesScope(current, target.database(), target.schema(), expanded);
             schemaStore.persistSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP, current);
             return current;
+        }
+
+        if (dueMode)
+        {
+            return crawlCoordinator.refreshDue(connectionId, crawlScope, target, waitForCompletion);
         }
 
         return crawlCoordinator.refreshNow(connectionId, crawlScope, target);
@@ -292,14 +300,39 @@ public final class JdbcSchemaActionHandler
         }
     }
 
-    private static String trimToNull(String value)
+    /**
+     * For each table node in the fetched list, resolve its columns via the router and attach them as children. This ensures column data is persisted in the DEEP snapshot and available for completion
+     * without live JDBC queries.
+     */
+    private List<JdbcSchemaObject> expandTableColumns(JdbcConnection connection, List<JdbcSchemaObject> tables)
     {
-        if (value == null)
+        List<JdbcSchemaObject> result = new ArrayList<>();
+        for (JdbcSchemaObject table : tables)
         {
-            return null;
+            String catalog = stringValue(table.attributes(), "catalog");
+            String schema = stringValue(table.attributes(), "schema");
+            String tableName = table.name();
+            if (isBlank(tableName))
+            {
+                continue;
+            }
+            JdbcSchemaTarget tableTarget = new JdbcSchemaTarget(!isBlank(catalog) ? catalog
+                    : null,
+                    !isBlank(schema) ? schema
+                            : null,
+                    tableName);
+            List<JdbcSchemaObject> columns;
+            try
+            {
+                columns = router.resolve(connection, "table", tableTarget);
+            }
+            catch (RuntimeException e)
+            {
+                System.err.println("[WARN] Failed to resolve columns for " + tableName + ": " + e.getMessage());
+                columns = List.of();
+            }
+            result.add(new JdbcSchemaObject(table.id(), table.name(), table.kind(), table.nodeType(), table.fullName(), List.copyOf(columns), table.attributes()));
         }
-        String trimmed = value.trim();
-        return trimmed.isBlank() ? null
-                : trimmed;
+        return result;
     }
 }

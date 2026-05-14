@@ -18,65 +18,132 @@ class SqlContextDetectorTest
     @Test
     void detectsFromClause()
     {
-        // SELECT * FROM t1
-        // from node: (0,9)-(0,16), cursor at pos 14 (on 't' of t1)
         assertContext("SELECT * FROM t1", 1, 15, SqlCompletionContext.TABLE_REFERENCE);
     }
 
     @Test
     void detectsJoinClause()
     {
-        // SELECT * FROM t1 JOIN t2 ON 1 = 1
-        // join node: (0,17)-(0,31), cursor at pos 22 (on 't' of t2)
         assertContext("SELECT * FROM t1 JOIN t2 ON 1 = 1", 1, 23, SqlCompletionContext.TABLE_REFERENCE);
     }
 
     @Test
     void detectsRelationInFromClause()
     {
-        // SELECT * FROM dbo.t1
-        // from node: (0,9)-(0,20), cursor at pos 18 (on 't' of t1)
         assertContext("SELECT * FROM dbo.t1", 1, 19, SqlCompletionContext.TABLE_REFERENCE);
     }
 
     @Test
     void detectsSubqueryFromClause()
     {
-        // SELECT * FROM (SELECT * FROM t1)
-        // inner from: (0,24)-(0,31), cursor at pos 29 (on 't' of inner t1)
         assertContext("SELECT * FROM (SELECT * FROM t1)", 1, 30, SqlCompletionContext.TABLE_REFERENCE);
     }
 
+    // -- COLUMN_REFERENCE tests --
+
     @Test
-    void returnsOtherForSelectClause()
+    void columnReferenceInSelectExpression()
     {
-        // SELECT * FROM t1
-        // select node: (0,0)-(0,8), cursor at pos 7 (on '*')
-        assertContext("SELECT * FROM t1", 1, 8, SqlCompletionContext.OTHER);
+        assertContext("SELECT name FROM t1", 1, 10, SqlCompletionContext.COLUMN_REFERENCE);
     }
 
     @Test
-    void returnsOtherForWhereClause()
+    void columnReferenceInEmptySelectListBeforeFrom()
     {
-        // SELECT * FROM t1 WHERE x = 1
-        // where node: (0,17)-(0,28), cursor at pos 23 (on 'x' in WHERE field)
-        assertContext("SELECT * FROM t1 WHERE x = 1", 1, 24, SqlCompletionContext.OTHER);
+        assertContext("SELECT \nFROM public.orders o", 1, 8, SqlCompletionContext.COLUMN_REFERENCE);
     }
 
     @Test
-    void returnsOtherForEmptyText()
+    void columnReferenceInNonEmptySelectListBeforeFrom()
     {
-        TSTree tree = parser.parseString(null, "");
-        assertEquals(SqlCompletionContext.OTHER, SqlContextDetector.detectContext(tree, 1, 1));
+        assertContext("SELECT na\nFROM public.orders o", 1, 10, SqlCompletionContext.COLUMN_REFERENCE);
     }
 
     @Test
-    void returnsOtherForOnCondition()
+    void columnReferenceInQualifiedSelectListBeforeFrom()
     {
-        // SELECT * FROM t1 JOIN t2 ON t1.x = t2.y
-        // binary_expression: (0,28)-(0,39), cursor at pos 28 (on first 't' of t1.x)
-        assertContext("SELECT * FROM t1 JOIN t2 ON t1.x = t2.y", 1, 29, SqlCompletionContext.OTHER);
+        assertContext("SELECT o.\nFROM public.orders o", 1, 10, SqlCompletionContext.COLUMN_REFERENCE);
     }
+
+    @Test
+    void tableReferenceInInsertInto()
+    {
+        assertContext("INSERT INTO ", 1, 13, SqlCompletionContext.TABLE_REFERENCE);
+    }
+
+    @Test
+    void columnReferenceInInsertColumnList()
+    {
+        assertContext("INSERT INTO tableB (", 1, 21, SqlCompletionContext.COLUMN_REFERENCE);
+    }
+
+    @Test
+    void columnReferenceInNonEmptyInsertColumnList()
+    {
+        assertContext("INSERT INTO tableB (na", 1, 23, SqlCompletionContext.COLUMN_REFERENCE);
+    }
+
+    @Test
+    void columnReferenceInSelectWithAlias()
+    {
+        assertContext("SELECT a.name FROM t1 a", 1, 10, SqlCompletionContext.COLUMN_REFERENCE);
+    }
+
+    @Test
+    void columnReferenceAfterDot()
+    {
+        assertContext("SELECT a. FROM t1 a", 1, 10, SqlCompletionContext.COLUMN_REFERENCE);
+    }
+
+    @Test
+    void columnReferenceInWhereClause()
+    {
+        assertContext("SELECT * FROM t1 WHERE x = 1", 1, 24, SqlCompletionContext.COLUMN_REFERENCE);
+    }
+
+    @Test
+    void columnReferenceInOnCondition()
+    {
+        assertContext("SELECT * FROM t1 JOIN t2 ON t1.x = t2.y", 1, 29, SqlCompletionContext.COLUMN_REFERENCE);
+    }
+
+    @Test
+    void columnReferenceInOnClause()
+    {
+        assertContext("SELECT * FROM t1 JOIN t2 ON t1.x = t2.y", 1, 33, SqlCompletionContext.COLUMN_REFERENCE);
+    }
+
+    @Test
+    void columnReferenceInOnAfterJoinWithAlias()
+    {
+        assertContext("SELECT *\nFROM dbo.tableA f\nINNER JOIN dbo.tableB p\n    ON ", 4, 7, SqlCompletionContext.COLUMN_REFERENCE);
+    }
+
+    @Test
+    void columnReferenceAfterWhereWithRelation()
+    {
+        assertContext("SELECT *\nFROM dbo.tableA\nWHERE ", 3, 6, SqlCompletionContext.COLUMN_REFERENCE);
+    }
+
+    @Test
+    void columnReferenceInHaving()
+    {
+        assertContext("SELECT count(*) FROM t1 HAVING count(*) > 1", 1, 31, SqlCompletionContext.COLUMN_REFERENCE);
+    }
+
+    @Test
+    void columnReferenceInGroupBy()
+    {
+        assertContext("SELECT name FROM t1 GROUP BY name", 1, 30, SqlCompletionContext.COLUMN_REFERENCE);
+    }
+
+    @Test
+    void columnReferenceInOrderBy()
+    {
+        assertContext("SELECT name FROM t1 ORDER BY name", 1, 30, SqlCompletionContext.COLUMN_REFERENCE);
+    }
+
+    // -- TABLE_REFERENCE (regression) --
 
     @Test
     void detectsIncompleteFromOnNextLine()
@@ -97,17 +164,8 @@ class SqlContextDetectorTest
     }
 
     @Test
-    void returnsOtherForSelectOnly()
-    {
-        assertContext("SELECT *", 1, 9, SqlCompletionContext.OTHER);
-    }
-
-    @Test
     void detectsFromAfterWhereOnPreviousLine()
     {
-        // A preceding WHERE clause with binary_expression should NOT bleed into a
-        // subsequent FROM on a later line (binary_expression can span multiple lines
-        // but exclude check is end-exclusive).
         assertContext("SELECT * FROM t1 WHERE x = 1\nSELECT *\nFROM ", 3, 5, SqlCompletionContext.TABLE_REFERENCE);
     }
 
@@ -117,37 +175,31 @@ class SqlContextDetectorTest
         assertContext("SELECT * FROM t1 JOIN t2 ON 1 = 1\nSELECT *\nFROM ", 3, 5, SqlCompletionContext.TABLE_REFERENCE);
     }
 
+    // -- OTHER tests --
+
     @Test
-    void respectsWhereOnSameStatement()
+    void columnReferenceInSelectStar()
     {
-        assertContext("SELECT * FROM t1 WHERE x = 1", 1, 24, SqlCompletionContext.OTHER);
+        assertContext("SELECT * FROM t1", 1, 8, SqlCompletionContext.COLUMN_REFERENCE);
     }
 
     @Test
-    void respectsOnClauseInJoin()
+    void returnsOtherForEmptyText()
     {
-        // Cursor inside JOIN's ON condition should not suggest tables
-        assertContext("SELECT * FROM t1 JOIN t2 ON t1.x = t2.y", 1, 33, SqlCompletionContext.OTHER);
+        TSTree tree = parser.parseString(null, "");
+        assertEquals(SqlCompletionContext.OTHER, SqlContextDetector.detectContext(tree, 1, 1));
     }
 
     @Test
-    void returnsOtherForOnAfterJoinWithAlias()
+    void returnsOtherForSelectOnly()
     {
-        // Cursor after ON on a multi-line JOIN should not suggest tables
-        assertContext("SELECT *\nFROM dbo.tableA f\nINNER JOIN dbo.tableB p\n    ON ", 4, 7, SqlCompletionContext.OTHER);
-    }
-
-    @Test
-    void returnsOtherForWhereAfterFromWithRelation()
-    {
-        // Cursor after WHERE with a preceding FROM that has a table should be OTHER
-        assertContext("SELECT *\nFROM dbo.tableA\nWHERE ", 3, 6, SqlCompletionContext.OTHER);
+        assertContext("SELECT *", 1, 9, SqlCompletionContext.OTHER);
     }
 
     private void assertContext(String sql, int line, int column, SqlCompletionContext expected)
     {
         TSTree tree = parser.parseString(null, sql);
-        SqlCompletionContext result = SqlContextDetector.detectContext(tree, line, column);
+        SqlCompletionContext result = SqlContextDetector.detectContext(tree, sql, line, column);
         assertEquals(expected, result, "Expected " + expected + " for cursor at (" + line + "," + column + ") in: " + sql);
     }
 }

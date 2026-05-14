@@ -57,14 +57,7 @@ class JdbcDatabaseCache {
         { silent: true }
       )) as JdbcSchemaObject[];
 
-      let databases = extractDatabaseNames(snapshot);
-      if (databases.length === 0) {
-        const live = (await getQueryEngineService().invoke(
-          { engineId: "jdbc", action: "jdbc.schema.fetch", payload: { connectionId, scope: "top" } },
-          { silent: true }
-        )) as JdbcSchemaObject[];
-        databases = extractDatabaseNames(live);
-      }
+      const databases = extractDatabaseNames(snapshot);
 
       this.entries.set(connectionId, { databases, fetchedAtMs: Date.now() });
       this.failures.delete(connectionId);

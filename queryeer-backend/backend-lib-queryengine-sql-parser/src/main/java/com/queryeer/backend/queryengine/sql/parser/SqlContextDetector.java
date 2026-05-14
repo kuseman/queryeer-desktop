@@ -10,23 +10,27 @@ import org.treesitter.TSTree;
 import org.treesitter.TreeSitterSql;
 
 /**
- * Detects whether the cursor is in a table-reference context (FROM/JOIN clause) or an exclude context (WHERE/ON/binary_expression) using tree-sitter queries with a fallback ancestor walk for
- * error-recovery trees.
+ * Detects whether the cursor is in a table-reference context (FROM/JOIN clause), a column-reference context (SELECT expressions, WHERE/ON/HAVING conditions, GROUP BY, ORDER BY), or an other context
+ * using tree-sitter queries with a fallback ancestor walk for error-recovery trees.
  *
  * <h2>Why keyword-specific logic is needed</h2> When SQL is incomplete, tree-sitter creates ERROR nodes containing orphaned keywords. These keywords lose their structural context — a
- * {@code keyword_from} orphaned in ERROR should trigger table suggestions, while a {@code keyword_where} orphaned in ERROR should suppress them. The keyword type IS the context.
+ * {@code keyword_from} orphaned in ERROR should trigger table suggestions, while a {@code keyword_where} orphaned in ERROR should trigger column suggestions. The keyword type IS the context.
  */
 public final class SqlContextDetector
 {
     /**
-     * Single query finding all nodes relevant to context detection. Capture names indicate the semantic group:
+     * Single query finding nodes relevant to context detection. Capture names indicate the semantic group:
      * <ul>
      * <li>{@code clause} — cursor inside a FROM/JOIN clause → TABLE_REFERENCE</li>
-     * <li>{@code exclude} — cursor inside WHERE/ON/binary_expression → OTHER</li>
+     * <li>{@code other} — cursor inside WHERE/ON/HAVING/binary_expression → COLUMN_REFERENCE</li>
      * </ul>
+     * {@code @other} wins over {@code @clause} when both match the cursor (checked via early-return logic).
      */
-    private static final TSQuery CONTEXT_QUERY = new TSQuery(new TreeSitterSql(),
-            "(from) @clause\n(join) @clause\n(keyword_from) @clause\n(keyword_join) @clause\n" + "(where) @exclude\n(keyword_on) @exclude\n(keyword_where) @exclude\n(binary_expression) @exclude");
+    private static final TSQuery CONTEXT_QUERY = new TSQuery(new TreeSitterSql(), "(from) @clause\n(join) @clause\n(keyword_from) @clause\n(keyword_join) @clause\n"
+                                                                                  + "(keyword_where) @other\n(keyword_on) @other\n(keyword_having) @other\n(where) @other\n(binary_expression) @other");
+
+    private static final int HASH_CLAUSE = "clause".hashCode();
+    private static final int HASH_OTHER = "other".hashCode();
 
     private SqlContextDetector()
     {
@@ -34,28 +38,45 @@ public final class SqlContextDetector
 
     public static SqlCompletionContext detectContext(TSTree tree, int line, int column)
     {
+        return detectContext(tree, null, line, column);
+    }
+
+    public static SqlCompletionContext detectContext(TSTree tree, String text, int line, int column)
+    {
         TSPoint pt = new TSPoint(line - 1, column - 1);
 
-        // Phase 1: TSQuery — efficient for most well-formed and broken SQL
+        SqlCompletionContext scannedContext = SqlClauseClassifier.classify(text, line, column);
+        if (scannedContext != null)
+        {
+            return scannedContext;
+        }
+
+        // Phase 1: TSQuery — efficient for well-formed and broken SQL
         SqlCompletionContext result = queryContext(tree, pt);
         if (result != null)
         {
             return result;
         }
 
-        // Phase 2: Ancestor-walking fallback — catches edge cases where
-        // getNamedDescendantForPointRange returns a covering node the query missed
+        // Phase 2: Ancestor-walking fallback — handles edge cases where
+        // getNamedDescendantForPointRange returns a covering node the query missed,
+        // and orphaned keywords inside ERROR nodes.
         TSNode node = tree.getRootNode()
                 .getNamedDescendantForPointRange(pt, pt);
         while (node != null
                 && !node.isNull())
         {
             String type = node.getType();
-            if (isExcludeKeyword(type)
+            if (isColumnKeyword(type)
+                    || "select".equals(type)
                     || "where".equals(type)
+                    || "having".equals(type)
+                    || "group_by".equals(type)
+                    || "order_by".equals(type)
+                    || "on".equals(type)
                     || "binary_expression".equals(type))
             {
-                return SqlCompletionContext.OTHER;
+                return SqlCompletionContext.COLUMN_REFERENCE;
             }
             if (isTableKeyword(type)
                     || "from".equals(type)
@@ -68,50 +89,62 @@ public final class SqlContextDetector
         return SqlCompletionContext.OTHER;
     }
 
-    /** Iterates context query matches and checks cursor containment. Exclude wins over clause. */
+    /**
+     * Iterates context query matches and checks cursor containment. Keyword-type nodes use the same-line heuristic; structural nodes use strict end-inclusive containment. {@code @other} wins
+     * immediately over {@code @clause}.
+     */
     private static SqlCompletionContext queryContext(TSTree tree, TSPoint pt)
     {
-        TSQueryCursor cursor = new TSQueryCursor();
-        cursor.exec(CONTEXT_QUERY, tree.getRootNode());
-        TSQueryMatch match = new TSQueryMatch();
-        boolean inClause = false;
-        while (cursor.nextMatch(match))
+        try (TSQueryCursor cursor = new TSQueryCursor())
         {
-            for (TSQueryCapture capture : match.getCaptures())
+            cursor.exec(CONTEXT_QUERY, tree.getRootNode());
+            TSQueryMatch match = new TSQueryMatch();
+            boolean inClause = false;
+            while (cursor.nextMatch(match))
             {
-                TSNode node = capture.getNode();
-                int captureIndex = capture.getIndex();
-                int captureNameId = CONTEXT_QUERY.getCaptureNameForId(captureIndex)
-                        .hashCode();
-                boolean isExclude = isExcludeCapture(captureNameId);
-                if (containsPoint(node, pt, isExclude))
+                for (TSQueryCapture capture : match.getCaptures())
                 {
-                    if (isExclude)
+                    TSNode node = capture.getNode();
+                    int captureIndex = capture.getIndex();
+                    String type = node.getType();
+                    int captureNameId = CONTEXT_QUERY.getCaptureNameForId(captureIndex)
+                            .hashCode();
+                    // Keyword nodes use same-line heuristic; structural nodes use strict containment
+                    boolean contained = isKeywordType(type) ? keywordContains(node, pt)
+                            : strictContains(node, pt);
+                    if (contained)
                     {
-                        return SqlCompletionContext.OTHER;
+                        if (captureNameId == HASH_OTHER)
+                        {
+                            return SqlCompletionContext.COLUMN_REFERENCE;
+                        }
+                        if (captureNameId == HASH_CLAUSE)
+                        {
+                            inClause = true;
+                        }
                     }
-                    inClause = true;
                 }
             }
+            return inClause ? SqlCompletionContext.TABLE_REFERENCE
+                    : null;
         }
-        return inClause ? SqlCompletionContext.TABLE_REFERENCE
-                : null;
     }
 
-    private static boolean isExcludeCapture(int captureNameHash)
+    /** Returns true for single-token keyword nodes that need the same-line heuristic. */
+    private static boolean isKeywordType(String type)
     {
-        return captureNameHash == "exclude".hashCode();
+        return "keyword_from".equals(type)
+                || "keyword_join".equals(type)
+                || "keyword_where".equals(type)
+                || "keyword_on".equals(type)
+                || "keyword_having".equals(type);
     }
 
     /**
-     * Single containment check for all node types. Behavior differs subtly between clause and exclude captures:
-     * <ul>
-     * <li><b>Exclude:</b> end-exclusive ({@code ptCol >= endCol} → outside). Multi-line nodes only apply exclusion on their starting line.</li>
-     * <li><b>Clause:</b> end-inclusive ({@code ptCol > endCol} → outside).</li>
-     * <li><b>Both:</b> orphaned keywords (FROM/JOIN/WHERE/ON) use same-line heuristic: cursor anywhere at or after the keyword's start column on the same line is considered inside.</li>
-     * </ul>
+     * Same-line heuristic for orphaned keyword nodes. A cursor within or shortly after the keyword on the same line is considered inside. This handles trailing whitespace past the keyword's end (when
+     * a user types "FROM " and the cursor is on the trailing space) without bleeding into distant clauses like GROUP BY, ORDER BY, or HAVING.
      */
-    private static boolean containsPoint(TSNode node, TSPoint pt, boolean exclude)
+    private static boolean keywordContains(TSNode node, TSPoint pt)
     {
         TSPoint start = node.getStartPoint();
         TSPoint end = node.getEndPoint();
@@ -131,37 +164,50 @@ public final class SqlContextDetector
         {
             return false;
         }
-        // Orphaned keywords lose their ERROR node structural context. Use the
-        // keyword type to derive meaning: FROM/JOIN keywords → table context,
-        // WHERE/ON keywords → exclude context. Same-line heuristic handles
-        // trailing whitespace past the keyword's node end boundary.
-        String type = node.getType();
-        if (isOrphanedKeyword(type)
-                && ptRow == startRow
+        // Same-line heuristic: cursor on the same line as the keyword
+        // and within a reasonable window (keyword text + 5 chars for trailing space).
+        if (ptRow == startRow
                 && ptRow == endRow)
         {
-            return ptCol >= startCol;
+            int endCol = end.getColumn();
+            // Require cursor to be within or shortly after the keyword (max 5 chars past end)
+            return ptCol >= startCol
+                    && ptCol <= endCol + 5;
         }
-        // Multi-line exclude nodes (error recovery artifacts) only apply on
-        // their starting line to prevent bleeding across statements.
-        if (exclude
-                && startRow != endRow
-                && ptRow != startRow)
-        {
-            return false;
-        }
-        int endCol = end.getColumn();
-        // Exclude: end-exclusive. Clause: end-inclusive.
+        // Multi-line keywords: end-inclusive
         if (ptRow == endRow
-                && (exclude ? ptCol >= endCol
-                        : ptCol > endCol))
+                && ptCol > end.getColumn())
         {
             return false;
         }
         return true;
     }
 
-    // -- Keyword classifier (single source of truth) --
+    /** End-inclusive point containment using the node's structural range. */
+    private static boolean strictContains(TSNode node, TSPoint pt)
+    {
+        TSPoint start = node.getStartPoint();
+        TSPoint end = node.getEndPoint();
+        int ptRow = pt.getRow();
+        if (ptRow < start.getRow()
+                || ptRow > end.getRow())
+        {
+            return false;
+        }
+        if (ptRow == start.getRow()
+                && pt.getColumn() < start.getColumn())
+        {
+            return false;
+        }
+        if (ptRow == end.getRow()
+                && pt.getColumn() > end.getColumn())
+        {
+            return false;
+        }
+        return true;
+    }
+
+    // -- Keyword classifiers --
 
     /** Keywords that indicate a table-reference context. */
     private static boolean isTableKeyword(String type)
@@ -170,17 +216,11 @@ public final class SqlContextDetector
                 || "keyword_join".equals(type);
     }
 
-    /** Keywords that indicate a non-table context (WHERE, ON). */
-    private static boolean isExcludeKeyword(String type)
+    /** Keywords that indicate a column-reference context (WHERE, ON, HAVING). */
+    private static boolean isColumnKeyword(String type)
     {
         return "keyword_where".equals(type)
-                || "keyword_on".equals(type);
-    }
-
-    /** Any orphaned keyword that needs same-line heuristic. */
-    private static boolean isOrphanedKeyword(String type)
-    {
-        return isTableKeyword(type)
-                || isExcludeKeyword(type);
+                || "keyword_on".equals(type)
+                || "keyword_having".equals(type);
     }
 }

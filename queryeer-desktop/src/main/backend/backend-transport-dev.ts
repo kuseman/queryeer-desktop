@@ -39,13 +39,15 @@ export class DevBackendTransport extends StdioBackendTransportBase {
     if (!this.state.dependenciesPrepared) {
       await this.runMavenCommand(repoRoot, mvnwPath, [
         "-q",
-        "-f",
-        "queryeer-backend/pom.xml",
-        "-pl",
-        "backend-runner",
+        "-T", "1C",                     // Parallel build
+        "-f", "queryeer-backend/pom.xml",
+        "-pl", "backend-runner",
         "-am",
         "-DskipTests=true",
         "-Dspotless.check.skip=true",
+        "-Dmaven.javadoc.skip=true",    // Don't build docs
+        "-Dmaven.source.skip=true",     // Don't package source code
+        "-Dbuild.cache.skip=false",     // Enable build cache if plugin is present        
         "install"
       ]);
       this.state.dependenciesPrepared = true;
@@ -62,7 +64,7 @@ export class DevBackendTransport extends StdioBackendTransportBase {
     const appDir = this.launchContext?.appDir ?? process.env.QUERYEER_APP_DIR;
     const debugArgs =
       process.env.QUERYEER_BACKEND_JDWP?.trim() ||
-      //"-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:51050";
+      //"-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:51050";  // Sticky listening port and suspend JVM until debug connect
       "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=0";
     const existingMavenOpts = process.env.MAVEN_OPTS?.trim();
     const libNativeArg = appDir ? `-Djava.library.path=${join(appDir, "libNative")}` : null;

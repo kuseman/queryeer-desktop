@@ -88,7 +88,7 @@ class JdbcBackendPluginTest
 
     @SuppressWarnings("unchecked")
     @Test
-    void schemaSnapshotTopTriggersRefreshWhenCacheIsEmpty() throws Exception
+    void schemaSnapshotTopReturnsCachedDataOnlyWhenCacheIsEmpty() throws Exception
     {
         QueryEngineProvider provider = activateAndGetProvider();
         String jdbcUrl = "jdbc:h2:mem:test_snapshot_backfill;DB_CLOSE_DELAY=-1";
@@ -99,7 +99,7 @@ class JdbcBackendPluginTest
         }
 
         List<Object> snapshot = (List<Object>) provider.invoke(null, "jdbc.schema.snapshot", Map.of("connectionId", "jdbc-snapshot-backfill", "scope", "top"));
-        Assertions.assertFalse(snapshot.isEmpty());
+        Assertions.assertTrue(snapshot.isEmpty());
     }
 
     @SuppressWarnings("unchecked")
@@ -165,35 +165,6 @@ class JdbcBackendPluginTest
 
     @SuppressWarnings("unchecked")
     @Test
-    void sqlCompleteIncludesTableNamesViaLiveFallbackWhenDeepCacheIsEmpty() throws Exception
-    {
-        // Regression: navigator.loadSnapshotForLookup falls through to live query
-        // when DEEP cache is empty. The fallback must return tables (and views).
-        QueryEngineProvider provider = activateAndGetProvider();
-        String jdbcUrl = "jdbc:h2:mem:test_fetch_deep_append;DB_CLOSE_DELAY=-1";
-
-        try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
-        {
-            statement.execute("create table table_complete_test(id int)");
-            statement.execute("create view view_complete_test as select * from table_complete_test");
-        }
-
-        // Refresh TOP only (DEEP cache remains empty)
-        provider.invoke(null, "jdbc.schema.refresh", Map.of("connectionId", "jdbc-fetch-deep", "scope", "top"));
-
-        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete",
-                Map.of("fileId", "file-1", "version", 1L, "text", "SELECT * FROM ", "connectionId", "jdbc-fetch-deep", "cursor", Map.of("line", 1, "column", 15), "limits", Map.of("maxItems", 50)));
-
-        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
-        // Table names from live fallback should be present (table_complete_test, and may include fetch_direct_visible)
-        Assertions.assertTrue(items.stream()
-                .map(item -> String.valueOf(item.get("label")))
-                .anyMatch(label -> label.toUpperCase()
-                        .contains("TABLE_COMPLETE_TEST")));
-    }
-
-    @SuppressWarnings("unchecked")
-    @Test
     void sqlSymbolAtPositionResolvesTableFromSchemaStore() throws Exception
     {
         QueryEngineProvider provider = activateAndGetProvider();
@@ -229,39 +200,6 @@ class JdbcBackendPluginTest
                 Map.of("text", "SELECT * FROM totally_unknown_xyz", "cursor", Map.of("line", 1, "column", 20), "connectionId", "jdbc-symbol"));
 
         Assertions.assertNull(result);
-    }
-
-    @SuppressWarnings("unchecked")
-    @Test
-    void sqlCompleteWithDatabaseParamReturnsTablesViaLiveFallback() throws Exception
-    {
-        // Regression: when selectedDatabase is set but no schema, the fallback previously
-        // created JdbcSchemaTarget(database, null). target.matches() returns false when
-        // schema is null, filtering out ALL tables. Null target must be passed instead.
-        QueryEngineProvider provider = activateAndGetProvider();
-        String jdbcUrl = "jdbc:h2:mem:test_fetch_deep_append;DB_CLOSE_DELAY=-1";
-
-        try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
-        {
-            statement.execute("create table db_filter_test(id int)");
-        }
-
-        // Only TOP refresh (DEEP cache stays empty)
-        provider.invoke(null, "jdbc.schema.refresh", Map.of("connectionId", "jdbc-fetch-deep", "scope", "top"));
-
-        // Complete with explicit database parameter — this previously caused ALL tables
-        // to be filtered out because the fallback target had schema=null
-        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete", Map.of("fileId", "file-1", "version", 1L, "text", "SELECT * FROM ", "connectionId",
-                "jdbc-fetch-deep", "database", "TEST", "cursor", Map.of("line", 1, "column", 15), "limits", Map.of("maxItems", 50)));
-
-        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
-        Assertions.assertTrue(items.stream()
-                .map(item -> String.valueOf(item.get("label")))
-                .anyMatch(label -> label.toUpperCase()
-                        .contains("DB_FILTER_TEST")),
-                "Table should appear in completion even when database filter is set, " + items.stream()
-                        .map(i -> String.valueOf(i.get("label")))
-                        .toList());
     }
 
     @SuppressWarnings("unchecked")
@@ -633,6 +571,134 @@ class JdbcBackendPluginTest
         Assertions.assertTrue(afterClose.stream()
                 .anyMatch(entry -> "file-live".equals(entry.get("fileId"))
                         && "dead".equals(entry.get("status"))));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void columnCompletionIncludesAliasPrefix() throws Exception
+    {
+        JdbcBackendPlugin plugin = new JdbcBackendPlugin();
+        RecordingQueryEngineRegistry engines = new RecordingQueryEngineRegistry();
+        RecordingFileSessionHandlerRegistry fileSessions = new RecordingFileSessionHandlerRegistry();
+        RecordingEventBus events = new RecordingEventBus();
+        plugin.activate(new TestPluginContext(engines, fileSessions, defaultConnectionsConfigService(), (_, _) ->
+        {
+        }, events));
+        QueryEngineProvider provider = engines.provider;
+
+        // Use the same H2 URL that jdbc-refresh-open is configured with
+        String jdbcUrl = "jdbc:h2:mem:test_refresh_open;DB_CLOSE_DELAY=-1";
+        try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
+        {
+            statement.execute("create table alias_test(id int primary key, name varchar(64), age int)");
+        }
+        events.publish("security.session.opened", Map.of("sessionId", "s1"));
+
+        // DEEP refresh to populate column cache
+        provider.invoke(null, "jdbc.schema.refresh", Map.of("connectionId", "jdbc-refresh-open", "scope", "deep", "target", Map.of("schema", "PUBLIC")));
+
+        // Complete in a COLUMN_REFERENCE context with an aliased table
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete", Map.of("fileId", "file-1", "version", 1L, "text", "SELECT t. FROM alias_test t", "connectionId",
+                "jdbc-refresh-open", "cursor", Map.of("line", 1, "column", 10), "limits", Map.of("maxItems", 50)));
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+        List<String> labels = items.stream()
+                .map(item -> String.valueOf(item.get("label")))
+                .toList();
+
+        // Items should include alias-prefixed column names (t.id, t.name, t.age)
+        Assertions.assertTrue(labels.stream()
+                .anyMatch(l -> "t.id".equalsIgnoreCase(l)), "Should include t.id, got: " + labels);
+        Assertions.assertTrue(labels.stream()
+                .anyMatch(l -> "t.name".equalsIgnoreCase(l)), "Should include t.name, got: " + labels);
+        Assertions.assertTrue(labels.stream()
+                .anyMatch(l -> "t.age".equalsIgnoreCase(l)), "Should include t.age, got: " + labels);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void columnCompletionWorksInSelectListBeforeFrom() throws Exception
+    {
+        JdbcBackendPlugin plugin = new JdbcBackendPlugin();
+        RecordingQueryEngineRegistry engines = new RecordingQueryEngineRegistry();
+        RecordingFileSessionHandlerRegistry fileSessions = new RecordingFileSessionHandlerRegistry();
+        RecordingEventBus events = new RecordingEventBus();
+        plugin.activate(new TestPluginContext(engines, fileSessions, defaultConnectionsConfigService(), (_, _) ->
+        {
+        }, events));
+        QueryEngineProvider provider = engines.provider;
+
+        String jdbcUrl = "jdbc:h2:mem:test_refresh_open;DB_CLOSE_DELAY=-1";
+        try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
+        {
+            statement.execute("create table select_list_test(id int primary key, name varchar(64), amount decimal)");
+        }
+        events.publish("security.session.opened", Map.of("sessionId", "s1"));
+        provider.invoke(null, "jdbc.schema.refresh", Map.of("connectionId", "jdbc-refresh-open", "scope", "deep", "target", Map.of("schema", "PUBLIC")));
+
+        Map<String, Object> emptySelectResult = (Map<String, Object>) provider.invoke("file-1", "sql.complete", Map.of("fileId", "file-1", "version", 1L, "text",
+                "SELECT \nFROM PUBLIC.SELECT_LIST_TEST t", "connectionId", "jdbc-refresh-open", "cursor", Map.of("line", 1, "column", 8), "limits", Map.of("maxItems", 50)));
+        List<String> emptyLabels = ((List<Map<String, Object>>) emptySelectResult.get("items")).stream()
+                .map(item -> String.valueOf(item.get("label")))
+                .toList();
+        Assertions.assertTrue(emptyLabels.stream()
+                .anyMatch(l -> "t.name".equalsIgnoreCase(l)), "Should include t.name, got: " + emptyLabels);
+
+        Map<String, Object> prefixResult = (Map<String, Object>) provider.invoke("file-1", "sql.complete", Map.of("fileId", "file-1", "version", 1L, "text",
+                "SELECT na\nFROM PUBLIC.SELECT_LIST_TEST t", "connectionId", "jdbc-refresh-open", "cursor", Map.of("line", 1, "column", 10), "limits", Map.of("maxItems", 50)));
+        List<String> prefixLabels = ((List<Map<String, Object>>) prefixResult.get("items")).stream()
+                .map(item -> String.valueOf(item.get("label")))
+                .toList();
+        Assertions.assertTrue(prefixLabels.stream()
+                .anyMatch(l -> "t.name".equalsIgnoreCase(l)), "Should include t.name for non-empty select list, got: " + prefixLabels);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void completionWorksForInsertTargetsAndColumns() throws Exception
+    {
+        JdbcBackendPlugin plugin = new JdbcBackendPlugin();
+        RecordingQueryEngineRegistry engines = new RecordingQueryEngineRegistry();
+        RecordingFileSessionHandlerRegistry fileSessions = new RecordingFileSessionHandlerRegistry();
+        RecordingEventBus events = new RecordingEventBus();
+        plugin.activate(new TestPluginContext(engines, fileSessions, defaultConnectionsConfigService(), (_, _) ->
+        {
+        }, events));
+        QueryEngineProvider provider = engines.provider;
+
+        String jdbcUrl = "jdbc:h2:mem:test_refresh_open;DB_CLOSE_DELAY=-1";
+        try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
+        {
+            statement.execute("create table insert_target_test(id int primary key, name varchar(64), amount decimal)");
+        }
+        events.publish("security.session.opened", Map.of("sessionId", "s1"));
+        provider.invoke(null, "jdbc.schema.refresh", Map.of("connectionId", "jdbc-refresh-open", "scope", "deep", "target", Map.of("schema", "PUBLIC")));
+
+        Map<String, Object> tableResult = (Map<String, Object>) provider.invoke("file-1", "sql.complete",
+                Map.of("fileId", "file-1", "version", 1L, "text", "INSERT INTO ", "connectionId", "jdbc-refresh-open", "cursor", Map.of("line", 1, "column", 13), "limits", Map.of("maxItems", 50)));
+        List<String> tableLabels = ((List<Map<String, Object>>) tableResult.get("items")).stream()
+                .map(item -> String.valueOf(item.get("label")))
+                .toList();
+        Assertions.assertTrue(tableLabels.stream()
+                .anyMatch(l -> l.toUpperCase()
+                        .contains("INSERT_TARGET_TEST")),
+                "Should include INSERT_TARGET_TEST, got: " + tableLabels);
+
+        Map<String, Object> columnResult = (Map<String, Object>) provider.invoke("file-1", "sql.complete", Map.of("fileId", "file-1", "version", 1L, "text", "INSERT INTO PUBLIC.INSERT_TARGET_TEST (",
+                "connectionId", "jdbc-refresh-open", "cursor", Map.of("line", 1, "column", 40), "limits", Map.of("maxItems", 50)));
+        List<String> columnLabels = ((List<Map<String, Object>>) columnResult.get("items")).stream()
+                .map(item -> String.valueOf(item.get("label")))
+                .toList();
+        Assertions.assertTrue(columnLabels.stream()
+                .anyMatch(l -> "name".equalsIgnoreCase(l)), "Should include name column, got: " + columnLabels);
+
+        Map<String, Object> enclosedColumnResult = (Map<String, Object>) provider.invoke("file-1", "sql.complete", Map.of("fileId", "file-1", "version", 1L, "text",
+                "INSERT INTO PUBLIC.INSERT_TARGET_TEST()", "connectionId", "jdbc-refresh-open", "cursor", Map.of("line", 1, "column", 39), "limits", Map.of("maxItems", 50)));
+        List<String> enclosedColumnLabels = ((List<Map<String, Object>>) enclosedColumnResult.get("items")).stream()
+                .map(item -> String.valueOf(item.get("label")))
+                .toList();
+        Assertions.assertTrue(enclosedColumnLabels.stream()
+                .anyMatch(l -> "name".equalsIgnoreCase(l)), "Should include name column between parentheses, got: " + enclosedColumnLabels);
     }
 
     private QueryEngineProvider activateAndGetProvider()
