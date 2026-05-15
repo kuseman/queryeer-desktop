@@ -1,12 +1,18 @@
-import type { OutputContext } from "../../contracts/extensions/OutputExtension";
+import type { OutputContext, ResultSet } from "../../contracts/extensions/OutputExtension";
 
 export type TextOutputFormatId = "plain" | "json" | "csv";
 
-export type TextOutputFormatter = {
-  id: TextOutputFormatId;
+export type QueryResultFormatter = {
+  id: string;
   label: string;
+  /** Format for text display — full context with status and output lines. */
   format: (context: OutputContext) => string[];
+  /** Format completed result sets as file content string. */
+  formatFile: (resultSets: ResultSet[]) => string;
 };
+
+/** @deprecated Use QueryResultFormatter. */
+export type TextOutputFormatter = QueryResultFormatter;
 
 function stringifyCell(cell: unknown): string {
   if (cell === null || cell === undefined) return "NULL";
@@ -26,8 +32,13 @@ function escapeCsv(value: string): string {
   return `"${escaped}"`;
 }
 
+// ---- Plain format ----
+
+const FORMAT_TARGET_TEXT = "core.queryengine.output.text";
+const FORMAT_TARGET_FILE = "core.queryengine.output.file";
+
 function formatRowsPlain(context: OutputContext): string[] {
-  if (context.rowsTargetPrimaryId !== "core.queryengine.output.text") {
+  if (context.rowsTargetPrimaryId !== FORMAT_TARGET_TEXT && context.rowsTargetPrimaryId !== FORMAT_TARGET_FILE) {
     return [];
   }
   const lines: string[] = [];
@@ -40,6 +51,14 @@ function formatRowsPlain(context: OutputContext): string[] {
     lines.push("");
   }
   return lines;
+}
+
+function plainFileContent(resultSets: ResultSet[]): string {
+  return resultSets.map((set) => {
+    const header = set.schema.columns.map((col) => col.name).join(" | ");
+    const rows = set.rows.map((row) => row.map((cell) => stringifyCell(cell)).join(" | "));
+    return [`Result set ${set.resultSetIndex + 1}`, header, ...rows].join("\n");
+  }).join("\n\n");
 }
 
 function formatRowSets(context: OutputContext, rowsFormatter: (context: OutputContext) => string[]): string[] {
@@ -62,8 +81,10 @@ function formatRowSets(context: OutputContext, rowsFormatter: (context: OutputCo
   return [...allLines, ...statusLines, "", ...rowLines];
 }
 
+// ---- JSON format ----
+
 function formatRowsJson(context: OutputContext): string[] {
-  if (context.rowsTargetPrimaryId !== "core.queryengine.output.text") {
+  if (context.rowsTargetPrimaryId !== FORMAT_TARGET_TEXT && context.rowsTargetPrimaryId !== FORMAT_TARGET_FILE) {
     return [];
   }
   const sets = context.resultSets.map((set) => ({
@@ -75,8 +96,20 @@ function formatRowsJson(context: OutputContext): string[] {
   return JSON.stringify(sets, null, 2).split("\n");
 }
 
+function jsonFileContent(resultSets: ResultSet[]): string {
+  const sets = resultSets.map((set) => ({
+    resultSetIndex: set.resultSetIndex,
+    rows: set.rows.map((row) =>
+      Object.fromEntries(set.schema.columns.map((col, i) => [col.name, row[i] ?? null]))
+    )
+  }));
+  return JSON.stringify(sets, null, 2);
+}
+
+// ---- CSV format ----
+
 function formatRowsCsv(context: OutputContext): string[] {
-  if (context.rowsTargetPrimaryId !== "core.queryengine.output.text") {
+  if (context.rowsTargetPrimaryId !== FORMAT_TARGET_TEXT && context.rowsTargetPrimaryId !== FORMAT_TARGET_FILE) {
     return [];
   }
   const lines: string[] = [];
@@ -89,6 +122,14 @@ function formatRowsCsv(context: OutputContext): string[] {
     lines.push("");
   }
   return lines;
+}
+
+function csvFileContent(resultSets: ResultSet[]): string {
+  return resultSets.map((set) => {
+    const header = set.schema.columns.map((col) => escapeCsv(col.name)).join(",");
+    const rows = set.rows.map((row) => row.map((cell) => escapeCsv(stringifyCell(cell))).join(","));
+    return [header, ...rows].join("\n");
+  }).join("\n");
 }
 
 const ANSI_RED = "\x1b[31m";
@@ -156,24 +197,27 @@ function getStatusLines(context: OutputContext): string[] {
   return [];
 }
 
-export const TEXT_OUTPUT_FORMATTERS: TextOutputFormatter[] = [
+export const TEXT_OUTPUT_FORMATTERS: QueryResultFormatter[] = [
   {
     id: "plain",
     label: "Plain",
-    format: (context) => formatRowSets(context, formatRowsPlain)
+    format: (context) => formatRowSets(context, formatRowsPlain),
+    formatFile: plainFileContent
   },
   {
     id: "json",
     label: "JSON",
-    format: (context) => formatRowSets(context, formatRowsJson)
+    format: (context) => formatRowSets(context, formatRowsJson),
+    formatFile: jsonFileContent
   },
   {
     id: "csv",
     label: "CSV",
-    format: (context) => formatRowSets(context, formatRowsCsv)
+    format: (context) => formatRowSets(context, formatRowsCsv),
+    formatFile: csvFileContent
   }
 ];
 
-export function resolveTextOutputFormatter(id: TextOutputFormatId): TextOutputFormatter {
+export function resolveTextOutputFormatter(id: string): QueryResultFormatter {
   return TEXT_OUTPUT_FORMATTERS.find((f) => f.id === id) ?? TEXT_OUTPUT_FORMATTERS[0];
 }

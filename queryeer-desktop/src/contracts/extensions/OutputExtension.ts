@@ -103,6 +103,8 @@ export type OutputContributor = {
   /** Lower number = higher priority in auto-resolution. Defaults to 100. */
   priority?: number;
   render: (context: OutputContext) => ReactNode;
+  /** When false, the contributor is excluded from OutputPanel tabs. Default true. */
+  showInPanel?: boolean;
   /**
    * Optional incremental hook called before the context state update on every
    * chunkRows event. Lets Ag-Grid call applyTransaction() without a full React
