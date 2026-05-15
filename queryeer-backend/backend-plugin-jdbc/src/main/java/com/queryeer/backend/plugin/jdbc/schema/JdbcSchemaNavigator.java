@@ -213,26 +213,6 @@ public final class JdbcSchemaNavigator
         }
 
         return List.of();
-        // // Skip live fallback for known-broken connections
-        // if (!connectionHealth.isHealthy(connectionId))
-        // {
-        // return List.of();
-        // }
-        // try
-        // {
-        // JdbcConnection resolved = connections.resolve(connectionId);
-        // List<JdbcSchemaObject> result = new ArrayList<>();
-        // // Pass null target — target.matches rejects rows when schema is null,
-        // // which would filter out ALL tables. Database filtering is handled by
-        // // the caller (collectTableNames) via normalizedSelectedDatabase.
-        // result.addAll(router.resolve(resolved, "tables_folder", null));
-        // result.addAll(router.resolve(resolved, "views_folder", null));
-        // return result;
-        // }
-        // catch (RuntimeException e)
-        // {
-        // return List.of();
-        // }
     }
 
     private static boolean containsTableData(List<JdbcSchemaObject> nodes)
@@ -254,9 +234,14 @@ public final class JdbcSchemaNavigator
         return false;
     }
 
-    private List<JdbcSchemaObject> loadCachedSnapshot(String connectionId)
+    public List<JdbcSchemaObject> loadDeepSnapshot(String connectionId)
     {
         return schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP);
+    }
+
+    private List<JdbcSchemaObject> loadCachedSnapshot(String connectionId)
+    {
+        return loadDeepSnapshot(connectionId);
     }
 
     private static Map<String, Object> findSymbolInSchema(List<JdbcSchemaObject> snapshot, String rawToken, String normalizedDatabase)

@@ -36,23 +36,23 @@ public final class SqlContextDetector
     {
     }
 
-    public static SqlCompletionContext detectContext(TSTree tree, int line, int column)
+    public static SqlParseContext detectContext(TSTree tree, int line, int column)
     {
         return detectContext(tree, null, line, column);
     }
 
-    public static SqlCompletionContext detectContext(TSTree tree, String text, int line, int column)
+    public static SqlParseContext detectContext(TSTree tree, String text, int line, int column)
     {
         TSPoint pt = new TSPoint(line - 1, column - 1);
 
-        SqlCompletionContext scannedContext = SqlClauseClassifier.classify(text, line, column);
+        SqlParseContext scannedContext = SqlClauseClassifier.classify(text, line, column);
         if (scannedContext != null)
         {
             return scannedContext;
         }
 
         // Phase 1: TSQuery — efficient for well-formed and broken SQL
-        SqlCompletionContext result = queryContext(tree, pt);
+        SqlParseContext result = queryContext(tree, pt);
         if (result != null)
         {
             return result;
@@ -76,24 +76,24 @@ public final class SqlContextDetector
                     || "on".equals(type)
                     || "binary_expression".equals(type))
             {
-                return SqlCompletionContext.COLUMN_REFERENCE;
+                return SqlParseContext.COLUMN_REFERENCE;
             }
             if (isTableKeyword(type)
                     || "from".equals(type)
                     || "join".equals(type))
             {
-                return SqlCompletionContext.TABLE_REFERENCE;
+                return SqlParseContext.TABLE_REFERENCE;
             }
             node = node.getParent();
         }
-        return SqlCompletionContext.OTHER;
+        return SqlParseContext.OTHER;
     }
 
     /**
      * Iterates context query matches and checks cursor containment. Keyword-type nodes use the same-line heuristic; structural nodes use strict end-inclusive containment. {@code @other} wins
      * immediately over {@code @clause}.
      */
-    private static SqlCompletionContext queryContext(TSTree tree, TSPoint pt)
+    private static SqlParseContext queryContext(TSTree tree, TSPoint pt)
     {
         try (TSQueryCursor cursor = new TSQueryCursor())
         {
@@ -116,7 +116,7 @@ public final class SqlContextDetector
                     {
                         if (captureNameId == HASH_OTHER)
                         {
-                            return SqlCompletionContext.COLUMN_REFERENCE;
+                            return SqlParseContext.COLUMN_REFERENCE;
                         }
                         if (captureNameId == HASH_CLAUSE)
                         {
@@ -125,7 +125,7 @@ public final class SqlContextDetector
                     }
                 }
             }
-            return inClause ? SqlCompletionContext.TABLE_REFERENCE
+            return inClause ? SqlParseContext.TABLE_REFERENCE
                     : null;
         }
     }

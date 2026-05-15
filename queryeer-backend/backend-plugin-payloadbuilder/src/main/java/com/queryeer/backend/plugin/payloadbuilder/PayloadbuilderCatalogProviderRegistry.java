@@ -72,7 +72,7 @@ final class PayloadbuilderCatalogProviderRegistry
         PayloadbuilderCatalogProvider provider = providerByAction(action);
         if (provider == null)
         {
-            throw new IllegalArgumentException("Unsupported payloadbuilder action: " + action);
+            return null;
         }
         return provider.invoke(action, payload);
     }

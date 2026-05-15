@@ -854,18 +854,13 @@ SymbolAtPositionInvokeResult:
 
 ### Backend implementation notes
 
-- Uses the existing `SqlCompletionContext` (to be renamed `SqlParseContext`) and TreeSitter to resolve the node at the cursor position.
+- Uses `SqlParseContext` (renamed from `SqlCompletionContext`) and TreeSitter to resolve the node at the cursor position.
 - The `SqlContextDetector` already classifies context (TABLE_REFERENCE vs OTHER). Extending this to return a `kind` and extracting the symbol name from the node is the core change.
 - Should be added to the engine's `capabilities` response as `"sql.symbolAtPosition"`.
 
-### Renaming: SqlCompletionContext → SqlParseContext
+### Renaming: SqlCompletionContext → SqlParseContext (completed)
 
-The existing `SqlCompletionContext` class is a general SQL parsing utility that happens to be used for completion. Rename it to `SqlParseContext` to reflect that it serves both completion and symbol navigation.
-
-Affected backend files:
-- `SqlCompletionContext.java` → rename to `SqlParseContext.java`
-- `SqlCompletionSupport.java` → update references
-- All callers updated accordingly
+The existing `SqlCompletionContext` class has been renamed to `SqlParseContext` to reflect that it serves both completion and symbol navigation.
 
 ---
 

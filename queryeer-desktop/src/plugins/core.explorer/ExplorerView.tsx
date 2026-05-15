@@ -56,9 +56,29 @@ function applyOpacityToHex(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function fileBackgroundStyle(file: FileEntity): React.CSSProperties | undefined {
+const JDBC_CONNECTIONS_SETTING_ID = "core.queryengine.jdbc.connections";
+
+function resolveAccentColor(file: FileEntity): string | undefined {
   const settings = getCoreSettingsService();
-  const configured = settings?.getValue("core.files.mimeTypes");
+  if (!settings) {
+    return undefined;
+  }
+
+  // JDBC connection color takes priority when the file is bound to a JDBC engine
+  if (file.engineBinding?.engineId === "jdbc" && file.engineBinding?.connectionId) {
+    const raw = settings.getValue(JDBC_CONNECTIONS_SETTING_ID);
+    if (Array.isArray(raw)) {
+      const jdbcColor = (raw as { connectionId: string; color?: string }[]).find(
+        (entry) => entry.connectionId === file.engineBinding!.connectionId
+      )?.color;
+      if (jdbcColor) {
+        return jdbcColor;
+      }
+    }
+  }
+
+  // Fall back to mime-type color
+  const configured = settings.getValue("core.files.mimeTypes");
   if (!Array.isArray(configured)) {
     return undefined;
   }
@@ -68,12 +88,21 @@ function fileBackgroundStyle(file: FileEntity): React.CSSProperties | undefined 
       typeof entry === "object" &&
       (entry as Record<string, unknown>).mimeType === file.mimeType
   ) as { color?: string } | undefined;
-  if (!item?.color || !item.color.startsWith("#")) {
+  if (item?.color && item.color.startsWith("#")) {
+    return item.color;
+  }
+  return undefined;
+}
+
+function fileAccentStyle(file: FileEntity): React.CSSProperties | undefined {
+  const color = resolveAccentColor(file);
+  if (!color) {
     return undefined;
   }
   return {
-    backgroundColor: applyOpacityToHex(item.color, 0.08)
-  };
+    backgroundColor: applyOpacityToHex(color, 0.08),
+    "--tab-accent-color": color
+  } as React.CSSProperties;
 }
 
 export function ExplorerView({ context, filesRegistry, store, readDir }: ExplorerViewProps) {
@@ -358,7 +387,7 @@ export function ExplorerView({ context, filesRegistry, store, readDir }: Explore
                 <div
                   key={file.fileId}
                   className={`explorer-file explorer-workspace-file ${isActive ? "active" : ""} ${isSelected ? "is-selected" : ""} ${isDirty ? "dirty" : ""}`}
-                  style={fileBackgroundStyle(file)}
+                  style={fileAccentStyle(file)}
                   onClick={() => {
                     store.setSelectedItemId(`${WORKSPACE_SELECTED_PREFIX}${file.fileId}`);
                     context.fileMediator.setActiveFileId(file.fileId);

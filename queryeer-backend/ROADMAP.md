@@ -6,9 +6,6 @@ Quick fixes
 
 Large features in prio
 
-- [ ] Hoover table / etc.
-    - Show popup with schema
-    - Settings turn on/off
 - [ ] Create a distribution flow. Github etc.
     - [ ] jlink
     - [ ] matrix releases
@@ -29,6 +26,9 @@ Large features in prio
 - [ ] About dialog
     - Queryeer changelog
     - Modules changelog (Payloadbuilder)
+- [X] Hoover table / etc.
+    - Show popup with schema
+    - Settings turn on/off
 - [X] Status bar additions
     - [X] Line / column contribution from active editor
     - [X] Show memory usage of java/node processes

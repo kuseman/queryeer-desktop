@@ -10,7 +10,7 @@ final class SqlClauseClassifier
     {
     }
 
-    static SqlCompletionContext classify(String text, int line, int column)
+    static SqlParseContext classify(String text, int line, int column)
     {
         if (isBlank(text))
         {
@@ -25,7 +25,7 @@ final class SqlClauseClassifier
         List<SqlToken> tokens = statementTokens.stream()
                 .filter(token -> token.startOffset() < range.cursorOffset())
                 .toList();
-        SqlCompletionContext insertContext = classifyInsert(tokens);
+        SqlParseContext insertContext = classifyInsert(tokens);
         if (insertContext != null)
         {
             return insertContext;
@@ -68,9 +68,9 @@ final class SqlClauseClassifier
 
         return switch (lastClause)
         {
-            case TABLE -> SqlCompletionContext.TABLE_REFERENCE;
-            case COLUMN -> SqlCompletionContext.COLUMN_REFERENCE;
-            case SELECT -> hasRelationAfterCursor(statementTokens, range.cursorOffset()) ? SqlCompletionContext.COLUMN_REFERENCE
+            case TABLE -> SqlParseContext.TABLE_REFERENCE;
+            case COLUMN -> SqlParseContext.COLUMN_REFERENCE;
+            case SELECT -> hasRelationAfterCursor(statementTokens, range.cursorOffset()) ? SqlParseContext.COLUMN_REFERENCE
                     : null;
             case NONE -> null;
         };
@@ -84,7 +84,7 @@ final class SqlClauseClassifier
                         || token.wordEquals("JOIN"));
     }
 
-    private static SqlCompletionContext classifyInsert(List<SqlToken> tokens)
+    private static SqlParseContext classifyInsert(List<SqlToken> tokens)
     {
         int insertIndex = firstWordIndex(tokens, "INSERT");
         if (insertIndex < 0)
@@ -99,9 +99,9 @@ final class SqlClauseClassifier
         QualifiedName tableName = readQualifiedName(tokens, intoIndex + 1);
         if (tableName == null)
         {
-            return SqlCompletionContext.TABLE_REFERENCE;
+            return SqlParseContext.TABLE_REFERENCE;
         }
-        return isInsideInsertColumnList(tokens, tableName.nextIndex()) ? SqlCompletionContext.COLUMN_REFERENCE
+        return isInsideInsertColumnList(tokens, tableName.nextIndex()) ? SqlParseContext.COLUMN_REFERENCE
                 : null;
     }
 

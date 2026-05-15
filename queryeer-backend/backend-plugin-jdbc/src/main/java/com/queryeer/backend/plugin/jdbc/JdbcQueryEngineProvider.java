@@ -47,8 +47,6 @@ import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldDefinition
 import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldOption;
 import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldType;
 import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionSetupDefinition;
-import com.queryeer.backend.queryengine.sql.parser.SqlCompletionContext;
-import com.queryeer.backend.queryengine.sql.parser.SqlCompletionSupport;
 import com.queryeer.backend.queryengine.sql.parser.TreeSitterSqlParseFunction;
 
 final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionHandler
@@ -66,6 +64,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private static final String ACTION_SQL_PARSE_SNAPSHOT = "sql.parse.snapshot";
     private static final String ACTION_SQL_COMPLETE = "sql.complete";
     private static final String ACTION_SQL_SYMBOL_AT_POSITION = "sql.symbolAtPosition";
+    private static final String ACTION_SQL_HOVER = "sql.hover";
 
     private static final String ERROR_CODE_VALIDATION = "VALIDATION";
     private static final String ERROR_CODE_CANCELLED = "CANCELLED";
@@ -92,6 +91,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private final JdbcConnectionUsageListener usageListener;
     private final JdbcSchemaActionHandler schemaActions;
     private final JdbcSchemaNavigator schemaNavigator;
+    private final JdbcSqlSemanticHandler sqlSemanticHandler;
     private final long idleTimeoutMs;
     private final PayloadMapper payloadMapper;
     private final IncrementalParseSessionService parseSessions;
@@ -125,6 +125,12 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         this.parseFunction = parseFunction;
         this.schemaNavigator = new JdbcSchemaNavigator(connections, schemaStore, router, connectionHealth);
         this.schemaActions = new JdbcSchemaActionHandler(payloadMapper, connections, router, schemaStore, crawlCoordinator, connectionHealth);
+        this.sqlSemanticHandler = new JdbcSqlSemanticHandler(payloadMapper, parseSessions, engineId(), schemaNavigator, usageListener, fileId ->
+        {
+            FileSessionHandle session = byFileId.get(fileId);
+            return session != null ? session.connectionId()
+                    : null;
+        });
     }
 
     @Override
@@ -286,9 +292,10 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             case ACTION_SCHEMA_FETCH -> schemaActions.fetch(payload);
             case ACTION_SCHEMA_STATUS -> schemaActions.status(payload);
             case ACTION_CONNECTION_SESSIONS -> connectionSessions();
-            case ACTION_SQL_PARSE_SNAPSHOT -> sqlParseSnapshot(fileId);
-            case ACTION_SQL_COMPLETE -> sqlComplete(fileId, payload);
-            case ACTION_SQL_SYMBOL_AT_POSITION -> sqlSymbolAtPosition(fileId, payload);
+            case ACTION_SQL_PARSE_SNAPSHOT -> sqlSemanticHandler.parseSnapshot(fileId);
+            case ACTION_SQL_COMPLETE -> sqlSemanticHandler.complete(fileId, payload);
+            case ACTION_SQL_SYMBOL_AT_POSITION -> sqlSemanticHandler.symbolAtPosition(fileId, payload);
+            case ACTION_SQL_HOVER -> sqlSemanticHandler.hover(fileId, payload);
             case ACTION_ENGINE_CAPABILITIES -> engineCapabilities();
             default -> QueryEngineProvider.super.invoke(fileId, action, payload);
         };
@@ -327,178 +334,9 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                 ACTION_CONNECTION_SESSIONS,
                 ACTION_SQL_PARSE_SNAPSHOT,
                 ACTION_SQL_COMPLETE,
-                ACTION_SQL_SYMBOL_AT_POSITION));
+                ACTION_SQL_SYMBOL_AT_POSITION,
+                ACTION_SQL_HOVER));
         //@formatter:on
-    }
-
-    private Object sqlComplete(String fileId, Object payload)
-    {
-        return SqlCompletionSupport.complete(payloadMapper, parseSessions, engineId(), fileId, payload, this::jdbcSemanticCompletions);
-    }
-
-    private List<Map<String, Object>> jdbcSemanticCompletions(SqlCompletionSupport.SqlCompletePayload payload, String fileId, SqlCompletionSupport.SqlCompleteCursor cursor, String prefix,
-            int replaceStartColumn, int maxItems, SqlCompletionContext context, Map<String, String> aliases)
-    {
-        if (context == SqlCompletionContext.OTHER)
-        {
-            return List.of();
-        }
-
-        String connectionId = payload != null ? trimToNull(payload.connectionId())
-                : null;
-        if (connectionId == null
-                && fileId != null)
-        {
-            FileSessionHandle fileSession = byFileId.get(fileId);
-            connectionId = fileSession == null ? null
-                    : trimToNull(fileSession.connectionId());
-        }
-        if (connectionId == null)
-        {
-            return List.of();
-        }
-        String selectedDatabase = payload == null ? null
-                : trimToNull(payload.database());
-
-        try
-        {
-            usageListener.onUsage(connectionId, selectedDatabase);
-        }
-        catch (RuntimeException e)
-        {
-            // Completion should remain best-effort even if usage tracking fails.
-        }
-
-        if (context == SqlCompletionContext.TABLE_REFERENCE)
-        {
-            List<String> tableNames = schemaNavigator.tableNamesForCompletion(connectionId, selectedDatabase);
-            return tableNames.stream()
-                    .filter(name -> prefix.isBlank()
-                            || name.toLowerCase()
-                                    .startsWith(prefix.toLowerCase()))
-                    .distinct()
-                    .sorted(String.CASE_INSENSITIVE_ORDER)
-                    .limit(maxItems)
-                    .map(name -> Map.<String, Object>of("label", name, "kind", "table", "detail", "JDBC table", "insertText", name, "insertTextFormat", "plain", "source", "jdbc.schema",
-                            "replaceRange", Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column())))
-                    .toList();
-        }
-
-        // -- COLUMN_REFERENCE context --
-        // Batch-resolve all required tables' columns in a single H2 snapshot load
-        List<String> tableNames;
-        List<Map<String, Object>> columnItems = new ArrayList<>();
-        java.util.Set<String> seenLower = new java.util.HashSet<>();
-
-        if (prefix.contains("."))
-        {
-            int dotIndex = prefix.lastIndexOf('.');
-            String partialColumn = prefix.substring(dotIndex + 1);
-            String qualifier = prefix.substring(0, dotIndex);
-            String resolvedTable = aliases.getOrDefault(qualifier, qualifier);
-            tableNames = List.of(resolvedTable);
-            Map<String, List<String>> allTableColumns = schemaNavigator.columnNamesForTables(connectionId, tableNames, selectedDatabase);
-            for (String col : allTableColumns.getOrDefault(resolvedTable, List.of()))
-            {
-                if ((partialColumn.isBlank()
-                        || col.toLowerCase()
-                                .startsWith(partialColumn.toLowerCase()))
-                        && seenLower.add(col.toLowerCase()))
-                {
-                    String insertText = qualifier + "." + col;
-                    columnItems.add(Map.<String, Object>of("label", insertText, "kind", "column", "detail", "JDBC column", "insertText", insertText, "insertTextFormat", "plain", "source",
-                            "jdbc.schema", "replaceRange", Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column())));
-                }
-            }
-        }
-        else
-        {
-            // Build a map of table name → alias for the insertText prefix
-            java.util.Map<String, String> tableToAlias = new java.util.LinkedHashMap<>();
-            for (java.util.Map.Entry<String, String> entry : aliases.entrySet())
-            {
-                tableToAlias.put(entry.getValue(), entry.getKey());
-            }
-            tableNames = List.copyOf(tableToAlias.keySet());
-            Map<String, List<String>> allTableColumns = schemaNavigator.columnNamesForTables(connectionId, tableNames, selectedDatabase);
-            for (java.util.Map.Entry<String, List<String>> entry : allTableColumns.entrySet())
-            {
-                String tableName = entry.getKey();
-                String alias = tableToAlias.get(tableName);
-                for (String col : entry.getValue())
-                {
-                    // Only prefix with alias when the table has an explicit alias
-                    String displayPrefix = (alias != null
-                            && !alias.equals(tableName)) ? alias
-                                    : null;
-                    String prefixed = displayPrefix != null ? displayPrefix + "." + col
-                            : col;
-                    if ((prefix.isBlank()
-                            || col.toLowerCase()
-                                    .startsWith(prefix.toLowerCase()))
-                            && seenLower.add(prefixed.toLowerCase()))
-                    {
-                        columnItems.add(Map.<String, Object>of("label", prefixed, "kind", "column", "detail", "JDBC column", "insertText", prefixed, "insertTextFormat", "plain", "source",
-                                "jdbc.schema", "replaceRange", Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column())));
-                    }
-                }
-            }
-        }
-
-        return columnItems.stream()
-                .sorted((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(String.valueOf(a.get("label")), String.valueOf(b.get("label"))))
-                .limit(maxItems)
-                .toList();
-    }
-
-    private Object sqlSymbolAtPosition(String fileId, Object payload)
-    {
-        SqlSymbolAtPositionPayload params = payloadMapper.convert(payload, SqlSymbolAtPositionPayload.class);
-        if (params == null
-                || params.cursor() == null)
-        {
-            return null;
-        }
-        String token = SqlCompletionSupport.identifierAtPosition(parseSessions, engineId(), fileId, params.text(), params.cursor()
-                .line(),
-                params.cursor()
-                        .column());
-        if (token == null)
-        {
-            return null;
-        }
-        String connectionId = trimToNull(params.connectionId());
-        if (connectionId == null
-                && fileId != null)
-        {
-            FileSessionHandle fileSession = byFileId.get(fileId);
-            connectionId = fileSession == null ? null
-                    : trimToNull(fileSession.connectionId());
-        }
-        if (connectionId == null)
-        {
-            return null;
-        }
-        String selectedDatabase = trimToNull(params.database());
-        try
-        {
-            usageListener.onUsage(connectionId, selectedDatabase);
-        }
-        catch (RuntimeException ignored)
-        {
-        }
-        return schemaNavigator.findSymbol(connectionId, token, selectedDatabase);
-    }
-
-    private Object sqlParseSnapshot(String fileId)
-    {
-        if (isBlank(fileId))
-        {
-            return Map.of();
-        }
-        return parseSessions.get(engineId(), fileId)
-                .map(snapshot -> Map.of("version", snapshot.version(), "languageId", snapshot.languageId(), "hasErrors", snapshot.hasErrors(), "attributes", snapshot.attributes()))
-                .orElseGet(Map::of);
     }
 
     private Object connectionSessions()
@@ -759,14 +597,6 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     }
 
     private record AcquiredConnection(Connection connection, boolean createdNew)
-    {
-    }
-
-    private record SqlSymbolAtPositionPayload(String fileId, String text, SymbolCursor cursor, String connectionId, String database)
-    {
-    }
-
-    private record SymbolCursor(int line, int column)
     {
     }
 }
