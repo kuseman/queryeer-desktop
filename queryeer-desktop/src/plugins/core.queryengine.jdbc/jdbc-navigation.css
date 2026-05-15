@@ -88,6 +88,7 @@
 }
 
 .jdbc-nav-node {
+  position: relative;
   display: flex;
   align-items: center;
   padding: 2px 4px;
@@ -153,4 +154,20 @@
 
 .jdbc-nav-node-error {
   margin-left: 4px;
+}
+
+.jdbc-nav-node.is-active {
+  background: var(--accent-soft, rgba(0, 120, 212, 0.12));
+  color: var(--text-0, #fff);
+}
+
+.jdbc-nav-node.is-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  background: var(--accent, #0078d4);
+  border-radius: 0 1px 1px 0;
 }

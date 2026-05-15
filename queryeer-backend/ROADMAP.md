@@ -6,14 +6,22 @@ Quick fixes
 
 Large features in prio
 
-- [ ] JDBC Tree navigation fixes
-    - [X] All tables without schema below database should be a meta level above
-          with views/tables/procedures etc.
-    - [ ] Context menu items contributor per kind
-        - New query on connection / database
 - [ ] Hoover table / etc.
     - Show popup with schema
     - Settings turn on/off
+- [ ] Status bar additions
+    - [ ] Line / column contribution from active editor
+    - [ ] Show memory usage of java/node processes
+- [ ] Create a distribution flow. Github etc.
+    - [ ] jlink
+    - [ ] matrix releases
+    - [ ] change log (app bundled)
+    - [ ] change log (gitgub release)
+- [ ] Backend builtin modules should be discovered normally but with target/classes as source class path with m2 dep references etc.
+   - [ ] Runtime services plugins. Put on top of class loader chain. Load libraries etc. See queryeer-backend\SHARED_RUNTIME_PLUGINS.md
+- [ ] Modularize
+    - Make sure all contributions have contracts and all API:s are located in a separate project
+      that might end up on npmjs one day
 - [ ] User actions in JDBC navigation
     - Pre.req. Tree content menu contribution done
     - Rulebased actions based on node type etc
@@ -24,17 +32,11 @@ Large features in prio
 - [ ] About dialog
     - Queryeer changelog
     - Modules changelog (Payloadbuilder)
-- [ ] Backend builtin modules should be discovered normally but with target/classes as source class path with m2 dep references etc.
-   - [ ] Runtime services plugins. Put on top of class loader chain. Load libraries etc. See queryeer-backend\SHARED_RUNTIME_PLUGINS.md
-- [ ] Modularize
-    - Make sure all contributions have contracts and all API:s are located in a separate project
-      that might end up on npmjs one day
-- [ ] Create a distribution flow. Github etc.
-    - [ ] jlink
-    - [ ] matrix releases
-    - [ ] change log (app bundled)
-    - [ ] change log (gitgub release)
-- [ ] Show memory usage of java/node in status bar
+- [X] JDBC Tree navigation fixes
+    - [X] All tables without schema below database should be a meta level above
+          with views/tables/procedures etc.
+    - [X] Context menu items contributor per kind
+        - New query on connection / database
 - [X] JDBC Panel extension fixes
     - Add a new panel with schema status/statistics per connection. Actions like force crawl etc.
 - [X] SQLServer query plan
