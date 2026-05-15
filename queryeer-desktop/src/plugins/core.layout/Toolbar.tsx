@@ -166,7 +166,7 @@ export function Toolbar({
     const label = action.title ?? getCommandTitle(action.commandId);
     const accelerator = getCommandAccelerator(action.commandId);
     const tooltip = label ? (accelerator ? `${label} (${accelerator})` : label) : undefined;
-    const isActive = zoneToggle ? isZoneVisible(zoneToggle) : false;
+    const isActive = zoneToggle ? isZoneVisible(zoneToggle) : (action.pressed?.() ?? false);
 
     return (
       <button
@@ -176,7 +176,7 @@ export function Toolbar({
         title={tooltip}
         aria-label={tooltip ?? action.commandId}
         disabled={isDisabled}
-        aria-pressed={zoneToggle ? isActive : undefined}
+        aria-pressed={zoneToggle || action.pressed ? isActive : undefined}
         onMouseDown={(event) => {
           event.preventDefault();
         }}

@@ -8,9 +8,11 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryExecutor;
+import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryPlanExecutor;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
 
 public interface JdbcDialect
@@ -20,6 +22,11 @@ public interface JdbcDialect
     JdbcDialectMetadata metadata();
 
     JdbcQueryExecutor queryExecutor();
+
+    default Optional<JdbcQueryPlanExecutor> queryPlanExecutor()
+    {
+        return Optional.empty();
+    }
 
     /**
      * Returns per-parentKind schema resolvers that override the default behavior. Keys are parentKind strings (e.g. "tables_folder", "schema"). Parent kinds not present in the map fall through to the

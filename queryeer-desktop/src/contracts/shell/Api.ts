@@ -1,5 +1,6 @@
 import type { BackendGatewayStatus } from "../backend/index.js";
 export type { BackendGatewayStatus };
+import type { QueryExecuteOptions } from "../backend/Types.js";
 import type { WorkspaceSnapshot } from "../workspace/WorkspaceSnapshot.js";
 import type { UserKeybindingsDocument } from "../commands/Keybindings.js";
 import type { ExternalFrontendPluginManifest } from "../plugin/ExternalFrontendPluginManifest.js";
@@ -36,6 +37,7 @@ export interface ShellApi {
     fileId: string;
     text: string;
     engineState?: unknown;
+    options?: QueryExecuteOptions;
   }) => Promise<{ accepted: boolean; queryExecutionId: string }>;
   cancelBackendQuery: (params: {
     queryExecutionId: string;

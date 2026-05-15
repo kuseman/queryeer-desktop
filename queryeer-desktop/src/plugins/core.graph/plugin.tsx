@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { OutputContext } from "../../contracts/extensions/OutputExtension";
 import type { FileEntity } from "../../contracts/files/FileEntity";
@@ -7,16 +8,56 @@ import { GraphViewer } from "./GraphViewer";
 import { GRAPH_DOCUMENT_EDITOR_ID, GRAPH_DOCUMENT_EXTENSION, GRAPH_DOCUMENT_MIME_TYPE } from "./constants";
 import { GraphIcon } from "./GraphIcon";
 import { createSampleGraphDocument } from "./sample-graph";
+import outputGraphIconUrl from "./output-graph.svg";
 import "./graph.css";
 
 function QueryPlanGraphOutput({ context }: { context: OutputContext }): JSX.Element {
-  const artifact = context.artifacts.find((candidate) => candidate.kind === "graph" && candidate.capability === "plan");
+  const artifacts = useMemo(
+    () => context.artifacts.filter((candidate) => candidate.kind === "graph" && candidate.capability === "plan"),
+    [context.artifacts]
+  );
+  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
+  const selectedArtifact = artifacts.find((artifact) => artifact.id === selectedArtifactId) ?? artifacts[0];
 
-  if (!artifact) {
+  useEffect(() => {
+    if (artifacts.length === 0) {
+      setSelectedArtifactId(null);
+      return;
+    }
+    if (!selectedArtifactId || !artifacts.some((artifact) => artifact.id === selectedArtifactId)) {
+      setSelectedArtifactId(artifacts[0]!.id);
+    }
+  }, [artifacts, selectedArtifactId]);
+
+  if (!selectedArtifact) {
     return <div className="graph-output-empty">Query plan feature was reported, but no graph artifact was provided.</div>;
   }
 
-  return <GraphViewer graph={artifact.graph} />;
+  if (artifacts.length === 1) {
+    return <GraphViewer graph={selectedArtifact.graph} />;
+  }
+
+  return (
+    <div className="graph-plan-output">
+      <div className="graph-plan-list" aria-label="Query plans">
+        <span className="graph-plan-list-label">Plans</span>
+        {artifacts.map((artifact, index) => (
+          <button
+            key={artifact.id}
+            type="button"
+            className={`graph-plan-list-item${artifact.id === selectedArtifact.id ? " is-selected" : ""}`}
+            title={artifact.title}
+            onClick={() => setSelectedArtifactId(artifact.id)}
+          >
+            {`Statement ${index + 1}`}
+          </button>
+        ))}
+      </div>
+      <div className="graph-plan-view">
+        <GraphViewer key={selectedArtifact.id} graph={selectedArtifact.graph} />
+      </div>
+    </div>
+  );
 }
 
 function GraphDocumentEditor({ activeFile }: { activeFile?: FileEntity }): JSX.Element {
@@ -122,6 +163,7 @@ export const coreGraphPlugin: Plugin = {
       capability: "plan",
       mode: "adhoc",
       title: "Plan",
+      icon: outputGraphIconUrl,
       priority: 50,
       render: (context) => <QueryPlanGraphOutput context={context} />
     });

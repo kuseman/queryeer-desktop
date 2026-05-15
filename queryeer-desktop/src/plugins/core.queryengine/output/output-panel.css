@@ -62,7 +62,14 @@
 .query-output-primary {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
+}
+
+.query-output-view {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .query-output-adhoc {

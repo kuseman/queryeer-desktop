@@ -458,6 +458,26 @@ describe("core.queryengine.jdbc plugin integration", () => {
     expect(mocks.openQuickCommandMock).toHaveBeenCalledWith("$", { when: "activeFile.mimeType == 'application/sql'" });
   });
 
+  it("registers SQL Server plan enablement with null-safe flat metadata access", () => {
+    const context = createContext();
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const registerCommandMock = context.commands.registerCommand as ReturnType<typeof vi.fn>;
+    const commandCall = registerCommandMock.mock.calls.find(
+      (call: unknown[]) => (call[0] as { id?: string } | undefined)?.id === "core.queryengine.jdbc.sqlserver.toggleActualPlan"
+    );
+    expect(commandCall).toBeDefined();
+
+    const enablement = commandCall![0].enablement as string;
+    const evaluate = (activeFile: unknown) => {
+      const runner = new Function("hasActiveQueryExecutableFile", "activeFile", `return (${enablement});`) as (hasActiveQueryExecutableFile: boolean, activeFile: unknown) => boolean;
+      return runner(true, activeFile);
+    };
+
+    expect(evaluate({ metadata: {} })).toBe(false);
+    expect(evaluate({ metadata: { "core.queryengine.jdbc.dialectId": "sqlserver" } })).toBe(true);
+  });
+
   it("applies connection color to tab header style for JDBC files", () => {
     const context = createContext();
     mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([

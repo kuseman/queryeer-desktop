@@ -1,4 +1,5 @@
 import { BackendNotReadyError } from "../../contracts/backend/BackendNotReadyError";
+import type { QueryExecuteOptions } from "../../contracts/backend/Types";
 import { getCoreSecurityService } from "../core.security/service";
 
 type QueryEvent = { method: string; params: unknown };
@@ -11,6 +12,8 @@ export type ExecuteRequestOptions = {
   textOverride?: string;
   /** When set, overrides the output contributor selected in the toolbar. */
   outputIdOverride?: string;
+  /** When set, overrides backend execution options for this execute request. */
+  optionsOverride?: QueryExecuteOptions;
 };
 type ExecutionContextProvider = (params: ExecuteParams) => Partial<ExecuteParams> | void;
 type EngineResolver = (params: Omit<ExecuteParams, "engineId">) => string | undefined;
@@ -24,6 +27,7 @@ type ExecuteParams = {
   text: string;
   fileId: string;
   engineState?: unknown;
+  options?: QueryExecuteOptions;
 };
 
 type EngineInvokeParams = {
@@ -125,7 +129,8 @@ export class QueryEngineService {
           engineId,
           fileId: decoratedParams.fileId,
           text: decoratedParams.text,
-          engineState: decoratedParams.engineState
+          engineState: decoratedParams.engineState,
+          options: decoratedParams.options
         });
       });
     } catch (error) {

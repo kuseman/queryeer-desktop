@@ -2,6 +2,7 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileEntity } from "../../contracts/files/FileEntity";
+import type { QueryExecuteOptions } from "../../contracts/backend/Types";
 import type { ContentCategory } from "../../contracts/files/FilesRegistry";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import type { OutputContext } from "../../contracts/extensions/OutputExtension";
@@ -26,6 +27,7 @@ const mocks = vi.hoisted(() => {
   const selectedPrimaryRef = { value: "core.queryengine.output.table" as string | null };
   return {
     executeMock: vi.fn(async () => "exec-1"),
+    consumeExecuteOptionsMock: vi.fn(() => null as { outputIdOverride?: string; optionsOverride?: QueryExecuteOptions } | null),
     cancelMock: vi.fn(async () => {}),
     ensureUnlockedForSecretAccessMock: vi.fn(async () => true),
     subscribeMock: vi.fn((executionId: string, listener: (event: { method: string; params?: unknown }) => void) => {
@@ -64,7 +66,7 @@ vi.mock("./output/OutputPanel", () => ({
     selectedPrimaryId,
     onSelectPrimary
   }: {
-    context: { state: string; textOutputFormat?: string };
+    context: { state: string; textOutputFormat?: string; rowsTargetPrimaryId?: string | null };
     selectedPrimaryId?: string | null;
     onSelectPrimary?: (id: string) => void;
   }) => (
@@ -73,6 +75,7 @@ vi.mock("./output/OutputPanel", () => ({
       data-state={context.state}
       data-selected-primary={selectedPrimaryId ?? ""}
       data-text-format={context.textOutputFormat ?? ""}
+      data-rows-target-primary={context.rowsTargetPrimaryId ?? ""}
       data-has-select-callback={onSelectPrimary ? "true" : "false"}
     />
   )
@@ -91,7 +94,7 @@ vi.mock("./QueryEngineService", () => ({
     subscribe: mocks.subscribeMock,
     onExecuteRequest: mocks.onExecuteRequestMock,
     onCancelRequest: mocks.onCancelRequestMock,
-    consumeExecuteOptions: () => null
+    consumeExecuteOptions: mocks.consumeExecuteOptionsMock
   })
 }));
 
@@ -181,6 +184,8 @@ describe("QueryEditorComponent execution state across tab switches", () => {
   beforeEach(() => {
     (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     mocks.executeMock.mockReset();
+    mocks.consumeExecuteOptionsMock.mockReset();
+    mocks.consumeExecuteOptionsMock.mockReturnValue(null);
     mocks.cancelMock.mockReset();
     mocks.subscribeMock.mockClear();
     mocks.onExecuteRequestMock.mockClear();
@@ -292,6 +297,35 @@ const filesRegistry = {
     });
 
     expect(mocks.cancelMock).toHaveBeenCalledWith("exec-1");
+  });
+
+  it("passes one-shot execution option overrides to the query engine", async () => {
+    const file = makeFile({ fileId: "file-plan", uri: "file:///plan.sql" });
+    mocks.consumeExecuteOptionsMock.mockReturnValueOnce({
+      optionsOverride: {
+        intent: "plan.estimated",
+        requestedArtifacts: [{ capability: "plan", kind: "graph" }]
+      }
+    });
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+
+    expect(mocks.executeMock).toHaveBeenCalledWith(expect.objectContaining({
+      fileId: "file-plan",
+      options: {
+        intent: "plan.estimated",
+        requestedArtifacts: [{ capability: "plan", kind: "graph" }]
+      }
+    }));
   });
 
   it("tracks concurrent executions per file across tab switches", async () => {
@@ -563,6 +597,32 @@ const filesRegistry = {
     expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.text");
   });
 
+  it("selects plan tab without routing row chunks to the plan output", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+    mocks.consumeExecuteOptionsMock.mockReturnValueOnce({
+      outputIdOverride: "core.graph.queryPlanOutput",
+      optionsOverride: {
+        intent: "plan.estimated",
+        requestedArtifacts: [{ capability: "plan", kind: "graph" }]
+      }
+    });
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+
+    const output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-selected-primary")).toBe("core.graph.queryPlanOutput");
+    expect(output?.getAttribute("data-rows-target-primary")).toBe("core.queryengine.output.text");
+  });
+
   it("does not persist output selection when switching output tabs", async () => {
     const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
 
@@ -624,6 +684,49 @@ const filesRegistry = {
     expect(context?.features).toEqual(["plan"]);
     expect(context?.artifacts).toHaveLength(1);
     expect(context?.artifacts[0]?.graph.vertices[0]?.label).toBe("SELECT");
+  });
+
+  it("selects the plan tab when actual plan execution returns a graph artifact", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+
+    const listener = [...mocks.subscribeByExecutionId.values()][0];
+    await act(async () => {
+      listener?.({
+        method: "queryengine.completed",
+        params: {
+          metrics: { rowCount: 1, durationMs: 10 },
+          features: ["rows", "plan"],
+          artifacts: [
+            {
+              id: "plan-1",
+              capability: "plan",
+              kind: "graph",
+              title: "Plan",
+              graph: {
+                id: "graph-1",
+                vertices: [{ id: "select", label: "SELECT" }],
+                edges: []
+              }
+            }
+          ]
+        }
+      });
+      await Promise.resolve();
+    });
+
+    const output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-selected-primary")).toBe("core.graph.queryPlanOutput");
   });
 
   it("maps failed error line to absolute editor line using execution selection anchor", async () => {

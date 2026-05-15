@@ -10,6 +10,7 @@ export type QueryViewState = {
   selectedOutputId?: string;
   panelSelectedOutputId?: string;
   textOutputFormat?: string;
+  includeActualPlan?: boolean;
 };
 
 type Listener = (state: QueryViewState) => void;
@@ -50,6 +51,10 @@ class QueryViewStateStore {
 
   setTextOutputFormat(fileId: string, textOutputFormat: string): void {
     this.patch(fileId, { textOutputFormat });
+  }
+
+  setIncludeActualPlan(fileId: string, includeActualPlan: boolean): void {
+    this.patch(fileId, { includeActualPlan });
   }
 
   subscribe(fileId: string, listener: Listener): () => void {
@@ -125,7 +130,8 @@ function readStateFromFile(file: FileEntity | undefined): QueryViewState {
     panelActiveOutputId,
     selectedOutputId: executionTargetOutputId,
     panelSelectedOutputId: panelActiveOutputId,
-    textOutputFormat: typeof value.textOutputFormat === "string" ? value.textOutputFormat : undefined
+    textOutputFormat: typeof value.textOutputFormat === "string" ? value.textOutputFormat : undefined,
+    includeActualPlan: value.includeActualPlan === true
   };
 }
 

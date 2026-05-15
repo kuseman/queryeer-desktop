@@ -87,8 +87,8 @@ export type RowChunk = {
  *             contributor whose capability is in context.features is selected
  *             automatically. The user can override this selection via the UI.
  *
- * "adhoc"   — opens a parallel panel automatically when its capability appears in
- *             context.features. Not user-selectable as primary.
+ * "adhoc"   — appears as an execution-scoped tab when its capability appears in
+ *             context.features. Not selectable as the default row output.
  */
 export type OutputContributor = {
   id: string;
