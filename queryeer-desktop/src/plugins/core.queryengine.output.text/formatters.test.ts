@@ -15,7 +15,8 @@ function makeContext(overrides: Partial<OutputContext>): OutputContext {
     executionStartedAtMs: null,
     textOutputFormat: "plain",
     rowsTargetPrimaryId: null,
-    ...overrides
+    ...overrides,
+    artifacts: overrides.artifacts ?? []
   };
 }
 

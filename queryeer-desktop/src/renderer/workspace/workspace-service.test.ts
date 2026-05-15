@@ -220,6 +220,26 @@ describe("RendererWorkspaceService.hydrate", () => {
   });
 });
 
+describe("RendererWorkspaceService snapshots", () => {
+  it("does not persist workspace-transient files", async () => {
+    const { service, mediator, filesRegistry, saveMock } = makeHarness();
+
+    await service.hydrate();
+    const persisted = await mediator.createUntitledFile({ mimeType: "text/plain", extension: "txt" });
+    const transient = await mediator.createUntitledFile({ mimeType: "text/plain", extension: "txt" });
+    filesRegistry.updateFile(transient.fileId, {
+      metadata: { workspaceTransient: true }
+    });
+    service.setActiveFileId(transient.fileId);
+
+    await service.flush();
+
+    const snapshot = saveMock.mock.calls.at(-1)?.[0];
+    expect(snapshot?.files.map((file) => file.uri)).toEqual([persisted.uri]);
+    expect(snapshot?.activeFileUri).toBeUndefined();
+  });
+});
+
 describe("RendererWorkspaceService snapshot push", () => {
   beforeEach(() => {
     vi.useFakeTimers();

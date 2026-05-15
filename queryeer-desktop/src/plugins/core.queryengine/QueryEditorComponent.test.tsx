@@ -581,6 +581,51 @@ const filesRegistry = {
     expect(getQueryViewStateStore().read("file-1").selectedOutputId).toBe("core.queryengine.output.text");
   });
 
+  it("stores graph artifacts from completed query events", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+
+    const listener = [...mocks.subscribeByExecutionId.values()][0];
+    await act(async () => {
+      listener?.({
+        method: "queryengine.completed",
+        params: {
+          metrics: { rowCount: 0, durationMs: 10 },
+          features: ["plan"],
+          artifacts: [
+            {
+              id: "plan-1",
+              capability: "plan",
+              kind: "graph",
+              title: "Plan",
+              graph: {
+                id: "graph-1",
+                vertices: [{ id: "select", label: "SELECT" }],
+                edges: []
+              }
+            }
+          ]
+        }
+      });
+      await Promise.resolve();
+    });
+
+    const context = getFileStateRegistry().get("file-1", OUTPUT_CONTEXT_KEY);
+    expect(context?.features).toEqual(["plan"]);
+    expect(context?.artifacts).toHaveLength(1);
+    expect(context?.artifacts[0]?.graph.vertices[0]?.label).toBe("SELECT");
+  });
+
   it("maps failed error line to absolute editor line using execution selection anchor", async () => {
     const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
     mocks.getActiveEditorMock.mockReturnValue({

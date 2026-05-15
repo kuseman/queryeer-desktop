@@ -3,6 +3,7 @@ import type {
   BackendNotificationMethod,
   BackendRequestMethod
 } from "./Methods.js";
+import type { GraphDocument } from "../graph/GraphDocument.js";
 
 export type Capability =
   | "backend.runtimeStatus"
@@ -248,7 +249,16 @@ export type QueryCompletedNotification = {
   };
   /** Which output capabilities this result provides, e.g. ["rows"], ["rows", "plan"]. Absent = ["rows"] by convention. */
   features?: string[];
+  artifacts?: QueryOutputArtifact[];
   engineState?: unknown;
+};
+
+export type QueryOutputArtifact = {
+  id: string;
+  capability: string;
+  kind: "graph";
+  title?: string;
+  graph: GraphDocument;
 };
 
 export type QueryFailedNotification = {

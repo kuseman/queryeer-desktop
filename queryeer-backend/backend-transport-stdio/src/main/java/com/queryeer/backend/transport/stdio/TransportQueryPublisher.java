@@ -14,6 +14,7 @@ import com.queryeer.backend.contract.query.QueryChunkStartNotification;
 import com.queryeer.backend.contract.query.QueryCompletedNotification;
 import com.queryeer.backend.contract.query.QueryFailedNotification;
 import com.queryeer.backend.contract.query.QueryMetrics;
+import com.queryeer.backend.contract.query.QueryOutputArtifact;
 import com.queryeer.backend.contract.query.QueryProgressNotification;
 import com.queryeer.backend.contract.query.ResultSchema;
 
@@ -88,7 +89,14 @@ final class TransportQueryPublisher implements QueryPublisher
     @Override
     public void completed(long durationMs, long rowCount, Object engineState)
     {
-        notificationPublisher.publishForQuery(executionId, "queryengine.completed", new QueryCompletedNotification(executionId, new QueryMetrics((int) durationMs, (int) rowCount), engineState));
+        completed(durationMs, rowCount, null, null, engineState);
+    }
+
+    @Override
+    public void completed(long durationMs, long rowCount, List<String> features, List<QueryOutputArtifact> artifacts, Object engineState)
+    {
+        notificationPublisher.publishForQuery(executionId, "queryengine.completed",
+                new QueryCompletedNotification(executionId, new QueryMetrics((int) durationMs, (int) rowCount), features, artifacts, engineState));
     }
 
     @Override
