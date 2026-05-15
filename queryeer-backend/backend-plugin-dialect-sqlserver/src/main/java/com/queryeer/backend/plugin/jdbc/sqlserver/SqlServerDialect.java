@@ -116,6 +116,12 @@ public final class SqlServerDialect implements JdbcDialect
     }
 
     @Override
+    public java.util.Optional<com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryPlanExecutor> queryPlanExecutor()
+    {
+        return java.util.Optional.of(queryExecutor);
+    }
+
+    @Override
     public Map<String, JdbcSchemaResolver> branchResolvers()
     {
         return Map.ofEntries(Map.entry("databases_container", this::resolveDatabasesContainer), Map.entry("database", this::resolveDatabaseChildren),

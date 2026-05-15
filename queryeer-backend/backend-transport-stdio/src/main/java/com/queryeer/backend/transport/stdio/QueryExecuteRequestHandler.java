@@ -37,6 +37,6 @@ final class QueryExecuteRequestHandler implements RequestHandler
         responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, new QueryExecuteResult(true, params.queryExecutionId()), null));
 
         TransportQueryPublisher publisher = new TransportQueryPublisher(params.queryExecutionId(), notificationPublisher);
-        queryExecutionService.execute(params.queryExecutionId(), params.engineId(), params.fileId(), params.text(), params.engineState(), publisher);
+        queryExecutionService.execute(params.queryExecutionId(), params.engineId(), params.fileId(), params.text(), params.engineState(), params.options(), publisher);
     }
 }

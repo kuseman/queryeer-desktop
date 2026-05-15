@@ -51,6 +51,16 @@ export type GraphAction = {
   disabled?: boolean;
 };
 
+export type GraphVertexOverlayKind = "parallel" | "warning" | "info" | "custom";
+
+export type GraphVertexOverlay = {
+  id: string;
+  kind: GraphVertexOverlayKind;
+  label: string;
+  title?: string;
+  iconUrl?: string;
+};
+
 export type GraphVertex = {
   id: string;
   label: string;
@@ -58,6 +68,7 @@ export type GraphVertex = {
   description?: string;
   style?: GraphVertexStyle;
   properties?: GraphPropertyGroup[];
+  overlays?: GraphVertexOverlay[];
   actions?: GraphAction[];
 };
 

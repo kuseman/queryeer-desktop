@@ -115,10 +115,22 @@ export type QueryExecuteParams = {
   fileId: string;
   text: string;
   engineState?: unknown;
-  options?: {
-    maxRows?: number;
-    timeoutMs?: number;
-  };
+  options?: QueryExecuteOptions;
+};
+
+export type QueryExecutionIntent = "execute" | "plan.estimated" | "plan.actual";
+
+export type QueryRequestedArtifact = {
+  capability: "plan" | string;
+  kind: "graph" | string;
+};
+
+export type QueryExecuteOptions = {
+  maxRows?: number;
+  timeoutMs?: number;
+  intent?: QueryExecutionIntent;
+  requestedArtifacts?: QueryRequestedArtifact[];
+  dialectOptions?: Record<string, unknown>;
 };
 
 export type QueryExecuteResult = {

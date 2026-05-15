@@ -10,6 +10,7 @@ import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.QueryPublisher;
 import com.queryeer.backend.api.SecuritySessionClosedException;
+import com.queryeer.backend.contract.query.QueryExecuteOptions;
 import com.queryeer.backend.core.security.SecretRefPayloadResolver;
 
 public final class QueryExecutionService
@@ -25,6 +26,11 @@ public final class QueryExecutionService
 
     public void execute(String queryExecutionId, String engineId, String fileId, String text, Object engineState, QueryPublisher publisher)
     {
+        execute(queryExecutionId, engineId, fileId, text, engineState, null, publisher);
+    }
+
+    public void execute(String queryExecutionId, String engineId, String fileId, String text, Object engineState, QueryExecuteOptions options, QueryPublisher publisher)
+    {
         QueryEngineProvider provider = engineRegistry.getProvider(engineId);
         if (provider == null)
         {
@@ -37,7 +43,7 @@ public final class QueryExecutionService
         {
             try
             {
-                provider.execute(queryExecutionId, fileId, text, engineState, publisher);
+                provider.execute(queryExecutionId, fileId, text, engineState, options, publisher);
             }
             catch (SecuritySessionClosedException e)
             {

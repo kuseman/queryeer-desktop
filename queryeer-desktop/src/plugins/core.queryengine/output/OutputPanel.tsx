@@ -26,12 +26,29 @@ function resolvePrimary(
   return eligible[0];
 }
 
+function resolveSelectedOutput(
+  outputs: OutputContributor[],
+  selectedId: string | null | undefined
+): OutputContributor | undefined {
+  if (selectedId) {
+    const selected = outputs.find((c) => c.id === selectedId);
+    if (selected) return selected;
+  }
+  return outputs[0];
+}
+
 function eligiblePrimaries(
   contributors: OutputContributor[],
   features: string[] | null
 ): OutputContributor[] {
   const primaries = contributors.filter((c) => c.mode === "primary");
-  return features === null ? primaries : primaries.filter((c) => features.includes(c.capability));
+  if (features === null) {
+    return primaries;
+  }
+  const effectiveFeatures = features.includes("plan") && !features.includes("rows")
+    ? [...features, "rows"]
+    : features;
+  return primaries.filter((c) => effectiveFeatures.includes(c.capability));
 }
 
 export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExportOpen }: Props): JSX.Element {
@@ -51,14 +68,22 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
   }, []);
 
   const effectiveSelectedPrimaryId = selectedPrimaryId ?? lastSelectedPrimaryIdRef.current;
-  const primaryContributor = resolvePrimary(contributors, context.features, effectiveSelectedPrimaryId);
   const primaries = eligiblePrimaries(contributors, context.features);
+  const adhocContributors = context.features !== null
+    ? contributors.filter((c) => c.mode === "adhoc" && context.features!.includes(c.capability))
+    : [];
+  const tabContributors = [...primaries, ...adhocContributors];
+  const selectedContributor = resolveSelectedOutput(tabContributors, effectiveSelectedPrimaryId);
+  const primaryContributor = resolvePrimary(contributors, context.features, context.rowsTargetPrimaryId);
+  const visibleContributors = selectedContributor?.mode === "adhoc"
+    ? [...primaries, selectedContributor]
+    : primaries;
 
   useEffect(() => {
-    if (primaryContributor?.id) {
-      lastSelectedPrimaryIdRef.current = primaryContributor.id;
+    if (selectedContributor?.id) {
+      lastSelectedPrimaryIdRef.current = selectedContributor.id;
     }
-  }, [primaryContributor?.id]);
+  }, [selectedContributor?.id]);
 
   const contextForPrimary = (contributor: OutputContributor): OutputContext => {
     const rowsTargetPrimaryId = context.rowsTargetPrimaryId ?? primaryContributor?.id ?? null;
@@ -73,27 +98,20 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
   };
 
   useEffect(() => {
-    if (!primaryContributor?.id) return;
-    if (pendingFocusPrimaryIdRef.current !== primaryContributor.id) return;
+    if (!selectedContributor?.id) return;
+    if (pendingFocusPrimaryIdRef.current !== selectedContributor.id) return;
     pendingFocusPrimaryIdRef.current = null;
 
     const host = primaryHostRef.current;
     if (!host) return;
     const target = host.querySelector("[data-output-focus-target='true']") as HTMLElement | null;
     target?.focus({ preventScroll: true });
-  }, [primaryContributor?.id]);
+  }, [selectedContributor?.id]);
 
   useEffect(() => {
     pendingFocusPrimaryIdRef.current = null;
     lastSelectedPrimaryIdRef.current = null;
   }, [context.fileId]);
-
-  const adhocContributors =
-    context.features !== null
-      ? contributors.filter(
-          (c) => c.mode === "adhoc" && context.features!.includes(c.capability)
-        )
-      : [];
 
   const limitedSets = context.resultSets.filter((rs) => rs.rowLimitExceeded);
   const exportPaths = limitedSets.map((rs) => rs.exportPath).filter(Boolean) as string[];
@@ -124,10 +142,10 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
   return (
     <div className="query-output-panel">
       <div className="query-output-tabs">
-        {primaries.map((c) => (
+        {tabContributors.map((c) => (
           <button
             key={c.id}
-            className={`query-output-tab${c.id === primaryContributor?.id ? " query-output-tab-active" : ""}`}
+            className={`query-output-tab${c.id === selectedContributor?.id ? " query-output-tab-active" : ""}`}
             onClick={() => {
               pendingFocusPrimaryIdRef.current = c.id;
               onSelectPrimary?.(c.id);
@@ -152,24 +170,18 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
       )}
 
       <div className="query-output-primary" ref={primaryHostRef}>
-        {primaries.length > 0
-          ? primaries.map((contributor) => (
+        {tabContributors.length > 0
+          ? visibleContributors.map((contributor) => (
               <div
                 key={contributor.id}
-                style={{ display: contributor.id === primaryContributor?.id ? "block" : "none", height: "100%" }}
+                className="query-output-view"
+                style={{ display: contributor.id === selectedContributor?.id ? "block" : "none" }}
               >
                 {contributor.render(contextForPrimary(contributor))}
               </div>
             ))
           : <div className="query-output-empty">No output view available.</div>}
       </div>
-
-      {adhocContributors.map((c) => (
-        <div key={c.id} className="query-output-adhoc">
-          <div className="query-output-adhoc-title">{c.title}</div>
-          <div className="query-output-adhoc-content">{c.render(context)}</div>
-        </div>
-      ))}
 
       <div className="query-output-status-bar">
         <span>State: {context.state}</span>

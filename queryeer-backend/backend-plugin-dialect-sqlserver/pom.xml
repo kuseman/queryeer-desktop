@@ -10,6 +10,11 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
+    <properties>
+        <bind-api.version>4.0.2</bind-api.version>
+        <jaxb-runtime.version>4.0.5</jaxb-runtime.version>
+    </properties>
+
     <artifactId>backend-plugin-dialect-sqlserver</artifactId>
     <name>backend-plugin-dialect-sqlserver</name>
 
@@ -38,10 +43,47 @@
             <version>12.8.1.jre11</version>
             <scope>provided</scope>
         </dependency>
+        
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
+    <!--
+     <dependency>
+        <groupId>jakarta.xml.bind</groupId>
+        <artifactId>jakarta.xml.bind-api</artifactId>
+        <version>${bind-api.version}</version>
+    </dependency>
+    <dependency>
+        <groupId>org.glassfish.jaxb</groupId>
+        <artifactId>jaxb-runtime</artifactId>
+        <version>${jaxb-runtime.version}</version>
+    </dependency>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.jvnet.jaxb</groupId>
+                <artifactId>jaxb-maven-plugin</artifactId>
+                <version>4.0.14</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <schemaDirectory>src/main/resources/xsd</schemaDirectory>
+                            <generateDirectory>${project.build.directory}/generated-sources/xjc</generateDirectory>
+                            <generatePackage>com.queryeer.backend.plugin.jdbc.sqlserver.showplan2019</generatePackage>
+                            <schemaIncludes>
+                                <include>/sqlserver2019queryplan.xsd</include>
+                            </schemaIncludes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+    -->
 </project>

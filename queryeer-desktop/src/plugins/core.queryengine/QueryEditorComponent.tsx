@@ -44,6 +44,7 @@ function toAbsoluteLocation(anchor: ExecutionAnchor, line?: number, column?: num
 }
 
 const OUTPUT_CONTEXT_KEY = defineStateKey<OutputContext>("core.queryengine.outputContext");
+const PLAN_OUTPUT_ID = "core.graph.queryPlanOutput";
 
 export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry }: Props): JSX.Element {
   const [outputContext, setOutputContext] = useState<OutputContext>(IDLE_OUTPUT_CONTEXT);
@@ -189,13 +190,25 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
 
       const panelState = getQueryViewStateStore().read(targetFileId);
       const selectedFromToolbar = executeOptions?.outputIdOverride ?? panelState.executionTargetOutputId;
-      const fallbackPrimaryId = TEXT_OUTPUT_PRIMARY_ID;
-      const targetPrimaryId = selectedFromToolbar
+      const outputRegistry = getOutputRegistry();
+      const selectablePrimaryIds = outputRegistry.getSelectablePrimaryContributors().map((output) => output.id);
+      const isSelectedPrimary = selectedFromToolbar
+        ? selectablePrimaryIds.includes(selectedFromToolbar)
+        : false;
+      const registrySelectedPrimaryId = outputRegistry.getSelectedPrimaryId();
+      const fallbackPrimaryId = registrySelectedPrimaryId && selectablePrimaryIds.includes(registrySelectedPrimaryId)
+        ? registrySelectedPrimaryId
+        : TEXT_OUTPUT_PRIMARY_ID;
+      const targetPrimaryCandidate = isSelectedPrimary ? selectedFromToolbar : panelState.executionTargetOutputId;
+      const targetPrimaryId = targetPrimaryCandidate && selectablePrimaryIds.includes(targetPrimaryCandidate)
+        ? targetPrimaryCandidate
+        : fallbackPrimaryId;
+      const panelOutputId = selectedFromToolbar
         ?? panelState.panelActiveOutputId
-        ?? fallbackPrimaryId;
+        ?? targetPrimaryId;
 
-      getQueryViewStateStore().setPanelSelectedOutput(targetFileId, targetPrimaryId);
-      setExecutionPrimaryOverride(targetFileId, targetPrimaryId ?? null);
+      getQueryViewStateStore().setPanelSelectedOutput(targetFileId, panelOutputId);
+      setExecutionPrimaryOverride(targetFileId, panelOutputId ?? null);
 
       const persistedFormat = getQueryViewStateStore().read(targetFileId).textOutputFormat;
       updateOutputContextForFile(targetFileId, (prev) => ({
@@ -210,7 +223,11 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
 
       try {
         const service = getQueryEngineService();
-        const executionId = await service.execute({ fileId: targetFileId, text });
+        const executionId = await service.execute({
+          fileId: targetFileId,
+          text,
+          ...(executeOptions?.optionsOverride ? { options: executeOptions.optionsOverride } : {})
+        });
 
         const unsubscribe = service.subscribe(executionId, (event) => {
           if (event.method === "queryengine.progress") {
@@ -305,6 +322,8 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
             });
           } else if (event.method === "queryengine.completed") {
             const p = event.params as { metrics?: { durationMs?: number; rowCount?: number }; features?: string[]; artifacts?: OutputContext["artifacts"] };
+            const artifacts = p.artifacts ?? [];
+            const hasPlanGraphArtifact = artifacts.some((artifact) => artifact.kind === "graph" && artifact.capability === "plan");
             activeExecutionByFileIdRef.current.delete(targetFileId);
             securityRetryCountByFileIdRef.current.delete(targetFileId);
             updateOutputContextForFile(targetFileId, (prev) => ({
@@ -312,11 +331,14 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
               state: "completed",
               metrics: p.metrics ?? null,
               features: p.features ?? ["rows"],
-              artifacts: p.artifacts ?? [],
+              artifacts,
               progress: null,
               executionStartedAtMs: null
             }));
 
+            if (hasPlanGraphArtifact) {
+              getQueryViewStateStore().setPanelSelectedOutput(targetFileId, PLAN_OUTPUT_ID);
+            }
             setExecutionPrimaryOverride(targetFileId, null);
 
             // Finalize any open export streams and patch exportPath back into the result set

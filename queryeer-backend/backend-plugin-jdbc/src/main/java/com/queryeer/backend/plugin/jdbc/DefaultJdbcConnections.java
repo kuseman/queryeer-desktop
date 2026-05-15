@@ -114,7 +114,7 @@ public final class DefaultJdbcConnections implements JdbcConnections
         {
             resolved.dialect()
                     .queryExecutor()
-                    .execute(new JdbcQueryRequest(CONNECTION_TEST_EXECUTION_ID, null, CONNECTION_TEST_QUERY, resolved.connectionId(), resolved.properties(), null, null, resolved.dialect()),
+                    .execute(new JdbcQueryRequest(CONNECTION_TEST_EXECUTION_ID, null, CONNECTION_TEST_QUERY, resolved.connectionId(), resolved.properties(), null, null, resolved.dialect(), null),
                             new NoopJdbcQueryEventListener());
         }
         catch (RuntimeException e)

@@ -29,6 +29,7 @@ import com.queryeer.backend.api.QueryPublisher;
 import com.queryeer.backend.api.SecuritySessionClosedException;
 import com.queryeer.backend.api.parse.IncrementalParseFunction;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
+import com.queryeer.backend.contract.query.QueryExecuteOptions;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcConnectionHealth;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaActionHandler;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawlCoordinator;
@@ -134,6 +135,12 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     @Override
     public void execute(String queryExecutionId, String fileId, String text, Object engineState, QueryPublisher publisher)
     {
+        execute(queryExecutionId, fileId, text, engineState, null, publisher);
+    }
+
+    @Override
+    public void execute(String queryExecutionId, String fileId, String text, Object engineState, QueryExecuteOptions options, QueryPublisher publisher)
+    {
         long startedAt = System.currentTimeMillis();
         String sessionId = null;
         JdbcConnection resolved = null;
@@ -175,10 +182,9 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                 resultSetMeta.put("Database", state.database());
             }
             Connection sessionConnection = acquire(fileId, resolved);
-            JdbcQueryRequest request = new JdbcQueryRequest(queryExecutionId, fileId, text, resolved.connectionId(), resolved.properties(), sessionConnection, state.database(), resolved.dialect());
-            JdbcQueryResult result = resolved.dialect()
-                    .queryExecutor()
-                    .execute(request, new TransportJdbcQueryEventListener(publisher, resultSetMeta));
+            JdbcQueryRequest request = new JdbcQueryRequest(queryExecutionId, fileId, text, resolved.connectionId(), resolved.properties(), sessionConnection, state.database(), resolved.dialect(),
+                    options);
+            JdbcQueryResult result = executeJdbcRequest(resolved, request, new TransportJdbcQueryEventListener(publisher, resultSetMeta));
 
             Map<String, Object> engineStatePatch = new LinkedHashMap<>();
             if (result.engineState() != null)
@@ -191,7 +197,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             }
 
             usageListener.onUsage(resolved.connectionId(), state.database());
-            publisher.completed(System.currentTimeMillis() - startedAt, result.rowCount(), engineStatePatch);
+            publisher.completed(System.currentTimeMillis() - startedAt, result.rowCount(), result.features(), result.artifacts(), engineStatePatch);
         }
         catch (IllegalArgumentException e)
         {
@@ -233,6 +239,26 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             activeExecutors.remove(queryExecutionId);
             cancelledExecutionIds.remove(queryExecutionId);
         }
+    }
+
+    private JdbcQueryResult executeJdbcRequest(JdbcConnection resolved, JdbcQueryRequest request, TransportJdbcQueryEventListener listener)
+    {
+        String intent = request.options() == null ? null
+                : request.options()
+                        .intent();
+        if (intent != null
+                && intent.startsWith("plan."))
+        {
+            return resolved.dialect()
+                    .queryPlanExecutor()
+                    .orElseThrow(() -> new IllegalArgumentException("Query plans are not supported for dialect: " + resolved.dialect()
+                            .metadata()
+                            .id()))
+                    .executeWithPlan(request, listener);
+        }
+        return resolved.dialect()
+                .queryExecutor()
+                .execute(request, listener);
     }
 
     @Override

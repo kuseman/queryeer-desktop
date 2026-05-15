@@ -3,21 +3,10 @@
 Quick fixes
 - Save to file output
     - Should not output anything to table/text only writing status to text
+- Coloring of mimetype/connections is not good UI/UX wise, suggest a better non intrusive approach to coloring
 
 Large features in prio
 
-- [ ] Graph visualization framework
-    - Query plan
-    - Procedure call tree
-    - Schema overview
-    - Vertices / edges
-    - Properties panel
-    - Hoover tooltip support
-- [ ] SQLServer query plan
-    - Pre.req. Graph visualization framework done
-    - Parse XML
-    - Convert to a common plan model
-    - Actions in toolbar by dialect (Estimated / Actual)
 - [ ] JDBC Panel extension fixes
     - Add a new panel with schema status/statistics per connection. Actions like force crawl etc.
 - [ ] JDBC Tree navigation fixes
@@ -48,6 +37,22 @@ Large features in prio
     - [ ] matrix releases
     - [ ] change log (app bundled)
     - [ ] change log (gitgub release)
+- [X] SQLServer query plan
+    - Pre.req. Graph visualization framework done
+    - Parse XML
+    - Convert to a common plan model
+    - Actions in toolbar by dialect (Estimated / Actual)
+- [X] Graph visualization framework
+    - Vertices / edges
+    - Properties panel
+    - Hoover tooltip support
+    - Zooming / paning
+    - Styling
+        - Support for imgages/icons on vertices
+        - Edge thicknes / color / shape
+    - Query plan
+    - Procedure call tree
+    - Schema overview
 - [X] Code complete (Phase 2. Detect context)
     - [X] Tables
     - [X] Columns

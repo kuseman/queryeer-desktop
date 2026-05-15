@@ -237,7 +237,14 @@ Request params:
   },
   "options": {
     "maxRows": 10000,
-    "timeoutMs": 120000
+    "timeoutMs": 120000,
+    "intent": "plan.estimated",
+    "requestedArtifacts": [
+      { "capability": "plan", "kind": "graph" }
+    ],
+    "dialectOptions": {
+      "sqlserverPlanXmlOutput": "suppress"
+    }
   }
 }
 ```
@@ -255,6 +262,9 @@ Behavior:
 
 - Execution updates are sent via notifications (`queryengine.progress`, `queryengine.resultChunk`, `queryengine.completed`, `queryengine.failed`).
 - `engineState` is an engine-owned opaque blob. Core protocol forwards it without interpretation.
+- `options.intent` is optional. Omitted or `execute` means normal execution. `plan.estimated` requests a non-executing estimate/explain plan where supported. `plan.actual` requests normal execution plus plan artifacts where supported.
+- `options.requestedArtifacts` lets the client request non-row outputs such as `{ "capability": "plan", "kind": "graph" }`.
+- `options.dialectOptions` is an optional dialect-owned settings bag. For SQL Server, `sqlserverPlanXmlOutput` may be `suppress` or `include` to control whether raw ShowPlan XML result sets are also streamed as row output alongside graph artifacts.
 - Payloadbuilder engine state may include `payloadbuilder.defaultCatalogAlias` to request session default catalog alias.
 - Payloadbuilder engine state may include `payloadbuilder.selectedEnvironmentId`. Backend reads environment variables from settings module `core.queryengine.payloadbuilder.environments` (`core.queryengine.payloadbuilder.environments.json`) and injects them into the query session as runtime variables before execution.
 - JDBC engine state carries `connectionId`, optional `database`, and optional `sessionId`. When `database` is present, the backend switches the JDBC connection to that catalog (via dialect-specific `setCatalog`/`setSchema`) before executing statements. After execution, the backend reflects the current database back in `queryengine.completed.engineState.database` and the active RDBMS session in `queryengine.completed.engineState.sessionId` so the UI stays synchronized.
@@ -606,6 +616,10 @@ Backends and dialects MUST convert native graph-like formats into this protocol 
             ]
           }
         ],
+        "overlays": [
+          { "id": "parallel", "kind": "parallel", "label": "Parallel", "title": "Operator executed in parallel" },
+          { "id": "warning", "kind": "warning", "label": "Warnings", "title": "Plan warnings are available" }
+        ],
         "actions": [
           { "id": "copy-node", "label": "Copy node" }
         ]
@@ -637,6 +651,7 @@ Rules:
 - Edge endpoints MUST reference existing vertex ids.
 - Property values are scalar: string, number, boolean, or null. Backends SHOULD stringify structured native values in v1.
 - Tooltip properties are selected by `important: true`; the full property set is shown in the graph properties panel.
+- Vertex overlays are compact badges rendered on top of a vertex. Known `kind` values are `parallel`, `warning`, `info`, and `custom`; unknown values SHOULD be rendered as custom informational badges.
 
 ## 6.4a `file.change`
 

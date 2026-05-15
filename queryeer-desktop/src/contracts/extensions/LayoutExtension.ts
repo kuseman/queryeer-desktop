@@ -26,6 +26,7 @@ export type LayoutToolbarActionContribution = {
   commandId: string;
   icon?: string | LayoutActionIconRenderer;
   when?: string;
+  pressed?: () => boolean;
 };
 
 export type LayoutToolbarSeparatorContribution = {

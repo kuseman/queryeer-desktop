@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   Background,
   Controls,
@@ -7,6 +7,8 @@ import {
   MiniMap,
   Position,
   ReactFlow,
+  useNodesInitialized,
+  useReactFlow,
   type Edge as FlowEdge,
   type Node as FlowNode,
   type NodeTypes
@@ -64,6 +66,7 @@ export function GraphViewer({
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [layoutDirectionOverride, setLayoutDirectionOverride] = useState<GraphLayoutDirection | "auto">("auto");
+  const canvasRef = useRef<HTMLDivElement | null>(null);
   const effectiveLayoutDirection = layoutDirectionOverride === "auto"
     ? graph.layout?.direction ?? "top-bottom"
     : layoutDirectionOverride;
@@ -138,7 +141,7 @@ export function GraphViewer({
 
   return (
     <div className="graph-viewer" data-output-focus-target="true" tabIndex={-1}>
-      <div className="graph-canvas">
+      <div className="graph-canvas" ref={canvasRef}>
         <GraphLayoutToolbar
           direction={layoutDirectionOverride}
           onDirectionChanged={setLayoutDirectionOverride}
@@ -161,8 +164,16 @@ export function GraphViewer({
           onNodeMouseLeave={() => setTooltip(null)}
           onEdgeMouseLeave={() => setTooltip(null)}
         >
+          <GraphFitController
+            canvasRef={canvasRef}
+            fitKey={`${graph.id}:${nodes.length}:${edges.length}:${effectiveLayoutDirection}`}
+          />
           <Background />
           <MiniMap
+            style={{
+              width: 100,  // Half the default size
+              height: 75,
+            }}
             pannable
             zoomable
             className="graph-minimap"
@@ -197,6 +208,55 @@ export function GraphViewer({
       )}
     </div>
   );
+}
+
+function GraphFitController({
+  canvasRef,
+  fitKey
+}: {
+  canvasRef: RefObject<HTMLDivElement>;
+  fitKey: string;
+}): null {
+  const nodesInitialized = useNodesInitialized();
+  const { fitView } = useReactFlow();
+
+  useEffect(() => {
+    if (!nodesInitialized) {
+      return;
+    }
+    const fit = () => {
+      void fitView({ padding: 0.18, duration: 0, includeHiddenNodes: false });
+    };
+    const frame = requestAnimationFrame(() => {
+      requestAnimationFrame(fit);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [fitKey, fitView, nodesInitialized]);
+
+  useEffect(() => {
+    if (!nodesInitialized || !canvasRef.current) {
+      return;
+    }
+    let frame: number | null = null;
+    const observer = new ResizeObserver(() => {
+      if (frame !== null) {
+        cancelAnimationFrame(frame);
+      }
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        void fitView({ padding: 0.18, duration: 0, includeHiddenNodes: false });
+      });
+    });
+    observer.observe(canvasRef.current);
+    return () => {
+      observer.disconnect();
+      if (frame !== null) {
+        cancelAnimationFrame(frame);
+      }
+    };
+  }, [canvasRef, fitView, nodesInitialized]);
+
+  return null;
 }
 
 function GraphLayoutToolbar({
@@ -247,6 +307,25 @@ function GraphVertexNode({ data, selected }: { data: GraphVertexNodeData; select
       <Handle type="source" position={handles.source} className="graph-node-handle" />
       {(style.iconUrl || style.imageUrl) && (
         <img src={style.iconUrl ?? style.imageUrl} alt="" className="graph-node-icon" aria-hidden="true" />
+      )}
+      {vertex.overlays && vertex.overlays.length > 0 && (
+        <div className="graph-node-overlays" aria-hidden="true">
+          {vertex.overlays.map((overlay) => (
+            <span
+              key={overlay.id}
+              className={`graph-node-overlay graph-node-overlay-${overlay.kind}`}
+              title={overlay.title ?? overlay.label}
+            >
+              {overlay.iconUrl
+                ? <img src={overlay.iconUrl} alt="" />
+                : overlay.kind === "parallel"
+                  ? ">>"
+                  : overlay.kind === "warning"
+                    ? "!"
+                    : "i"}
+            </span>
+          ))}
+        </div>
       )}
       <div className="graph-node-body">
         {vertex.kind && <div className="graph-node-kind">{vertex.kind}</div>}

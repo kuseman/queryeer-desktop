@@ -1,6 +1,7 @@
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import { registerQueryExecutableEngine } from "../core.queryengine/engine-registration";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
+import { getQueryViewStateStore } from "../core.queryengine/QueryViewStateStore";
 import { getCoreSettingsService } from "../core.settings/service";
 import { JdbcConnectionsSettingsEditor } from "./JdbcConnectionsSettingsEditor";
 import {
@@ -25,6 +26,9 @@ import { getJdbcDatabaseCache } from "./jdbc-database-cache";
 const JDBC_SESSION_ID_METADATA_KEY = "core.queryengine.jdbc.sessionId";
 const JDBC_SESSION_CONNECTION_TITLE_KEY = "core.queryengine.jdbc.sessionConnection";
 const JDBC_SESSION_STATE_METADATA_KEY = "core.queryengine.jdbc.sessionState";
+const SQLSERVER_PLAN_OUTPUT_SETTING_ID = "core.queryengine.jdbc.sqlserver.planXmlOutput";
+const PLAN_OUTPUT_ID = "core.graph.queryPlanOutput";
+const SQLSERVER_WHEN = "hasActiveQueryExecutableFile && activeFile.metadata && activeFile.metadata['core.queryengine.jdbc.dialectId'] == 'sqlserver'";
 // Tracks which connectionId (UUID) each file's session was established with.
 // Kept in memory — same lifetime as metadata, which is also not persisted.
 const sessionConnectionUuidMap = new Map<string, string>();
@@ -40,6 +44,8 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
     providesCapabilities: ["query.engine.jdbc"]
   },
   activate: (context) => {
+    const queryEngineService = getQueryEngineService();
+
     registerWhenExpressionVariables([
       { name: "activeFile.metadata.core.queryengine.jdbc.database", type: "string", description: "Selected JDBC database name" },
       { name: "activeFile.metadata.core.queryengine.jdbc.connectionTitle", type: "string", description: "Human-readable title of the active JDBC connection" },
@@ -52,7 +58,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       {
         name: "SQLServer Database",
         description: "Match SQL files using SQL Server against a specific selected database",
-        when: "activeFile.mimeType == 'application/sql' && activeFile.metadata.core.queryengine.jdbc.dialectId == 'sqlserver' && activeFile.metadata.core.queryengine.jdbc.database == 'OrderService'"
+        when: "activeFile.mimeType == 'application/sql' && activeFile.metadata && activeFile.metadata['core.queryengine.jdbc.dialectId'] == 'sqlserver' && activeFile.metadata['core.queryengine.jdbc.database'] == 'OrderService'"
       }
     ]);
 
@@ -63,7 +69,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       order: 10,
       action: {
         label: "Describe",
-        when: "activeFile.mimeType == 'application/sql' && activeFile.metadata.core.queryengine.jdbc.dialectId == 'sqlserver' && (symbol.kind == 'table' || symbol.kind == 'view')",
+        when: "activeFile.mimeType == 'application/sql' && activeFile.metadata && activeFile.metadata['core.queryengine.jdbc.dialectId'] == 'sqlserver' && (symbol.kind == 'table' || symbol.kind == 'view')",
         query: "exec sp_help '${symbol.name}'"
       }
     });
@@ -80,6 +86,63 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       moduleId: "core.queryengine.jdbc",
       mimeType: "application/sql",
       icon: DatabaseIcon
+    });
+
+    const getActiveQueryFile = () => {
+      const fileId = context.fileMediator.getActiveFileId();
+      return fileId ? context.files.getFile(fileId) : undefined;
+    };
+
+    context.commands.registerCommand({
+      id: "core.queryengine.jdbc.sqlserver.showEstimatedPlan",
+      title: "Show Estimated Query Plan",
+      category: "Query",
+      enablement: `backendHealthy && ${SQLSERVER_WHEN}`,
+      handler: async () => {
+        queryEngineService.requestExecute({
+          outputIdOverride: PLAN_OUTPUT_ID,
+          optionsOverride: {
+            intent: "plan.estimated",
+            requestedArtifacts: [{ capability: "plan", kind: "graph" }]
+          }
+        });
+      }
+    });
+
+    context.commands.registerCommand({
+      id: "core.queryengine.jdbc.sqlserver.toggleActualPlan",
+      title: "Include Actual Query Plan",
+      category: "Query",
+      enablement: SQLSERVER_WHEN,
+      handler: async () => {
+        const file = getActiveQueryFile();
+        if (!file) {
+          return;
+        }
+        const store = getQueryViewStateStore();
+        const current = store.read(file.fileId).includeActualPlan === true;
+        store.setIncludeActualPlan(file.fileId, !current);
+      }
+    });
+
+    context.layout.registerToolbarAction({
+      id: "core.queryengine.jdbc.toolbar.sqlserver.showEstimatedPlan",
+      title: "Estimated Plan",
+      order: 44,
+      commandId: "core.queryengine.jdbc.sqlserver.showEstimatedPlan",
+      when: SQLSERVER_WHEN
+    });
+
+    context.layout.registerToolbarAction({
+      id: "core.queryengine.jdbc.toolbar.sqlserver.includeActualPlan",
+      title: "Actual Plan",
+      order: 45,
+      commandId: "core.queryengine.jdbc.sqlserver.toggleActualPlan",
+      when: SQLSERVER_WHEN,
+      pressed: () => {
+        const file = getActiveQueryFile();
+        return file ? getQueryViewStateStore().read(file.fileId).includeActualPlan === true : false;
+      }
     });
 
     context.layout.registerTabHeaderStyle({
@@ -148,6 +211,20 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
             rendererId: "core.queryengine.jdbc.connections.renderer",
             validatorId: "core.queryengine.jdbc.connections.validator"
           }
+        },
+        {
+          id: SQLSERVER_PLAN_OUTPUT_SETTING_ID,
+          moduleId: "core.queryengine.jdbc",
+          title: "SQL Server Plan XML Output",
+          description: "Controls whether SQL Server query plan XML result sets are also shown as raw query output when plan graph artifacts are produced.",
+          sectionPath: ["Query Engine", "JDBC", "SQL Server"],
+          tags: ["jdbc", "sqlserver", "plan", "showplan"],
+          type: "enum",
+          defaultValue: "suppress",
+          options: [
+            { label: "Suppress raw XML", value: "suppress" },
+            { label: "Include raw XML", value: "include" }
+          ]
         },
       ]
     });
@@ -249,7 +326,27 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
         engineState.sessionId = sessionId;
       }
 
-      return { engineState };
+      const isSqlServer = file?.metadata?.["core.queryengine.jdbc.dialectId"] === "sqlserver";
+      if (!isSqlServer) {
+        return { engineState };
+      }
+      const viewState = getQueryViewStateStore().read(params.fileId);
+      const includeActualPlan = viewState.includeActualPlan === true && !params.options?.intent;
+      const rawXmlMode = getCoreSettingsService()?.getValue(SQLSERVER_PLAN_OUTPUT_SETTING_ID) === "include"
+        ? "include"
+        : "suppress";
+      return {
+        engineState,
+        options: {
+          ...params.options,
+          intent: includeActualPlan ? "plan.actual" : params.options?.intent,
+          requestedArtifacts: params.options?.requestedArtifacts ?? (includeActualPlan ? [{ capability: "plan", kind: "graph" }] : undefined),
+          dialectOptions: {
+            ...(params.options?.dialectOptions ?? {}),
+            sqlserverPlanXmlOutput: rawXmlMode
+          }
+        }
+      };
     });
 
     getQueryEngineService().onQueryEvent((event, executeContext) => {
