@@ -16,6 +16,17 @@ type Props = {
 export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDatabase }: Props) {
   const [, setRevision] = useState(0);
   const prevBackendStateRef = useRef<string | null>(null);
+  const treeBodyRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollToActiveNode = useCallback(() => {
+    if (!treeBodyRef.current) return;
+    // Scroll to the deepest active node (database, not the parent connection)
+    const allActive = treeBodyRef.current.querySelectorAll<HTMLElement>(".jdbc-nav-node.is-active");
+    if (allActive.length > 0) {
+      allActive[allActive.length - 1].scrollIntoView({ block: "nearest" });
+    }
+  }, []);
+
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -35,8 +46,10 @@ export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDa
   useEffect(() => {
     if (!store.getState().linkToActiveFile || !activeFileConnectionId) return;
     const rootNodeId = `${activeFileConnectionId}::__root__`;
-    void store.expandNode(rootNodeId, { silent: true });
-  }, [store, activeFileConnectionId]);
+    void store.expandNode(rootNodeId, { silent: true }).then(() => {
+      requestAnimationFrame(() => scrollToActiveNode());
+    });
+  }, [store, activeFileConnectionId, scrollToActiveNode]);
 
   // Auto-expand databases_container then target database
   useEffect(() => {
@@ -56,7 +69,9 @@ export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDa
         for (const dbId of refreshed.childIds) {
           const db = store.getNode(dbId);
           if (db?.name === activeFileDatabase) {
-            void store.expandNode(dbId, { silent: true });
+            void store.expandNode(dbId, { silent: true }).then(() => {
+              requestAnimationFrame(() => scrollToActiveNode());
+            });
             break;
           }
         }
@@ -67,11 +82,13 @@ export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDa
     for (const dbId of databasesNode.childIds) {
       const db = store.getNode(dbId);
       if (db?.name === activeFileDatabase) {
-        void store.expandNode(dbId, { silent: true });
+        void store.expandNode(dbId, { silent: true }).then(() => {
+          requestAnimationFrame(() => scrollToActiveNode());
+        });
         break;
       }
     }
-  }, [store, activeFileConnectionId, activeFileDatabase]);
+  }, [store, activeFileConnectionId, activeFileDatabase, scrollToActiveNode]);
 
   // Auto-recover: re-expand active connection/database when backend becomes healthy
   useEffect(() => {
@@ -84,11 +101,13 @@ export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDa
         && activeFileConnectionId
       ) {
         const rootNodeId = `${activeFileConnectionId}::__root__`;
-        void store.expandNode(rootNodeId, { silent: true });
+        void store.expandNode(rootNodeId, { silent: true }).then(() => {
+          requestAnimationFrame(() => scrollToActiveNode());
+        });
       }
       prevBackendStateRef.current = status.state;
     });
-  }, [store, activeFileConnectionId, activeFileDatabase]);
+  }, [store, activeFileConnectionId, activeFileDatabase, scrollToActiveNode]);
 
   const state = store.getState();
 
@@ -113,7 +132,7 @@ export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDa
           {state.linkToActiveFile ? "⊟" : "⊞"}
         </button>
       </div>
-      <div className="jdbc-nav-tree-body">
+      <div ref={treeBodyRef} className="jdbc-nav-tree-body">
         {state.connectionEntries.map((entry) => (
           <TreeNodeRow
             key={entry.rootNodeId}

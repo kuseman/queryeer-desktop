@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { SecretRefValue } from "../../contracts/security/Security";
 import { PasswordFieldInput } from "../core.settings/PasswordFieldInput";
-import "./jdbc-settings.css";
+import "../core.queryengine.jdbc/jdbc-settings.css";
 
 const MSSQL_JDBC_MAVEN_URL = "https://central.sonatype.com/artifact/com.microsoft.sqlserver/mssql-jdbc";
 
