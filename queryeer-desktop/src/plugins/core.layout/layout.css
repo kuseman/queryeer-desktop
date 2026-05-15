@@ -271,6 +271,21 @@
   color: var(--text-0);
 }
 
+.tab-accent {
+  position: relative;
+}
+
+.tab-accent::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 0;
+  bottom: 4px;
+  width: 5px;
+  border-radius: 0 2px 2px 0;
+  background: var(--tab-accent-color);
+}
+
 .shell-tab-tooltip {
   position: fixed;
   z-index: 1000;

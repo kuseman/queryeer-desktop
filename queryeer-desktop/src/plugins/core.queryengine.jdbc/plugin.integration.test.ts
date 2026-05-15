@@ -500,7 +500,8 @@ describe("core.queryengine.jdbc plugin integration", () => {
       hasCapability: () => true
     });
     expect(result).toEqual({
-      style: { backgroundColor: "#ff0000" }
+      className: "tab-accent",
+      style: { "--tab-accent-color": "#ff0000" }
     });
   });
 

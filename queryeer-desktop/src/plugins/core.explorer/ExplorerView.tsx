@@ -71,10 +71,8 @@ function fileBackgroundStyle(file: FileEntity): React.CSSProperties | undefined 
   if (!item?.color || !item.color.startsWith("#")) {
     return undefined;
   }
-  const opacityRaw = settings?.getValue("core.files.tabBackgroundOpacity");
-  const opacity = typeof opacityRaw === "number" && !Number.isNaN(opacityRaw) ? opacityRaw : 0.08;
   return {
-    backgroundColor: applyOpacityToHex(item.color, opacity)
+    backgroundColor: applyOpacityToHex(item.color, 0.08)
   };
 }
 

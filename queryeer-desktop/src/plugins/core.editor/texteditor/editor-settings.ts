@@ -106,7 +106,16 @@ export function buildMonacoCreateOptions(
     cursorBlinking: settings.cursorBlinking,
     contextmenu: false,
     fixedOverflowWidgets: true,
-    model: null
+    model: null,
+    quickSuggestions: { other: true, comments: false, strings: false },
+    suggestOnTriggerCharacters: true,
+    acceptSuggestionOnCommitCharacter: true,
+    suggest: {
+      showStatusBar: false,
+      preview: false,
+      snippetsPreventQuickSuggestions: true,
+      showInlineDetails: true
+    }
   };
 }
 

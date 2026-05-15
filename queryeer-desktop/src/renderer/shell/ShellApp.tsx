@@ -662,11 +662,6 @@ export function ShellApp({
               getMimeIcon={filesRegistry.mimeIcons.getMimeIcon}
               onTabContextMenuAction={handleTabContextMenuAction}
               onTabContextMenuOpen={handleTabContextMenuOpen}
-              tabBackgroundOpacity={(() => {
-                const settings = getCoreSettingsService();
-                const raw = settings?.getValue("core.files.tabBackgroundOpacity");
-                return typeof raw === "number" && !Number.isNaN(raw) ? raw : undefined;
-              })()}
             />
 
             <EditorPane

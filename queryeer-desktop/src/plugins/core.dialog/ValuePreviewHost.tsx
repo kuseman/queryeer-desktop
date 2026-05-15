@@ -66,6 +66,12 @@ function ValuePreviewWindow({ windowState }: { windowState: ValuePreviewWindowSt
         fixedOverflowWidgets: true,
         fontSize: 12,
         lineHeight: 18,
+        colorDecorators: false,
+        find: {
+          addExtraSpaceOnTop: false,
+          autoFindInSelection: "never",
+          seedSearchStringFromSelection: "never"
+        }
       });
       createdEditor = editor;
       editorRef.current = editor;
@@ -136,6 +142,23 @@ function ValuePreviewWindow({ windowState }: { windowState: ValuePreviewWindowSt
     window.addEventListener("mouseup", onMouseUp);
   }, [windowState.id, windowState.x, windowState.y]);
 
+  const handleCopyAll = React.useCallback(() => {
+    void navigator.clipboard.writeText(windowState.value);
+  }, [windowState.value]);
+
+  const handleSelectAll = React.useCallback(() => {
+    editorRef.current?.focus();
+    const model = editorRef.current?.getModel();
+    if (model) {
+      editorRef.current?.setSelection(model.getFullModelRange());
+    }
+  }, []);
+
+  const handleFind = React.useCallback(() => {
+    editorRef.current?.focus();
+    editorRef.current?.trigger("value-preview", "actions.find", null);
+  }, []);
+
   const onResizePointerDown = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     focusValuePreviewDialog(windowState.id);
@@ -174,6 +197,34 @@ function ValuePreviewWindow({ windowState }: { windowState: ValuePreviewWindowSt
     return () => cancelAnimationFrame(frame);
   }, [windowState.id]);
 
+  React.useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!windowRef.current?.contains(event.target as Node)) {
+        return;
+      }
+      const isMod = event.ctrlKey || event.metaKey;
+      if (isMod && event.key === "f") {
+        event.preventDefault();
+        handleFind();
+        return;
+      }
+      if (isMod && event.key === "a") {
+        event.preventDefault();
+        handleSelectAll();
+        return;
+      }
+      if (isMod && event.key === "c") {
+        event.preventDefault();
+        handleCopyAll();
+        return;
+      }
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [handleFind, handleSelectAll, handleCopyAll]);
+
   return (
     <div
       ref={windowRef}
@@ -194,17 +245,19 @@ function ValuePreviewWindow({ windowState }: { windowState: ValuePreviewWindowSt
         windowRef.current?.focus();
       }}
       onKeyDown={(event) => {
-        if (event.key !== "Escape") {
-          return;
+        if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          closeValuePreviewDialog(windowState.id);
         }
-        event.preventDefault();
-        event.stopPropagation();
-        closeValuePreviewDialog(windowState.id);
       }}
     >
       <div className="dialog-value-preview-header" onMouseDown={onHeaderMouseDown}>
         <span className="dialog-value-preview-title" title={windowLabel}>{windowLabel}</span>
         <div className="dialog-value-preview-actions">
+          <button type="button" className="dialog-value-preview-action-btn" onClick={handleFind} aria-label="Find" title="Find (Ctrl+F)">Find</button>
+          <button type="button" className="dialog-value-preview-action-btn" onClick={handleSelectAll} aria-label="Select all" title="Select all (Ctrl+A)">Select all</button>
+          <button type="button" className="dialog-value-preview-action-btn" onClick={handleCopyAll} aria-label="Copy all" title="Copy all to clipboard">Copy</button>
           <button type="button" className="dialog-value-preview-min" onClick={() => minimizeValuePreviewDialog(windowState.id)} aria-label="Minimize">_</button>
           <button type="button" className="dialog-value-preview-close" onClick={() => closeValuePreviewDialog(windowState.id)}>Close</button>
         </div>

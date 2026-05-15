@@ -49,10 +49,15 @@ export function createJdbcDatabaseQuickCommandProvider(
 
       const items: QuickCommandItem[] = [];
       for (const result of results) {
+        const connColor = connections.find((c) => c.connectionId === result.connectionId)?.color;
         if (result.databases.length === 0) {
           items.push({
             id: `jdbc.db.${result.connectionId}::`,
             title: `${result.title} / — no databases —`,
+            titleParts: [
+              { text: `${result.title} / `, color: connColor },
+              { text: "— no databases —" }
+            ],
             description: "Select connection only",
             action: async () => {
               context.files.setEditorState(activeFile.fileId, JDBC_NAV_DB_KEY, undefined);
@@ -67,6 +72,10 @@ export function createJdbcDatabaseQuickCommandProvider(
           items.push({
             id: `jdbc.db.${result.connectionId}::${db}`,
             title: `${result.title} / ${db}`,
+            titleParts: [
+              { text: `${result.title} / `, color: connColor },
+              { text: db }
+            ],
             action: async () => {
               context.files.setEditorState(activeFile.fileId, JDBC_NAV_DB_KEY, {
                 connectionId: result.connectionId,
