@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { JdbcNavigationStore } from "./jdbc-navigation-store";
 import { getBackendStatusService } from "../../renderer/shell/backend-status-service";
 import { getNodeIcon } from "./jdbc-tree-contribution";
 import type { JdbcTreeNode } from "./jdbc-navigation-types";
+import { getJdbcTreeContextMenuRegistry } from "./jdbc-tree-context-menu-registry";
+import { ContextMenuSurface } from "../../renderer/components/ContextMenuSurface";
+import type { ContextMenuSurfaceItem } from "../../renderer/components/ContextMenuSurface";
 
 type Props = {
   store: JdbcNavigationStore;
@@ -13,6 +16,16 @@ type Props = {
 export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDatabase }: Props) {
   const [, setRevision] = useState(0);
   const prevBackendStateRef = useRef<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    node: JdbcTreeNode;
+  } | null>(null);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, node: JdbcTreeNode) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, node });
+  }, []);
 
   useEffect(() => {
     return store.subscribe(() => setRevision((r) => r + 1));
@@ -108,10 +121,27 @@ export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDa
             store={store}
             depth={0}
             dialectId={entry.dialectId}
+            activeFileConnectionId={activeFileConnectionId}
+            activeFileDatabase={activeFileDatabase}
             onNodeClick={handleNodeClick}
+            onContextMenu={handleContextMenu}
           />
         ))}
       </div>
+      {contextMenu && (() => {
+        const registry = getJdbcTreeContextMenuRegistry();
+        const menuItems = registry.getItemsForNode(contextMenu.node);
+        if (menuItems.length === 0) return null;
+        const sections = groupBySection(menuItems);
+        return (
+          <ContextMenuSurface
+            x={contextMenu.x}
+            y={contextMenu.y}
+            sections={sections}
+            onClose={() => setContextMenu(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -121,10 +151,13 @@ type NodeRowProps = {
   store: JdbcNavigationStore;
   depth: number;
   dialectId: string;
+  activeFileConnectionId: string | undefined;
+  activeFileDatabase: string | undefined;
   onNodeClick: (nodeId: string) => void;
+  onContextMenu: (e: React.MouseEvent, node: JdbcTreeNode) => void;
 };
 
-function TreeNodeRow({ nodeId, store, depth, dialectId, onNodeClick }: NodeRowProps) {
+function TreeNodeRow({ nodeId, store, depth, dialectId, activeFileConnectionId, activeFileDatabase, onNodeClick, onContextMenu }: NodeRowProps) {
   const node = store.getNode(nodeId);
   if (!node) return null;
 
@@ -135,13 +168,23 @@ function TreeNodeRow({ nodeId, store, depth, dialectId, onNodeClick }: NodeRowPr
   const icon = getNodeIcon(node.kind, node.attributes, dialectId);
   const label = formatNodeLabel(node);
 
+  const isActive =
+    activeFileConnectionId && node.connectionId === activeFileConnectionId
+      ? node.kind === "connection"
+        ? true
+        : node.kind === "database" && node.name === activeFileDatabase
+      : false;
+
+  const classNames = `jdbc-nav-node${node.isLoading ? " is-loading" : ""}${node.loadError ? " has-error" : ""}${isActive ? " is-active" : ""}`;
+
   return (
     <>
       <div
         data-testid="jdbc-tree-node"
-        className={`jdbc-nav-node${node.isLoading ? " is-loading" : ""}${node.loadError ? " has-error" : ""}`}
+        className={classNames}
         style={{ paddingLeft: `${depth * 16 + 4}px` }}
         onClick={() => isExpandable && onNodeClick(nodeId)}
+        onContextMenu={(e) => onContextMenu(e, node)}
         role="treeitem"
         aria-expanded={node.isExpanded}
       >
@@ -166,7 +209,10 @@ function TreeNodeRow({ nodeId, store, depth, dialectId, onNodeClick }: NodeRowPr
           store={store}
           depth={depth + 1}
           dialectId={dialectId}
+          activeFileConnectionId={activeFileConnectionId}
+          activeFileDatabase={activeFileDatabase}
           onNodeClick={onNodeClick}
+          onContextMenu={onContextMenu}
         />
       ))}
     </>
@@ -222,4 +268,22 @@ function formatQualifiedType(type: string, size?: number, precision?: number, sc
   }
 
   return type;
+}
+
+function groupBySection(
+  items: Array<{ id: string; label: string; section?: string; onSelect: () => void | Promise<void> }>
+): ContextMenuSurfaceItem[][] {
+  const map = new Map<string, ContextMenuSurfaceItem[]>();
+  for (const item of items) {
+    const section = item.section ?? "";
+    if (!map.has(section)) {
+      map.set(section, []);
+    }
+    map.get(section)!.push({
+      id: item.id,
+      label: item.label,
+      onSelect: item.onSelect
+    });
+  }
+  return Array.from(map.values());
 }

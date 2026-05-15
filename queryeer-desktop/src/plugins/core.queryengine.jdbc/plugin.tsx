@@ -22,6 +22,7 @@ import { getQuickCommandService } from "../core.quickcommand/service";
 import { createJdbcDatabaseQuickCommandProvider } from "./jdbc-database-quick-command";
 import { getJdbcDatabaseCache } from "./jdbc-database-cache";
 import { JdbcPanel } from "./JdbcPanel";
+import { getJdbcTreeContextMenuRegistry } from "./jdbc-tree-context-menu-registry";
 
 const JDBC_SESSION_ID_METADATA_KEY = "core.queryengine.jdbc.sessionId";
 const JDBC_SESSION_CONNECTION_TITLE_KEY = "core.queryengine.jdbc.sessionConnection";
@@ -291,6 +292,63 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       ],
       when: "activeFile.mimeType == 'application/sql'",
       render: () => <JdbcNavigationView context={context} />
+    });
+
+    const treeContextMenu = getJdbcTreeContextMenuRegistry();
+
+    treeContextMenu.registerContribution({
+      id: "core.queryengine.jdbc.navigation.newQuery.connection",
+      label: "New Query",
+      order: 10,
+      section: "query",
+      matches: (node) => node.kind === "connection",
+      run: async (node) => {
+        const file = await context.fileMediator.createUntitledFile({
+          mimeType: "application/sql",
+          extension: "sql"
+        });
+        context.files.updateFile(file.fileId, {
+          engineBinding: { engineId: "jdbc", connectionId: node.connectionId }
+        });
+        writeJdbcContextMetadata(
+          file.fileId,
+          node.connectionId,
+          undefined,
+          context.files
+        );
+      }
+    });
+
+    treeContextMenu.registerContribution({
+      id: "core.queryengine.jdbc.navigation.newQuery.database",
+      label: "New Query",
+      order: 10,
+      section: "query",
+      matches: (node) => node.kind === "database",
+      run: async (node) => {
+        const file = await context.fileMediator.createUntitledFile({
+          mimeType: "application/sql",
+          extension: "sql"
+        });
+        const database = typeof node.attributes.catalog === "string"
+          ? node.attributes.catalog
+          : node.name;
+        // Set editor state before engine binding so the files subscriber
+        // picks up the database selection when it re-reads on updateFile.
+        context.files.setEditorState(file.fileId, JDBC_NAV_DB_KEY, {
+          connectionId: node.connectionId,
+          database
+        } satisfies JdbcSelectedDatabase);
+        context.files.updateFile(file.fileId, {
+          engineBinding: { engineId: "jdbc", connectionId: node.connectionId }
+        });
+        writeJdbcContextMetadata(
+          file.fileId,
+          node.connectionId,
+          database,
+          context.files
+        );
+      }
     });
 
     getQueryEngineService().registerExecutionContextProvider((params) => {

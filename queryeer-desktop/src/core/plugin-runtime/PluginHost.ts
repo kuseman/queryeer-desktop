@@ -18,6 +18,7 @@ import {
   validateRequiredCapabilities
 } from "./PluginValidation";
 import { getFileStateRegistry } from "./FileStateRegistryImpl";
+import { getJdbcTreeContextMenuRegistry } from "../../plugins/core.queryengine.jdbc/jdbc-tree-context-menu-registry";
 
 export type PluginHostState = {
   startedAt: string;
@@ -116,7 +117,8 @@ export class PluginHost {
       outline: this.extensionRegistry.createOutlineRegistry(),
       editors: this.extensionRegistry.createEditorRegistry(),
       contextMenu: this.extensionRegistry.createContextMenuRegistry(),
-      tableOutputContextMenu: this.extensionRegistry.createTableOutputContextMenuRegistry()
+      tableOutputContextMenu: this.extensionRegistry.createTableOutputContextMenuRegistry(),
+      jdbcTreeContextMenu: getJdbcTreeContextMenuRegistry()
     };
 
     for (const plugin of orderedPlugins) {
