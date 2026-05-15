@@ -27,7 +27,7 @@ Large features in prio
 - [ ] About dialog
     - Queryeer changelog
     - Modules changelog (Payloadbuilder)
-- [ ] Backend builtin modules should be discovered normally but with target/classes as source class path etc.
+- [ ] Backend builtin modules should be discovered normally but with target/classes as source class path with m2 dep references etc.
    - [ ] Runtime services plugins. Put on top of class loader chain. Load libraries etc. See queryeer-backend\SHARED_RUNTIME_PLUGINS.md
 - [ ] Modularize
     - Make sure all contributions have contracts and all API:s are located in a separate project
@@ -37,6 +37,7 @@ Large features in prio
     - [ ] matrix releases
     - [ ] change log (app bundled)
     - [ ] change log (gitgub release)
+- [ ] Show memory usage of java/node in status bar
 - [X] SQLServer query plan
     - Pre.req. Graph visualization framework done
     - Parse XML

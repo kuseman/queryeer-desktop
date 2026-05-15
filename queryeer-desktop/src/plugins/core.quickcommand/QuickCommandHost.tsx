@@ -171,7 +171,15 @@ export function QuickCommandHost({ filesRegistry, fileMediator }: QuickCommandHo
               onClick={() => handleItemClick(item)}
               onMouseEnter={() => setSelectedIndex(idx)}
             >
-              <span className="quick-command-item-title">{item.title}</span>
+              {item.titleParts ? (
+                <span className="quick-command-item-title">
+                  {item.titleParts.map((part, partIdx) => (
+                    <span key={partIdx} style={part.color ? { color: part.color } : undefined}>{part.text}</span>
+                  ))}
+                </span>
+              ) : (
+                <span className="quick-command-item-title">{item.title}</span>
+              )}
               {item.description && (
                 <span className="quick-command-item-description">{item.description}</span>
               )}

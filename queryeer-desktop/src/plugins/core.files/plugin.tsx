@@ -272,7 +272,8 @@ export const coreFilesPlugin: Plugin = {
           return null;
         }
         return {
-          style: { backgroundColor: item.color }
+          className: "tab-accent",
+          style: { "--tab-accent-color": item.color } as React.CSSProperties
         };
       }
     });
@@ -302,17 +303,6 @@ export const coreFilesPlugin: Plugin = {
           type: "number",
           defaultValue: 100,
           constraints: { min: 10, max: 500 }
-        },
-        {
-          id: "core.files.tabBackgroundOpacity",
-          moduleId: "core.files",
-          title: "Tab Background Opacity",
-          description: "Opacity (0-1) applied to tab background colors from MIME type and connection settings.",
-          sectionPath: ["Files", "General"],
-          tags: ["files", "tabs", "opacity", "color"],
-          type: "number",
-          defaultValue: 0.08,
-          constraints: { min: 0, max: 1 }
         },
         {
           id: MIME_TYPES_SETTING_ID,

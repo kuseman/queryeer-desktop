@@ -124,7 +124,7 @@ public final class SqlCompletionSupport
                         "label", keyword,
                         "kind", "keyword",
                         "sortText", "9_" + keyword,
-                        "insertText", keyword + " ",
+                        "insertText", keyword,
                         "insertTextFormat", "plain",
                         "source", "keyword",
                         "replaceRange",

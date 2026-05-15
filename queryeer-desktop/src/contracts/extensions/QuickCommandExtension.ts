@@ -1,8 +1,14 @@
 import type { FileEntity } from "../files/FileEntity.js";
 
+export type QuickCommandItemTitlePart = {
+  text: string;
+  color?: string;
+};
+
 export type QuickCommandItem = {
   id: string;
   title: string;
+  titleParts?: QuickCommandItemTitlePart[];
   description?: string;
   icon?: string;
   action: () => void | Promise<void>;

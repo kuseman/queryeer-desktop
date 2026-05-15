@@ -28,7 +28,7 @@ const JDBC_SESSION_CONNECTION_TITLE_KEY = "core.queryengine.jdbc.sessionConnecti
 const JDBC_SESSION_STATE_METADATA_KEY = "core.queryengine.jdbc.sessionState";
 const SQLSERVER_PLAN_OUTPUT_SETTING_ID = "core.queryengine.jdbc.sqlserver.planXmlOutput";
 const PLAN_OUTPUT_ID = "core.graph.queryPlanOutput";
-const SQLSERVER_WHEN = "hasActiveQueryExecutableFile && activeFile.metadata && activeFile.metadata['core.queryengine.jdbc.dialectId'] == 'sqlserver'";
+const SQLSERVER_WHEN = "hasActiveQueryExecutableFile && activeFile.metadata.core.queryengine.jdbc?.dialectId == 'sqlserver'";
 // Tracks which connectionId (UUID) each file's session was established with.
 // Kept in memory — same lifetime as metadata, which is also not persisted.
 const sessionConnectionUuidMap = new Map<string, string>();
@@ -58,7 +58,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       {
         name: "SQLServer Database",
         description: "Match SQL files using SQL Server against a specific selected database",
-        when: "activeFile.mimeType == 'application/sql' && activeFile.metadata && activeFile.metadata['core.queryengine.jdbc.dialectId'] == 'sqlserver' && activeFile.metadata['core.queryengine.jdbc.database'] == 'OrderService'"
+        when: "activeFile.mimeType == 'application/sql' && activeFile.metadata.core.queryengine.jdbc?.dialectId == 'sqlserver' && activeFile.metadata.core.queryengine.jdbc?.database == 'OrderService'"
       }
     ]);
 
@@ -69,7 +69,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       order: 10,
       action: {
         label: "Describe",
-        when: "activeFile.mimeType == 'application/sql' && activeFile.metadata && activeFile.metadata['core.queryengine.jdbc.dialectId'] == 'sqlserver' && (symbol.kind == 'table' || symbol.kind == 'view')",
+        when: "activeFile.mimeType == 'application/sql' && activeFile.metadata.core.queryengine.jdbc?.dialectId == 'sqlserver' && (symbol.kind == 'table' || symbol.kind == 'view')",
         query: "exec sp_help '${symbol.name}'"
       }
     });
@@ -162,7 +162,8 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
           return null;
         }
         return {
-          style: { backgroundColor: match.color }
+          className: "tab-accent",
+          style: { "--tab-accent-color": match.color } as React.CSSProperties
         };
       }
     });

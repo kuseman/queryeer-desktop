@@ -2,7 +2,7 @@
   position: fixed;
   width: 680px;
   height: 420px;
-  z-index: 1400;
+  z-index: 9999;
   border: 1px solid var(--border);
   background: var(--bg-1);
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.42);
@@ -38,7 +38,22 @@
 
 .dialog-value-preview-actions {
   display: flex;
-  gap: 6px;
+  gap: 4px;
+  align-items: center;
+}
+
+.dialog-value-preview-action-btn {
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+  color: var(--text-1);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  line-height: 1;
+}
+
+.dialog-value-preview-action-btn:hover {
+  background: var(--bg-2);
 }
 
 .dialog-value-preview-min {
@@ -88,7 +103,7 @@ body.dialog-value-preview-resizing {
   left: 8px;
   right: 8px;
   bottom: 28px;
-  z-index: 1450;
+  z-index: 10000;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;

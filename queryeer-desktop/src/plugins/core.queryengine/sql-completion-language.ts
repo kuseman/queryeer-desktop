@@ -18,14 +18,19 @@ async function getMonaco(): Promise<typeof monacoType>
   return monacoModuleInstance;
 }
 
+function normalizeUri(uri: string): string {
+  return uri.toLowerCase().replace(/%3a/g, ":");
+}
+
 function findFileForModelUri(uri: string): FileEntity | undefined {
   const filesRegistry = getFilesRegistry();
   if (!filesRegistry) {
     return undefined;
   }
+  const normalized = normalizeUri(uri);
   return filesRegistry
     .listFiles()
-    .find((file) => file.uri === uri);
+    .find((file) => normalizeUri(file.uri) === normalized);
 }
 
 function resolveEngineId(file: FileEntity): string | undefined {
@@ -83,10 +88,12 @@ export async function setupSqlCompletionLanguage(): Promise<void> {
     async provideCompletionItems(model, position, context, token) {
       const file = findFileForModelUri(model.uri.toString());
       if (!file) {
+        console.warn("[sql-completion] No file found in registry for URI:", model.uri.toString());
         return { suggestions: [] };
       }
       const engineId = resolveEngineId(file);
       if (!engineId) {
+        console.warn("[sql-completion] No engineId resolved for file:", file.uri, "mimeType:", file.mimeType, "engineBinding:", file.engineBinding);
         return { suggestions: [] };
       }
 

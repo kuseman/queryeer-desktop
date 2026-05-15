@@ -288,16 +288,6 @@ final class SqlServerShowPlanGraphConverter
                 : (Element) matches.item(0);
     }
 
-    private static String firstRuntimeCounterAttr(Element relOp, String name)
-    {
-        List<Element> counters = runtimeCounters(relOp);
-        if (counters.isEmpty())
-        {
-            return "";
-        }
-        return attr(counters.getFirst(), name);
-    }
-
     private static Double runtimeCounterSum(Element relOp, String name)
     {
         List<Element> counters = runtimeCounters(relOp);
