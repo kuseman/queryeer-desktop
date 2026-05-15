@@ -11,6 +11,7 @@ Scope: Implement backend JDBC schema crawl core with dialect-specific extraction
 - Use usage-based decay so hot connections crawl frequently and cold connections back off to disabled/off.
 - Allow backend startup crawl without requiring the user to run a query first.
 - Protect frontend/backend JDBC settings shape parity with shared fixtures.
+- Expose crawl status/statistics to the UI for monitoring and manual control.
 
 ## Architecture
 
@@ -123,6 +124,24 @@ Tests:
 5. H2 schema store migration and repository tests.
 6. Base INFORMATION_SCHEMA resolver and integration tests.
 7. Documentation updates in `BACKEND_PROTOCOL.md`.
+8. Schema cache status UI (backend `jdbc.schema.status` action + frontend Schema Cache panel).
+
+## Schema Cache Status UI (Phase 8)
+
+### Backend
+
+- New action `jdbc.schema.status` returns `List<JdbcSchemaCrawlStatus>` for all configured connections (or single connection when `connectionId` provided).
+- `JdbcSchemaStore.crawlStatusForConnection()` batches all status queries into a single H2 connection open per scope (TOP, DEEP).
+- Status fields: `connectionId`, `connectionTitle`, `scope`, `databaseKey`, `lastSuccessAt`, `lastAttemptAt`, `lastFailureAt`, `nextDueAt`, `consecutiveFailures`, `usageScore`, `enabled`, `objectCount`, `lastError`.
+
+### Frontend
+
+- New panel tab "Schema Cache" in `core.queryengine.jdbc.panel` alongside "JDBC Sessions".
+- `JdbcSchemaCachePanel.tsx` displays grouped table (by connection) with per-scope rows.
+- `jdbc-schema-cache-store.ts` is request-driven (no polling) — loads on mount + explicit refresh.
+- Per-row actions: Force refresh (invokes `jdbc.schema.refresh` with `mode=force`).
+- Panel header has global refresh button.
+- Visual indicators: Usage level (hot/warm/cold), failure count warnings.
 
 ## Validation checklist
 

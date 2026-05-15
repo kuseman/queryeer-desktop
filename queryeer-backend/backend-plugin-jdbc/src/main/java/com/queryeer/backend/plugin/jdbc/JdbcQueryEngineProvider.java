@@ -61,6 +61,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private static final String ACTION_SCHEMA_SNAPSHOT = "jdbc.schema.snapshot";
     private static final String ACTION_SCHEMA_REFRESH = "jdbc.schema.refresh";
     private static final String ACTION_SCHEMA_FETCH = "jdbc.schema.fetch";
+    private static final String ACTION_SCHEMA_STATUS = "jdbc.schema.status";
     private static final String ACTION_CONNECTION_SESSIONS = "jdbc.connection.sessions";
     private static final String ACTION_SQL_PARSE_SNAPSHOT = "sql.parse.snapshot";
     private static final String ACTION_SQL_COMPLETE = "sql.complete";
@@ -283,6 +284,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             case ACTION_SCHEMA_SNAPSHOT -> schemaActions.snapshot(payload);
             case ACTION_SCHEMA_REFRESH -> schemaActions.refresh(payload);
             case ACTION_SCHEMA_FETCH -> schemaActions.fetch(payload);
+            case ACTION_SCHEMA_STATUS -> schemaActions.status(payload);
             case ACTION_CONNECTION_SESSIONS -> connectionSessions();
             case ACTION_SQL_PARSE_SNAPSHOT -> sqlParseSnapshot(fileId);
             case ACTION_SQL_COMPLETE -> sqlComplete(fileId, payload);
@@ -312,8 +314,21 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
 
     private Object engineCapabilities()
     {
-        return Map.of(KEY_ACTIONS, List.of(ACTION_ENGINE_CAPABILITIES, ACTION_CONNECTION_SETUP, ACTION_CONNECTION_DIALECTS, ACTION_CONNECTION_TEST, ACTION_SCHEMA_SNAPSHOT, ACTION_SCHEMA_REFRESH,
-                ACTION_SCHEMA_FETCH, ACTION_CONNECTION_SESSIONS, ACTION_SQL_PARSE_SNAPSHOT, ACTION_SQL_COMPLETE, ACTION_SQL_SYMBOL_AT_POSITION));
+        //@formatter:off
+        return Map.of(KEY_ACTIONS, List.of(
+                ACTION_ENGINE_CAPABILITIES,
+                ACTION_CONNECTION_SETUP,
+                ACTION_CONNECTION_DIALECTS,
+                ACTION_CONNECTION_TEST,
+                ACTION_SCHEMA_SNAPSHOT,
+                ACTION_SCHEMA_REFRESH,
+                ACTION_SCHEMA_FETCH,
+                ACTION_SCHEMA_STATUS,
+                ACTION_CONNECTION_SESSIONS,
+                ACTION_SQL_PARSE_SNAPSHOT,
+                ACTION_SQL_COMPLETE,
+                ACTION_SQL_SYMBOL_AT_POSITION));
+        //@formatter:on
     }
 
     private Object sqlComplete(String fileId, Object payload)

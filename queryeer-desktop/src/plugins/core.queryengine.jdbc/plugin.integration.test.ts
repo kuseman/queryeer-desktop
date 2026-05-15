@@ -458,7 +458,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
     expect(mocks.openQuickCommandMock).toHaveBeenCalledWith("$", { when: "activeFile.mimeType == 'application/sql'" });
   });
 
-  it("registers SQL Server plan enablement with null-safe flat metadata access", () => {
+  it("registers SQL Server plan enablement with null-safe nested metadata access", () => {
     const context = createContext();
     coreQueryEngineJdbcPlugin.activate(context);
 
@@ -475,7 +475,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
     };
 
     expect(evaluate({ metadata: {} })).toBe(false);
-    expect(evaluate({ metadata: { "core.queryengine.jdbc.dialectId": "sqlserver" } })).toBe(true);
+    expect(evaluate({ metadata: { core: { queryengine: { jdbc: { dialectId: "sqlserver" } } } } })).toBe(true);
   });
 
   it("applies connection color to tab header style for JDBC files", () => {

@@ -13,9 +13,9 @@
 
 .jdbc-nav-selector-row {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
 }
 
 .jdbc-nav-selector-row:last-child {
@@ -25,12 +25,10 @@
 .jdbc-nav-selector-label {
   font-size: 11px;
   color: var(--text-muted, #888);
-  flex-shrink: 0;
-  width: 66px;
 }
 
 .jdbc-nav-selector-select {
-  flex: 1;
+  width: 100%;
   min-width: 0;
   font-size: 12px;
   background: var(--input-bg, #3c3c3c);

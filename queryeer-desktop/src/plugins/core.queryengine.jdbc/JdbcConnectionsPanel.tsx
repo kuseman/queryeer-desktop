@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { FileMediator } from "../../contracts/files/FileMediator";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import { getConfiguredJdbcConnections } from "./jdbc-settings";
 import { getJdbcSessionStore, type JdbcConnectionSessionSnapshot } from "./jdbc-session-store";
+import "./JdbcConnectionsPanel.css";
 
 type JdbcConnectionsPanelProps = {
   files: FilesRegistry;
@@ -69,32 +70,25 @@ export function JdbcConnectionsPanel({ files, fileMediator }: JdbcConnectionsPan
   }, [entries, files]);
 
   return (
-    <div className="panel-card" style={{ height: "100%", overflow: "auto", padding: 0 }}>
-      <table
-        style={{
-          width: "100%",
-          borderCollapse: "collapse",
-          fontSize: 12,
-          border: "1px solid var(--panel-border, #2f3440)"
-        }}
-      >
+    <div className="jdbc-sessions-panel">
+      <table className="jdbc-sessions-panel__table">
         <thead>
           <tr>
-            <th style={headerCellStyle}>File</th>
-            <th style={headerCellStyle}>Connection</th>
-            <th style={headerCellStyle}>Session</th>
-            <th style={headerCellStyle}>State</th>
-            <th style={headerCellStyle}>Last access</th>
+            <th className="jdbc-sessions-panel__header">File</th>
+            <th className="jdbc-sessions-panel__header">Connection</th>
+            <th className="jdbc-sessions-panel__header">Session</th>
+            <th className="jdbc-sessions-panel__header">State</th>
+            <th className="jdbc-sessions-panel__header">Last access</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row, index) => (
-            <tr key={`${row.fileName}-${row.connectionName}-${index}`}>
-              <td style={bodyCellStyle}>
+            <tr key={`${row.fileName}-${row.connectionName}-${index}`} className="jdbc-sessions-panel__row">
+              <td className="jdbc-sessions-panel__cell">
                 {row.canActivate ? (
                   <button
                     type="button"
-                    style={fileLinkStyle}
+                    className="jdbc-sessions-panel__file-link"
                     onClick={() => fileMediator.setActiveFileId(row.fileId)}
                     title={`Activate ${row.fileName}`}
                   >
@@ -104,10 +98,10 @@ export function JdbcConnectionsPanel({ files, fileMediator }: JdbcConnectionsPan
                   <span>{row.fileName}</span>
                 )}
               </td>
-              <td style={bodyCellStyle}>{row.connectionName}</td>
-              <td style={bodyCellStyle}>{row.sessionId}</td>
-              <td style={bodyCellStyle}>{row.state}</td>
-              <td style={bodyCellStyle}>{row.lastAccess}</td>
+              <td className="jdbc-sessions-panel__cell">{row.connectionName}</td>
+              <td className="jdbc-sessions-panel__cell">{row.sessionId}</td>
+              <td className={`jdbc-sessions-panel__cell${row.state === "dead" ? " jdbc-sessions-panel__state--dead" : ""}`}>{row.state}</td>
+              <td className="jdbc-sessions-panel__cell">{row.lastAccess}</td>
             </tr>
           ))}
         </tbody>
@@ -115,31 +109,6 @@ export function JdbcConnectionsPanel({ files, fileMediator }: JdbcConnectionsPan
     </div>
   );
 }
-
-const headerCellStyle: CSSProperties = {
-  textAlign: "left",
-  padding: "6px 8px",
-  border: "1px solid var(--panel-border, #2f3440)",
-  backgroundColor: "var(--panel-header-bg, #1a1f2a)",
-  fontWeight: 600
-};
-
-const bodyCellStyle: CSSProperties = {
-  padding: "6px 8px",
-  border: "1px solid var(--panel-border, #2f3440)",
-  whiteSpace: "nowrap"
-};
-
-const fileLinkStyle: CSSProperties = {
-  background: "none",
-  border: "none",
-  padding: 0,
-  margin: 0,
-  color: "var(--color-accent, #4ea1ff)",
-  textDecoration: "underline",
-  cursor: "pointer",
-  font: "inherit"
-};
 
 function resolveFileTitle(file: FileEntity): string {
   if (file.uri.startsWith("file://")) {
