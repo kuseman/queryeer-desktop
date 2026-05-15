@@ -85,6 +85,48 @@ describe("OutputPanel", () => {
     expect(rootElement.textContent).not.toContain("No output view available");
   });
 
+  it("excludes contributors with showInPanel=false from tabs", async () => {
+    mocks.contributors.push(
+      makeContributor("file-out", "File", "rows", "primary"),
+    );
+    // Set showInPanel=false on the last registered contributor
+    const fileContrib = mocks.contributors.find((c) => c.id === "file-out");
+    if (fileContrib) fileContrib.showInPanel = false;
+
+    await act(async () => {
+      root.render(<OutputPanel context={baseContext} />);
+    });
+
+    const tabs = [...rootElement.querySelectorAll(".query-output-tab")].map((tab) => tab.textContent);
+    expect(tabs).not.toContain("File");
+    expect(tabs).toEqual(["Results", "Text"]);
+  });
+
+  it("renders show-in-folder button in export banner", async () => {
+    const onExportShowInFolder = vi.fn();
+    await act(async () => {
+      root.render(
+        <OutputPanel
+          context={{
+            ...baseContext,
+            resultSets: [{
+              resultSetIndex: 0,
+              schema: { columns: [] },
+              rows: [],
+              rowLimitExceeded: true,
+              exportPath: "file:///C:/tmp/export.csv"
+            }]
+          }}
+          onExportShowInFolder={onExportShowInFolder}
+        />
+      );
+    });
+
+    const showInFolderBtn = rootElement.querySelector(".query-output-export-show-folder");
+    expect(showInFolderBtn).not.toBeNull();
+    expect(showInFolderBtn?.textContent).toBe("Show in folder");
+  });
+
   it("renders plan output as a selectable normal tab", async () => {
     const onSelectPrimary = vi.fn();
 

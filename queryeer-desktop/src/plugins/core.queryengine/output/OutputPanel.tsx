@@ -7,6 +7,7 @@ type Props = {
   selectedPrimaryId?: string | null;
   onSelectPrimary?: (id: string) => void;
   onExportOpen?: (exportPath: string) => void;
+  onExportShowInFolder?: (exportPath: string) => void;
 };
 
 function resolvePrimary(
@@ -41,7 +42,7 @@ function eligiblePrimaries(
   contributors: OutputContributor[],
   features: string[] | null
 ): OutputContributor[] {
-  const primaries = contributors.filter((c) => c.mode === "primary");
+  const primaries = contributors.filter((c) => c.mode === "primary" && c.showInPanel !== false);
   if (features === null) {
     return primaries;
   }
@@ -51,7 +52,7 @@ function eligiblePrimaries(
   return primaries.filter((c) => effectiveFeatures.includes(c.capability));
 }
 
-export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExportOpen }: Props): JSX.Element {
+export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExportOpen, onExportShowInFolder }: Props): JSX.Element {
   const [contributors, setContributors] = useState<OutputContributor[]>(() =>
     getOutputRegistry().getContributors()
   );
@@ -72,7 +73,7 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
   const adhocContributors = context.features !== null
     ? contributors.filter((c) => c.mode === "adhoc" && context.features!.includes(c.capability))
     : [];
-  const tabContributors = [...primaries, ...adhocContributors];
+  const tabContributors = [...primaries, ...adhocContributors].filter((c) => c.showInPanel !== false);
   const selectedContributor = resolveSelectedOutput(tabContributors, effectiveSelectedPrimaryId);
   const primaryContributor = resolvePrimary(contributors, context.features, context.rowsTargetPrimaryId);
   const visibleContributors = selectedContributor?.mode === "adhoc"
@@ -114,8 +115,9 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
   }, [context.fileId]);
 
   const limitedSets = context.resultSets.filter((rs) => rs.rowLimitExceeded);
-  const exportPaths = limitedSets.map((rs) => rs.exportPath).filter(Boolean) as string[];
-  const isExportPending = limitedSets.length > 0 && exportPaths.length < limitedSets.length;
+  const rawExportPaths = limitedSets.map((rs) => rs.exportPath).filter(Boolean) as string[];
+  const exportPaths = [...new Set(rawExportPaths)] as string[];
+  const isExportPending = limitedSets.length > 0 && rawExportPaths.length < limitedSets.length;
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
@@ -161,10 +163,15 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
         <div className="query-output-export-banner">
           {isExportPending
             ? "Writing export file…"
-            : exportPaths.map((p) => (
-                <button key={p} className="query-output-export-open" onClick={() => onExportOpen?.(p)}>
-                  Open full export
-                </button>
+            : exportPaths.map((p, i) => (
+                <span key={`${p}-${i}`} className="query-output-export-actions">
+                  <button className="query-output-export-open" onClick={() => onExportOpen?.(p)}>
+                    Open full export
+                  </button>
+                  <button className="query-output-export-show-folder" onClick={() => onExportShowInFolder?.(p)}>
+                    Show in folder
+                  </button>
+                </span>
               ))}
         </div>
       )}

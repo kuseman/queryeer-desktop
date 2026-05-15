@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { OutputContext } from "../../contracts/extensions/OutputExtension";
 import { getOutputRegistry } from "../core.queryengine/output/OutputRegistry";
+import { getQueryOutputFormatRegistry } from "../core.queryengine/QueryOutputFormatRegistry";
 import { defineStateKey } from "../../contracts/files/FileStateRegistry";
 import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistryImpl";
 import { XtermTextConsole } from "../../renderer/components/XtermTextConsole";
 import {
   resolveTextOutputFormatter,
+  TEXT_OUTPUT_FORMATTERS,
   type TextOutputFormatId
 } from "./formatters";
 import outputTextIconUrl from "./output-text.svg";
@@ -114,5 +116,10 @@ export const coreQueryEngineOutputTextPlugin: Plugin = {
       priority: 200,
       render: (context) => <TextOutputView context={context} />
     });
+
+    const formatRegistry = getQueryOutputFormatRegistry();
+    for (const formatter of TEXT_OUTPUT_FORMATTERS) {
+      formatRegistry.register(formatter);
+    }
   }
 };

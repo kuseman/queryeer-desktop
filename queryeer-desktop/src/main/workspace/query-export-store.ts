@@ -37,7 +37,13 @@ export class QueryExportStore {
     const key = this.key(params);
     const path = await this.ensurePath(params);
     this.pathsByKey.set(key, path);
-    await writeFile(path, "", "utf8");
+    // Use wx flag so we don't overwrite if appendChunk already created the file
+    // (race between openExportStream and appendExportChunk on the same (executionId, resultSetIndex)).
+    try {
+      await writeFile(path, "", { flag: "wx" });
+    } catch {
+      // File already exists — nothing to do
+    }
   }
 
   public async appendChunk(params: ExportAppendParams): Promise<void> {

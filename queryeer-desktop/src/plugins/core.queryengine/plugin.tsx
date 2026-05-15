@@ -6,8 +6,8 @@ import { queryTextRegistry } from "./QueryTextEditorRegistry";
 import { QueryEditorComponent } from "./QueryEditorComponent";
 import { QueryRunIcon, QueryStopIcon } from "./query-toolbar-icons";
 import { getOutputRegistry } from "./output/OutputRegistry";
+import { getQueryOutputFormatRegistry } from "./QueryOutputFormatRegistry";
 import { getQueryViewStateStore, TEXT_OUTPUT_PRIMARY_ID } from "./QueryViewStateStore";
-import { TEXT_OUTPUT_FORMATTERS } from "../core.queryengine.output.text/formatters";
 import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegistry";
 import { getOutlineRegistry } from "../../core/plugin-runtime/ExtensionRegistry";
 import { registerShortcuts } from "./shortcuts";
@@ -245,13 +245,14 @@ export const coreQueryEnginePlugin: Plugin = {
       order: 43,
       alignment: "west",
       when: "hasActiveQueryExecutableFile",
-      getOptions: () => TEXT_OUTPUT_FORMATTERS.map((formatter) => ({ value: formatter.id, label: formatter.label })),
+      getOptions: () => getQueryOutputFormatRegistry().getFormatters().map((f) => ({ value: f.id, label: f.label })),
       getValue: () => {
         const active = getActiveQueryFile();
+        const formatters = getQueryOutputFormatRegistry().getFormatters();
         if (!active) {
-          return TEXT_OUTPUT_FORMATTERS[0]!.id;
+          return formatters[0]?.id ?? "csv";
         }
-        return getQueryViewStateStore().read(active.fileId).textOutputFormat ?? TEXT_OUTPUT_FORMATTERS[0]!.id;
+        return getQueryViewStateStore().read(active.fileId).textOutputFormat ?? formatters[0]?.id ?? "csv";
       },
       onChange: (value) => {
         const active = getActiveQueryFile();
@@ -265,7 +266,8 @@ export const coreQueryEnginePlugin: Plugin = {
         if (!active) {
           return true;
         }
-        return resolveSelectedOutput(active.fileId) !== TEXT_OUTPUT_PRIMARY_ID;
+        const id = resolveSelectedOutput(active.fileId);
+        return id !== TEXT_OUTPUT_PRIMARY_ID && id !== "core.queryengine.output.file";
       }
     });
 

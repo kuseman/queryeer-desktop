@@ -169,4 +169,41 @@ describe("text output formatters", () => {
 
     expect(lines).toEqual([]);
   });
+
+  describe("formatFile", () => {
+    const resultSets = [
+      {
+        resultSetIndex: 0,
+        schema: { columns: [{ name: "name", type: "string" as const }, { name: "age", type: "int" as const }] },
+        rows: [["alice", 30], ["bob", 25]],
+        rowLimitExceeded: false
+      }
+    ];
+
+    it("csv formatFile produces CSV content without trailing blank lines", () => {
+      const formatter = resolveTextOutputFormatter("csv");
+      const content = formatter.formatFile(resultSets);
+      expect(content).toBe('"name","age"\n"alice","30"\n"bob","25"');
+    });
+
+    it("json formatFile produces JSON content", () => {
+      const formatter = resolveTextOutputFormatter("json");
+      const content = formatter.formatFile(resultSets);
+      const parsed = JSON.parse(content);
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0].rows).toEqual([
+        { name: "alice", age: 30 },
+        { name: "bob", age: 25 }
+      ]);
+    });
+
+    it("plain formatFile produces plain text content", () => {
+      const formatter = resolveTextOutputFormatter("plain");
+      const content = formatter.formatFile(resultSets);
+      expect(content).toContain("Result set 1");
+      expect(content).toContain("name | age");
+      expect(content).toContain("alice | 30");
+      expect(content).toContain("bob | 25");
+    });
+  });
 });

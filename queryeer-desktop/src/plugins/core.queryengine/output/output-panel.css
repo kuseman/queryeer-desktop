@@ -103,7 +103,8 @@
   border-bottom: 1px solid var(--border);
 }
 
-.query-output-export-open {
+.query-output-export-open,
+.query-output-export-show-folder {
   background: none;
   border: none;
   color: var(--accent);
@@ -111,6 +112,12 @@
   font-size: var(--ui-font-size-sm);
   padding: 0;
   text-decoration: underline;
+}
+
+.query-output-export-actions {
+  display: inline-flex;
+  gap: 12px;
+  align-items: center;
 }
 
 .query-output-status-bar {
