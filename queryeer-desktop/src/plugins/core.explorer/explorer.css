@@ -218,10 +218,22 @@
 }
 
 .explorer-file {
+  position: relative;
   display: flex;
   align-items: center;
   padding: 2px 8px;
   cursor: pointer;
+}
+
+.explorer-workspace-file::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 0;
+  bottom: 3px;
+  width: 4px;
+  border-radius: 0 2px 2px 0;
+  background: var(--tab-accent-color);
 }
 
 .explorer-file:hover {

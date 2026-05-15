@@ -15,7 +15,7 @@ public interface QueryEngineProvider
 
     default Object invoke(String fileId, String action, Object payload)
     {
-        throw new IllegalArgumentException("Unsupported engine action '" + action + "' for engine '" + engineId() + "'");
+        return null;
     }
 
     void cancel(String queryExecutionId);

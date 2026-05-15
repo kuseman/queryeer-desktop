@@ -803,7 +803,7 @@ Current Java stdio scaffold implementation status:
 - `queryengine.execute` implemented (mocked progressive notifications); `fileId` is required and validated
 - `queryengine.cancel` implemented (mocked cancellation notification)
 - `backend.runtimeStatus` implemented
-- JDBC provider actions include `jdbc.schema.snapshot` (latest cached snapshot by `connectionId` and optional `scope`) and `jdbc.schema.refresh` (synchronous refresh + cache persist with scope-aware behavior)
+- JDBC provider actions include `jdbc.schema.snapshot` (latest cached snapshot by `connectionId` and optional `scope`), `jdbc.schema.refresh` (synchronous refresh + cache persist with scope-aware behavior), and `sql.hover` (returns pre-formatted markdown for table/column names under the cursor, resolved from H2 DEEP snapshot only)
 - JDBC provider action `jdbc.schema.fetch` resolves connection settings by `connectionId` only; fetch payload supports `connectionId`, `scope`, and optional `target` (no inline connection overrides).
 - JDBC provider action `jdbc.schema.status` returns crawl status/statistics for all configured connections (or a single connection when `connectionId` is provided). Each status entry includes: `connectionId`, `connectionTitle`, `scope` (`top`|`deep`), `databaseKey` (null for top), `lastSuccessAt`, `lastAttemptAt`, `lastFailureAt`, `nextDueAt`, `consecutiveFailures`, `usageScore`, `enabled`, `objectCount`, `lastError`.
 - JDBC provider action `jdbc.connection.test` accepts `{ "connectionId": "..." }` whole body for a connection.

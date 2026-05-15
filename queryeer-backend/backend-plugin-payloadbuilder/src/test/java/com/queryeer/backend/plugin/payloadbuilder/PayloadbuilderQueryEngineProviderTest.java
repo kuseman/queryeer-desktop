@@ -1,5 +1,7 @@
 package com.queryeer.backend.plugin.payloadbuilder;
 
+import static org.junit.jupiter.api.Assertions.assertNull;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
@@ -66,10 +68,7 @@ class PayloadbuilderQueryEngineProviderTest
     void invokeThrowsForUnsupportedAction()
     {
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, PARSE_SESSIONS, PARSE_FUNCTION);
-
-        IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class, () -> provider.invoke("file-1", "payloadbuilder.unknown", null));
-
-        Assertions.assertEquals("Unsupported payloadbuilder action: payloadbuilder.unknown", error.getMessage());
+        assertNull(provider.invoke("file-1", "payloadbuilder.unknown", null));
     }
 
     @Test

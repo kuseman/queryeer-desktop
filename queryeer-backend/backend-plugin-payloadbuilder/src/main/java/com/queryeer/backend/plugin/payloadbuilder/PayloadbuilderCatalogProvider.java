@@ -19,7 +19,7 @@ public interface PayloadbuilderCatalogProvider
 
     default Object invoke(String action, Object payload)
     {
-        throw new IllegalArgumentException("Unsupported payloadbuilder action: " + action);
+        return null;
     }
 
     /** Inject properties for this catalog / alias combo. */

@@ -13,6 +13,7 @@ import { getOutlineRegistry } from "../../core/plugin-runtime/ExtensionRegistry"
 import { registerShortcuts } from "./shortcuts";
 import { setFilesRegistry } from "../core.commands/files-registry-accessor";
 import { setupSqlCompletionLanguage } from "./sql-completion-language";
+import { setupSqlHoverLanguage } from "./sql-hover-language";
 import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";
 import { createSymbolActionProvider } from "./symbol-action-provider";
 import { getSymbolActionRegistry, } from "./symbol-action-registry";
@@ -68,6 +69,7 @@ export const coreQueryEnginePlugin: Plugin = {
     const queryEngineService = getQueryEngineService();
     queryEngineService.initialize();
     void setupSqlCompletionLanguage();
+    void setupSqlHoverLanguage();
     queryTextRegistry.setFilesRegistry(context.files);
     setFilesRegistry(context.files);
     getEditorRegistryHost().registerContentRepository(queryTextRegistry);

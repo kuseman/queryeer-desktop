@@ -385,6 +385,25 @@ export type SqlCompleteInvokeResult = {
   };
 };
 
+export type SqlHoverInvokePayload = {
+  fileId?: string;
+  text?: string;
+  connectionId?: string;
+  database?: string;
+  cursor: { line: number; column: number };
+};
+
+export type SqlHoverMarkdownContent = {
+  value: string;
+  isTrusted?: boolean;
+};
+
+export type SqlHoverInvokeResult = {
+  contents: SqlHoverMarkdownContent[];
+  context?: string;
+  token?: string;
+};
+
 export type SettingsModuleChangedNotification = {
   moduleId: string;
   version: number;

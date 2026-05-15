@@ -76,7 +76,7 @@ public final class SqlCompletionSupport
         context.put("usedFallback", Boolean.FALSE);
 
         TSTree tree = null;
-        SqlCompletionContext completionContext = SqlCompletionContext.OTHER;
+        SqlParseContext completionContext = SqlParseContext.OTHER;
         if (!isBlank(params == null ? null
                 : params.text()))
         {
@@ -100,7 +100,7 @@ public final class SqlCompletionSupport
         // Extract aliases scoped to the statement containing the cursor
         // (not the entire tree — prevents bleeding across statements)
         Map<String, String> aliases = (tree != null
-                && completionContext == SqlCompletionContext.COLUMN_REFERENCE) ? extractAliases(tree, params.text(), cursor.line(), cursor.column())
+                && completionContext == SqlParseContext.COLUMN_REFERENCE) ? extractAliases(tree, params.text(), cursor.line(), cursor.column())
                         : Map.of();
         List<Map<String, Object>> semanticItems = semanticProvider == null ? List.of()
                 : semanticProvider.provide(params, fileId, cursor, prefix, replaceStartColumn, maxItems, completionContext, aliases);
@@ -208,7 +208,7 @@ public final class SqlCompletionSupport
     @FunctionalInterface
     public interface SemanticCompletionProvider
     {
-        List<Map<String, Object>> provide(SqlCompletePayload payload, String fileId, SqlCompleteCursor cursor, String prefix, int replaceStartColumn, int maxItems, SqlCompletionContext context,
+        List<Map<String, Object>> provide(SqlCompletePayload payload, String fileId, SqlCompleteCursor cursor, String prefix, int replaceStartColumn, int maxItems, SqlParseContext context,
                 Map<String, String> aliases);
     }
 
