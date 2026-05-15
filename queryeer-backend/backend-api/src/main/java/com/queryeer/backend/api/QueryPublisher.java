@@ -2,6 +2,8 @@ package com.queryeer.backend.api;
 
 import java.util.List;
 
+import com.queryeer.backend.contract.query.QueryOutputArtifact;
+
 /** Callback interface for publishing query execution results back to the transport layer. */
 public interface QueryPublisher
 {
@@ -30,6 +32,11 @@ public interface QueryPublisher
     default void completed(long durationMs, long rowCount, Object engineState)
     {
         completed(durationMs, rowCount);
+    }
+
+    default void completed(long durationMs, long rowCount, List<String> features, List<QueryOutputArtifact> artifacts, Object engineState)
+    {
+        completed(durationMs, rowCount, engineState);
     }
 
     /** errorCode should match a {@code BackendErrorCode} name, falls back to INTERNAL */

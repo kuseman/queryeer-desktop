@@ -96,7 +96,8 @@ function makeContext(overrides: Partial<OutputContext> = {}): OutputContext {
     textOutputFormat: "plain",
     rowsTargetPrimaryId: "core.queryengine.output.text",
     fileId: "file-1",
-    ...overrides
+    ...overrides,
+    artifacts: overrides.artifacts ?? []
   };
 }
 

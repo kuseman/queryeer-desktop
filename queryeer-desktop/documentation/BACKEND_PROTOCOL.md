@@ -516,7 +516,40 @@ Success result:
   "result": {
     "actions": ["engine.capabilities", "payloadbuilder.es.listIndices"],
     "catalogIds": ["jdbc", "elasticsearch", "filesystem"]
-  }
+  },
+  "features": ["rows", "plan"],
+  "artifacts": [
+    {
+      "id": "plan-001",
+      "capability": "plan",
+      "kind": "graph",
+      "title": "Query plan",
+      "graph": {
+        "id": "query-plan-001",
+        "title": "Query plan",
+        "layout": {
+          "direction": "right-left"
+        },
+        "vertices": [
+          {
+            "id": "select",
+            "label": "SELECT",
+            "kind": "operator",
+            "properties": [
+              {
+                "id": "operator",
+                "label": "Operator",
+                "properties": [
+                  { "id": "physical", "label": "Physical operator", "value": "SELECT", "important": true }
+                ]
+              }
+            ]
+          }
+        ],
+        "edges": []
+      }
+    }
+  ]
 }
 ```
 
@@ -530,6 +563,80 @@ Rules:
 
 - `engineState` is an engine-owned opaque blob. Core protocol forwards it without interpretation.
 - Engines SHOULD only return changed values in patches.
+- `features` declares output capabilities such as `rows` and `plan`. If omitted, clients use `rows` by convention.
+- `artifacts` carries non-row output payloads. Graph artifacts MUST follow the `GraphDocument` contract below.
+
+### 6.3.1 Graph artifacts
+
+Backends and dialects MUST convert native graph-like formats into this protocol contract before sending them to the frontend. For example, the SQL Server dialect will later convert ShowPlan XML into this shape. The frontend renderer does not parse engine-native formats.
+
+```json
+{
+  "id": "plan-001",
+  "capability": "plan",
+  "kind": "graph",
+  "title": "Query plan",
+  "graph": {
+    "id": "query-plan-001",
+    "title": "Query plan",
+    "description": "Optional description",
+    "layout": {
+      "direction": "top-bottom",
+      "rankSpacing": 90,
+      "nodeSpacing": 70
+    },
+    "vertices": [
+      {
+        "id": "node-1",
+        "label": "Index Seek",
+        "kind": "operator",
+        "style": {
+          "shape": "rounded",
+          "backgroundColor": "#1f2937",
+          "borderColor": "#60a5fa",
+          "iconUrl": "file:///icons/index.svg"
+        },
+        "properties": [
+          {
+            "id": "estimates",
+            "label": "Estimates",
+            "properties": [
+              { "id": "rows", "label": "Estimated rows", "value": 42, "important": true },
+              { "id": "cost", "label": "Estimated cost", "value": 0.12, "important": true }
+            ]
+          }
+        ],
+        "actions": [
+          { "id": "copy-node", "label": "Copy node" }
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge-1",
+        "sourceVertexId": "node-1",
+        "targetVertexId": "node-2",
+        "label": "rows",
+        "style": {
+          "shape": "smoothstep",
+          "color": "#94a3b8",
+          "width": 2,
+          "markerEnd": "arrow"
+        }
+      }
+    ]
+  }
+}
+```
+
+Rules:
+
+- `artifact.kind` MUST be `graph` for graph artifacts.
+- `artifact.capability` identifies which output contributor should render the artifact. Query plans use `plan`.
+- `graph.vertices[*].id` and `graph.edges[*].id` MUST be unique within the graph.
+- Edge endpoints MUST reference existing vertex ids.
+- Property values are scalar: string, number, boolean, or null. Backends SHOULD stringify structured native values in v1.
+- Tooltip properties are selected by `important: true`; the full property set is shown in the graph properties panel.
 
 ## 6.4a `file.change`
 

@@ -1,4 +1,4 @@
-import type { OutputSeverity } from "../backend/Types.js";
+import type { OutputSeverity, QueryOutputArtifact } from "../backend/Types.js";
 import type { ReactNode } from "react";
 
 export type ExecutionState = "idle" | "running" | "completed" | "failed" | "cancelled";
@@ -63,6 +63,7 @@ export type OutputContext = {
    * the primary contributor.
    */
   features: string[] | null;
+  artifacts: QueryOutputArtifact[];
   metrics: { durationMs?: number; rowCount?: number } | null;
   error: { code: string; message: string; details?: Record<string, unknown> } | null;
   progress: { percent?: number; message?: string } | null;
@@ -119,6 +120,7 @@ export const IDLE_OUTPUT_CONTEXT: OutputContext = {
   resultSets: [],
   output: [],
   features: null,
+  artifacts: [],
   metrics: null,
   error: null,
   progress: null,

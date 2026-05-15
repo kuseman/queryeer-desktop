@@ -12,4 +12,12 @@
 
     <artifactId>backend-api</artifactId>
     <name>backend-api</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.queryeer.backend</groupId>
+            <artifactId>backend-contract</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
 </project>

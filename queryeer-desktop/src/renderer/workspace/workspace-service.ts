@@ -62,6 +62,7 @@ type AutosaveState = {
 const DEFAULT_DEBOUNCE_MS = 250;
 const DEFAULT_BACKUP_DEBOUNCE_MS = 3_000;
 const DEFAULT_BACKUP_MAX_INTERVAL_MS = 30_000;
+const WORKSPACE_TRANSIENT_METADATA_KEY = "workspaceTransient";
 
 function deriveUntitledCounter(snapshot: WorkspaceSnapshot): number {
   let maxFromFiles = 0;
@@ -678,7 +679,9 @@ export class RendererWorkspaceService {
   }
 
   private async pushSnapshot(): Promise<void> {
-    const orderedFiles = this.resolveFileOrder(this.filesRegistry.listFiles());
+    const orderedFiles = this.resolveFileOrder(this.filesRegistry.listFiles()).filter(
+      (file) => file.metadata?.[WORKSPACE_TRANSIENT_METADATA_KEY] !== true
+    );
     const files: PersistedFileEntry[] = orderedFiles.map((file) => ({
       uri: file.uri,
       mimeType: file.mimeType,
@@ -690,7 +693,10 @@ export class RendererWorkspaceService {
 
     let activeFileUri: string | undefined;
     if (this.activeFileId) {
-      activeFileUri = this.filesRegistry.getFile(this.activeFileId)?.uri;
+      const activeFile = this.filesRegistry.getFile(this.activeFileId);
+      activeFileUri = activeFile?.metadata?.[WORKSPACE_TRANSIENT_METADATA_KEY] === true
+        ? undefined
+        : activeFile?.uri;
     }
 
     const snapshot: WorkspaceSnapshot = {

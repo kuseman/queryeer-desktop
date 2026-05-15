@@ -74,6 +74,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     const queryViewState = getQueryViewStateStore().read(fileId);
     setOutputContext({
       ...restoredContext,
+      artifacts: restoredContext.artifacts ?? [],
       fileId,
       textOutputFormat: queryViewState.textOutputFormat ?? restoredContext.textOutputFormat ?? "plain"
     });
@@ -303,7 +304,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
               };
             });
           } else if (event.method === "queryengine.completed") {
-            const p = event.params as { metrics?: { durationMs?: number; rowCount?: number }; features?: string[] };
+            const p = event.params as { metrics?: { durationMs?: number; rowCount?: number }; features?: string[]; artifacts?: OutputContext["artifacts"] };
             activeExecutionByFileIdRef.current.delete(targetFileId);
             securityRetryCountByFileIdRef.current.delete(targetFileId);
             updateOutputContextForFile(targetFileId, (prev) => ({
@@ -311,6 +312,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
               state: "completed",
               metrics: p.metrics ?? null,
               features: p.features ?? ["rows"],
+              artifacts: p.artifacts ?? [],
               progress: null,
               executionStartedAtMs: null
             }));

@@ -1,7 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import sharp from "sharp";
-import toIco from "to-ico";
 import png2icons from "png2icons";
 
 const projectRoot = resolve(import.meta.dirname, "..");
@@ -28,15 +27,11 @@ async function generatePngs(svgBuffer) {
 }
 
 async function generateIco() {
-  const icoSizes = [16, 24, 32, 48, 64, 128, 256];
-  const buffers = await Promise.all(
-    icoSizes.map((size) =>
-      sharp(join(outputDir, `icon-${size}.png`))
-        .png()
-        .toBuffer()
-    )
-  );
-  const ico = await toIco(buffers);
+  const png256 = await readFile(join(outputDir, "icon-256.png"));
+  const ico = png2icons.createICO(png256, png2icons.BICUBIC, 0, false, true);
+  if (!ico) {
+    throw new Error("Failed to generate ICO output");
+  }
   await writeFile(join(outputDir, "icon.ico"), ico);
 }
 
