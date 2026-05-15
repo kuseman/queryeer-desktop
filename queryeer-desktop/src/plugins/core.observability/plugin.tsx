@@ -5,6 +5,7 @@ import type { Plugin } from "../../contracts/plugin/Plugin";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import { getRegisteredQueryExecutableEngines } from "../core.queryengine/engine-registration";
 import { getRuntimeData } from "./runtime-data";
+import { MemoryIndicator } from "./MemoryIndicator";
 
 export const OBSERVABILITY_MIME_TYPE = "application/x-observability";
 export const OBSERVABILITY_URI = "observability://system";
@@ -36,6 +37,13 @@ export const coreObservabilityPlugin: Plugin = {
       order: 100,
       commandId: "core.observability.open",
       render: () => <BackendStatusIndicator />
+    });
+
+    context.layout.registerStatusItem({
+      id: "core.observability.memoryStatusItem",
+      alignment: "right",
+      order: 85,
+      render: () => <MemoryIndicator />
     });
 
     context.commands.registerCommand({

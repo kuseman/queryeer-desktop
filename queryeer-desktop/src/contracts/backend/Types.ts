@@ -54,6 +54,8 @@ export type PingResult = {
   timestamp: string;
   uptimeMs: number;
   javaDebugPort?: number;
+  jvmHeapUsedBytes?: number;
+  jvmHeapMaxBytes?: number;
 };
 
 export type SecuritySessionOpenParams = {

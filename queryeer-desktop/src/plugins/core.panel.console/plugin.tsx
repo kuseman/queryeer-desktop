@@ -126,7 +126,7 @@ export const corePanelConsolePlugin: Plugin = {
       id: "core.panel.console.open",
       title: "Toggle Console Panel",
       handler: () => {
-        requestOpenPanel({ tabId: getConsolePanelVisible() ? undefined : CONSOLE_PANEL_TAB_ID, toggle: true });
+        requestOpenPanel({ tabId: CONSOLE_PANEL_TAB_ID, toggle: true });
       }
     });
 

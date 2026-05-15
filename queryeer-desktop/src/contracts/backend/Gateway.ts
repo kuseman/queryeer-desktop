@@ -17,6 +17,10 @@ export type BackendGatewayStatus = {
   activeExecutionIds: string[];
   recentExecutions: QueryExecutionStatus[];
   runtimeStatus?: RuntimeStatusResult;
+  jvmMemory?: {
+    heapUsedBytes: number;
+    heapMaxBytes: number;
+  };
   javaDebugPort?: number;
   backendLogs: BackendLogEntry[];
   error?: string;

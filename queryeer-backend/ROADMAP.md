@@ -9,9 +9,6 @@ Large features in prio
 - [ ] Hoover table / etc.
     - Show popup with schema
     - Settings turn on/off
-- [ ] Status bar additions
-    - [ ] Line / column contribution from active editor
-    - [ ] Show memory usage of java/node processes
 - [ ] Create a distribution flow. Github etc.
     - [ ] jlink
     - [ ] matrix releases
@@ -32,6 +29,9 @@ Large features in prio
 - [ ] About dialog
     - Queryeer changelog
     - Modules changelog (Payloadbuilder)
+- [X] Status bar additions
+    - [X] Line / column contribution from active editor
+    - [X] Show memory usage of java/node processes
 - [X] JDBC Tree navigation fixes
     - [X] All tables without schema below database should be a meta level above
           with views/tables/procedures etc.

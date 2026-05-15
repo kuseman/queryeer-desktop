@@ -30,6 +30,7 @@ export interface ShellApi {
   toggleBackendTrace: (enabled: boolean) => Promise<void>;
   setLogFlow: (enabled: boolean) => Promise<void>;
   clearBackendLogs: () => Promise<void>;
+  getMemoryUsage: () => Promise<{ heapUsed: number; heapTotal: number; rss: number }>;
   getExternalFrontendPlugins: () => Promise<ExternalFrontendPluginManifest[]>;
   executeBackendQuery: (params: {
     queryExecutionId: string;

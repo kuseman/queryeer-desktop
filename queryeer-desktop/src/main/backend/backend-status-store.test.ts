@@ -40,4 +40,38 @@ describe("BackendStatusStore", () => {
 
     vi.useRealTimers();
   });
+
+  it("stores jvm memory from ping details", () => {
+    const store = new BackendStatusStore();
+    store.setPingDetails({
+      timestamp: "2026-01-01T00:00:01.000Z",
+      rttMs: 5,
+      jvmHeapUsedBytes: 536870912,
+      jvmHeapMaxBytes: 2147483648
+    });
+
+    const status = store.get();
+    expect(status.jvmMemory).toBeDefined();
+    expect(status.jvmMemory!.heapUsedBytes).toBe(536870912);
+    expect(status.jvmMemory!.heapMaxBytes).toBe(2147483648);
+  });
+
+  it("retains previous jvm memory when new ping has none", () => {
+    const store = new BackendStatusStore();
+    store.setPingDetails({
+      timestamp: "2026-01-01T00:00:01.000Z",
+      rttMs: 5,
+      jvmHeapUsedBytes: 536870912,
+      jvmHeapMaxBytes: 2147483648
+    });
+
+    store.setPingDetails({
+      timestamp: "2026-01-01T00:00:02.000Z",
+      rttMs: 6
+    });
+
+    const status = store.get();
+    expect(status.jvmMemory).toBeDefined();
+    expect(status.jvmMemory!.heapUsedBytes).toBe(536870912);
+  });
 });

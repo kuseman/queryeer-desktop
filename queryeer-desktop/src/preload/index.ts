@@ -71,6 +71,7 @@ type AppShellApi = {
   toggleBackendTrace: (enabled: boolean) => Promise<void>;
   setLogFlow: (enabled: boolean) => Promise<void>;
   clearBackendLogs: () => Promise<void>;
+  getMemoryUsage: () => Promise<{ heapUsed: number; heapTotal: number; rss: number }>;
   getExternalFrontendPlugins: () => Promise<ExternalFrontendPluginManifest[]>;
   executeBackendQuery: (params: QueryExecuteParams) => Promise<QueryExecuteResult>;
   cancelBackendQuery: (params: QueryCancelParams) => Promise<QueryCancelResult>;
@@ -216,6 +217,9 @@ const appShellApi: AppShellApi = {
   },
   clearBackendLogs: async () => {
     return ipcRenderer.invoke("backend:clear-logs");
+  },
+  getMemoryUsage: async () => {
+    return ipcRenderer.invoke("app:get-memory-usage");
   },
   getExternalFrontendPlugins: async () => {
     return ipcRenderer.invoke("plugins:get-frontend-targets");

@@ -1,5 +1,7 @@
 package com.queryeer.backend.transport.stdio;
 
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryUsage;
 import java.time.Instant;
 
 import com.queryeer.backend.contract.BackendEnvelope;
@@ -35,9 +37,16 @@ final class HealthPingRequestHandler implements RequestHandler
         PingParams params = codec.objectMapper()
                 .convertValue(envelope.params(), PingParams.class);
 
+        MemoryUsage heapMemory = ManagementFactory.getMemoryMXBean()
+                .getHeapMemoryUsage();
+        Long heapUsed = heapMemory.getUsed() >= 0 ? heapMemory.getUsed()
+                : null;
+        Long heapMax = heapMemory.getMax() >= 0 ? heapMemory.getMax()
+                : null;
+
         PingResult result = new PingResult(params.timestamp() == null ? Instant.now()
                 .toString()
-                : params.timestamp(), System.currentTimeMillis() - startedAt, debugPortDetector.detect());
+                : params.timestamp(), System.currentTimeMillis() - startedAt, debugPortDetector.detect(), heapUsed, heapMax);
 
         responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, result, null));
     }
