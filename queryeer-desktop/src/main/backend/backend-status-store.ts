@@ -70,11 +70,14 @@ export class BackendStatusStore {
     this.onChange?.(this.status);
   }
 
-  public setPingDetails(params: { timestamp: string; rttMs: number }): void {
+  public setPingDetails(params: { timestamp: string; rttMs: number; jvmHeapUsedBytes?: number; jvmHeapMaxBytes?: number }): void {
     this.status = {
       ...this.status,
       lastPingAt: params.timestamp,
       lastPingRttMs: params.rttMs,
+      jvmMemory: params.jvmHeapUsedBytes !== undefined && params.jvmHeapMaxBytes !== undefined
+        ? { heapUsedBytes: params.jvmHeapUsedBytes, heapMaxBytes: params.jvmHeapMaxBytes }
+        : this.status.jvmMemory,
       state: "healthy",
       error: undefined
     };

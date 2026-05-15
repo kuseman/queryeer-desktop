@@ -499,7 +499,9 @@ export class BackendGateway {
     const result = response.result as PingResult;
     this.statusStore.setPingDetails({
       timestamp: result.timestamp,
-      rttMs: Date.now() - startedAt
+      rttMs: Date.now() - startedAt,
+      jvmHeapUsedBytes: result.jvmHeapUsedBytes,
+      jvmHeapMaxBytes: result.jvmHeapMaxBytes
     });
     if (typeof result.javaDebugPort === "number" && result.javaDebugPort > 0) {
       this.statusStore.setJavaDebugPort(result.javaDebugPort);

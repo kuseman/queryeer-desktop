@@ -148,7 +148,9 @@ export class MockJavaBackend {
     const params = request.params as { timestamp?: string };
     const result: PingResult = {
       timestamp: params.timestamp ?? new Date().toISOString(),
-      uptimeMs: Date.now() - this.startedAt
+      uptimeMs: Date.now() - this.startedAt,
+      jvmHeapUsedBytes: 268435456,
+      jvmHeapMaxBytes: 2147483648
     };
 
     const response: BackendResponseEnvelope<PingResult> = {

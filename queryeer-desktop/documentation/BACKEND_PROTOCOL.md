@@ -189,6 +189,8 @@ Purpose: liveness check and latency baseline.
 
 When available, backend may include `javaDebugPort` (notably in dev mode with JDWP enabled).
 
+Backend may also include `jvmHeapUsedBytes` and `jvmHeapMaxBytes` (from `MemoryMXBean.getHeapMemoryUsage()`).
+
 Request params:
 
 ```json
@@ -203,7 +205,9 @@ Success result:
 {
   "timestamp": "2026-04-19T12:00:00.000Z",
   "uptimeMs": 15320,
-  "javaDebugPort": 53721
+  "javaDebugPort": 53721,
+  "jvmHeapUsedBytes": 536870912,
+  "jvmHeapMaxBytes": 2147483648
 }
 ```
 

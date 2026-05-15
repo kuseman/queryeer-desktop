@@ -8,6 +8,7 @@ import { TextEditorComponent } from "./TextEditorComponent";
 import { preloadMonaco } from "./MonacoTextEditorApi";
 import { registerTextEditorMimeTypes } from "./mime-types";
 import { TextIcon } from "./TextIcon";
+import { EditorCursorPositionIndicator } from "./EditorCursorPositionIndicator";
 import {
   jsonOutlineProvider,
   xmlOutlineProvider,
@@ -57,6 +58,13 @@ export const coreEditorTextPlugin: Plugin = {
 
     registerTextEditorCommands(context, textRegistry);
     registerTextEditorKeybindings(context);
+
+    context.layout.registerStatusItem({
+      id: "core.editor.text.statusItem",
+      alignment: "left",
+      order: 10,
+      render: () => <EditorCursorPositionIndicator />
+    });
 
     void preloadMonaco();
 
