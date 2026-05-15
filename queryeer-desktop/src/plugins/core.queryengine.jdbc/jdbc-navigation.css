@@ -83,8 +83,7 @@
 
 .jdbc-nav-tree-body {
   padding: 2px 0;
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
 }
 
 .jdbc-nav-node {

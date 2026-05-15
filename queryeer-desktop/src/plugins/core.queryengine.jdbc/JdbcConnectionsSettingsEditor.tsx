@@ -11,7 +11,7 @@ import {
   parseJdbcConnectionDefinitions,
   type JdbcConnectionDefinition
 } from "./jdbc-settings";
-import { SqlServerConnectionForm, type SqlServerProperties } from "./SqlServerConnectionForm";
+import { getJdbcDialect } from "./jdbc-dialect-registry";
 import "./jdbc-settings.css";
 
 type JdbcDialectOption = {
@@ -38,7 +38,6 @@ type Props = {
   setValue: (next: unknown) => void;
 };
 
-const SQLSERVER_DIALECT_ID = "sqlserver";
 const TEST_CONNECTION_SUFFIX = "::test";
 
 export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Props): JSX.Element {
@@ -276,60 +275,12 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
               </select>
             </div>
 
-            {row.dialectId === SQLSERVER_DIALECT_ID ? (
-              <SqlServerConnectionForm
-                connectionId={row.id}
-                properties={(row.properties ?? {}) as SqlServerProperties}
-                password={row.password}
-                readonly={readonly}
-                onChange={(patch) => {
-                  updateRow(row.id, {
-                    ...(patch.properties !== undefined ? { properties: patch.properties as Record<string, unknown> } : {}),
-                    ...(patch.password !== undefined ? { password: patch.password } : {})
-                  });
-                }}
-              />
-            ) : (
-              <>
-                <div className="jdbc-settings-cell">
-                  <label className="jdbc-settings-label" htmlFor={`jdbc-url-${row.id}`}>
-                    JDBC URL
-                  </label>
-                  <input
-                    id={`jdbc-url-${row.id}`}
-                    className="jdbc-settings-input"
-                    value={row.url}
-                    readOnly={readonly}
-                    onChange={(event) => updateRow(row.id, { url: event.target.value })}
-                  />
-                </div>
-
-                <div className="jdbc-settings-cell">
-                  <label className="jdbc-settings-label" htmlFor={`jdbc-username-${row.id}`}>
-                    Username
-                  </label>
-                  <input
-                    id={`jdbc-username-${row.id}`}
-                    className="jdbc-settings-input"
-                    value={row.username}
-                    readOnly={readonly}
-                    onChange={(event) => updateRow(row.id, { username: event.target.value })}
-                  />
-                </div>
-
-                <div className="jdbc-settings-cell">
-                  <label className="jdbc-settings-label" htmlFor={`jdbc-password-${row.id}`}>
-                    Password
-                  </label>
-                  <PasswordFieldInput
-                    inputId={`jdbc-password-${row.id}`}
-                    valueRef={row.password}
-                    readonly={readonly}
-                    onChangeRef={(nextRef) => updateRow(row.id, { password: nextRef })}
-                  />
-                </div>
-              </>
-            )}
+            {renderDialectForm(row, readonly, (patch) => {
+              updateRow(row.id, {
+                ...(patch.properties !== undefined ? { properties: patch.properties } : {}),
+                ...(patch.password !== undefined ? { password: patch.password } : {})
+              });
+            }, updateRow)}
 
             <div className="jdbc-settings-cell">
               <button
@@ -361,11 +312,70 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
   );
 }
 
+function renderDialectForm(row: Row, readonly: boolean, onChange: (patch: { properties?: Record<string, unknown>; password?: import("../../contracts/security/Security").SecretRefValue }) => void, updateRowLocal: (id: string, patch: Partial<Row>) => void): JSX.Element {
+  const dialect = getJdbcDialect(row.dialectId);
+  if (dialect?.ConnectionForm) {
+    const FormComponent = dialect.ConnectionForm;
+    return (
+      <FormComponent
+        connectionId={row.id}
+        properties={row.properties ?? {}}
+        password={row.password}
+        readonly={readonly}
+        onChange={onChange}
+      />
+    );
+  }
+
+  return (
+    <>
+      <div className="jdbc-settings-cell">
+        <label className="jdbc-settings-label" htmlFor={`jdbc-url-${row.id}`}>
+          JDBC URL
+        </label>
+        <input
+          id={`jdbc-url-${row.id}`}
+          className="jdbc-settings-input"
+          value={row.url}
+          readOnly={readonly}
+          onChange={(event) => updateRowLocal(row.id, { url: event.target.value })}
+        />
+      </div>
+
+      <div className="jdbc-settings-cell">
+        <label className="jdbc-settings-label" htmlFor={`jdbc-username-${row.id}`}>
+          Username
+        </label>
+        <input
+          id={`jdbc-username-${row.id}`}
+          className="jdbc-settings-input"
+          value={row.username}
+          readOnly={readonly}
+          onChange={(event) => updateRowLocal(row.id, { username: event.target.value })}
+        />
+      </div>
+
+      <div className="jdbc-settings-cell">
+        <label className="jdbc-settings-label" htmlFor={`jdbc-password-${row.id}`}>
+          Password
+        </label>
+        <PasswordFieldInput
+          inputId={`jdbc-password-${row.id}`}
+          valueRef={row.password}
+          readonly={readonly}
+          onChangeRef={(nextRef) => updateRowLocal(row.id, { password: nextRef })}
+        />
+      </div>
+    </>
+  );
+}
+
 function buildSubtitle(row: Row): string {
-  if (row.dialectId === SQLSERVER_DIALECT_ID) {
-    const host = String(row.properties?.host ?? "");
-    const port = row.properties?.port ?? 1433;
-    const database = String(row.properties?.database ?? "");
+  const dialect = getJdbcDialect(row.dialectId);
+  if (dialect?.ConnectionForm && row.properties) {
+    const host = String(row.properties.host ?? "");
+    const port = row.properties.port ?? 1433;
+    const database = String(row.properties.database ?? "");
     if (!host) return "Host required";
     return database ? `${host}:${port}/${database}` : `${host}:${port}`;
   }
@@ -381,7 +391,8 @@ function serializeRow(row: Row): unknown {
     enabled: row.enabled,
     color: row.color || undefined
   };
-  if (row.dialectId === SQLSERVER_DIALECT_ID) {
+  const dialect = getJdbcDialect(row.dialectId);
+  if (dialect?.ConnectionForm) {
     return {
       ...base,
       properties: row.properties ?? {}
@@ -440,7 +451,8 @@ function buildRowErrors(rows: Row[]): Record<string, { url?: string; host?: stri
   for (const row of rows) {
     const rowError: { url?: string; host?: string } = {};
 
-    if (row.dialectId === SQLSERVER_DIALECT_ID) {
+    const dialect = getJdbcDialect(row.dialectId);
+    if (dialect?.ConnectionForm) {
       const host = String(row.properties?.host ?? "").trim();
       if (!host) {
         rowError.host = "Host is required";
