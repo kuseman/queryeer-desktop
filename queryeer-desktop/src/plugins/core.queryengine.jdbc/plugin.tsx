@@ -10,7 +10,6 @@ import {
   parseJdbcConnectionDefinitions
 } from "./jdbc-settings";
 import { getJdbcSessionStore } from "./jdbc-session-store";
-import { JdbcConnectionsPanel } from "./JdbcConnectionsPanel";
 import { DatabaseIcon } from "./DatabaseIcon";
 import { getJdbcNavigationStore } from "./jdbc-navigation-store";
 import { JdbcNavigationView } from "./JdbcNavigationView";
@@ -22,13 +21,14 @@ import { registerSymbolActionTemplate } from "../core.queryengine/symbol-action-
 import { getQuickCommandService } from "../core.quickcommand/service";
 import { createJdbcDatabaseQuickCommandProvider } from "./jdbc-database-quick-command";
 import { getJdbcDatabaseCache } from "./jdbc-database-cache";
+import { JdbcPanel } from "./JdbcPanel";
 
 const JDBC_SESSION_ID_METADATA_KEY = "core.queryengine.jdbc.sessionId";
 const JDBC_SESSION_CONNECTION_TITLE_KEY = "core.queryengine.jdbc.sessionConnection";
 const JDBC_SESSION_STATE_METADATA_KEY = "core.queryengine.jdbc.sessionState";
 const SQLSERVER_PLAN_OUTPUT_SETTING_ID = "core.queryengine.jdbc.sqlserver.planXmlOutput";
 const PLAN_OUTPUT_ID = "core.graph.queryPlanOutput";
-const SQLSERVER_WHEN = "hasActiveQueryExecutableFile && activeFile.metadata.core.queryengine.jdbc?.dialectId == 'sqlserver'";
+const SQLSERVER_WHEN = "hasActiveQueryExecutableFile && activeFile?.metadata?.core?.queryengine?.jdbc?.dialectId == 'sqlserver'";
 // Tracks which connectionId (UUID) each file's session was established with.
 // Kept in memory — same lifetime as metadata, which is also not persisted.
 const sessionConnectionUuidMap = new Map<string, string>();
@@ -473,10 +473,10 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       id: "core.queryengine.jdbc.panel",
       tabs: [
         {
-          id: "core.queryengine.jdbc.panel.sessions",
-          title: "JDBC Sessions",
+          id: "core.queryengine.jdbc.panel",
+          title: "JDBC",
           order: 20,
-          render: () => <JdbcConnectionsPanel files={context.files} fileMediator={context.fileMediator} />
+          render: () => <JdbcPanel files={context.files} fileMediator={context.fileMediator} />
         }
       ],
       defaultHeight: 220,

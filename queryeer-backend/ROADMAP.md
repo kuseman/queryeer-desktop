@@ -3,12 +3,9 @@
 Quick fixes
 - Save to file output
     - Should not output anything to table/text only writing status to text
-- Coloring of mimetype/connections is not good UI/UX wise, suggest a better non intrusive approach to coloring
 
 Large features in prio
 
-- [ ] JDBC Panel extension fixes
-    - Add a new panel with schema status/statistics per connection. Actions like force crawl etc.
 - [ ] JDBC Tree navigation fixes
     - [X] All tables without schema below database should be a meta level above
           with views/tables/procedures etc.
@@ -38,6 +35,8 @@ Large features in prio
     - [ ] change log (app bundled)
     - [ ] change log (gitgub release)
 - [ ] Show memory usage of java/node in status bar
+- [X] JDBC Panel extension fixes
+    - Add a new panel with schema status/statistics per connection. Actions like force crawl etc.
 - [X] SQLServer query plan
     - Pre.req. Graph visualization framework done
     - Parse XML

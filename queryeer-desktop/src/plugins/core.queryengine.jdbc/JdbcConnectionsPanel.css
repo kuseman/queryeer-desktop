@@ -1,0 +1,52 @@
+.jdbc-sessions-panel {
+  height: 100%;
+  overflow: auto;
+  background: var(--bg-1);
+}
+
+.jdbc-sessions-panel__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--ui-font-size-sm);
+}
+
+.jdbc-sessions-panel__header {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-2);
+  font-weight: 600;
+  color: var(--text-0);
+  white-space: nowrap;
+  font-size: var(--ui-font-size-xs);
+}
+
+.jdbc-sessions-panel__cell {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-0);
+  white-space: nowrap;
+}
+
+.jdbc-sessions-panel__row:hover {
+  background: var(--surface-overlay-weak);
+}
+
+.jdbc-sessions-panel__file-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: var(--accent-muted);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
+.jdbc-sessions-panel__file-link:hover {
+  color: var(--text-0);
+}
+
+.jdbc-sessions-panel__state--dead {
+  color: var(--warning);
+}

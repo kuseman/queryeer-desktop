@@ -128,6 +128,61 @@ public final class JdbcSchemaActionHandler
         return schemaStore.latestSnapshot(connectionId, crawlScope);
     }
 
+    public Object status(Object payload)
+    {
+        JdbcSchemaStatusPayload params = payload != null ? payloadMapper.convert(payload, JdbcSchemaStatusPayload.class)
+                : new JdbcSchemaStatusPayload(null);
+        String requestedConnectionId = trimToNull(params.connectionId());
+
+        List<String> connectionIds = requestedConnectionId != null ? List.of(requestedConnectionId)
+                : connections.allConfiguredConnectionIds();
+
+        List<JdbcSchemaCrawlStatus> result = new ArrayList<>();
+        for (String connectionId : connectionIds)
+        {
+            String connectionTitle = resolveConnectionTitle(connectionId);
+            result.addAll(buildStatusForConnection(connectionId, connectionTitle));
+        }
+        return result;
+    }
+
+    private List<JdbcSchemaCrawlStatus> buildStatusForConnection(String connectionId, String connectionTitle)
+    {
+        List<JdbcSchemaCrawlStatus> result = new ArrayList<>();
+
+        // TOP scope status (single H2 open)
+        List<JdbcSchemaStore.CrawlStatusEntry> topEntries = schemaStore.crawlStatusForConnection(connectionId, JdbcSchemaCrawlScope.TOP);
+        for (JdbcSchemaStore.CrawlStatusEntry entry : topEntries)
+        {
+            result.add(new JdbcSchemaCrawlStatus(connectionId, connectionTitle, "top", entry.databaseKey(), entry.lastSuccessAt(), entry.lastAttemptAt(), entry.lastFailureAt(), entry.nextDueAt(),
+                    entry.consecutiveFailures(), entry.usageScore(), entry.enabled(), entry.objectCount(), entry.lastError()));
+        }
+
+        // DEEP scope status for each database (single H2 open)
+        List<JdbcSchemaStore.CrawlStatusEntry> deepEntries = schemaStore.crawlStatusForConnection(connectionId, JdbcSchemaCrawlScope.DEEP);
+        for (JdbcSchemaStore.CrawlStatusEntry entry : deepEntries)
+        {
+            result.add(new JdbcSchemaCrawlStatus(connectionId, connectionTitle, "deep", entry.databaseKey(), entry.lastSuccessAt(), entry.lastAttemptAt(), entry.lastFailureAt(), entry.nextDueAt(),
+                    entry.consecutiveFailures(), entry.usageScore(), entry.enabled(), entry.objectCount(), entry.lastError()));
+        }
+
+        return result;
+    }
+
+    private String resolveConnectionTitle(String connectionId)
+    {
+        try
+        {
+            JdbcConnection resolved = connections.resolve(connectionId);
+            return resolved.title() != null ? resolved.title()
+                    : connectionId;
+        }
+        catch (RuntimeException e)
+        {
+            return connectionId;
+        }
+    }
+
     public Object refresh(Object payload)
     {
         JdbcSchemaRefreshPayload params = payloadMapper.convert(payload, JdbcSchemaRefreshPayload.class);
@@ -157,6 +212,7 @@ public final class JdbcSchemaActionHandler
         JdbcSchemaTarget incomingTarget = params.target();
         String mode = trimToNull(params.mode());
         boolean dueMode = "due".equalsIgnoreCase(mode);
+        boolean forceMode = "force".equalsIgnoreCase(mode);
         boolean waitForCompletion = params.waitForCompletion() == null
                 || params.waitForCompletion();
         if (crawlScope == JdbcSchemaCrawlScope.DEEP)
@@ -165,6 +221,15 @@ public final class JdbcSchemaActionHandler
                     : null;
             String database = incomingTarget != null ? trimToNull(incomingTarget.database())
                     : null;
+
+            // Force mode without schema: trigger a full crawl for the database
+            if (forceMode
+                    && schema == null)
+            {
+                target = new JdbcSchemaTarget(database, null);
+                return crawlCoordinator.refreshNow(connectionId, crawlScope, target);
+            }
+
             if (schema == null
                     && !dueMode)
             {

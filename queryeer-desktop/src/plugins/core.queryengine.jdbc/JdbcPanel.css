@@ -1,0 +1,40 @@
+.jdbc-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.jdbc-panel__tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 8px;
+  background: var(--surface-overlay-weak);
+  border-bottom: 1px solid var(--border);
+}
+
+.jdbc-panel__tab {
+  padding: 4px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-1);
+  cursor: pointer;
+  font-size: var(--ui-font-size-xs);
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.jdbc-panel__tab:hover {
+  color: var(--text-0);
+}
+
+.jdbc-panel__tab--active {
+  color: var(--text-0);
+  border-bottom-color: var(--accent);
+}
+
+.jdbc-panel__content {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}

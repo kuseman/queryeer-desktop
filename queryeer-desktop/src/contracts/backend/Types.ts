@@ -169,6 +169,26 @@ export type JdbcSchemaRefreshPayload = {
   };
 };
 
+export type JdbcSchemaStatusPayload = {
+  connectionId?: string;
+};
+
+export type JdbcSchemaCrawlStatus = {
+  connectionId: string;
+  connectionTitle: string;
+  scope: "top" | "deep";
+  databaseKey: string | null;
+  lastSuccessAt: string | null;
+  lastAttemptAt: string | null;
+  lastFailureAt: string | null;
+  nextDueAt: string | null;
+  consecutiveFailures: number;
+  usageScore: number;
+  enabled: boolean;
+  objectCount: number;
+  lastError: string | null;
+};
+
 export type JdbcEngineState = {
   connectionId?: string;
   database?: string;

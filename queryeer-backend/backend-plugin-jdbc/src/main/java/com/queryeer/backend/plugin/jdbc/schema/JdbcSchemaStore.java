@@ -10,6 +10,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,7 +57,12 @@ public final class JdbcSchemaStore
         try (Connection connection = open(connectionId, scope))
         {
             List<Row> rows = new ArrayList<>();
-            String sql = "select object_id, parent_object_id, object_name, kind, attributes_json, ordinal from schema_object where is_deleted = false order by ordinal";
+            String sql = """
+                    select object_id, parent_object_id, object_name, kind, attributes_json, ordinal
+                    from schema_object
+                    where is_deleted = false
+                    order by ordinal
+                    """;
             try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet resultSet = statement.executeQuery())
             {
                 while (resultSet.next())
@@ -93,7 +99,12 @@ public final class JdbcSchemaStore
     {
         try (Connection connection = open(connectionId, scope))
         {
-            String sql = "select consecutive_failures, usage_score, enabled, next_due_at from crawl_state where state_id = 1 and database_key = ?";
+            String sql = """
+                    select consecutive_failures, usage_score, enabled, next_due_at
+                    from crawl_state
+                    where state_id = 1
+                    and database_key = ?
+                    """;
             try (PreparedStatement statement = connection.prepareStatement(sql))
             {
                 statement.setString(1, normalizeDatabaseKey(databaseKey));
@@ -130,8 +141,15 @@ public final class JdbcSchemaStore
             Instant previousUse = readLastUsedAt(connection, normalized);
             double decayed = decay(state.usageScore(), previousUse, now);
             double nextScore = Math.min(1.0d, decayed + 0.30d);
-            try (PreparedStatement statement = connection
-                    .prepareStatement("update crawl_state set usage_score = ?, last_attempt_at = ?, last_used_at = ?, next_due_at = coalesce(next_due_at, ?) where state_id = 1 and database_key = ?"))
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    update crawl_state
+                    set usage_score = ?
+                    , last_attempt_at = ?
+                    , last_used_at = ?
+                    , next_due_at = coalesce(next_due_at, ?)
+                    where state_id = 1
+                    and database_key = ?
+                    """))
             {
                 statement.setDouble(1, nextScore);
                 statement.setTimestamp(2, java.sql.Timestamp.from(now));
@@ -356,7 +374,15 @@ public final class JdbcSchemaStore
         String attributes = MapperUtils.MAPPER.writeValueAsString(object.attributes() == null ? Map.of()
                 : object.attributes());
         String upsertSql = """
-                merge into schema_object (object_id, parent_object_id, object_name, kind, attributes_json, ordinal, first_seen_run_id, last_seen_run_id, is_deleted)
+                merge into schema_object
+                (
+                    object_id
+                ,   parent_object_id
+                ,   object_name, kind
+                ,   attributes_json, ordinal
+                ,   first_seen_run_id
+                ,   last_seen_run_id
+                ,   is_deleted)
                 values (?, ?, ?, ?, ?, ?,
                   coalesce((select first_seen_run_id from schema_object where object_id = ?), ?),
                   ?, false)
@@ -378,8 +404,10 @@ public final class JdbcSchemaStore
 
         if (parentObjectId != null)
         {
-            try (PreparedStatement edge = connection
-                    .prepareStatement("insert into object_reference(source_object_id, target_object_id, reference_kind, ordinal, attributes_json) values (?, ?, ?, ?, ?)"))
+            try (PreparedStatement edge = connection.prepareStatement("""
+                    insert into object_reference(source_object_id, target_object_id, reference_kind, ordinal, attributes_json)
+                    values (?, ?, ?, ?, ?)
+                    """))
             {
                 edge.setString(1, parentObjectId);
                 edge.setString(2, object.id());
@@ -422,7 +450,15 @@ public final class JdbcSchemaStore
 
     private void rebuildSemanticReferences(Connection connection, long[] edgeOrdinal) throws SQLException
     {
-        String sql = "select object_id, kind, attributes_json, parent_object_id from schema_object where is_deleted = false and kind in ('primary_key','foreign_key','index')";
+        String sql = """
+                select object_id
+                ,      kind
+                ,      attributes_json
+                ,      parent_object_id
+                from schema_object
+                where is_deleted = false
+                and kind in ('primary_key','foreign_key','index')
+                """;
         try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet resultSet = statement.executeQuery())
         {
             while (resultSet.next())
@@ -475,8 +511,10 @@ public final class JdbcSchemaStore
 
     private static void insertReference(Connection connection, String sourceObjectId, String targetObjectId, String referenceKind, long ordinal, String attributesJson) throws SQLException
     {
-        try (PreparedStatement statement = connection
-                .prepareStatement("insert into object_reference(source_object_id, target_object_id, reference_kind, ordinal, attributes_json) values (?, ?, ?, ?, ?)"))
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into object_reference(source_object_id, target_object_id, reference_kind, ordinal, attributes_json)
+                values (?, ?, ?, ?, ?)
+                """))
         {
             statement.setString(1, sourceObjectId);
             statement.setString(2, targetObjectId);
@@ -489,7 +527,13 @@ public final class JdbcSchemaStore
 
     private static String findColumnId(Connection connection, String tableObjectId, String columnName) throws SQLException
     {
-        String sql = "select object_id from schema_object where parent_object_id = ? and kind = 'column' and upper(object_name) = upper(?) and is_deleted = false";
+        String sql = """
+                select object_id from schema_object
+                where parent_object_id = ?
+                and kind = 'column'
+                and upper(object_name) = upper(?)
+                and is_deleted = false
+                """;
         try (PreparedStatement statement = connection.prepareStatement(sql))
         {
             statement.setString(1, tableObjectId);
@@ -532,6 +576,191 @@ public final class JdbcSchemaStore
                         : timestamp.toInstant();
             }
         }
+    }
+
+    /** Returns all crawl status entries for a connection in a single pass per scope. */
+    List<CrawlStatusEntry> crawlStatusForConnection(String connectionId, JdbcSchemaCrawlScope scope)
+    {
+        List<CrawlStatusEntry> result = new ArrayList<>();
+        try (Connection connection = open(connectionId, scope))
+        {
+            // Read all crawl_state rows
+            String stateSql = """
+                    select database_key
+                    ,      consecutive_failures
+                    ,      usage_score, enabled
+                    ,      next_due_at
+                    ,      last_success_at
+                    ,      last_attempt_at
+                    ,      last_failure_at
+                    from crawl_state
+                    where state_id = 1
+                    order by database_key
+                    """;
+            Map<String, CrawlStateWithTimestamps> stateMap = new LinkedHashMap<>();
+            try (PreparedStatement statement = connection.prepareStatement(stateSql); ResultSet resultSet = statement.executeQuery())
+            {
+                while (resultSet.next())
+                {
+                    String dbKey = resultSet.getString(1);
+                    Instant nextDueAt = resultSet.getTimestamp(5) == null ? Instant.EPOCH
+                            : resultSet.getTimestamp(5)
+                                    .toInstant();
+                    Instant lastSuccessAt = resultSet.getTimestamp(6) != null ? resultSet.getTimestamp(6)
+                            .toInstant()
+                            : null;
+                    Instant lastAttemptAt = resultSet.getTimestamp(7) != null ? resultSet.getTimestamp(7)
+                            .toInstant()
+                            : null;
+                    Instant lastFailureAt = resultSet.getTimestamp(8) != null ? resultSet.getTimestamp(8)
+                            .toInstant()
+                            : null;
+                    CrawlStateWithTimestamps state = new CrawlStateWithTimestamps(resultSet.getInt(2), resultSet.getDouble(3), resultSet.getBoolean(4), nextDueAt, lastSuccessAt, lastAttemptAt,
+                            lastFailureAt);
+                    stateMap.put(dbKey != null ? dbKey
+                            : "", state);
+                }
+            }
+
+            // Read last error message
+            String lastError = null;
+            try (PreparedStatement statement = connection.prepareStatement("select error_message from crawl_run where status = 'FAILED' order by run_id desc limit 1");
+                    ResultSet resultSet = statement.executeQuery())
+            {
+                if (resultSet.next())
+                {
+                    lastError = resultSet.getString(1);
+                }
+            }
+
+            // Compute per-database object counts for DEEP scope using recursive CTE
+            Map<String, Integer> objectCountByDatabase = new HashMap<>();
+            if (scope == JdbcSchemaCrawlScope.DEEP)
+            {
+                // Use recursive CTE to attribute each object to its root database
+                try (PreparedStatement statement = connection.prepareStatement("""
+                        with recursive db_tree as (
+                          select object_id, object_name, object_id as root_id
+                          from schema_object
+                          where kind = 'database' and is_deleted = false
+                          union all
+                          select child.object_id, child.object_name, dt.root_id
+                          from schema_object child
+                          join db_tree dt on child.parent_object_id = dt.object_id
+                          where child.is_deleted = false
+                        )
+                        select root_id, count(*) as object_count
+                        from db_tree
+                        group by root_id
+                        """); ResultSet resultSet = statement.executeQuery())
+                {
+                    while (resultSet.next())
+                    {
+                        String rootId = resultSet.getString(1);
+                        int count = resultSet.getInt(2);
+                        // Look up the database name from schema_object
+                        try (PreparedStatement nameStmt = connection.prepareStatement("select object_name from schema_object where object_id = ?"))
+                        {
+                            nameStmt.setString(1, rootId);
+                            try (ResultSet nameRs = nameStmt.executeQuery())
+                            {
+                                if (nameRs.next())
+                                {
+                                    objectCountByDatabase.put(nameRs.getString(1), count);
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (SQLException e)
+                {
+                    // Fallback: use total count if recursive CTE fails
+                }
+
+                // If CTE produced no results, fall back to total count distributed across known databases
+                if (objectCountByDatabase.isEmpty())
+                {
+                    try (PreparedStatement statement = connection.prepareStatement("select count(*) from schema_object where is_deleted = false"); ResultSet resultSet = statement.executeQuery())
+                    {
+                        if (resultSet.next())
+                        {
+                            int totalCount = resultSet.getInt(1);
+                            List<String> dbKeys = stateMap.keySet()
+                                    .stream()
+                                    .filter(k -> !k.isBlank())
+                                    .toList();
+                            if (!dbKeys.isEmpty())
+                            {
+                                int perDb = totalCount / dbKeys.size();
+                                int remainder = totalCount % dbKeys.size();
+                                for (int i = 0; i < dbKeys.size(); i++)
+                                {
+                                    objectCountByDatabase.put(dbKeys.get(i), perDb + (i < remainder ? 1
+                                            : 0));
+                                }
+                            }
+                            else
+                            {
+                                objectCountByDatabase.put("", totalCount);
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // For TOP scope, just count all objects
+                try (PreparedStatement statement = connection.prepareStatement("select count(*) from schema_object where is_deleted = false"); ResultSet resultSet = statement.executeQuery())
+                {
+                    if (resultSet.next())
+                    {
+                        objectCountByDatabase.put("", resultSet.getInt(1));
+                    }
+                }
+            }
+
+            // Build status entries — skip empty database_key for DEEP scope
+            for (Map.Entry<String, CrawlStateWithTimestamps> entry : stateMap.entrySet())
+            {
+                String dbKey = entry.getKey();
+
+                // For DEEP scope, skip the default empty-key entry (it's not a real database)
+                if (scope == JdbcSchemaCrawlScope.DEEP
+                        && dbKey.isBlank())
+                {
+                    continue;
+                }
+
+                CrawlStateWithTimestamps state = entry.getValue();
+                int objectCount = objectCountByDatabase.getOrDefault(dbKey, 0);
+                result.add(new CrawlStatusEntry(dbKey.isBlank() ? null
+                        : dbKey, state.consecutiveFailures(), state.usageScore(), state.enabled(), state.nextDueAt(), state.lastSuccessAt(), state.lastAttemptAt(), state.lastFailureAt(), objectCount,
+                        lastError));
+            }
+
+            // If no crawl_state rows exist (or all filtered), return a single entry with defaults for TOP scope
+            if (result.isEmpty()
+                    && scope == JdbcSchemaCrawlScope.TOP)
+            {
+                Instant now = Instant.now();
+                int totalCount = objectCountByDatabase.getOrDefault("", 0);
+                result.add(new CrawlStatusEntry(null, 0, 0.0d, true, now, null, null, null, totalCount, lastError));
+            }
+        }
+        catch (SQLException e)
+        {
+            throw new RuntimeException(e);
+        }
+        return result;
+    }
+
+    record CrawlStatusEntry(String databaseKey, int consecutiveFailures, double usageScore, boolean enabled, Instant nextDueAt, Instant lastSuccessAt, Instant lastAttemptAt, Instant lastFailureAt,
+            int objectCount, String lastError)
+    {
+    }
+
+    private record CrawlStateWithTimestamps(int consecutiveFailures, double usageScore, boolean enabled, Instant nextDueAt, Instant lastSuccessAt, Instant lastAttemptAt, Instant lastFailureAt)
+    {
     }
 
     List<String> databaseKeys(String connectionId, JdbcSchemaCrawlScope scope)

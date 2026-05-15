@@ -801,6 +801,7 @@ Current Java stdio scaffold implementation status:
 - `backend.runtimeStatus` implemented
 - JDBC provider actions include `jdbc.schema.snapshot` (latest cached snapshot by `connectionId` and optional `scope`) and `jdbc.schema.refresh` (synchronous refresh + cache persist with scope-aware behavior)
 - JDBC provider action `jdbc.schema.fetch` resolves connection settings by `connectionId` only; fetch payload supports `connectionId`, `scope`, and optional `target` (no inline connection overrides).
+- JDBC provider action `jdbc.schema.status` returns crawl status/statistics for all configured connections (or a single connection when `connectionId` is provided). Each status entry includes: `connectionId`, `connectionTitle`, `scope` (`top`|`deep`), `databaseKey` (null for top), `lastSuccessAt`, `lastAttemptAt`, `lastFailureAt`, `nextDueAt`, `consecutiveFailures`, `usageScore`, `enabled`, `objectCount`, `lastError`.
 - JDBC provider action `jdbc.connection.test` accepts `{ "connectionId": "..." }` whole body for a connection.
 - JDBC provider action `jdbc.connection.sessions` returns file-scoped JDBC session metadata (`fileId`, `connectionId`, optional `sessionId`, optional `lastAccessTimeMs`, `status=alive|dead`) for UI session badges and connection health views.
 - `file.open` / `file.close` request handlers implemented against `DefaultFileRegistry`; JDBC provider registers `FileSessionHandler` for file-scoped connection lifecycle and cleanup. `file.bind` has been removed — backend auto-upserts on `queryengine.execute`.
