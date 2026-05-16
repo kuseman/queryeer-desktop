@@ -1,17 +1,23 @@
 import type { OutlineSymbol, SymbolKind } from "../../../../contracts/extensions/OutlineExtension";
 
-function offsetToPosition(content: string, offset: number): { line: number; column: number } {
-  let line = 1;
-  let column = 1;
-  for (let i = 0; i < offset && i < content.length; i++) {
-    if (content[i] === "\n") {
-      line++;
-      column = 1;
-    } else {
-      column++;
-    }
+function buildLineOffsets(content: string): number[] {
+  const offsets = [0];
+  for (let i = 0; i < content.length; i++) {
+    if (content[i] === "\n") offsets.push(i + 1);
   }
-  return { line, column };
+  return offsets;
+}
+
+function offsetToPosition(
+  lineOffsets: number[],
+  offset: number
+): { line: number; column: number } {
+  let lo = 0, hi = lineOffsets.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (lineOffsets[mid] <= offset) lo = mid; else hi = mid - 1;
+  }
+  return { line: lo + 1, column: offset - lineOffsets[lo] + 1 };
 }
 
 function findKeyOffset(content: string, key: string, fromOffset: number): number {
@@ -23,13 +29,14 @@ function findKeyOffset(content: string, key: string, fromOffset: number): number
 function walkJsonValue(
   value: unknown,
   content: string,
+  lineOffsets: number[],
   path: string[],
   keyOffset: number,
   valueEndOffset: number
 ): OutlineSymbol[] {
   if (value === null || value === undefined) {
-    const start = offsetToPosition(content, keyOffset);
-    const end = offsetToPosition(content, valueEndOffset);
+    const start = offsetToPosition(lineOffsets, keyOffset);
+    const end = offsetToPosition(lineOffsets, valueEndOffset);
     const name = path[path.length - 1] ?? "null";
     return [{
       id: `json:${path.join(".")}:${start.line}`,
@@ -51,8 +58,8 @@ function walkJsonValue(
   }
 
   if (typeof value === "string") {
-    const start = offsetToPosition(content, keyOffset);
-    const end = offsetToPosition(content, valueEndOffset);
+    const start = offsetToPosition(lineOffsets, keyOffset);
+    const end = offsetToPosition(lineOffsets, valueEndOffset);
     const name = path[path.length - 1] ?? value;
     return [{
       id: `json:${path.join(".")}:${start.line}`,
@@ -75,8 +82,8 @@ function walkJsonValue(
   }
 
   if (typeof value === "number") {
-    const start = offsetToPosition(content, keyOffset);
-    const end = offsetToPosition(content, valueEndOffset);
+    const start = offsetToPosition(lineOffsets, keyOffset);
+    const end = offsetToPosition(lineOffsets, valueEndOffset);
     const name = path[path.length - 1] ?? String(value);
     return [{
       id: `json:${path.join(".")}:${start.line}`,
@@ -99,8 +106,8 @@ function walkJsonValue(
   }
 
   if (typeof value === "boolean") {
-    const start = offsetToPosition(content, keyOffset);
-    const end = offsetToPosition(content, valueEndOffset);
+    const start = offsetToPosition(lineOffsets, keyOffset);
+    const end = offsetToPosition(lineOffsets, valueEndOffset);
     const name = path[path.length - 1] ?? String(value);
     return [{
       id: `json:${path.join(".")}:${start.line}`,
@@ -123,8 +130,8 @@ function walkJsonValue(
   }
 
   if (Array.isArray(value)) {
-    const start = offsetToPosition(content, keyOffset);
-    const end = offsetToPosition(content, valueEndOffset);
+    const start = offsetToPosition(lineOffsets, keyOffset);
+    const end = offsetToPosition(lineOffsets, valueEndOffset);
     const name = path[path.length - 1] ?? "Array";
     const children: OutlineSymbol[] = [];
     let scanOffset = keyOffset;
@@ -132,7 +139,7 @@ function walkJsonValue(
       const item = value[i];
       const itemPath = [...path, String(i)];
       const itemKeyOffset = findKeyOffset(content, String(i), scanOffset);
-      const itemSymbols = walkJsonValue(item, content, itemPath, itemKeyOffset, valueEndOffset);
+      const itemSymbols = walkJsonValue(item, content, lineOffsets, itemPath, itemKeyOffset, valueEndOffset);
       children.push(...itemSymbols);
       if (itemSymbols.length > 0) {
         scanOffset = itemKeyOffset;
@@ -168,22 +175,22 @@ function walkJsonValue(
         const keyOffset = findKeyOffset(content, key, scanOffset);
         const keyEndStr = `"${key}"`;
         const keyEndOffset = keyOffset + keyEndStr.length;
-        const childSymbols = walkJsonValue(val, content, keyPath, keyOffset, valueEndOffset);
+        const childSymbols = walkJsonValue(val, content, lineOffsets, keyPath, keyOffset, valueEndOffset);
         results.push(...childSymbols);
         scanOffset = keyEndOffset;
       }
       return results;
     }
 
-    const start = offsetToPosition(content, keyOffset);
-    const end = offsetToPosition(content, valueEndOffset);
+    const start = offsetToPosition(lineOffsets, keyOffset);
+    const end = offsetToPosition(lineOffsets, valueEndOffset);
     const name = path[path.length - 1] ?? "Object";
     const children: OutlineSymbol[] = [];
     let scanOffset = keyOffset;
     for (const [key, val] of entries) {
       const keyPath = [...path, key];
       const itemKeyOffset = findKeyOffset(content, key, scanOffset);
-      const childSymbols = walkJsonValue(val, content, keyPath, itemKeyOffset, valueEndOffset);
+      const childSymbols = walkJsonValue(val, content, lineOffsets, keyPath, itemKeyOffset, valueEndOffset);
       children.push(...childSymbols);
       if (childSymbols.length > 0) {
         scanOffset = itemKeyOffset;
@@ -217,9 +224,11 @@ export function jsonOutlineProvider(content: string): OutlineSymbol[] {
     return [];
   }
 
+  const lineOffsets = buildLineOffsets(content);
+
   try {
     const parsed = JSON.parse(content);
-    return walkJsonValue(parsed, content, [], 0, content.length);
+    return walkJsonValue(parsed, content, lineOffsets, [], 0, content.length);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const lineMatch = message.match(/position\s+(\d+)/i);
@@ -227,7 +236,7 @@ export function jsonOutlineProvider(content: string): OutlineSymbol[] {
     let column = 0;
     if (lineMatch) {
       const pos = parseInt(lineMatch[1], 10);
-      const position = offsetToPosition(content, pos);
+      const position = offsetToPosition(lineOffsets, pos);
       line = position.line;
       column = position.column;
     }

@@ -307,6 +307,11 @@ app.whenReady().then(() => {
   ipcMain.handle("file:read", async (_event, { uri }: { uri: string }) => {
     try {
       const filePath = fileUriToPath(uri);
+      const MAX_FILE_SIZE_BYTES = 512 * 1024 * 1024;
+      const stats = await stat(filePath);
+      if (stats.size > MAX_FILE_SIZE_BYTES) {
+        return { success: false, content: "", tooLarge: true, fileSizeBytes: stats.size };
+      }
       const content = await readFile(filePath, "utf8");
       return { success: true, content };
     } catch {
