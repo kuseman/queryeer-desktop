@@ -1,15 +1,23 @@
 package com.queryeer.backend.plugin.payloadbuilder;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+
+import org.apache.commons.io.IOUtils;
+
 import com.queryeer.backend.api.BackendPlugin;
 import com.queryeer.backend.api.BackendPluginContext;
+import com.queryeer.backend.api.PluginDescriptor;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
 import com.queryeer.backend.queryengine.sql.parser.TreeSitterSqlParseFunction;
 
+import se.kuseman.payloadbuilder.core.Payloadbuilder;
+
 public final class PayloadbuilderBackendPlugin implements BackendPlugin
 {
     @Override
-    public void activate(BackendPluginContext context)
+    public void activate(BackendPluginContext context, PluginDescriptor descriptor)
     {
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(context.config(), context.payloadMapper(), context.services()
                 .get(JdbcRuntimeService.class),
@@ -22,5 +30,24 @@ public final class PayloadbuilderBackendPlugin implements BackendPlugin
                 .register(provider);
         context.logger()
                 .info("Activated payloadbuilder backend plugin");
+
+        String plbChangeLog = getPayloadbuilderChangeLog();
+        if (plbChangeLog != null)
+        {
+            context.changelogs()
+                    .registerChangelog(descriptor.id(), plbChangeLog);
+        }
+    }
+
+    private String getPayloadbuilderChangeLog()
+    {
+        try
+        {
+            return IOUtils.toString(Payloadbuilder.class.getResource("/CHANGELOG.md"), StandardCharsets.UTF_8);
+        }
+        catch (IOException e)
+        {
+            return "";
+        }
     }
 }

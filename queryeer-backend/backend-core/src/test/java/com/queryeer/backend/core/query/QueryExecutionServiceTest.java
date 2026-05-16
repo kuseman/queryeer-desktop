@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import com.queryeer.backend.api.BackendPluginContext;
+import com.queryeer.backend.api.ChangelogRegistry;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.EventBus;
 import com.queryeer.backend.api.FileSessionHandlerRegistry;
@@ -90,7 +91,7 @@ class QueryExecutionServiceTest
     private static QueryEngineRegistry activateJdbcRegistry()
     {
         RecordingQueryEngineRegistry registry = new RecordingQueryEngineRegistry();
-        new JdbcBackendPlugin().activate(new JdbcPluginContext(registry));
+        new JdbcBackendPlugin().activate(new JdbcPluginContext(registry), null);
         return registry;
     }
 
@@ -336,6 +337,30 @@ class QueryExecutionServiceTest
         public PluginServiceRegistry services()
         {
             return mock(PluginServiceRegistry.class);
+        }
+
+        @Override
+        public ChangelogRegistry changelogs()
+        {
+            return new ChangelogRegistry()
+            {
+                @Override
+                public void registerChangelog(String pluginId, String changelog)
+                {
+                }
+
+                @Override
+                public java.util.List<String> pluginIds()
+                {
+                    return java.util.List.of();
+                }
+
+                @Override
+                public String getChangelog(String pluginId)
+                {
+                    return null;
+                }
+            };
         }
     }
 }

@@ -3,6 +3,7 @@ package com.queryeer.backend.core;
 import java.util.Map;
 
 import com.queryeer.backend.api.BackendPluginContext;
+import com.queryeer.backend.api.ChangelogRegistry;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.EventBus;
 import com.queryeer.backend.api.FileSessionHandlerRegistry;
@@ -25,9 +26,10 @@ public final class BackendPlatformServices implements PluginHostServices
     private final InlineSchedulerService scheduler;
     private final BackendPluginContext pluginContext;
     private final PayloadMapper payloadMapper;
+    private final InMemoryChangelogRegistry changelogs;
 
     private BackendPlatformServices(DefaultLoggerService logger, ConfigService config, InMemoryQueryEngineRegistry queryEngines, DefaultFileRegistry fileRegistry, InMemoryEventBus events,
-            InlineSchedulerService scheduler, BackendPluginContext pluginContext, PayloadMapper payloadMapper)
+            InlineSchedulerService scheduler, BackendPluginContext pluginContext, PayloadMapper payloadMapper, InMemoryChangelogRegistry changelogs)
     {
         this.logger = logger;
         this.config = config;
@@ -37,6 +39,7 @@ public final class BackendPlatformServices implements PluginHostServices
         this.scheduler = scheduler;
         this.pluginContext = pluginContext;
         this.payloadMapper = payloadMapper;
+        this.changelogs = changelogs;
     }
 
     public static BackendPlatformServices defaultServices()
@@ -56,10 +59,11 @@ public final class BackendPlatformServices implements PluginHostServices
         PayloadMapper payloadMapper = new JacksonPayloadMapper(MapperUtils.MAPPER);
         PluginServiceRegistry services = new InMemoryPluginServiceRegistry();
         services.register(IncrementalParseSessionService.class, new DefaultIncrementalParseSessionService());
+        InMemoryChangelogRegistry changelogs = new InMemoryChangelogRegistry();
 
-        BackendPluginContext context = new DefaultBackendPluginContext(logger, config, queryEngines, fileRegistry, events, scheduler, payloadMapper, services);
+        BackendPluginContext context = new DefaultBackendPluginContext(logger, config, queryEngines, fileRegistry, events, scheduler, payloadMapper, services, changelogs);
 
-        return new BackendPlatformServices(logger, config, queryEngines, fileRegistry, events, scheduler, context, payloadMapper);
+        return new BackendPlatformServices(logger, config, queryEngines, fileRegistry, events, scheduler, context, payloadMapper, changelogs);
     }
 
     /** Creates services with {@link FileBasedConfigService} connected to the given security session. */
@@ -74,10 +78,16 @@ public final class BackendPlatformServices implements PluginHostServices
         PayloadMapper payloadMapper = new JacksonPayloadMapper(MapperUtils.MAPPER);
         PluginServiceRegistry services = new InMemoryPluginServiceRegistry();
         services.register(IncrementalParseSessionService.class, new DefaultIncrementalParseSessionService());
+        InMemoryChangelogRegistry changelogs = new InMemoryChangelogRegistry();
 
-        BackendPluginContext context = new DefaultBackendPluginContext(logger, config, queryEngines, fileRegistry, events, scheduler, payloadMapper, services);
+        BackendPluginContext context = new DefaultBackendPluginContext(logger, config, queryEngines, fileRegistry, events, scheduler, payloadMapper, services, changelogs);
 
-        return new BackendPlatformServices(logger, config, queryEngines, fileRegistry, events, scheduler, context, payloadMapper);
+        return new BackendPlatformServices(logger, config, queryEngines, fileRegistry, events, scheduler, context, payloadMapper, changelogs);
+    }
+
+    public ChangelogRegistry changelogRegistry()
+    {
+        return changelogs;
     }
 
     public BackendPluginContext pluginContext()

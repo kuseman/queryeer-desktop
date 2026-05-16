@@ -226,6 +226,7 @@ function createContext(args: {
     editors: {
       getActiveEditor: vi.fn(() => null),
       onActiveEditorChanged: vi.fn(() => ({ dispose: vi.fn() }))
-    }
+    },
+    about: { registerChangelog: vi.fn() }
   };
 }

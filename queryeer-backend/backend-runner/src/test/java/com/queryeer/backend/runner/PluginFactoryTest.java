@@ -51,7 +51,7 @@ class PluginFactoryTest
         }
 
         @Override
-        public void activate(BackendPluginContext context)
+        public void activate(BackendPluginContext context, PluginDescriptor descriptor)
         {
         }
     }
@@ -81,7 +81,7 @@ class PluginFactoryTest
         }
 
         @Override
-        public void activate(BackendPluginContext context)
+        public void activate(BackendPluginContext context, PluginDescriptor descriptor)
         {
         }
     }

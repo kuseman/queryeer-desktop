@@ -9,7 +9,8 @@ export type BackendRequestMethod =
   | "queryengine.cancel"
   | "queryengine.invoke"
   | "file.open"
-  | "file.close";
+  | "file.close"
+  | "about.pluginChangelogs";
 
 export type BackendNotificationMethod =
   | "queryengine.progress"

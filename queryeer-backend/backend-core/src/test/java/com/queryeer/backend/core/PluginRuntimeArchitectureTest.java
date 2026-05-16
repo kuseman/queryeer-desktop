@@ -172,7 +172,7 @@ class PluginRuntimeArchitectureTest
         }
 
         @Override
-        public void activate(BackendPluginContext context)
+        public void activate(BackendPluginContext context, PluginDescriptor descriptor)
         {
             if (failOnActivate)
             {

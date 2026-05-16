@@ -37,7 +37,7 @@ export class DevBackendTransport extends StdioBackendTransportBase {
 
   protected async spawnBackendProcess(): Promise<ChildProcessWithoutNullStreams> {
     const repoRoot = join(process.cwd(), "..");
-    const mvnwPath = join(repoRoot, process.platform === "win32" ? "mvnw.cmd" : "mvnw");
+    const mvnwPath = join(repoRoot + '/queryeer-backend/', process.platform === "win32" ? "mvnw.cmd" : "mvnw");
 
     if (!existsSync(mvnwPath)) {
       throw new Error(`Maven wrapper not found: ${mvnwPath}`);

@@ -72,6 +72,16 @@ type AppShellApi = {
   setLogFlow: (enabled: boolean) => Promise<void>;
   clearBackendLogs: () => Promise<void>;
   getMemoryUsage: () => Promise<{ heapUsed: number; heapTotal: number; rss: number }>;
+  getAboutMetadata: () => Promise<{
+    appVersion: string;
+    electronVersion: string;
+    chromiumVersion: string;
+    nodeVersion: string;
+    platform: string;
+    arch: string;
+  }>;
+  getDesktopChangelog: () => Promise<string | null>;
+  fetchBackendPluginChangelogs: () => Promise<{ plugins: Array<{ pluginId: string; pluginName: string; version: string; changelog: string }> }>;
   getExternalFrontendPlugins: () => Promise<ExternalFrontendPluginManifest[]>;
   executeBackendQuery: (params: QueryExecuteParams) => Promise<QueryExecuteResult>;
   cancelBackendQuery: (params: QueryCancelParams) => Promise<QueryCancelResult>;
@@ -220,6 +230,15 @@ const appShellApi: AppShellApi = {
   },
   getMemoryUsage: async () => {
     return ipcRenderer.invoke("app:get-memory-usage");
+  },
+  getAboutMetadata: async () => {
+    return ipcRenderer.invoke("app:get-about-metadata");
+  },
+  getDesktopChangelog: async () => {
+    return ipcRenderer.invoke("app:get-desktop-changelog");
+  },
+  fetchBackendPluginChangelogs: async () => {
+    return ipcRenderer.invoke("backend:fetch-plugin-changelogs");
   },
   getExternalFrontendPlugins: async () => {
     return ipcRenderer.invoke("plugins:get-frontend-targets");

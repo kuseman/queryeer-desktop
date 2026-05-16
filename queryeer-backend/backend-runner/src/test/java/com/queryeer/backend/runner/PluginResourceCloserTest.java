@@ -55,7 +55,7 @@ class PluginResourceCloserTest
             }
 
             @Override
-            public void activate(BackendPluginContext context)
+            public void activate(BackendPluginContext context, PluginDescriptor descriptor)
             {
             }
         };

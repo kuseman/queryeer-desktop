@@ -7,7 +7,7 @@ public interface BackendPlugin
         throw new UnsupportedOperationException("Plugin descriptor is provided by plugin manifest at runtime");
     }
 
-    void activate(BackendPluginContext context) throws Exception;
+    void activate(BackendPluginContext context, PluginDescriptor descriptor) throws Exception;
 
     default void deactivate() throws Exception
     {

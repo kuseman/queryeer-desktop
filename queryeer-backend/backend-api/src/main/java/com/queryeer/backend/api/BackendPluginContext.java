@@ -17,4 +17,6 @@ public interface BackendPluginContext
     PayloadMapper payloadMapper();
 
     PluginServiceRegistry services();
+
+    ChangelogRegistry changelogs();
 }
