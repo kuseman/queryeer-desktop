@@ -23,6 +23,23 @@
                     <mainClass>com.queryeer.backend.runner.BackendRunnerApp</mainClass>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>write-queryeer-runner-classpath</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>build-classpath</goal>
+                        </goals>
+                        <configuration>
+                            <includeScope>runtime</includeScope>
+                            <outputFile>${project.build.directory}/queryeer-runner-classpath.txt</outputFile>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 
@@ -35,21 +52,6 @@
         <dependency>
             <groupId>com.queryeer.backend</groupId>
             <artifactId>backend-transport-stdio</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.queryeer.backend</groupId>
-            <artifactId>backend-plugin-payloadbuilder</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.queryeer.backend</groupId>
-            <artifactId>backend-plugin-jdbc</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.queryeer.backend</groupId>
-            <artifactId>backend-plugin-dialect-sqlserver</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

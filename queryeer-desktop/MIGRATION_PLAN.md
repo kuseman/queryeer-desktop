@@ -183,8 +183,8 @@ Design reference: `documentation/CORE_WORKSPACE_MODEL.md`.
 - `core.editor`: pluggable editor system — owns editor registry, delegates to `core.editor.text` / `core.editor.image` / future editors
 - `core.editor.text`: Monaco-based text editor with stable `TextEditorApi` abstraction, model-per-file registry, command/keybinding wiring
 - `core.editor.image`: image viewer for common image mime types
-- `query.payloadbuilder`: query execution adapter over backend contract
-- `query.jdbc`: jdbc query adapter over backend contract
+- `queryengine.payloadbuilder`: query execution adapter over backend contract
+- `queryengine.jdbc`: jdbc query adapter over backend contract
 - `output.table`: virtualized tabular output renderer
 - `output.text`: text/log output renderer
 - `dev.query-probe`: developer-only backend execute/cancel probe panel plugin
@@ -408,7 +408,7 @@ Rule: dependencies point inward only; transport and engine details must not leak
 ### Increment 6 - Streaming + engine integration (partially started)
 
 - Streaming notifications (`progress`/`resultChunk`/`completed`/`failed`) are in protocol + fixtures
-- Remaining: activate first real engine adapter (`query.payloadbuilder`) behind backend runtime
+- Remaining: activate first real engine adapter (`queryengine.payloadbuilder`) behind backend runtime
 - Remaining: wire one query plugin through non-mocked backend execution end-to-end
 
 ### Increment 7

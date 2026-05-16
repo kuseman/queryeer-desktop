@@ -2,7 +2,10 @@ package com.queryeer.backend.api;
 
 public interface BackendPlugin
 {
-    PluginDescriptor descriptor();
+    default PluginDescriptor descriptor()
+    {
+        throw new UnsupportedOperationException("Plugin descriptor is provided by plugin manifest at runtime");
+    }
 
     void activate(BackendPluginContext context) throws Exception;
 

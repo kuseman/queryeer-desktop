@@ -146,12 +146,12 @@ Success result:
   "startedAt": "2026-01-01T00:00:00.000Z",
   "pluginStatuses": [
     {
-      "pluginId": "query.payloadbuilder",
+      "pluginId": "queryengine.payloadbuilder",
       "state": "activated",
       "reason": "Activated"
     }
   ],
-  "activatedPluginIds": ["query.payloadbuilder"],
+  "activatedPluginIds": ["queryengine.payloadbuilder"],
   "providedCapabilities": ["queryengine.execute", "queryengine.invoke"]
 }
 ```
@@ -839,6 +839,7 @@ JDBC startup preload behavior:
 Current integration notes:
 
 - Desktop default mode remains `mock-stdio`; `QUERYEER_BACKEND_STDIO=1` enables stdio-process mode.
+- Backend builtin query engines are discovered from real `plugin.json` manifests under `plugins/builtin` in dev mode. Dev manifests point at backend module `target/classes` plus Maven-generated `target/queryeer-plugin-deps.txt` files.
 - External plugin discovery uses `QUERYEER_PLUGINS_PATH` for both backend (runner side) and frontend (desktop side).
 
 See Java transport implementation:

@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { redactLogMessage } from "./backend-log-redaction.js";
 import { StdioBackendTransportBase } from "./backend-transport-stdio-base.js";
 import type { BackendTransportCallbacks } from "./backend-transport.js";
@@ -17,6 +17,15 @@ type BackendLaunchContext = {
 
 export class DevBackendTransport extends StdioBackendTransportBase {
   public readonly mode = "dev-maven" as const;
+
+  private static readonly builtinBackendModules = [
+    "backend-runner",
+    "backend-lib-queryengine-jdbc-foundation",
+    "backend-lib-queryengine-sql-parser",
+    "backend-plugin-jdbc",
+    "backend-plugin-payloadbuilder",
+    "backend-plugin-dialect-sqlserver"
+  ];
 
   public constructor(
     callbacks: BackendTransportCallbacks,
@@ -41,10 +50,11 @@ export class DevBackendTransport extends StdioBackendTransportBase {
         "-q",
         "-T", "1C",                     // Parallel build
         "-f", "queryeer-backend/pom.xml",
-        "-pl", "backend-runner",
+        "-pl", DevBackendTransport.builtinBackendModules.join(","),
         "-am",
         "-DskipTests=true",
         "-Dspotless.check.skip=true",
+        "-DcheckstyleSkip=true",
         "-Dmaven.javadoc.skip=true",    // Don't build docs
         "-Dmaven.source.skip=true",     // Don't package source code
         "-Dbuild.cache.skip=false",     // Enable build cache if plugin is present        
@@ -53,42 +63,49 @@ export class DevBackendTransport extends StdioBackendTransportBase {
       this.state.dependenciesPrepared = true;
     }
 
-    const args = [
-      "-e",
-      "-f",
-      "queryeer-backend/backend-runner/pom.xml",
-      "-Dexec.mainClass=com.queryeer.backend.runner.BackendRunnerApp",
-      "exec:java"
-    ];
-
     const appDir = this.launchContext?.appDir ?? process.env.QUERYEER_APP_DIR;
     const debugArgs =
       process.env.QUERYEER_BACKEND_JDWP?.trim() ||
       //"-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:51050";  // Sticky listening port and suspend JVM until debug connect
       "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=0";
-    const existingMavenOpts = process.env.MAVEN_OPTS?.trim();
     const libNativeArg = appDir ? `-Djava.library.path=${join(appDir, "libNative")}` : null;
+    const appDirArg = appDir ? `-Dqueryeer.app.dir=${appDir}` : null;
+    const settingsDirPath = this.launchContext?.settingsDirPath ?? process.env.QUERYEER_SETTINGS_DIR;
+    const settingsDirArg = settingsDirPath ? `-Dqueryeer.settings.dir=${settingsDirPath}` : null;
+    const classpath = this.resolveRunnerClasspath(repoRoot);
+    const args = [
+      "--enable-native-access=ALL-UNNAMED",
+      ...[debugArgs, libNativeArg, appDirArg, settingsDirArg].filter((arg): arg is string => Boolean(arg)),
+      "-cp",
+      classpath,
+      "com.queryeer.backend.runner.BackendRunnerApp"
+    ];
     const spawnEnv = {
       ...process.env,
-      MAVEN_OPTS:
-        [existingMavenOpts, debugArgs, libNativeArg].filter(Boolean).join(" ") || undefined,
       QUERYEER_APP_DIR: appDir,
-      QUERYEER_SETTINGS_DIR:
-        this.launchContext?.settingsDirPath ?? process.env.QUERYEER_SETTINGS_DIR
+      QUERYEER_SETTINGS_DIR: settingsDirPath
     };
 
-    return process.platform === "win32"
-      ? spawn(
-          "cmd.exe",
-          ["/d", "/s", "/c", `${mvnwPath} ${args.join(" ")}`],
-          { cwd: repoRoot, stdio: ["pipe", "pipe", "pipe"], windowsHide: true, env: spawnEnv }
-        )
-      : spawn(mvnwPath, args, {
-          cwd: repoRoot,
-          stdio: ["pipe", "pipe", "pipe"],
-          windowsHide: true,
-          env: spawnEnv
-        });
+    return spawn("java", args, {
+      cwd: repoRoot,
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+      env: spawnEnv
+    });
+  }
+
+  private resolveRunnerClasspath(repoRoot: string): string {
+    const runnerRoot = join(repoRoot, "queryeer-backend", "backend-runner");
+    const runnerClasses = join(runnerRoot, "target", "classes");
+    const classpathFile = join(runnerRoot, "target", "queryeer-runner-classpath.txt");
+    if (!existsSync(runnerClasses)) {
+      throw new Error(`Backend runner classes not found after Maven preparation: ${runnerClasses}`);
+    }
+    if (!existsSync(classpathFile)) {
+      throw new Error(`Backend runner classpath file not found after Maven preparation: ${classpathFile}`);
+    }
+    const dependencyClasspath = readFileSync(classpathFile, "utf8").trim();
+    return [runnerClasses, dependencyClasspath].filter(Boolean).join(delimiter);
   }
 
   private async verifyJavaAvailable(repoRoot: string): Promise<void> {
@@ -166,18 +183,18 @@ export class DevBackendTransport extends StdioBackendTransportBase {
           .filter(Boolean)
           .map(redactLogMessage);
 
+        if (code === 0) {
+          resolve();
+          return;
+        }
+
         for (const line of lines) {
           this.lastErrorLine = line;
           this.callbacks.onDiagnostic({
             level: this.classifyBackendLineLevel(line),
-            source: "backend",
+            source: "transport",
             message: line
           });
-        }
-
-        if (code === 0) {
-          resolve();
-          return;
         }
         reject(
           new Error(

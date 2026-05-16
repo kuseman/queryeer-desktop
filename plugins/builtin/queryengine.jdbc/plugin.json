@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "queryengine.jdbc",
+  "name": "JDBC Query Engine",
+  "version": "0.1.0",
+  "description": "JDBC query execution and connection runtime.",
+  "dependencies": ["queryengine.runtime.jdbc-foundation", "queryengine.runtime.sql-parser"],
+  "providesCapabilities": ["queryengine.execute", "queryengine.jdbc.connection"],
+  "requiredCapabilities": [],
+  "backend": {
+    "entrypointClass": "com.queryeer.backend.plugin.jdbc.JdbcBackendPlugin",
+    "classpath": {
+      "root": "../../../queryeer-backend/backend-plugin-jdbc",
+      "include": ["target/classes", "@target/queryeer-plugin-deps.txt"]
+    }
+  }
+}

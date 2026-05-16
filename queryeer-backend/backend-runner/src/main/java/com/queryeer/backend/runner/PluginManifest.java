@@ -3,7 +3,7 @@ package com.queryeer.backend.runner;
 import java.util.List;
 
 record PluginManifest(int schemaVersion, String id, String name, String version, BackendTarget backend, FrontendTarget frontend, List<String> dependencies, List<String> providesCapabilities,
-        List<String> requiredCapabilities, String description, Packaging packaging)
+        List<String> requiredCapabilities, String description, Packaging packaging, RuntimeTarget runtime)
 {
 
     List<String> dependenciesOrEmpty()
@@ -41,6 +41,22 @@ record PluginManifest(int schemaVersion, String id, String name, String version,
     }
 
     record Layout(String jarsDir, String typescriptDir)
+    {
+    }
+
+    record RuntimeTarget(SharedRuntime shared)
+    {
+    }
+
+    record SharedRuntime(List<String> parentFirstPackagePrefixes, List<NativeLibrary> nativeLibraries, List<SharedArtifact> sharedArtifacts)
+    {
+    }
+
+    record NativeLibrary(String os, String arch, List<String> searchPaths, List<String> filePatterns, boolean required, String loaderClass)
+    {
+    }
+
+    record SharedArtifact(String pattern, boolean required)
     {
     }
 }

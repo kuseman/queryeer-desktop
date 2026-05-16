@@ -37,25 +37,28 @@ public final class BackendRunnerModule
     {
         int exitCode = 0;
         Map<String, String> config = resolveConfigValues();
-        preloadSqlServerNativeAuth(config);
 
         ClassLoader appClassLoader = BackendRunnerModule.class.getClassLoader();
-        List<URL> sharedLibUrls = SharedLibraryLoader.collect(config.get("queryeer.app.dir"));
-
         String appDir = config.getOrDefault("queryeer.app.dir", ".");
+        Path builtinsDir = resolveBuiltinsDir(Path.of(appDir));
+        List<PluginRuntimeContributionCollector.ManifestSource> builtinManifests = loadBuiltinManifests(builtinsDir);
+        PluginRuntimeContributionCollector.PluginRuntimeContributions runtimeContributions = new PluginRuntimeContributionCollector().collect(builtinManifests);
+        List<URL> sharedLibUrls = new ArrayList<>(SharedLibraryLoader.collect(config.get("queryeer.app.dir")));
+        sharedLibUrls.addAll(runtimeContributions.sharedClasspath());
+
         SharedClassLoader sharedLoader = new SharedClassLoader(sharedLibUrls, appClassLoader);
-        PluginClassLoaderFactory classLoaderFactory = new PluginClassLoaderFactory(sharedLoader);
-        Path builtinsDir = Path.of(appDir, "plugins", "builtin");
+        PluginClassLoaderFactory classLoaderFactory = new PluginClassLoaderFactory(sharedLoader, runtimeContributions.parentFirstPrefixes());
 
         SecuritySession securitySession = new SecuritySession();
         BackendPlatformServices services = BackendPlatformServices.fileBased(config, securitySession);
+        new NativeLibraryPreloader().preload(Path.of(appDir), runtimeContributions.nativeLibraries(), sharedLoader, services.logger());
         PluginDiscoveryService discoveryService = new PluginDiscoveryService(services, classLoaderFactory);
 
         PluginRuntime runtime = new PluginRuntime();
         List<DiscoveredPlugin> discoveredPlugins;
         try
         {
-            discoveredPlugins = discoverPlugins(discoveryService, services, classLoaderFactory, builtinsDir, sharedLibUrls, appClassLoader);
+            discoveredPlugins = discoverPlugins(discoveryService, services, builtinsDir);
             for (DiscoveredPlugin discovered : discoveredPlugins)
             {
                 runtime.register(discovered.plugin());
@@ -149,55 +152,6 @@ public final class BackendRunnerModule
         return exitCode;
     }
 
-    private void preloadSqlServerNativeAuth(Map<String, String> config)
-    {
-        // String appDir = config.getOrDefault("queryeer.app.dir", ".");
-        // Path libNativeDir = Path.of(appDir, "libNative");
-        // if (!Files.isDirectory(libNativeDir))
-        // {
-        // System.err.println(withCorrelation("SQL Server native auth preload skipped (missing directory: " + libNativeDir + ")", null));
-        // return;
-        // }
-        //
-        // List<Path> candidates = new ArrayList<>();
-        // candidates.add(libNativeDir.resolve("mssql-jdbc_auth.dll"));
-        // candidates.add(libNativeDir.resolve("sqljdbc_auth.dll"));
-        //
-        // try (var stream = Files.list(libNativeDir))
-        // {
-        // stream.filter(path -> path.getFileName()
-        // .toString()
-        // .toLowerCase()
-        // .matches("mssql-jdbc_auth.*\\.dll"))
-        // .sorted(Comparator.reverseOrder())
-        // .forEach(candidates::add);
-        // }
-        // catch (IOException ignored)
-        // {
-        // }
-        //
-        // for (Path candidate : candidates)
-        // {
-        // if (!Files.isRegularFile(candidate))
-        // {
-        // continue;
-        // }
-        // try
-        // {
-        // System.load(candidate.toAbsolutePath()
-        // .toString());
-        // System.err.println(withCorrelation("Preloaded SQL Server native auth DLL from " + candidate.toAbsolutePath(), null));
-        // return;
-        // }
-        // catch (UnsatisfiedLinkError e)
-        // {
-        // System.err.println(withCorrelation("SQL Server native auth preload attempt failed for " + candidate.toAbsolutePath() + ": " + e.getMessage(), null));
-        // }
-        // }
-        //
-        // System.err.println(withCorrelation("SQL Server native auth preload skipped (no matching DLL in " + libNativeDir + ")", null));
-    }
-
     static Map<String, String> resolveConfigValues()
     {
         Map<String, String> values = new LinkedHashMap<>();
@@ -226,8 +180,7 @@ public final class BackendRunnerModule
         return second;
     }
 
-    private List<DiscoveredPlugin> discoverPlugins(PluginDiscoveryService discoveryService, BackendPlatformServices services, PluginClassLoaderFactory classLoaderFactory, Path builtinsDir,
-            List<URL> sharedLibUrls, ClassLoader appClassLoader)
+    private List<DiscoveredPlugin> discoverPlugins(PluginDiscoveryService discoveryService, BackendPlatformServices services, Path builtinsDir)
     {
         PluginDiscoveryPlan discoveryPlan = PluginDiscoveryPlan.of(resolveDiscoveryMode(), resolvePluginPath());
         PluginDiscoveryMode mode = discoveryPlan.effectiveMode();
@@ -241,7 +194,7 @@ public final class BackendRunnerModule
 
         if (mode == PluginDiscoveryMode.BUILTIN)
         {
-            return new BuiltinPluginDiscovery(new PluginFactory(), services, classLoaderFactory, builtinsDir, sharedLibUrls, appClassLoader).discover();
+            return new BuiltinPluginDiscovery(discoveryService, builtinsDir).discover();
         }
 
         if (mode == PluginDiscoveryMode.EXTERNAL)
@@ -252,10 +205,40 @@ public final class BackendRunnerModule
         }
 
         String path = discoveryPlan.requiredPathFor(PluginDiscoveryMode.MIXED);
-        List<DiscoveredPlugin> builtin = new BuiltinPluginDiscovery(new PluginFactory(), services, classLoaderFactory, builtinsDir, sharedLibUrls, appClassLoader).discover();
+        List<DiscoveredPlugin> builtin = new BuiltinPluginDiscovery(discoveryService, builtinsDir).discover();
         List<DiscoveredPlugin> external = discoveryService.discoverFromPath(path)
                 .backendPlugins();
         return mergeDiscoveredPlugins(builtin, external);
+    }
+
+    private List<PluginRuntimeContributionCollector.ManifestSource> loadBuiltinManifests(Path builtinsDir)
+    {
+        PluginSourceExplorer sourceExplorer = new PluginSourceExplorer();
+        PluginManifestLoader manifestLoader = new PluginManifestLoader();
+        return sourceExplorer.discoverPluginSources(builtinsDir)
+                .stream()
+                .map(source -> new PluginRuntimeContributionCollector.ManifestSource(manifestLoader.load(source), source))
+                .toList();
+    }
+
+    private Path resolveBuiltinsDir(Path appDir)
+    {
+        Path appBuiltinsDir = appDir.resolve("plugins")
+                .resolve("builtin");
+        if (java.nio.file.Files.isDirectory(appBuiltinsDir))
+        {
+            return appBuiltinsDir;
+        }
+
+        Path workingDirBuiltinsDir = Path.of("plugins", "builtin")
+                .toAbsolutePath()
+                .normalize();
+        if (java.nio.file.Files.isDirectory(workingDirBuiltinsDir))
+        {
+            return workingDirBuiltinsDir;
+        }
+
+        return appBuiltinsDir;
     }
 
     static List<DiscoveredPlugin> mergeDiscoveredPlugins(List<DiscoveredPlugin> primary, List<DiscoveredPlugin> secondary)

@@ -138,4 +138,66 @@ class PluginManifestDiscoveryTest
         Assertions.assertTrue(error.getMessage()
                 .contains("backend.classpath.include"));
     }
+
+    @Test
+    void loadsSharedRuntimeManifest() throws IOException
+    {
+        Path pluginFolder = tempDir.resolve("runtime-plugin");
+        Files.createDirectories(pluginFolder);
+
+        String json = """
+                {
+                  "schemaVersion": 1,
+                  "id": "queryengine.runtime.jdbc-foundation",
+                  "name": "JDBC Foundation Runtime",
+                  "version": "1.0.0",
+                  "backend": {
+                    "entrypointClass": "com.example.RuntimePlugin"
+                  },
+                  "runtime": {
+                    "shared": {
+                      "parentFirstPackagePrefixes": ["com.queryeer.backend.queryengine.jdbc."],
+                      "nativeLibraries": []
+                    }
+                  }
+                }
+                """;
+        Files.writeString(pluginFolder.resolve("plugin.json"), json, StandardCharsets.UTF_8);
+
+        PluginManifest manifest = new PluginManifestLoader().load(pluginFolder);
+
+        Assertions.assertEquals(List.of("com.queryeer.backend.queryengine.jdbc."), manifest.runtime()
+                .shared()
+                .parentFirstPackagePrefixes());
+    }
+
+    @Test
+    void rejectsUnsafeSharedRuntimePrefix() throws IOException
+    {
+        Path pluginFolder = tempDir.resolve("runtime-plugin");
+        Files.createDirectories(pluginFolder);
+
+        String json = """
+                {
+                  "schemaVersion": 1,
+                  "id": "bad.runtime",
+                  "name": "Bad Runtime",
+                  "version": "1.0.0",
+                  "backend": {
+                    "entrypointClass": "com.example.RuntimePlugin"
+                  },
+                  "runtime": {
+                    "shared": {
+                      "parentFirstPackagePrefixes": ["com."]
+                    }
+                  }
+                }
+                """;
+        Files.writeString(pluginFolder.resolve("plugin.json"), json, StandardCharsets.UTF_8);
+
+        PluginDiscoveryException error = Assertions.assertThrows(PluginDiscoveryException.class, () -> new PluginManifestLoader().load(pluginFolder));
+
+        Assertions.assertTrue(error.getMessage()
+                .contains("Invalid runtime.shared.parentFirstPackagePrefixes"));
+    }
 }

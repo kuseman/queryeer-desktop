@@ -63,7 +63,7 @@ class BackendRunnerModuleTest
     private DiscoveredPlugin discovered(String pluginId, Path source)
     {
         PluginManifest manifest = new PluginManifest(1, pluginId, pluginId, "0.1.0", new PluginManifest.BackendTarget("com.example.Plugin", null, null), null, List.of(), List.of(), List.of(), null,
-                null);
+                null, null);
         return new DiscoveredPlugin(manifest, null, source, false, null);
     }
 

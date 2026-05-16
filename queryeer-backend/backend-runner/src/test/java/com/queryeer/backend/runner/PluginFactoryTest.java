@@ -20,7 +20,7 @@ class PluginFactoryTest
     {
         PluginFactory pluginFactory = new PluginFactory();
         PluginManifest manifest = new PluginManifest(1, "test.plugin", "Test Plugin", "1.0.0", new PluginManifest.BackendTarget(TestEntrypointPlugin.class.getName(), null, null), null, List.of(),
-                List.of(), List.of(), null, null);
+                List.of(), List.of(), null, null, null);
 
         BackendPlugin plugin = pluginFactory.instantiate(manifest, getClass().getClassLoader(), Path.of("test"), BackendPlatformServices.defaultServices());
 
@@ -33,7 +33,7 @@ class PluginFactoryTest
     {
         PluginFactory pluginFactory = new PluginFactory();
         PluginManifest manifest = new PluginManifest(1, "test.plugin", "Test Plugin", "1.0.0", new PluginManifest.BackendTarget(null, TestPluginFactory.class.getName(), null), null, List.of(),
-                List.of(), List.of(), null, null);
+                List.of(), List.of(), null, null, null);
 
         BackendPlugin plugin = pluginFactory.instantiate(manifest, getClass().getClassLoader(), Path.of("test"), BackendPlatformServices.defaultServices());
 

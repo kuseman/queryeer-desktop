@@ -16,7 +16,7 @@ record PluginDiscoveryPlan(PluginDiscoveryMode mode, Optional<String> pluginPath
         {
             return mode;
         }
-        return pluginPath.isPresent() ? PluginDiscoveryMode.EXTERNAL
+        return pluginPath.isPresent() ? PluginDiscoveryMode.MIXED
                 : PluginDiscoveryMode.BUILTIN;
     }
 
