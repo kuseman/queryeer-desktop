@@ -42,6 +42,18 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>com.queryeer.backend</groupId>
+            <artifactId>backend-lib-queryengine-jdbc-foundation</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.queryeer.backend</groupId>
+            <artifactId>backend-lib-queryengine-sql-parser</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <version>2.2.224</version>

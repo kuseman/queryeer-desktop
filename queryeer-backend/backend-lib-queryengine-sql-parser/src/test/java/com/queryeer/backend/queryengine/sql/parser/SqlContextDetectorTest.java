@@ -1,6 +1,8 @@
 package com.queryeer.backend.queryengine.sql.parser;
 
-import static com.queryeer.backend.queryengine.sql.parser.SqlParseContext.*;
+import static com.queryeer.backend.queryengine.sql.parser.SqlParseContext.COLUMN_REFERENCE;
+import static com.queryeer.backend.queryengine.sql.parser.SqlParseContext.OTHER;
+import static com.queryeer.backend.queryengine.sql.parser.SqlParseContext.TABLE_REFERENCE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import org.junit.jupiter.api.Test;

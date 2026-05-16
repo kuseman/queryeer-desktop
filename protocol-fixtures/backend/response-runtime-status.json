@@ -6,19 +6,19 @@
     "startedAt": "2026-01-01T00:00:00.000Z",
     "pluginStatuses": [
       {
-        "pluginId": "query.payloadbuilder",
+        "pluginId": "queryengine.payloadbuilder",
         "state": "activated",
         "reason": "Activated"
       },
       {
-        "pluginId": "query.jdbc",
+        "pluginId": "queryengine.jdbc",
         "state": "activated",
         "reason": "Activated"
       }
     ],
     "activatedPluginIds": [
-      "query.payloadbuilder",
-      "query.jdbc"
+      "queryengine.payloadbuilder",
+      "queryengine.jdbc"
     ],
     "providedCapabilities": [
       "queryengine.execute"

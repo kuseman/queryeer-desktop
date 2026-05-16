@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "queryengine.runtime.sql-parser",
+  "name": "SQL Parser Runtime",
+  "version": "0.1.0",
+  "description": "Shared runtime classes and native resources for SQL parsing.",
+  "dependencies": [],
+  "providesCapabilities": ["queryengine.runtime.sql-parser"],
+  "requiredCapabilities": [],
+  "backend": {
+    "entrypointClass": "com.queryeer.backend.queryengine.sql.parser.runtime.SqlParserRuntimePlugin",
+    "classpath": {
+      "root": "../../../queryeer-backend/backend-lib-queryengine-sql-parser",
+      "include": ["target/classes", "@target/queryeer-plugin-deps.txt"]
+    }
+  },
+  "runtime": {
+    "shared": {
+      "parentFirstPackagePrefixes": ["com.queryeer.backend.queryengine.sql.parser."],
+      "nativeLibraries": [],
+      "sharedArtifacts": []
+    }
+  }
+}

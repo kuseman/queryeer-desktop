@@ -120,17 +120,17 @@ export class MockJavaBackend {
       startedAt: new Date(this.startedAt).toISOString(),
       pluginStatuses: [
         {
-          pluginId: "query.payloadbuilder",
+          pluginId: "queryengine.payloadbuilder",
           state: "activated",
           reason: "Activated"
         },
         {
-          pluginId: "query.jdbc",
+          pluginId: "queryengine.jdbc",
           state: "activated",
           reason: "Activated"
         }
       ],
-      activatedPluginIds: ["query.payloadbuilder", "query.jdbc"],
+      activatedPluginIds: ["queryengine.payloadbuilder", "queryengine.jdbc"],
       providedCapabilities: ["queryengine.execute", "queryengine.cancel", "queryengine.invoke"]
     };
 

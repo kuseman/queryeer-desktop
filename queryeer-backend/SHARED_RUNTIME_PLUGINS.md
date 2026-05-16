@@ -35,11 +35,21 @@ Introduce **shared-runtime plugins** that can contribute runtime requirements in
 
 The runner aggregates these contributions before plugin activation and applies them once, centrally.
 
-## Proposed Design
+## Implemented Design
+
+Builtin shared-runtime modules are real backend plugins with tiny no-op entrypoints so they appear in normal plugin logs and runtime status. Their manifests live under `plugins/builtin` and use the same dev classpath mechanism as query engine plugins.
+
+Current builtin runtime/plugin ids:
+
+- `queryengine.runtime.jdbc-foundation`
+- `queryengine.runtime.sql-parser`
+- `queryengine.jdbc`
+- `queryengine.jdbc.dialect.sqlserver`
+- `queryengine.payloadbuilder`
 
 ### 1) New runtime contribution model
 
-Add a descriptor model consumed by `backend-runner`, for example:
+The descriptor model consumed by `backend-runner` is `runtime.shared` in `plugin.json`:
 
 - `SharedRuntimeContribution`
   - `id`
@@ -58,7 +68,7 @@ Native preload spec example fields:
 
 ### 2) How plugins contribute
 
-Allow plugin manifests to include a runtime block (shape can be refined):
+Plugin manifests can include a runtime block:
 
 ```yaml
 runtime:
@@ -73,7 +83,7 @@ runtime:
         required: false
 ```
 
-Only trusted/builtin plugins should be allowed to contribute parent-first/native rules.
+Only trusted builtin plugin manifests are currently collected for parent-first/native rules.
 
 ### 3) Runner startup sequence
 
@@ -83,7 +93,7 @@ Only trusted/builtin plugins should be allowed to contribute parent-first/native
    - deduplicate prefixes
    - validate package prefix format
    - validate native pattern safety
-4. Build `SharedClassLoader` from `libShared`.
+4. Build `SharedClassLoader` from `libShared` plus shared-runtime plugin classpaths.
 5. Build `ParentAwarePluginClassLoader` with merged parent-first prefixes.
 6. Preload native libraries in parent scope using absolute paths.
 7. Activate plugins.
@@ -121,12 +131,11 @@ And URL generation for native auth should remain explicit:
 - Reject wildcard parent-first prefixes like `com.` or empty values.
 - Restrict native search paths to app-owned directories.
 
-## Migration Plan
+## Migration Status
 
-1. Keep current hardcoded SQL Server workaround as compatibility fallback.
-2. Implement contribution model and startup aggregation.
-3. Move SQL Server-specific parent-first/native rules from hardcoded code to contribution config.
-4. Remove hardcoded rule once contribution path is proven in CI and manual smoke tests.
+- SQL Server-specific parent-first/native rules now live in `plugins/builtin/queryengine.jdbc.dialect.sqlserver/plugin.json`.
+- JDBC foundation and SQL parser shared class identity rules now live in their runtime plugin manifests.
+- `PluginClassLoaderFactory` keeps only base JVM/API/contract parent-first rules in code.
 
 ## Acceptance Criteria
 

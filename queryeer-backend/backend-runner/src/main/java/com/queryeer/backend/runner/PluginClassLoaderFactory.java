@@ -1,5 +1,6 @@
 package com.queryeer.backend.runner;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -12,17 +13,28 @@ import java.util.List;
 
 final class PluginClassLoaderFactory
 {
-    private static final List<String> PARENT_FIRST_PREFIXES = List.of("java.", "javax.", "jdk.", "sun.", "com.queryeer.backend.api.", "com.queryeer.backend.contract.",
-            "com.queryeer.backend.queryengine.jdbc.", "com.microsoft.sqlserver.jdbc.");
+    static final List<String> BASE_PARENT_FIRST_PREFIXES = List.of("java.", "javax.", "jdk.", "sun.", "com.queryeer.backend.api.", "com.queryeer.backend.contract.");
 
     private final SharedClassLoader sharedLoader;
+    private final List<String> parentFirstPrefixes;
 
     PluginClassLoaderFactory(SharedClassLoader sharedLoader)
     {
+        this(sharedLoader, BASE_PARENT_FIRST_PREFIXES);
+    }
+
+    PluginClassLoaderFactory(SharedClassLoader sharedLoader, List<String> parentFirstPrefixes)
+    {
         this.sharedLoader = sharedLoader;
+        this.parentFirstPrefixes = List.copyOf(parentFirstPrefixes);
     }
 
     URLClassLoader createClassLoader(Path source, PluginManifest manifest)
+    {
+        return new ParentAwarePluginClassLoader(resolveClasspath(source, manifest).toArray(URL[]::new), sharedLoader, parentFirstPrefixes);
+    }
+
+    static List<URL> resolveClasspath(Path source, PluginManifest manifest)
     {
         List<URL> urls = new ArrayList<>();
         try
@@ -33,7 +45,7 @@ final class PluginClassLoaderFactory
             {
                 buildManifestClasspath(source, manifest.backend()
                         .classpath(), urls);
-                return new ParentAwarePluginClassLoader(urls.toArray(URL[]::new), sharedLoader);
+                return urls;
             }
 
             if (Files.isDirectory(source))
@@ -65,10 +77,10 @@ final class PluginClassLoaderFactory
             throw new PluginDiscoveryException("Failed to build classpath for plugin source: " + source, e);
         }
 
-        return new ParentAwarePluginClassLoader(urls.toArray(URL[]::new), sharedLoader);
+        return urls;
     }
 
-    private void buildManifestClasspath(Path source, PluginManifest.Classpath classpath, List<URL> urls) throws IOException
+    private static void buildManifestClasspath(Path source, PluginManifest.Classpath classpath, List<URL> urls) throws IOException
     {
         if (!Files.isDirectory(source))
         {
@@ -109,7 +121,7 @@ final class PluginClassLoaderFactory
         }
     }
 
-    private void addClasspathEntriesFromList(Path root, Path listFile, List<URL> urls, Path source) throws IOException
+    private static void addClasspathEntriesFromList(Path root, Path listFile, List<URL> urls, Path source) throws IOException
     {
         if (!Files.exists(listFile)
                 || !Files.isRegularFile(listFile))
@@ -127,11 +139,18 @@ final class PluginClassLoaderFactory
             {
                 continue;
             }
-            addClasspathEntry(root, candidate, urls, source);
+            for (String entry : candidate.split(java.util.regex.Pattern.quote(File.pathSeparator)))
+            {
+                String expanded = entry.trim();
+                if (!expanded.isEmpty())
+                {
+                    addClasspathEntry(root, expanded, urls, source);
+                }
+            }
         }
     }
 
-    private void addClasspathEntry(Path root, String candidate, List<URL> urls, Path source) throws IOException
+    private static void addClasspathEntry(Path root, String candidate, List<URL> urls, Path source) throws IOException
     {
         if (containsGlob(candidate))
         {
@@ -153,7 +172,7 @@ final class PluginClassLoaderFactory
                 .toURL());
     }
 
-    private void addGlobEntries(Path root, String pattern, List<URL> urls, Path source) throws IOException
+    private static void addGlobEntries(Path root, String pattern, List<URL> urls, Path source) throws IOException
     {
         List<Path> matches = new ArrayList<>();
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(root, pattern))
@@ -176,7 +195,7 @@ final class PluginClassLoaderFactory
         }
     }
 
-    private boolean containsGlob(String candidate)
+    private static boolean containsGlob(String candidate)
     {
         return candidate.indexOf('*') >= 0
                 || candidate.indexOf('?') >= 0;
@@ -189,9 +208,12 @@ final class PluginClassLoaderFactory
 
     static final class ParentAwarePluginClassLoader extends URLClassLoader
     {
-        ParentAwarePluginClassLoader(URL[] urls, ClassLoader parent)
+        private final List<String> parentFirstPrefixes;
+
+        ParentAwarePluginClassLoader(URL[] urls, ClassLoader parent, List<String> parentFirstPrefixes)
         {
             super(urls, parent);
+            this.parentFirstPrefixes = List.copyOf(parentFirstPrefixes);
         }
 
         @Override
@@ -231,7 +253,7 @@ final class PluginClassLoaderFactory
 
         private boolean isParentFirst(String name)
         {
-            return PARENT_FIRST_PREFIXES.stream()
+            return parentFirstPrefixes.stream()
                     .anyMatch(name::startsWith);
         }
     }

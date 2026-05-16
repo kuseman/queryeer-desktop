@@ -1,14 +1,12 @@
 package com.queryeer.backend.plugin.jdbc;
 
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import com.queryeer.backend.api.BackendPlugin;
 import com.queryeer.backend.api.BackendPluginContext;
 import com.queryeer.backend.api.ConfigService;
-import com.queryeer.backend.api.PluginDescriptor;
 import com.queryeer.backend.api.parse.IncrementalParseFunction;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 import com.queryeer.backend.api.parse.ParseSessionSnapshot;
@@ -41,12 +39,6 @@ public final class JdbcBackendPlugin implements BackendPlugin
     JdbcBackendPlugin(JdbcDialectDiscovery dialectDiscovery)
     {
         this.dialectDiscovery = dialectDiscovery;
-    }
-
-    @Override
-    public PluginDescriptor descriptor()
-    {
-        return new PluginDescriptor("query.jdbc", "JDBC Query Engine", "0.1.0", List.of(), List.of("queryengine.execute", "queryengine.jdbc.connection"), List.of());
     }
 
     @Override

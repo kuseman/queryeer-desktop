@@ -41,7 +41,7 @@ class PluginResourceCloserTest
 
     private static PluginManifest manifest()
     {
-        return new PluginManifest(1, "test.plugin", "Test Plugin", "1.0.0", new PluginManifest.BackendTarget("example.Plugin", null, null), null, List.of(), List.of(), List.of(), null, null);
+        return new PluginManifest(1, "test.plugin", "Test Plugin", "1.0.0", new PluginManifest.BackendTarget("example.Plugin", null, null), null, List.of(), List.of(), List.of(), null, null, null);
     }
 
     private static BackendPlugin plugin()

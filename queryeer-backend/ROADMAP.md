@@ -2,9 +2,6 @@
 
 Large features in prio
 
-- [ ] Backend builtin modules should be discovered normally (the same as with a dist build) 
-         but with target/classes as source class path with m2 dep references etc.
-   - [ ] Runtime services plugins. Put on top of class loader chain. Load native libraries and load jdbc drivers etc. See queryeer-backend\SHARED_RUNTIME_PLUGINS.md
 - [ ] Create a distribution flow. Github etc.
     - [ ] jlink
     - [ ] matrix releases
@@ -23,6 +20,9 @@ Large features in prio
 - [ ] Modularize
     - Make sure all contributions have contracts and all API:s are located in a separate project
       that might end up on npmjs one day
+- [X] Backend builtin modules should be discovered normally (the same as with a dist build) 
+         but with target/classes as source class path with m2 dep references etc.
+   - [X] Runtime services plugins. Put on top of class loader chain. Load native libraries and load jdbc drivers etc. See queryeer-backend\SHARED_RUNTIME_PLUGINS.md
 - [X] Hoover table / etc.
     - Show popup with schema
     - Settings turn on/off

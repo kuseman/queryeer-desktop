@@ -248,7 +248,7 @@ type FilesRegistry = {
 
 Each editor plugin uses its own `editorKey` (e.g., `"monaco.editor"`) to namespace its state within `persistentViewState`.
 
-Engine plugins (`query.payloadbuilder`, `query.jdbc`) register both a mime resolver and an engine resolver. Core remains engine-agnostic.
+Engine plugins (`queryengine.payloadbuilder`, `queryengine.jdbc`) register both a mime resolver and an engine resolver. Core remains engine-agnostic.
 
 ## 8. Incremental rollout
 

@@ -103,12 +103,12 @@ const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
           startedAt: "2026-01-01T00:00:00.000Z",
           pluginStatuses: [
             {
-              pluginId: "query.payloadbuilder",
+              pluginId: "queryengine.payloadbuilder",
               state: "activated",
               reason: "Activated"
             }
           ],
-          activatedPluginIds: ["query.payloadbuilder"],
+          activatedPluginIds: ["queryengine.payloadbuilder"],
           providedCapabilities: ["queryengine.execute", "queryengine.invoke"]
         } satisfies RuntimeStatusResult);
         return;

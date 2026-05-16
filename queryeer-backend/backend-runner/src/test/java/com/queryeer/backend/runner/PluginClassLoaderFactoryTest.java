@@ -1,5 +1,6 @@
 package com.queryeer.backend.runner;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -81,6 +82,28 @@ class PluginClassLoaderFactoryTest
     }
 
     @Test
+    void resolvesPathSeparatorDelimitedClasspathEntriesFromDepsList() throws Exception
+    {
+        Path sourceDir = tempDir.resolve("plugin");
+        Files.createDirectories(sourceDir);
+        Path classesDir = sourceDir.resolve("classes");
+        Path depJarA = sourceDir.resolve("dep-a.jar");
+        Path depJarB = sourceDir.resolve("dep-b.jar");
+        compilePluginClass(classesDir, "dev.sample.PluginType", "plugin");
+        Files.writeString(depJarA, "not-a-real-jar", StandardCharsets.UTF_8);
+        Files.writeString(depJarB, "not-a-real-jar", StandardCharsets.UTF_8);
+        Files.writeString(sourceDir.resolve("deps-list.txt"), depJarA + File.pathSeparator + depJarB, StandardCharsets.UTF_8);
+
+        PluginManifest manifest = pluginManifest(new PluginManifest.Classpath(".", List.of("classes", "@deps-list.txt")));
+        PluginClassLoaderFactory factory = createFactory();
+        try (var classLoader = factory.createClassLoader(sourceDir, manifest))
+        {
+            Class<?> loaded = classLoader.loadClass("dev.sample.PluginType");
+            Assertions.assertSame(classLoader, loaded.getClassLoader());
+        }
+    }
+
+    @Test
     void failsWhenDepsListEntryIsMissing() throws Exception
     {
         Path sourceDir = tempDir.resolve("plugin");
@@ -115,7 +138,8 @@ class PluginClassLoaderFactoryTest
 
     private PluginManifest pluginManifest(PluginManifest.Classpath classpath)
     {
-        return new PluginManifest(1, "dev.plugin", "Dev Plugin", "0.1.0", new PluginManifest.BackendTarget("dev.sample.Plugin", null, classpath), null, List.of(), List.of(), List.of(), null, null);
+        return new PluginManifest(1, "dev.plugin", "Dev Plugin", "0.1.0", new PluginManifest.BackendTarget("dev.sample.Plugin", null, classpath), null, List.of(), List.of(), List.of(), null, null,
+                null);
     }
 
     private void compilePluginClass(Path classesRoot, String fqcn, String sourceValue) throws IOException

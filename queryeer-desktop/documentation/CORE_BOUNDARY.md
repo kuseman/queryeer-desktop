@@ -41,7 +41,7 @@ Primary direction: querying capabilities are external. Core is a secure host + w
 
 ## External plugin categories (must stay out of core)
 
-- Query engine plugins (for example: `query.payloadbuilder`, `query.jdbc`).
+- Query engine plugins (for example: `queryengine.payloadbuilder`, `queryengine.jdbc`).
 - Query/editor UX plugins (query tabs/notebooks/engine-specific editing helpers).
 - Connection management plugins and provider-specific auth UX.
 - Output/rendering plugins (`output.table`, `output.text`, charting, custom visualizations).

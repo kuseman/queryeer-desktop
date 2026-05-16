@@ -1,38 +1,45 @@
-# Queryeer Desktop (Increment 1)
+# Queryeer Desktop
 
-This folder is the first incremental step in migrating Queryeer toward an Electron frontend with a Java backend.
-
-Current scope:
-
-- Electron + React + TypeScript scaffold
-- secure process split (`main` / `preload` / `renderer`)
-- linting and type-check scripts
-- build + packaging scripts (`electron-builder`)
-- minimal, runnable shell UI
-
-Out of scope in this increment:
-
-- Java backend integration
-- plugin runtime and module loading
-- editor/query/output modules
+Electron + React + TypeScript desktop shell for Queryeer. In development it starts the Java backend from the repository using the dev backend transport.
 
 ## Prerequisites
 
 - Node.js 20+
+- Java 25 compatible JDK on `PATH`
+- Run `npm install` once in this folder
+
+## Daily Development
+
+```bash
+npm run dev
+```
+
+The app starts Electron and launches the Java backend when needed. On first backend startup per Electron session, Maven prepares the Java backend and builtin plugin classpaths. The backend process itself is then launched directly with `java`.
+
+Builtin backend plugins are real manifest plugins during development. Their manifests live under repository `plugins/builtin`, point at Java module `target/classes`, and use generated `target/queryeer-plugin-deps.txt` files for dependency jars.
+
+## User Data
+
+Electron's user-data directory is passed to the backend as `QUERYEER_APP_DIR`. Backend runtime files should appear there, including:
+
+- `libNative/`
+- `libShared/`
+- `jdbc-schema-cache/`
+
+If a file like `jdbc-schema-cache/` appears in the repository root, that usually means backend app-dir propagation regressed.
 
 ## Commands
 
 ```bash
-npm install
-npm run dev
-npm run lint
 npm run typecheck
+npm run lint
 npm run build
+npm run test:integration
 npm run dist:dir
 ```
 
-## Suggested next increments
+For backend-only verification, run from the repository root:
 
-1. Establish plugin contracts and lifecycle for shell modules (filesystem/layout/panels).
-2. Add IPC contract definitions and a backend process adapter boundary.
-3. Introduce a minimal module host that can load one internal renderer plugin.
+```bash
+./mvnw -f queryeer-backend/pom.xml clean verify
+```

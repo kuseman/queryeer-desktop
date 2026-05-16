@@ -16,11 +16,11 @@ class PluginDiscoveryPlanTest
     }
 
     @Test
-    void autoResolvesToExternalWhenPathPresent()
+    void autoResolvesToMixedWhenPathPresent()
     {
         PluginDiscoveryPlan plan = PluginDiscoveryPlan.of(PluginDiscoveryMode.AUTO, Optional.of("plugins"));
 
-        Assertions.assertEquals(PluginDiscoveryMode.EXTERNAL, plan.effectiveMode());
+        Assertions.assertEquals(PluginDiscoveryMode.MIXED, plan.effectiveMode());
     }
 
     @Test

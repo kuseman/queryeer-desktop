@@ -92,11 +92,6 @@ jobs:
           cd ./queryeer-desktop
           npm ci
 
-      - name: Run dev classpath probe smoke check
-        run: |
-          cd ./queryeer-desktop
-          npm run dev:classpath:probe:smoke
-
       - name: Run integration tests
         run: |
           cd ./queryeer-desktop

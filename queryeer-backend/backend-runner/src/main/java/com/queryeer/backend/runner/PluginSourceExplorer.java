@@ -5,6 +5,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 final class PluginSourceExplorer
@@ -34,6 +35,9 @@ final class PluginSourceExplorer
         {
             throw new PluginDiscoveryException("Failed to list plugin directory: " + pluginsDirectory, e);
         }
-        return sources;
+        return sources.stream()
+                .sorted(Comparator.comparing(path -> path.getFileName()
+                        .toString()))
+                .toList();
     }
 }

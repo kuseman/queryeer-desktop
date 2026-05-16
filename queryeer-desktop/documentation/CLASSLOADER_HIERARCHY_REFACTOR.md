@@ -1,6 +1,6 @@
 # ClassLoader Hierarchy Refactoring Plan
 
-Status: proposed and approved — implementation pending
+Status: implemented for backend dev-mode builtin plugins
 
 Date: 2026-05-04
 
@@ -31,10 +31,9 @@ Platform/Bootstrap ClassLoader (JVM)
       ├── backend-runner                     ← Bootstrap, orchestration, classloader factory
       ├── backend-lib-queryengine-jdbc-foundation  ← JDBC abstractions, JdbcDriverLoader helper
       └── SharedClassLoader                  ← libShared/*.jar (JDBC drivers: mssql, postgres, mysql, etc.)
-           ├── PluginCL: query.jdbc          ← backend-plugin-jdbc + its deps
-           ├── PluginCL: query.payloadbuilder ← backend-plugin-payloadbuilder + its deps
-           ├── PluginCL: query.payloadbuilder.jdbc ← backend-plugin-queryengine-payloadbuilder-jdbc + deps
-           ├── PluginCL: dialect.mssql       ← backend-plugin-dialect-sqlserver + its deps
+           ├── PluginCL: queryengine.jdbc          ← backend-plugin-jdbc + its deps
+           ├── PluginCL: queryengine.payloadbuilder ← backend-plugin-payloadbuilder + its deps
+           ├── PluginCL: queryengine.jdbc.dialect.sqlserver ← backend-plugin-dialect-sqlserver + deps
            └── PluginCL: <external>          ← External plugins from plugins path
 ```
 
@@ -52,6 +51,7 @@ When a plugin (e.g., the JDBC plugin or a dialect) calls `DriverManager.getConne
 | Decision | Rationale |
 |---|---|
 | Builtins get PluginCLs like external plugins | Uniform isolation; no special-casing; `isDriverAllowed` works consistently |
+| Builtins are real dev manifests | Dev mode points manifests at `target/classes` and Maven-generated `target/queryeer-plugin-deps.txt` files so it stays production-like without copying classes |
 | `SharedClassLoader` is a pure classloader, no business logic | Separation of concerns; driver registration owned by dialects |
 | Driver registration helper lives in `backend-lib-queryengine-jdbc-foundation` | Accessible to all dialects; fail-safe dual-path approach (`Class.forName` + reflective fallback) |
 | Dialect declares its driver class name via `JdbcDialectMetadata.driverClassName` | Each dialect knows its own driver; no guessing |
@@ -286,7 +286,7 @@ final class BuiltinPluginDiscovery {
 
     private List<PluginManifest> builtinManifests() {
         return List.of(
-            new PluginManifest(1, "query.payloadbuilder", "Payloadbuilder Query Engine", "0.1.0",
+            new PluginManifest(1, "queryengine.payloadbuilder", "Payloadbuilder Query Engine", "0.1.0",
                 new PluginManifest.BackendTarget(
                     "com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderBackendPlugin",
                     null, null, "17"),
@@ -294,19 +294,19 @@ final class BuiltinPluginDiscovery {
                 List.of("queryengine.execute", "engine.invoke",
                     "queryengine.payloadbuilder.catalog"),
                 List.of(), null, null),
-            new PluginManifest(1, "query.jdbc", "JDBC Query Engine", "0.1.0",
+            new PluginManifest(1, "queryengine.jdbc", "JDBC Query Engine", "0.1.0",
                 new PluginManifest.BackendTarget(
                     "com.queryeer.backend.plugin.jdbc.JdbcBackendPlugin",
                     null, null, "17"),
                 null, List.of(),
                 List.of("queryengine.execute", "queryengine.jdbc.connection"),
                 List.of(), null, null),
-            new PluginManifest(1, "query.payloadbuilder.jdbc",
+            new PluginManifest(1, "queryengine.payloadbuilder.jdbc",
                 "Payloadbuilder JDBC Bridge", "0.1.0",
                 new PluginManifest.BackendTarget(
                     "com.queryeer.backend.plugin.queryengine.payloadbuilder.jdbc.PayloadbuilderJdbcBackendPlugin",
                     null, null, "17"),
-                null, List.of("query.payloadbuilder", "query.jdbc"),
+                null, List.of("queryengine.payloadbuilder", "queryengine.jdbc"),
                 List.of("queryengine.payloadbuilder.jdbc.bridge"),
                 List.of("queryengine.payloadbuilder.catalog",
                     "queryengine.jdbc.connection"),
@@ -654,13 +654,13 @@ The Maven assembly plugin copies builtin plugin JARs into the expected runtime d
 target/
   plugins/
     builtin/
-      query.jdbc/
+      queryengine.jdbc/
         lib/
           backend-plugin-jdbc-0.1.0-SNAPSHOT.jar
           h2-2.2.224.jar
           jackson-databind-2.18.2.jar
           (transitive deps excluding api/contract/foundation)
-      query.payloadbuilder/
+      queryengine.payloadbuilder/
         lib/
           backend-plugin-payloadbuilder-0.1.0-SNAPSHOT.jar
           payloadbuilder-core-1.10.1.jar
@@ -670,7 +670,7 @@ target/
         lib/
           backend-plugin-dialect-sqlserver-0.1.0-SNAPSHOT.jar
           (transitive deps excluding api/contract/foundation)
-      query.payloadbuilder.jdbc/
+      queryengine.payloadbuilder.jdbc/
         lib/
           backend-plugin-queryengine-payloadbuilder-jdbc-0.1.0-SNAPSHOT.jar
           (transitive deps excluding api/contract/foundation)
@@ -696,7 +696,7 @@ target/
                 <include>com.queryeer.backend:backend-plugin-jdbc</include>
             </includes>
             <binaries>
-                <outputDirectory>plugins/builtin/query.jdbc/lib</outputDirectory>
+                <outputDirectory>plugins/builtin/queryengine.jdbc/lib</outputDirectory>
                 <unpack>false</unpack>
                 <excludes>
                     <exclude>com.queryeer.backend:backend-api</exclude>
