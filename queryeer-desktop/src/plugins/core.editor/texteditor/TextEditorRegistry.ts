@@ -233,20 +233,24 @@ export class TextEditorRegistry {
 
   markDirty(fileId: string): void {
     this.filesRegistry?.markDirty(fileId);
-    const activeModel = this.modelsByFileId.get(fileId);
-    if (activeModel) {
-      const text = this.editorApi?.getContent();
-      if (text !== undefined) {
-        activeModel.setContent(text);
-      }
-    }
-    if (this.contentDirtyListeners.length > 0) {
-      const text = this.editorApi?.getContent();
-      if (text !== undefined) {
-        for (const listener of this.contentDirtyListeners) {
-          listener(fileId, text);
+    try {
+      const activeModel = this.modelsByFileId.get(fileId);
+      if (activeModel) {
+        const text = this.editorApi?.getContent();
+        if (text !== undefined) {
+          activeModel.setContent(text);
         }
       }
+      if (this.contentDirtyListeners.length > 0) {
+        const text = this.editorApi?.getContent();
+        if (text !== undefined) {
+          for (const listener of this.contentDirtyListeners) {
+            listener(fileId, text);
+          }
+        }
+      }
+    } catch {
+      // File content too large to materialize as a string; dirty flag still set above
     }
   }
 
@@ -336,7 +340,25 @@ export class TextEditorRegistry {
     if (!model) {
       let content = "";
       try {
-        const result = await (window.appShell as unknown as { readFile: (uri: string) => Promise<{ success: boolean; content: string }> }).readFile(file.uri);
+        type ReadFileResult = { success: boolean; content: string; tooLarge?: boolean; fileSizeBytes?: number };
+        type AppShell = {
+          readFile: (uri: string) => Promise<ReadFileResult>;
+          showDialogMessage: (opts: { title: string; message: string; severity?: string }) => Promise<unknown>;
+        };
+        const appShell = window.appShell as unknown as AppShell;
+        const result = await appShell.readFile(file.uri);
+        if (result.tooLarge) {
+          const mb = Math.round((result.fileSizeBytes ?? 0) / (1024 * 1024));
+          if (file.fileId) {
+            this.filesRegistry?.closeFile(file.fileId);
+          }
+          await appShell.showDialogMessage({
+            title: "File too large",
+            message: `This file is too large to open (${mb} MB). The maximum supported file size is 512 MB.`,
+            severity: "error"
+          });
+          return;
+        }
         if (result.success) {
           content = result.content;
         }

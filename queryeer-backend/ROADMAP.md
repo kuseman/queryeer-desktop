@@ -1,9 +1,5 @@
 # Queryeer Roadmap
 
-Quick fixes
-- Save to file output
-    - Should not output anything to table/text only writing status to text
-
 Large features in prio
 
 - [ ] Backend builtin modules should be discovered normally (the same as with a dist build) 
@@ -14,9 +10,6 @@ Large features in prio
     - [ ] matrix releases
     - [ ] change log (app bundled)
     - [ ] change log (gitgub release)
-- [ ] Modularize
-    - Make sure all contributions have contracts and all API:s are located in a separate project
-      that might end up on npmjs one day
 - [ ] User actions in JDBC navigation
     - Pre.req. Tree content menu contribution done
     - Rulebased actions based on node type etc
@@ -27,6 +20,9 @@ Large features in prio
 - [ ] About dialog
     - Queryeer changelog
     - Modules changelog (Payloadbuilder has changed log in it's jar)
+- [ ] Modularize
+    - Make sure all contributions have contracts and all API:s are located in a separate project
+      that might end up on npmjs one day
 - [X] Hoover table / etc.
     - Show popup with schema
     - Settings turn on/off

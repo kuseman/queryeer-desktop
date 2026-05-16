@@ -424,6 +424,11 @@ export class ExtensionRegistry {
       getProvider: (mimeType: string) => providers.get(mimeType)?.provider,
 
       getSymbols: async (mimeType: string, content: string) => {
+        const MAX_OUTLINE_CONTENT_LENGTH = 500_000;
+        if (content.length > MAX_OUTLINE_CONTENT_LENGTH) {
+          return [];
+        }
+
         const mainResult = providers.has(mimeType)
           ? await runProvider(providers.get(mimeType)!.provider, content).catch((err) => {
               const message = err instanceof Error ? err.message : String(err);
