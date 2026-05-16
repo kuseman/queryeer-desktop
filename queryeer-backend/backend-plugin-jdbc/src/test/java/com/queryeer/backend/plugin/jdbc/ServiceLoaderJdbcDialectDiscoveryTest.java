@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import com.queryeer.backend.api.BackendPluginContext;
+import com.queryeer.backend.api.ChangelogRegistry;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.EventBus;
 import com.queryeer.backend.api.FileSessionHandlerRegistry;
@@ -47,7 +48,7 @@ class ServiceLoaderJdbcDialectDiscoveryTest
         RecordingQueryEngineRegistry registry = new RecordingQueryEngineRegistry();
         RecordingFileSessionHandlerRegistry fileSessions = new RecordingFileSessionHandlerRegistry();
 
-        plugin.activate(new TestPluginContext(registry, fileSessions));
+        plugin.activate(new TestPluginContext(registry, fileSessions), null);
 
         Assertions.assertTrue(discovery.called);
         Assertions.assertNotNull(registry.provider);
@@ -186,6 +187,30 @@ class ServiceLoaderJdbcDialectDiscoveryTest
         public PluginServiceRegistry services()
         {
             return mock(PluginServiceRegistry.class);
+        }
+
+        @Override
+        public ChangelogRegistry changelogs()
+        {
+            return new ChangelogRegistry()
+            {
+                @Override
+                public void registerChangelog(String pluginId, String changelog)
+                {
+                }
+
+                @Override
+                public java.util.List<String> pluginIds()
+                {
+                    return java.util.List.of();
+                }
+
+                @Override
+                public String getChangelog(String pluginId)
+                {
+                    return null;
+                }
+            };
         }
     }
 

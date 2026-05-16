@@ -27,7 +27,7 @@ Monorepo containing the Queryeer Desktop Electron shell and the Java backend run
 
 - Node.js 20+
 - Java 25 compatible JDK on `PATH`
-- Maven wrapper from the repository root (`mvnw` / `mvnw.cmd`)
+- Maven wrapper from the repository root of `queryeer-backend/` (`mvnw` / `mvnw.cmd`)
 
 ### First Setup
 
@@ -75,7 +75,7 @@ Run the full backend verification from the repository root:
 Fast backend preparation without tests/checkstyle:
 
 ```bash
-./mvnw -f queryeer-backend/pom.xml -pl backend-runner,backend-lib-queryengine-jdbc-foundation,backend-lib-queryengine-sql-parser,backend-plugin-jdbc,backend-plugin-payloadbuilder,backend-plugin-dialect-sqlserver -am -DskipTests=true -DcheckstyleSkip=true install
+./mvnw -f pom.xml -pl backend-runner,backend-lib-queryengine-jdbc-foundation,backend-lib-queryengine-sql-parser,backend-plugin-jdbc,backend-plugin-payloadbuilder,backend-plugin-dialect-sqlserver -am -DskipTests=true -DcheckstyleSkip=true install
 ```
 
 On PowerShell, prefer `-DcheckstyleSkip=true` to avoid quoting dotted Maven properties. If using Maven's native checkstyle property, quote it:
@@ -114,5 +114,3 @@ The repository `plugins/builtin` directory is development scaffolding only. A re
 
 - [Architecture Decision Records](queryeer-desktop/documentation/)
 - [Backend Protocol](queryeer-desktop/documentation/BACKEND_PROTOCOL.md)
-- [Migration Plan](queryeer-desktop/MIGRATION_PLAN.md)
-- [Session Handoff](queryeer-desktop/SESSION_HANDOFF.md)

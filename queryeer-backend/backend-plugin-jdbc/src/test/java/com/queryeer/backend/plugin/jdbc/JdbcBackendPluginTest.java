@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.queryeer.backend.api.BackendPluginContext;
+import com.queryeer.backend.api.ChangelogRegistry;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.EventBus;
 import com.queryeer.backend.api.FileSessionHandlerRegistry;
@@ -69,7 +70,7 @@ class JdbcBackendPluginTest
         RecordingEventBus events = new RecordingEventBus();
         plugin.activate(new TestPluginContext(engines, fileSessions, defaultConnectionsConfigService(), (_, _) ->
         {
-        }, events));
+        }, events), null);
         QueryEngineProvider provider = engines.provider;
 
         String jdbcUrl = "jdbc:h2:mem:test_refresh_open;DB_CLOSE_DELAY=-1";
@@ -335,7 +336,7 @@ class JdbcBackendPluginTest
         JdbcBackendPlugin plugin = new JdbcBackendPlugin();
         RecordingQueryEngineRegistry engines = new RecordingQueryEngineRegistry();
         RecordingFileSessionHandlerRegistry fileSessions = new RecordingFileSessionHandlerRegistry();
-        plugin.activate(new TestPluginContext(engines, fileSessions));
+        plugin.activate(new TestPluginContext(engines, fileSessions), null);
         QueryEngineProvider provider = engines.provider;
 
         RecordingPublisher createPublisher = new RecordingPublisher();
@@ -360,7 +361,7 @@ class JdbcBackendPluginTest
         JdbcBackendPlugin plugin = new JdbcBackendPlugin();
         RecordingQueryEngineRegistry engines = new RecordingQueryEngineRegistry();
         RecordingFileSessionHandlerRegistry fileSessions = new RecordingFileSessionHandlerRegistry();
-        plugin.activate(new TestPluginContext(engines, fileSessions));
+        plugin.activate(new TestPluginContext(engines, fileSessions), null);
         QueryEngineProvider provider = engines.provider;
 
         RecordingPublisher createPublisher = new RecordingPublisher();
@@ -387,7 +388,7 @@ class JdbcBackendPluginTest
         RecordingFileSessionHandlerRegistry fileSessions = new RecordingFileSessionHandlerRegistry();
         RecordingScheduler scheduler = new RecordingScheduler();
 
-        plugin.activate(new TestPluginContext(engines, fileSessions, _ -> "1000", scheduler));
+        plugin.activate(new TestPluginContext(engines, fileSessions, _ -> "1000", scheduler), null);
 
         Assertions.assertTrue(scheduler.scheduledNames.contains("jdbc.file-session-reaper"));
         Assertions.assertTrue(scheduler.scheduledNames.contains("jdbc.schema-crawl-startup"));
@@ -403,7 +404,7 @@ class JdbcBackendPluginTest
 
         plugin.activate(new TestPluginContext(engines, fileSessions, key -> "queryeer.jdbc.schemaCache.dir".equals(key) ? Path.of("target", "test-work", "jdbc-schema-cache", "schedule")
                 .toString()
-                : null, scheduler));
+                : null, scheduler), null);
 
         Assertions.assertTrue(scheduler.scheduledNames.contains("jdbc.schema-crawl-startup"));
     }
@@ -426,7 +427,7 @@ class JdbcBackendPluginTest
                     ]
                 }
                 """);
-        plugin.activate(new TestPluginContext(engines, fileSessions, configService));
+        plugin.activate(new TestPluginContext(engines, fileSessions, configService), null);
         QueryEngineProvider provider = engines.provider;
 
         RecordingPublisher publisher = new RecordingPublisher();
@@ -482,7 +483,7 @@ class JdbcBackendPluginTest
             {
                 return baseConfigService.materializeSecrets(payload);
             }
-        }, scheduler, events));
+        }, scheduler, events), null);
 
         scheduler.run("jdbc.schema-crawl-startup");
 
@@ -552,7 +553,7 @@ class JdbcBackendPluginTest
 
         ConfigService configService = defaultConnectionsConfigService();
 
-        plugin.activate(new TestPluginContext(engines, fileSessions, configService));
+        plugin.activate(new TestPluginContext(engines, fileSessions, configService), null);
         QueryEngineProvider provider = engines.provider;
 
         RecordingPublisher publisher = new RecordingPublisher();
@@ -583,7 +584,7 @@ class JdbcBackendPluginTest
         RecordingEventBus events = new RecordingEventBus();
         plugin.activate(new TestPluginContext(engines, fileSessions, defaultConnectionsConfigService(), (_, _) ->
         {
-        }, events));
+        }, events), null);
         QueryEngineProvider provider = engines.provider;
 
         // Use the same H2 URL that jdbc-refresh-open is configured with
@@ -625,7 +626,7 @@ class JdbcBackendPluginTest
         RecordingEventBus events = new RecordingEventBus();
         plugin.activate(new TestPluginContext(engines, fileSessions, defaultConnectionsConfigService(), (_, _) ->
         {
-        }, events));
+        }, events), null);
         QueryEngineProvider provider = engines.provider;
 
         String jdbcUrl = "jdbc:h2:mem:test_refresh_open;DB_CLOSE_DELAY=-1";
@@ -663,7 +664,7 @@ class JdbcBackendPluginTest
         RecordingEventBus events = new RecordingEventBus();
         plugin.activate(new TestPluginContext(engines, fileSessions, defaultConnectionsConfigService(), (_, _) ->
         {
-        }, events));
+        }, events), null);
         QueryEngineProvider provider = engines.provider;
 
         String jdbcUrl = "jdbc:h2:mem:test_refresh_open;DB_CLOSE_DELAY=-1";
@@ -705,7 +706,7 @@ class JdbcBackendPluginTest
     {
         JdbcBackendPlugin plugin = new JdbcBackendPlugin();
         RecordingQueryEngineRegistry registry = new RecordingQueryEngineRegistry();
-        plugin.activate(new TestPluginContext(registry, new RecordingFileSessionHandlerRegistry(), defaultConnectionsConfigService()));
+        plugin.activate(new TestPluginContext(registry, new RecordingFileSessionHandlerRegistry(), defaultConnectionsConfigService()), null);
         return registry.provider;
     }
 
@@ -1096,6 +1097,30 @@ class JdbcBackendPluginTest
         public PluginServiceRegistry services()
         {
             return mock(PluginServiceRegistry.class);
+        }
+
+        @Override
+        public ChangelogRegistry changelogs()
+        {
+            return new ChangelogRegistry()
+            {
+                @Override
+                public void registerChangelog(String pluginId, String changelog)
+                {
+                }
+
+                @Override
+                public List<String> pluginIds()
+                {
+                    return List.of();
+                }
+
+                @Override
+                public String getChangelog(String pluginId)
+                {
+                    return null;
+                }
+            };
         }
     }
 }

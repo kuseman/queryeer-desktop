@@ -17,6 +17,7 @@ import { InputDialogHost } from "../../plugins/core.dialog/InputDialogHost";
 import { MessageDialogHost } from "../../plugins/core.dialog/MessageDialogHost";
 import { ValuePreviewHost } from "../../plugins/core.dialog/ValuePreviewHost";
 import { QuickCommandHost } from "../../plugins/core.quickcommand/QuickCommandHost";
+import { AboutDialogHost } from "../../plugins/core.about/AboutDialogHost.js";
 import { filterMenuItemsByWhen } from "../../plugins/core.menu/menu-item-filter";
 import { confirmCloseDirtyFile } from "./close-file-guard";
 import { requestMessageDialog } from "../../plugins/core.dialog/message-dialog-service";
@@ -747,6 +748,7 @@ export function ShellApp({
       <InputDialogHost />
       <ValuePreviewHost />
       <QuickCommandHost filesRegistry={filesRegistry} fileMediator={fileMediator} />
+      <AboutDialogHost />
     </div>
   );
 }

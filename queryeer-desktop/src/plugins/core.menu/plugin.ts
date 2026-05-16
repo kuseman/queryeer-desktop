@@ -260,13 +260,5 @@ export const coreMenuPlugin: Plugin = {
       parentId: "core.menu.file",
       commandId: "core.closeActive",
     });
-
-    context.menu.registerMenuItem({
-      id: "core.menu.help.about.item",
-      label: "About Queryeer",
-      order: 10,
-      parentId: "core.menu.help",
-      commandId: "core.commands.about"
-    });
   }
 };

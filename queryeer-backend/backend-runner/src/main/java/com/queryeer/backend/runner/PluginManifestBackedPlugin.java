@@ -22,9 +22,9 @@ final class PluginManifestBackedPlugin implements BackendPlugin
     }
 
     @Override
-    public void activate(BackendPluginContext context) throws Exception
+    public void activate(BackendPluginContext context, PluginDescriptor descriptor) throws Exception
     {
-        delegate.activate(context);
+        delegate.activate(context, descriptor);
     }
 
     @Override

@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit;
 import com.queryeer.backend.api.BackendPlugin;
 import com.queryeer.backend.api.BackendPluginContext;
 import com.queryeer.backend.api.ConfigService;
+import com.queryeer.backend.api.PluginDescriptor;
 import com.queryeer.backend.api.parse.IncrementalParseFunction;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 import com.queryeer.backend.api.parse.ParseSessionSnapshot;
@@ -42,7 +43,7 @@ public final class JdbcBackendPlugin implements BackendPlugin
     }
 
     @Override
-    public void activate(BackendPluginContext context)
+    public void activate(BackendPluginContext context, PluginDescriptor descriptor)
     {
         if (dialectDiscovery == null)
         {

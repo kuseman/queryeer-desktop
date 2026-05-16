@@ -2,12 +2,13 @@ package com.queryeer.backend.plugin.jdbc.sqlserver;
 
 import com.queryeer.backend.api.BackendPlugin;
 import com.queryeer.backend.api.BackendPluginContext;
+import com.queryeer.backend.api.PluginDescriptor;
 import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
 
 public final class SqlServerBackendPlugin implements BackendPlugin
 {
     @Override
-    public void activate(BackendPluginContext context)
+    public void activate(BackendPluginContext context, PluginDescriptor descriptor)
     {
         JdbcRuntimeService runtimeService = context.services()
                 .get(JdbcRuntimeService.class);

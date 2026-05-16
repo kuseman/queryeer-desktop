@@ -10,6 +10,10 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
+    <properties>
+        <payloadbuilder.version>1.10.1</payloadbuilder.version>
+    </properties>
+
     <artifactId>backend-plugin-payloadbuilder</artifactId>
     <name>backend-plugin-payloadbuilder</name>
 
@@ -35,12 +39,12 @@
         <dependency>
             <groupId>se.kuseman.payloadbuilder</groupId>
             <artifactId>payloadbuilder-core</artifactId>
-            <version>1.10.1</version>
+            <version>${payloadbuilder.version}</version>
         </dependency>
         <dependency>
             <groupId>se.kuseman.payloadbuilder</groupId>
             <artifactId>payloadbuilder-catalog</artifactId>
-            <version>1.10.1</version>
+            <version>${payloadbuilder.version}</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

@@ -14,12 +14,12 @@ Large features in prio
         - etc.
     - [-] Investigate if this can be merged into Symbol Actions so with a toggle system
           where to show the action (editor / tree) will be hard  becuase the context is completly different activefile vs node in tree
-- [ ] About dialog
-    - Queryeer changelog
-    - Modules changelog (Payloadbuilder has changed log in it's jar)
 - [ ] Modularize
     - Make sure all contributions have contracts and all API:s are located in a separate project
       that might end up on npmjs one day
+- [X] About dialog
+    - Queryeer changelog
+    - Modules changelog (Payloadbuilder has changed log in it's jar)
 - [X] Backend builtin modules should be discovered normally (the same as with a dist build) 
          but with target/classes as source class path with m2 dep references etc.
    - [X] Runtime services plugins. Put on top of class loader chain. Load native libraries and load jdbc drivers etc. See queryeer-backend\SHARED_RUNTIME_PLUGINS.md

@@ -5,12 +5,15 @@ import static java.util.Objects.requireNonNull;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.List;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.queryeer.backend.api.ChangelogRegistry;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.EventBus;
 import com.queryeer.backend.api.FileRegistry;
+import com.queryeer.backend.api.PluginDescriptor;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.contract.runtime.RuntimeStatusResult;
 import com.queryeer.backend.core.engine.EngineInvokeService;
@@ -20,22 +23,12 @@ import com.queryeer.backend.core.security.SecuritySession;
 public final class StdioTransportModule
 {
     public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry, EventBus events,
-            Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt)
-    {
-        return create(input, output, objectMapper, queryEngines, fileRegistry, events, runtimeStatusSupplier, startedAt, null, new SecuritySession());
-    }
-
-    public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry, EventBus events,
-            Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt, ConfigService configService)
-    {
-        return create(input, output, objectMapper, queryEngines, fileRegistry, events, runtimeStatusSupplier, startedAt, configService, new SecuritySession());
-    }
-
-    public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry, EventBus events,
-            Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt, ConfigService configService, SecuritySession securitySession)
+            Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt, ConfigService configService, SecuritySession securitySession, ChangelogRegistry changelogRegistry,
+            Function<String, PluginDescriptor> descriptorLookup)
     {
         requireNonNull(configService, "configService");
         requireNonNull(events, "events");
+        requireNonNull(changelogRegistry, "changelogRegistry");
 
         EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
         ResponseWriter responseWriter = new ResponseWriter(output, codec);
@@ -48,7 +41,7 @@ public final class StdioTransportModule
                 new SecurityVaultChangedRequestHandler(responseWriter, codec, securitySession), new HealthPingRequestHandler(startedAt, responseWriter, codec),
                 new QueryExecuteRequestHandler(responseWriter, codec, queryExecutionService, notificationPublisher), new QueryCancelRequestHandler(responseWriter, codec, queryExecutionService),
                 new EngineInvokeRequestHandler(responseWriter, codec, engineInvokeService), new FileOpenRequestHandler(responseWriter, codec, fileRegistry),
-                new FileCloseRequestHandler(responseWriter, codec, fileRegistry));
+                new FileCloseRequestHandler(responseWriter, codec, fileRegistry), new AboutPluginChangelogsRequestHandler(responseWriter, changelogRegistry, descriptorLookup));
 
         RequestDispatcher requestDispatcher = new RequestDispatcher(responseWriter, handlers);
 
@@ -58,6 +51,44 @@ public final class StdioTransportModule
         StdioTransportServer transportServer = new StdioTransportServer(input, codec, responseWriter, requestDispatcher, notificationDispatcher);
         responseWriter.onBrokenPipe(transportServer::stop);
         return new RunningTransport(transportServer);
+    }
+
+    public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry, EventBus events,
+            Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt)
+    {
+        return create(input, output, objectMapper, queryEngines, fileRegistry, events, runtimeStatusSupplier, startedAt, null, new SecuritySession(), new EmptyChangelogRegistry(), _ -> null);
+    }
+
+    public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry, EventBus events,
+            Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt, ConfigService configService)
+    {
+        return create(input, output, objectMapper, queryEngines, fileRegistry, events, runtimeStatusSupplier, startedAt, configService, new SecuritySession(), new EmptyChangelogRegistry(), _ -> null);
+    }
+
+    public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry, EventBus events,
+            Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt, ConfigService configService, SecuritySession securitySession)
+    {
+        return create(input, output, objectMapper, queryEngines, fileRegistry, events, runtimeStatusSupplier, startedAt, configService, securitySession, new EmptyChangelogRegistry(), _ -> null);
+    }
+
+    private static final class EmptyChangelogRegistry implements ChangelogRegistry
+    {
+        @Override
+        public void registerChangelog(String pluginId, String changelog)
+        {
+        }
+
+        @Override
+        public List<String> pluginIds()
+        {
+            return List.of();
+        }
+
+        @Override
+        public String getChangelog(String pluginId)
+        {
+            return null;
+        }
     }
 
     public static final class RunningTransport

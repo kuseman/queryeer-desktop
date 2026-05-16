@@ -1,7 +1,7 @@
 import { app, BrowserWindow, webContents, nativeImage, shell } from "electron";
 import { join } from "node:path";
 import { readFile, writeFile, readdir, stat, mkdir } from "node:fs/promises";
-import { memoryUsage } from "node:process";
+import { memoryUsage, versions } from "node:process";
 import { ipcMain } from "electron";
 import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
 import { fileUriToPath } from "../contracts/files/Resolvers.js";
@@ -239,6 +239,24 @@ app.whenReady().then(() => {
   ipcMain.handle("app:get-memory-usage", () => {
     const usage = memoryUsage();
     return { heapUsed: usage.heapUsed, heapTotal: usage.heapTotal, rss: usage.rss };
+  });
+  ipcMain.handle("app:get-about-metadata", () => {
+    return {
+      appVersion: app.getVersion(),
+      electronVersion: versions.electron,
+      chromiumVersion: versions.chrome,
+      nodeVersion: versions.node,
+      platform: process.platform,
+      arch: process.arch
+    };
+  });
+  ipcMain.handle("app:get-desktop-changelog", async () => {
+    try {
+      const changelogPath = join(app.getAppPath(), "CHANGELOG.md");
+      return await readFile(changelogPath, "utf8");
+    } catch {
+      return null;
+    }
   });
   ipcMain.handle("shell:open-external", async (_event, { url }: { url: string }) => {
     await shell.openExternal(url);

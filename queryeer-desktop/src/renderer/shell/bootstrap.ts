@@ -290,8 +290,6 @@ export async function bootstrapShell() {
     }
   });
 
-  const commandExecution = await executeCommand("core.commands.about");
-
   window.appShell.onMenuExecuteCommand((commandId: string) => {
     void executeCommand(commandId);
   });
@@ -319,7 +317,7 @@ export async function bootstrapShell() {
     diagnostics: host.getDiagnostics(),
     extensions: host.getExtensions(),
     keybindingDiagnostics: keybindingService.diagnostics(),
-    commandExecution
+    commandExecution: { commandId: "", executed: false }
   });
 
   return {
@@ -328,7 +326,7 @@ export async function bootstrapShell() {
     filesRegistry,
     fileMediator,
     workspaceService,
-    commandExecution,
+    commandExecution: { commandId: "", executed: false },
     executeCommand,
     canExecuteCommand: (commandId: string) => host.canExecuteCommand(commandId),
     onCommandContextChanged: (listener: () => void) => chain.onDidChange(listener),

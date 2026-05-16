@@ -28,11 +28,6 @@ When applicable, run and report:
 - Prefer adding or extending tests for every non-trivial code change.
 - Minimum bar for behavior changes: add/adjust focused unit tests in the same session.
 - If a change crosses module/runtime boundaries (contracts, persistence, IPC, editor/workspace flow), add at least one higher-level integration-style test when feasible.
-- If a test is intentionally deferred, document the gap and rationale in `SESSION_HANDOFF.md` under "Known gaps / temporary scaffolds".
-
-## Handoff quality bar
-
-Handoff must be sufficient for a brand new agent session to continue without reading tool logs.
 
 ## Java code style directives
 

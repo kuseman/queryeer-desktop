@@ -47,7 +47,7 @@ public final class PluginRuntime
                     .id();
             try
             {
-                plugin.activate(context);
+                plugin.activate(context, plugin.descriptor());
                 activated.add(plugin);
                 statusByPluginId.put(pluginId, new PluginRuntimeStatus(pluginId, PluginRuntimeState.ACTIVATED, "Activated"));
             }

@@ -10,6 +10,11 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
+    <properties>
+        <tree-sitter.version>0.26.6</tree-sitter.version>
+        <tree-sitter-sql.version>gh-pages-a</tree-sitter-sql.version>
+    </properties>
+
     <artifactId>backend-lib-queryengine-sql-parser</artifactId>
     <name>backend-lib-queryengine-sql-parser</name>
 
@@ -23,14 +28,15 @@
         <dependency>
             <groupId>io.github.bonede</groupId>
             <artifactId>tree-sitter</artifactId>
-            <version>0.26.6</version>
+            <version>${tree-sitter.version}</version>
         </dependency>
         <dependency>
             <groupId>io.github.bonede</groupId>
             <artifactId>tree-sitter-sql</artifactId>
-            <version>gh-pages-a</version>
+            <version>${tree-sitter-sql.version}</version>
         </dependency>
 
+        <!-- TEST -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

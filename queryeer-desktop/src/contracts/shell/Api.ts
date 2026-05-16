@@ -31,6 +31,9 @@ export interface ShellApi {
   setLogFlow: (enabled: boolean) => Promise<void>;
   clearBackendLogs: () => Promise<void>;
   getMemoryUsage: () => Promise<{ heapUsed: number; heapTotal: number; rss: number }>;
+  getAboutMetadata: () => Promise<{ appVersion: string; electronVersion: string; chromiumVersion: string; nodeVersion: string; platform: string; arch: string }>;
+  getDesktopChangelog: () => Promise<string | null>;
+  fetchBackendPluginChangelogs: () => Promise<{ plugins: Array<{ pluginId: string; pluginName: string; version: string; changelog: string }> }>;
   getExternalFrontendPlugins: () => Promise<ExternalFrontendPluginManifest[]>;
   executeBackendQuery: (params: {
     queryExecutionId: string;

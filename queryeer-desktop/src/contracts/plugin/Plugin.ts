@@ -14,6 +14,7 @@ import type { EditorRegistry } from "../editor/EditorCapability.js";
 import type { ContextMenuRegistry } from "../extensions/ContextMenuExtension.js";
 import type { TableOutputContextMenuRegistry } from "../extensions/TableOutputContextMenuExtension.js";
 import type { JdbcTreeContextMenuRegistry } from "../extensions/JdbcTreeContextMenuExtension.js";
+import type { AboutExtension } from "../extensions/AboutExtension.js";
 import type { PluginManifest } from "./PluginManifest.js";
 
 export type Plugin = {
@@ -43,6 +44,7 @@ export type PluginContext = {
   contextMenu: ContextMenuRegistry;
   tableOutputContextMenu: TableOutputContextMenuRegistry;
   jdbcTreeContextMenu: JdbcTreeContextMenuRegistry;
+  about: AboutExtension;
 };
 
 export type CommandExecutionResult = {

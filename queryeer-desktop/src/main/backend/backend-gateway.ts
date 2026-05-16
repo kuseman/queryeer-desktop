@@ -29,7 +29,8 @@ import {
   type QueryCancelParams,
   type QueryCancelResult,
   type QueryExecuteParams,
-  type QueryExecuteResult
+  type QueryExecuteResult,
+  type AboutPluginChangelogsResult
 } from "../../contracts/backend/index.js";
 import { BackendExecutionStore } from "./backend-execution-store.js";
 import { BackendLogBuffer } from "./backend-log-buffer.js";
@@ -167,6 +168,9 @@ export class BackendGateway {
     });
     ipcMain.handle("backend:settings-module-changed", async (_event, params: SettingsModuleChangedNotification) => {
       return this.notifySettingsModuleChanged(params);
+    });
+    ipcMain.handle("backend:fetch-plugin-changelogs", async () => {
+      return this.fetchPluginChangelogs();
     });
   }
 
@@ -359,6 +363,25 @@ export class BackendGateway {
     }
   }
 
+  public async fetchPluginChangelogs(): Promise<AboutPluginChangelogsResult> {
+    await this.waitUntilHealthy(5_000);
+    if (this.statusStore.get().state !== "healthy") {
+      return { plugins: [] };
+    }
+    const envelope = this.createRequest("about.pluginChangelogs", {});
+    this.appendLog("debug", "gateway", `Sending request ${envelope.id} about.pluginChangelogs`);
+    try {
+      const response = await this.sendRequest(envelope, 10_000);
+      if (!response.result) {
+        return { plugins: [] };
+      }
+      return response.result as AboutPluginChangelogsResult;
+    } catch (e) {
+      this.appendLog("warn", "gateway", `Failed to fetch plugin changelogs: ${redactErrorMessage(e)}`);
+      return { plugins: [] };
+    }
+  }
+
   private startPingLoop(): void {
     if (this.pingIntervalHandle) {
       clearInterval(this.pingIntervalHandle);
@@ -538,7 +561,8 @@ export class BackendGateway {
       | "queryengine.cancel"
       | "queryengine.invoke"
       | "file.open"
-      | "file.close",
+      | "file.close"
+      | "about.pluginChangelogs",
     TParams
   >(
     method: TMethod,

@@ -132,7 +132,10 @@ describe("bootstrapShell diagnostics wiring", () => {
       removeRecentFile: async () => ({ removed: true }),
       clearRecentFiles: async () => ({ cleared: true }),
       evaluateExpression: async () => true,
-      evaluateExpressionSync: () => ({ ok: true, result: true })
+      evaluateExpressionSync: () => ({ ok: true, result: true }),
+      getAboutMetadata: async () => ({ appVersion: "0.1.0", electronVersion: "41.0.0", chromiumVersion: "126.0.0", nodeVersion: "20.0.0", platform: "win32", arch: "x64" }),
+      getDesktopChangelog: async () => null,
+      fetchBackendPluginChangelogs: async () => ({ plugins: [] })
     };
 
     (discoverPluginModules as MockedDiscovery).mockResolvedValue({

@@ -82,8 +82,12 @@ public final class BackendRunnerModule
         }
 
         long startedAt = System.currentTimeMillis();
+        java.util.Map<String, com.queryeer.backend.api.PluginDescriptor> descriptorMap = runtime.plugins()
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(plugin -> plugin.descriptor()
+                        .id(), com.queryeer.backend.api.BackendPlugin::descriptor));
         StdioTransportModule.RunningTransport transportServer = new StdioTransportModule().create(input, output, MapperUtils.MAPPER, services.queryEngines(), services.fileRegistryView(),
-                services.events(), () -> runtimeStatusSnapshot(runtime), startedAt, services.config(), securitySession);
+                services.events(), () -> runtimeStatusSnapshot(runtime), startedAt, services.config(), securitySession, services.changelogRegistry(), descriptorMap::get);
         System.err.println(withCorrelation("Queryeer backend runner started (stdio mode).", null));
 
         Thread selfDestruct = new Thread(() ->

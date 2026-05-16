@@ -22,7 +22,8 @@ export type Capability =
   | "file.open"
   | "file.close"
   | "file.change"
-  | "settings.module.changed";
+  | "settings.module.changed"
+  | "about.pluginChangelogs";
 
 export type ClientIdentity = {
   name: string;
@@ -409,6 +410,17 @@ export type SettingsModuleChangedNotification = {
   version: number;
 };
 
+export type AboutPluginChangelog = {
+  pluginId: string;
+  pluginName: string;
+  version: string;
+  changelog: string;
+};
+
+export type AboutPluginChangelogsResult = {
+  plugins: AboutPluginChangelog[];
+};
+
 export type BackendMethodParamsMap = {
   "backend.handshake": HandshakeParams;
   "backend.runtimeStatus": RuntimeStatusParams;
@@ -421,6 +433,7 @@ export type BackendMethodParamsMap = {
   "queryengine.invoke": EngineInvokeParams;
   "file.open": FileOpenParams;
   "file.close": FileCloseParams;
+  "about.pluginChangelogs": Record<string, never>;
 };
 
 export type BackendMethodResultMap = {
@@ -435,6 +448,7 @@ export type BackendMethodResultMap = {
   "queryengine.invoke": EngineInvokeResult;
   "file.open": FileOpenResult;
   "file.close": FileCloseResult;
+  "about.pluginChangelogs": AboutPluginChangelogsResult;
 };
 
 export type BackendNotificationParamsMap = {
