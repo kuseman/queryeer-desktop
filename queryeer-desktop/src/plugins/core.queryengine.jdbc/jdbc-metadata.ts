@@ -1,5 +1,6 @@
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import { getConfiguredJdbcConnections } from "./jdbc-settings";
+import { JDBC_NAV_DB_KEY } from "./jdbc-navigation-types";
 
 export const JDBC_CTX_DATABASE = "core.queryengine.jdbc.database";
 export const JDBC_CTX_CONNECTION_TITLE = "core.queryengine.jdbc.connectionTitle";
@@ -32,4 +33,19 @@ export function writeJdbcContextMetadata(
   }
 
   files.updateFile(fileId, { metadata });
+}
+
+export function initJdbcFileBinding(
+  fileId: string,
+  connectionId: string,
+  database: string | undefined,
+  files: Pick<FilesRegistry, "getFile" | "updateFile" | "setEditorState">
+): void {
+  if (database) {
+    files.setEditorState(fileId, JDBC_NAV_DB_KEY, { connectionId, database });
+  }
+  files.updateFile(fileId, {
+    engineBinding: { engineId: "jdbc", connectionId }
+  });
+  writeJdbcContextMetadata(fileId, connectionId, database, files);
 }

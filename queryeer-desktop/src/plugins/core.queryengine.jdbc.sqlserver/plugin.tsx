@@ -5,6 +5,7 @@ import { getCoreSettingsService } from "../core.settings/service";
 import { registerJdbcDialect } from "../core.queryengine.jdbc/jdbc-dialect-registry";
 import { registerWhenExpressionTemplates } from "../core.commands/when-expression-template-registry";
 import { registerSymbolActionTemplate } from "../core.queryengine/symbol-action-template-registry";
+import { registerTreeActionTemplate } from "../core.queryengine.jdbc/tree-action-template-registry";
 import { SqlServerConnectionForm } from "./SqlServerConnectionForm";
 
 const SQLSERVER_PLAN_OUTPUT_SETTING_ID = "core.queryengine.jdbc.sqlserver.planXmlOutput";
@@ -46,6 +47,63 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
         label: "Describe",
         when: "activeFile.mimeType == 'application/sql' && activeFile.metadata.core.queryengine.jdbc?.dialectId == 'sqlserver' && (symbol.kind == 'table' || symbol.kind == 'view')",
         query: "exec sp_help '${symbol.name}'"
+      }
+    });
+
+    registerTreeActionTemplate({
+      id: "core.queryengine.jdbc.treeAction.sqlserver.spHelptext",
+      title: "SQL Server: Procedure Definition to Text",
+      description: "Run sp_helptext and show results in text output",
+      order: 10,
+      action: {
+        label: "Definition to Text",
+        when: "node.dialectId == 'sqlserver' && node.kind == 'procedure'",
+        query: "exec sp_helptext '${node.fullName}'",
+        mode: "execute",
+        outputTarget: "output",
+        outputId: "core.queryengine.output.text"
+      }
+    });
+
+    registerTreeActionTemplate({
+      id: "core.queryengine.jdbc.treeAction.sqlserver.spHelptextNewQuery",
+      title: "SQL Server: Procedure Definition to New Query",
+      description: "Run sp_helptext and open results in a new query file",
+      order: 11,
+      action: {
+        label: "Definition to New Query",
+        when: "node.dialectId == 'sqlserver' && node.kind == 'procedure'",
+        query: "exec sp_helptext '${node.fullName}'",
+        mode: "execute",
+        outputTarget: "newQuery"
+      }
+    });
+
+    registerTreeActionTemplate({
+      id: "core.queryengine.jdbc.treeAction.sqlserver.spHelp",
+      title: "SQL Server: Object Help",
+      description: "Run sp_help on database objects",
+      order: 12,
+      action: {
+        label: "Help",
+        when: "node.dialectId == 'sqlserver' && (node.kind == 'table' || node.kind == 'view' || node.kind == 'procedure')",
+        query: "exec sp_help '${node.fullName}'",
+        mode: "execute",
+        outputTarget: "output"
+      }
+    });
+
+    registerTreeActionTemplate({
+      id: "core.queryengine.jdbc.treeAction.sqlserver.selectTop100",
+      title: "SQL Server: Select Top 100 Rows",
+      description: "Select top 100 rows from a table or view",
+      order: 13,
+      action: {
+        label: "Select Top 100 Rows",
+        when: "node.dialectId == 'sqlserver' && (node.kind == 'table' || node.kind == 'view')",
+        query: "select top 100 * from ${node.fullName}",
+        mode: "execute",
+        outputTarget: "output"
       }
     });
 

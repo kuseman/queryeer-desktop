@@ -13,13 +13,20 @@ import { DatabaseIcon } from "./DatabaseIcon";
 import { getJdbcNavigationStore } from "./jdbc-navigation-store";
 import { JdbcNavigationView } from "./JdbcNavigationView";
 import { JDBC_NAV_DB_KEY, type JdbcSelectedDatabase } from "./jdbc-navigation-types";
-import { writeJdbcContextMetadata } from "./jdbc-metadata";
+import { writeJdbcContextMetadata, initJdbcFileBinding } from "./jdbc-metadata";
 import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";
 import { getQuickCommandService } from "../core.quickcommand/service";
 import { createJdbcDatabaseQuickCommandProvider } from "./jdbc-database-quick-command";
 import { getJdbcDatabaseCache } from "./jdbc-database-cache";
 import { JdbcPanel } from "./JdbcPanel";
 import { getJdbcTreeContextMenuRegistry } from "./jdbc-tree-context-menu-registry";
+import { getTreeActionRegistry } from "./tree-action-registry";
+import { TREE_ACTIONS_SETTING_ID } from "./tree-action-types";
+import type { TreeAction } from "./tree-action-types";
+import { TreeActionsSettingsEditor } from "./tree-action-settings";
+import { createTreeActionProvider } from "./tree-action-provider";
+import { onCoreSettingsServiceInitialized } from "../core.settings/service";
+import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegistry";
 
 const JDBC_SESSION_ID_METADATA_KEY = "core.queryengine.jdbc.sessionId";
 const JDBC_SESSION_CONNECTION_TITLE_KEY = "core.queryengine.jdbc.sessionConnection";
@@ -208,15 +215,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
           mimeType: "application/sql",
           extension: "sql"
         });
-        context.files.updateFile(file.fileId, {
-          engineBinding: { engineId: "jdbc", connectionId: node.connectionId }
-        });
-        writeJdbcContextMetadata(
-          file.fileId,
-          node.connectionId,
-          undefined,
-          context.files
-        );
+        initJdbcFileBinding(file.fileId, node.connectionId, undefined, context.files);
       }
     });
 
@@ -234,21 +233,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
         const database = typeof node.attributes.catalog === "string"
           ? node.attributes.catalog
           : node.name;
-        // Set editor state before engine binding so the files subscriber
-        // picks up the database selection when it re-reads on updateFile.
-        context.files.setEditorState(file.fileId, JDBC_NAV_DB_KEY, {
-          connectionId: node.connectionId,
-          database
-        } satisfies JdbcSelectedDatabase);
-        context.files.updateFile(file.fileId, {
-          engineBinding: { engineId: "jdbc", connectionId: node.connectionId }
-        });
-        writeJdbcContextMetadata(
-          file.fileId,
-          node.connectionId,
-          database,
-          context.files
-        );
+        initJdbcFileBinding(file.fileId, node.connectionId, database, context.files);
       }
     });
 
@@ -338,6 +323,74 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
           }
         }
       }
+    });
+
+    // Tree Actions: when-expression variables for context variable autocomplete
+    registerWhenExpressionVariables([
+      { name: "node.kind", type: "string", description: "Kind of tree node (e.g. 'procedure', 'table', 'view', 'column', 'database')" },
+      { name: "node.name", type: "string", description: "Name of the tree node (e.g. 'sp_help')" },
+      { name: "node.fullName", type: "string", description: "Fully qualified name of the tree node (e.g. 'dbo.sp_help')" },
+      { name: "node.nodeType", type: "string", description: "Node type: 'container', 'structural', 'folder', 'object', 'property'" },
+      { name: "node.connectionId", type: "string", description: "Connection ID of the tree node" },
+      { name: "node.dialectId", type: "string", description: "SQL dialect of the connection (e.g. 'sqlserver', 'postgresql')" },
+    ]);
+
+    // Tree Actions: register context menu provider
+    createTreeActionProvider({
+      treeContextMenu: getJdbcTreeContextMenuRegistry(),
+      createUntitledFile: (options) => context.fileMediator.createUntitledFile(options),
+      applyRecoveredContent: (fileId, content) => {
+        getEditorRegistryHost().applyRecoveredContent(fileId, content);
+      },
+      setFileEngineBinding: (fileId, connectionId, database) => {
+        initJdbcFileBinding(fileId, connectionId, database, context.files);
+      },
+      getActiveFileId: () => context.fileMediator.getActiveFileId()
+    });
+
+    // Tree Actions: settings
+    context.settings.registerAdvancedRenderer({
+      id: TREE_ACTIONS_SETTING_ID,
+      render: ({ value, setValue, readonly }) => (
+        <TreeActionsSettingsEditor value={value} setValue={setValue} readonly={readonly} />
+      )
+    });
+    context.settings.registerSettings({
+      moduleId: "core.queryengine.jdbc",
+      title: "Query Engine JDBC",
+      order: 32,
+      settings: [
+        {
+          id: TREE_ACTIONS_SETTING_ID,
+          moduleId: "core.queryengine.jdbc",
+          title: "Tree Actions",
+          description: "Context menu actions that appear when right-clicking on nodes in the JDBC navigation tree.",
+          sectionPath: ["Query Engine", "JDBC", "Tree Actions"],
+          tags: ["jdbc", "tree", "actions", "context-menu"],
+          type: "json",
+          defaultValue: [],
+          advanced: { rendererId: TREE_ACTIONS_SETTING_ID }
+        }
+      ]
+    });
+
+    // Sync tree actions from settings to the runtime registry when the settings service is ready.
+    onCoreSettingsServiceInitialized((settingsService) => {
+      settingsService.subscribe(() => {
+        const current = settingsService.getValue(TREE_ACTIONS_SETTING_ID);
+        if (Array.isArray(current)) {
+          getTreeActionRegistry().setActions(current as TreeAction[]);
+        }
+      });
+
+      settingsService.refreshSchemaFromRegistry();
+
+      const initial = settingsService.getValue(TREE_ACTIONS_SETTING_ID);
+      if (Array.isArray(initial)) {
+        getTreeActionRegistry().setActions(initial as TreeAction[]);
+      }
+
+      void settingsService.syncRegistryModules();
     });
 
     // Write metadata for any JDBC file the first time it appears in the registry

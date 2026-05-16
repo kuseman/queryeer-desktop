@@ -1,6 +1,16 @@
 import { BackendNotReadyError } from "../../contracts/backend/BackendNotReadyError";
 import type { QueryExecuteOptions } from "../../contracts/backend/Types";
 import { getCoreSecurityService } from "../core.security/service";
+import type { Column } from "../../contracts/extensions/OutputExtension";
+
+export type CollectedResultSet = {
+  schema: { columns: Column[] };
+  rows: unknown[][];
+};
+
+export type CollectedResults = {
+  resultSets: CollectedResultSet[];
+};
 
 type QueryEvent = { method: string; params: unknown };
 type QueryEventListener = (event: QueryEvent) => void;
@@ -12,6 +22,8 @@ export type ExecuteRequestOptions = {
   textOverride?: string;
   /** When set, overrides the output contributor selected in the toolbar. */
   outputIdOverride?: string;
+  /** When set, overrides the text output format (e.g. "plain", "csv", "json"). */
+  formatOverride?: string;
   /** When set, overrides backend execution options for this execute request. */
   optionsOverride?: QueryExecuteOptions;
 };
@@ -159,6 +171,57 @@ export class QueryEngineService {
   async cancel(queryExecutionId: string): Promise<void> {
     await ensureBackendHealthy();
     await window.appShell.cancelBackendQuery({ queryExecutionId });
+  }
+
+  /**
+   * Executes a query and collects all result rows into memory.
+   * Useful for consumers like tree actions that need the full result text
+   * rather than streaming to an output panel.
+   */
+  async executeAndCollect(params: ExecuteParams): Promise<CollectedResults> {
+    const collector = new Map<number, CollectedResultSet>();
+
+    return new Promise<CollectedResults>((resolve, reject) => {
+      let resolved = false;
+
+      this.execute(params)
+        .then((executionId) => {
+          const unsubscribe = this.subscribe(executionId, (event) => {
+            if (event.method === "queryengine.chunkStart") {
+              const p = event.params as { resultSetIndex: number; schema: { columns: Column[] } };
+              collector.set(p.resultSetIndex, { schema: p.schema, rows: [] });
+            } else if (event.method === "queryengine.chunkRows") {
+              const p = event.params as { resultSetIndex: number; rows: unknown[][] };
+              const rs = collector.get(p.resultSetIndex);
+              if (rs) {
+                rs.rows.push(...p.rows);
+              }
+            } else if (event.method === "queryengine.completed") {
+              unsubscribe();
+              if (!resolved) {
+                resolved = true;
+                const resultSets = Array.from(collector.entries())
+                  .sort(([a], [b]) => a - b)
+                  .map(([, rs]) => rs);
+                resolve({ resultSets });
+              }
+            } else if (event.method === "queryengine.failed") {
+              unsubscribe();
+              const p = event.params as { error?: { message: string } };
+              if (!resolved) {
+                resolved = true;
+                reject(new Error(p.error?.message ?? "Query execution failed"));
+              }
+            }
+          });
+        })
+        .catch((error) => {
+          if (!resolved) {
+            resolved = true;
+            reject(error);
+          }
+        });
+    });
   }
 
   async invoke(params: EngineInvokeParams, options?: { silent?: boolean }): Promise<unknown> {

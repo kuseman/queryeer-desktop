@@ -12,6 +12,7 @@ import {
   resolveKeybindingState
 } from "../../plugins/core.commands/keybinding-resolver";
 import { setTextEditorContextChain } from "../../plugins/core.editor/texteditor/TextEditorRegistry";
+import { setJdbcTreeContextChain } from "../../plugins/core.queryengine.jdbc/jdbc-tree-context-chain";
 import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegistry";
 import { createBackendCommandContext } from "./backend-command-context";
 import { filterMenuItemsByWhen } from "../../plugins/core.menu/menu-item-filter";
@@ -45,6 +46,9 @@ export async function bootstrapShell() {
 
   // Wire all TextEditorRegistry instances so they can register EDITOR_INSTANCE scopes.
   setTextEditorContextChain(chain);
+
+  // Wire JDBC tree so it can register a TREE_NODE scope on click.
+  setJdbcTreeContextChain(chain);
 
   const resolveEffectiveEngineBinding = (file: FileEntity): FileEntity["engineBinding"] => {
     if (file.engineBinding?.engineId) {

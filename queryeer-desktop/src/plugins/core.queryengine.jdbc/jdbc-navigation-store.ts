@@ -44,6 +44,7 @@ export class JdbcNavigationStore {
         newNodeMap.set(rootNodeId, {
           id: rootNodeId,
           connectionId: conn.connectionId,
+          dialectId: conn.dialectId,
           kind: "connection",
           nodeType: "structural",
           name: conn.title ?? "Untitled connection",
@@ -97,7 +98,7 @@ export class JdbcNavigationStore {
   private async doFetchAndApply(nodeId: string, node: JdbcTreeNode, options?: { silent?: boolean }): Promise<void> {
     const children = await this.fetchChildren(node, options);
     const newNodeMap = new Map(this.state.nodeMap);
-    const childIds = this.materializeNodes(node.connectionId, children, newNodeMap);
+    const childIds = this.materializeNodes(node.connectionId, node.dialectId, children, newNodeMap);
     newNodeMap.set(nodeId, {
       ...newNodeMap.get(nodeId)!,
       isLoading: false,
@@ -170,6 +171,7 @@ export class JdbcNavigationStore {
 
   private materializeNodes(
     connectionId: string,
+    dialectId: string,
     objects: JdbcSchemaObject[],
     nodeMap: Map<string, JdbcTreeNode>
   ): string[] {
@@ -182,11 +184,12 @@ export class JdbcNavigationStore {
       const children = obj.children ?? [];
       const childIds =
         children.length > 0
-          ? this.materializeNodes(connectionId, children, nodeMap)
+          ? this.materializeNodes(connectionId, dialectId, children, nodeMap)
           : [];
       nodeMap.set(nodeId, {
         id: nodeId,
         connectionId,
+        dialectId,
         kind: obj.kind,
         nodeType,
         name: obj.name,

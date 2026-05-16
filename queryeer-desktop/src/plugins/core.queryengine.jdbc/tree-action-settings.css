@@ -1,0 +1,36 @@
+.tree-action-detail {
+  display: grid;
+  min-width: 0;
+}
+
+.tree-action-detail .settings-field {
+  min-width: 0;
+}
+
+.tree-action-detail .when-expr-editor {
+  width: min(560px, 100%);
+}
+
+.tree-action-query-editor {
+  width: min(560px, 100%);
+  height: 180px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-overlay-weak);
+  overflow: hidden;
+}
+
+.tree-action-query-editor:focus-within {
+  border-color: var(--accent-muted);
+}
+
+.tree-action-template-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.tree-action-template-toolbar .settings-field-input {
+  margin: 0;
+}

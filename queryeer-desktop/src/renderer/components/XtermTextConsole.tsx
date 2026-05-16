@@ -14,7 +14,7 @@ function readCssVar(style: CSSStyleDeclaration, name: string, fallback: string):
 
 function resolveXtermTheme() {
   const style = getComputedStyle(document.documentElement);
-  const background = readCssVar(style, "--surface-editor-active", "#121417");
+  const background = readCssVar(style, "--input-bg", "#ffffff");
   const foreground = readCssVar(style, "--text-0", "#cccccc");
   const cursor = readCssVar(style, "--accent", "#0e639c");
   const selectionBackground = readCssVar(style, "--state-select-bg", "rgba(0, 120, 215, 0.25)");

@@ -7,16 +7,16 @@ Large features in prio
     - [ ] matrix releases
     - [ ] change log (app bundled)
     - [ ] change log (gitgub release)
-- [ ] User actions in JDBC navigation
+- [ ] Modularize
+    - Make sure all contributions have contracts and all API:s are located in a separate project
+      that might end up on npmjs one day
+- [X] User actions in JDBC navigation
     - Pre.req. Tree content menu contribution done
     - Rulebased actions based on node type etc
         - SQLServer + Procedure => sp_helptext
         - etc.
     - [-] Investigate if this can be merged into Symbol Actions so with a toggle system
           where to show the action (editor / tree) will be hard  becuase the context is completly different activefile vs node in tree
-- [ ] Modularize
-    - Make sure all contributions have contracts and all API:s are located in a separate project
-      that might end up on npmjs one day
 - [X] About dialog
     - Queryeer changelog
     - Modules changelog (Payloadbuilder has changed log in it's jar)
