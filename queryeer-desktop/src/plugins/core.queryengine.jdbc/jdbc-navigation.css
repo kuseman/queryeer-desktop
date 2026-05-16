@@ -170,3 +170,18 @@
   background: var(--accent, #0078d4);
   border-radius: 0 1px 1px 0;
 }
+
+.jdbc-nav-node.is-selected {
+  background: var(--list-active-selection-bg, rgba(255, 255, 255, 0.08));
+}
+
+.jdbc-nav-node.is-selected::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  background: var(--text-muted, #888);
+  border-radius: 0 1px 1px 0;
+}

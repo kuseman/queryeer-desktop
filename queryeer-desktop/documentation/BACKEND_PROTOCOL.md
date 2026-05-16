@@ -854,3 +854,107 @@ When protocol shapes change, update both contract implementations in the same se
 - Java contracts: `queryeer-backend/backend-contract/*`
 
 Then update this protocol document to reflect the final agreed shape.
+
+## 14. Tree Actions (frontend extension point)
+
+Tree Actions are a rule-based context menu system for the JDBC navigation tree. They are purely a frontend feature — no backend contract changes are needed. Actions compose SQL templates and execute via the existing JDBC engine infrastructure.
+
+### 14.1 Architecture
+
+Tree Actions follow the same pattern as Symbol Actions and Table Actions:
+
+- **Type definition**: `core.queryengine.jdbc/tree-action-types.ts`
+- **Registry**: `core.queryengine.jdbc/tree-action-registry.ts` (singleton with change events)
+- **Provider**: `core.queryengine.jdbc/tree-action-provider.ts` (registers contributions to `JdbcTreeContextMenuRegistry`)
+- **Templates**: `core.queryengine.jdbc/tree-action-template-registry.ts` (dialect plugins contribute pre-built actions)
+- **Settings**: `core.queryengine.jdbc/tree-action-settings.tsx` (settings UI editor)
+- **Persistence**: `core.queryengine.jdbc.treeActions` setting (JSON array stored in settings)
+
+### 14.2 TreeAction type
+
+```typescript
+type TreeActionMode = "execute" | "render";
+type TreeActionOutputTarget = "output" | "clipboard" | "newQuery";
+
+type TreeAction = {
+  id: string;
+  label: string;
+  when: string;              // Expression evaluated against merged context
+  query: string;             // SQL template with ${...} interpolation
+  mode: TreeActionMode;      // execute=run query, render=interpolate only
+  outputTarget: TreeActionOutputTarget;
+  outputId?: string;         // For execute+output: route to specific output contributor
+  order?: number;
+};
+```
+
+### 14.3 Mode semantics
+
+- `execute` — Interpolate the query template, then execute SQL against the **tree node's connection/database** (not the active file). A temporary untitled file is created to host the execution context.
+- `render` — Interpolate the query template only, without executing. Output goes to the target (clipboard, new query file, or output panel).
+
+### 14.4 Output target semantics
+
+- `output` — Results go to an output panel. Default is the selected primary output; `outputId` can route to a specific contributor (e.g., `core.queryengine.output.text`).
+- `clipboard` — Rendered text is copied to the system clipboard.
+- `newQuery` — Rendered text is opened in a new untitled `.sql` file.
+
+### 14.5 Context chain integration
+
+Tree Actions integrate with the shared `ContextChain` (same system used by editors for `editorFocus`, `languageId`, etc.). When a tree node is clicked, `JdbcNavigationTree` registers a `TREE_NODE`-priority scope containing `node.*` variables. The `TreeActionProvider` evaluates `when` expressions against `getCommandContext()` which includes this scope, so `node.kind`, `node.dialectId`, etc. are available without manual merging.
+
+### 14.6 When expression context variables
+
+The following variables are available in `when` expressions via the context chain:
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `node.kind` | string | Kind of tree node (e.g. `procedure`, `table`, `view`, `column`, `database`) |
+| `node.name` | string | Name of the tree node (e.g. `sp_help`) |
+| `node.fullName` | string | Fully qualified name (e.g. `dbo.sp_help`) |
+| `node.nodeType` | string | `container`, `structural`, `folder`, `object`, `property` |
+| `node.connectionId` | string | Connection UUID |
+| `node.dialectId` | string | SQL dialect of the connection (e.g. `sqlserver`, `postgresql`) |
+| `node.attributes.*` | any | Dynamic node attributes (e.g. `node.attributes.schema`) |
+| `activeFile.*` | any | All standard active file context variables |
+| `backendHealthy` | boolean | Backend health status |
+
+### 14.7 Query template interpolation
+
+Query templates use `${...}` syntax with the same `node.*` context variables:
+
+```
+exec sp_helptext '${node.fullName}'
+select top 100 * from ${node.fullName}
+```
+
+### 14.8 Execution context
+
+When `mode: "execute"`, the query runs against the tree node's connection:
+
+- `engineState.connectionId` is set from `node.connectionId`
+- For database nodes, `engineState.database` is set from `node.attributes.catalog` or `node.name`
+- The engine resolver routes to `jdbc` based on the file's MIME type (`application/sql`)
+
+### 14.9 Dialect template contributions
+
+Dialect plugins (e.g., `core.queryengine.jdbc.sqlserver`) register pre-built action templates:
+
+```typescript
+registerTreeActionTemplate({
+  id: "core.queryengine.jdbc.treeAction.sqlserver.spHelptext",
+  title: "SQL Server: Procedure Definition to Text",
+  action: {
+    label: "Definition to Text",
+    when: "node.dialectId == 'sqlserver' && node.kind == 'procedure'",
+    query: "exec sp_helptext '${node.fullName}'",
+    mode: "execute",
+    outputTarget: "output",
+    outputId: "core.queryengine.output.text"
+  }
+});
+```
+
+### 14.10 Settings location
+
+Tree Actions are configured under: **Query Engine > JDBC > Tree Actions** in the settings UI.

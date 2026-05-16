@@ -13,6 +13,7 @@ export type JdbcSchemaObject = {
 export type JdbcTreeNode = {
   id: string;
   connectionId: string;
+  dialectId: string;
   kind: string;
   nodeType: NodeType;
   name: string;

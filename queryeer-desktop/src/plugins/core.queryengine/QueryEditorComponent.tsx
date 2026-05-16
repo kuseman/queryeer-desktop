@@ -113,18 +113,11 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     }
     return getQueryViewStateStore().subscribe(fileId, (state) => {
       const override = executionPrimaryOverrideByFileIdRef.current.get(fileId);
-      const validFormatIds = new Set<string>(getQueryOutputFormatRegistry().getFormatters().map((f) => f.id));
       if (state.panelActiveOutputId !== undefined) {
         setSelectedPrimaryId(state.panelActiveOutputId);
       } else if (override !== undefined) {
         setSelectedPrimaryId(override);
       }
-      setOutputContext((prev) => ({
-        ...prev,
-        textOutputFormat: state.textOutputFormat && validFormatIds.has(state.textOutputFormat)
-          ? state.textOutputFormat
-          : prev.textOutputFormat
-      }));
     });
   }, [file?.fileId]);
 
@@ -235,7 +228,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       getQueryViewStateStore().setPanelSelectedOutput(targetFileId, panelOutputId);
       setExecutionPrimaryOverride(targetFileId, panelOutputId ?? null);
 
-      const persistedFormat = getQueryViewStateStore().read(targetFileId).textOutputFormat;
+      const persistedFormat = executeOptions?.formatOverride ?? getQueryViewStateStore().read(targetFileId).textOutputFormat;
       updateOutputContextForFile(targetFileId, (prev) => ({
         ...IDLE_OUTPUT_CONTEXT,
         fileId: targetFileId,

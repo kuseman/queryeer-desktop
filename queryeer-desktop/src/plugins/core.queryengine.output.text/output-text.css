@@ -72,7 +72,7 @@
   flex: 1;
   min-height: 0;
   padding: 6px;
-  background: #121417;
+  background: var(--input-bg, #ffffff);
 }
 
 .query-output-text-terminal .xterm-viewport {

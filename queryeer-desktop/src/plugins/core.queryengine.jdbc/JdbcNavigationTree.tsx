@@ -6,6 +6,7 @@ import type { JdbcTreeNode } from "./jdbc-navigation-types";
 import { getJdbcTreeContextMenuRegistry } from "./jdbc-tree-context-menu-registry";
 import { ContextMenuSurface } from "../../renderer/components/ContextMenuSurface";
 import type { ContextMenuSurfaceItem } from "../../renderer/components/ContextMenuSurface";
+import { activateTreeNode } from "./jdbc-tree-context-chain";
 
 type Props = {
   store: JdbcNavigationStore;
@@ -17,10 +18,10 @@ export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDa
   const [, setRevision] = useState(0);
   const prevBackendStateRef = useRef<string | null>(null);
   const treeBodyRef = useRef<HTMLDivElement | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const scrollToActiveNode = useCallback(() => {
     if (!treeBodyRef.current) return;
-    // Scroll to the deepest active node (database, not the parent connection)
     const allActive = treeBodyRef.current.querySelectorAll<HTMLElement>(".jdbc-nav-node.is-active");
     if (allActive.length > 0) {
       allActive[allActive.length - 1].scrollIntoView({ block: "nearest" });
@@ -35,6 +36,8 @@ export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDa
 
   const handleContextMenu = useCallback((e: React.MouseEvent, node: JdbcTreeNode) => {
     e.preventDefault();
+    activateTreeNode(node);
+    setSelectedNodeId(node.id);
     setContextMenu({ x: e.clientX, y: e.clientY, node });
   }, []);
 
@@ -114,9 +117,11 @@ export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDa
   const handleNodeClick = (nodeId: string) => {
     const node = store.getNode(nodeId);
     if (!node) return;
+    activateTreeNode(node);
+    setSelectedNodeId(nodeId);
     if (node.isExpanded) {
       store.collapseNode(nodeId);
-    } else {
+    } else if (node.nodeType !== "property" && (node.isLoading || !node.isLoaded || node.childIds.length > 0)) {
       void store.expandNode(nodeId);
     }
   };
@@ -142,6 +147,7 @@ export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDa
             dialectId={entry.dialectId}
             activeFileConnectionId={activeFileConnectionId}
             activeFileDatabase={activeFileDatabase}
+            selectedNodeId={selectedNodeId}
             onNodeClick={handleNodeClick}
             onContextMenu={handleContextMenu}
           />
@@ -172,16 +178,15 @@ type NodeRowProps = {
   dialectId: string;
   activeFileConnectionId: string | undefined;
   activeFileDatabase: string | undefined;
+  selectedNodeId: string | null;
   onNodeClick: (nodeId: string) => void;
   onContextMenu: (e: React.MouseEvent, node: JdbcTreeNode) => void;
 };
 
-function TreeNodeRow({ nodeId, store, depth, dialectId, activeFileConnectionId, activeFileDatabase, onNodeClick, onContextMenu }: NodeRowProps) {
+function TreeNodeRow({ nodeId, store, depth, dialectId, activeFileConnectionId, activeFileDatabase, selectedNodeId, onNodeClick, onContextMenu }: NodeRowProps) {
   const node = store.getNode(nodeId);
   if (!node) return null;
 
-  // Property nodes are always leaf. Other nodes are expandable only if they
-  // have children or may have children (not yet loaded, or loaded with children).
   const isExpandable = node.nodeType !== "property" && (node.isLoading || !node.isLoaded || node.childIds.length > 0);
   const chevron = isExpandable ? (node.isExpanded ? "▼" : "▶") : "  ";
   const icon = getNodeIcon(node.kind, node.attributes, dialectId);
@@ -193,8 +198,9 @@ function TreeNodeRow({ nodeId, store, depth, dialectId, activeFileConnectionId, 
         ? true
         : node.kind === "database" && node.name === activeFileDatabase
       : false;
+  const isSelected = selectedNodeId === nodeId;
 
-  const classNames = `jdbc-nav-node${node.isLoading ? " is-loading" : ""}${node.loadError ? " has-error" : ""}${isActive ? " is-active" : ""}`;
+  const classNames = `jdbc-nav-node${node.isLoading ? " is-loading" : ""}${node.loadError ? " has-error" : ""}${isActive ? " is-active" : ""}${isSelected ? " is-selected" : ""}`;
 
   return (
     <>
@@ -202,7 +208,7 @@ function TreeNodeRow({ nodeId, store, depth, dialectId, activeFileConnectionId, 
         data-testid="jdbc-tree-node"
         className={classNames}
         style={{ paddingLeft: `${depth * 16 + 4}px` }}
-        onClick={() => isExpandable && onNodeClick(nodeId)}
+        onClick={() => onNodeClick(nodeId)}
         onContextMenu={(e) => onContextMenu(e, node)}
         role="treeitem"
         aria-expanded={node.isExpanded}
@@ -230,6 +236,7 @@ function TreeNodeRow({ nodeId, store, depth, dialectId, activeFileConnectionId, 
           dialectId={dialectId}
           activeFileConnectionId={activeFileConnectionId}
           activeFileDatabase={activeFileDatabase}
+          selectedNodeId={selectedNodeId}
           onNodeClick={onNodeClick}
           onContextMenu={onContextMenu}
         />

@@ -9,6 +9,7 @@ function makeNode(overrides: Partial<JdbcTreeNode> = {}): JdbcTreeNode {
   return {
     id: "test-node",
     connectionId: "conn-1",
+    dialectId: "jdbc",
     kind: "connection",
     nodeType: "structural",
     name: "Test Connection",

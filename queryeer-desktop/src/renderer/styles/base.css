@@ -149,6 +149,23 @@ body {
   cursor: default;
 }
 
+.shell-context-menu__item--parent {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+}
+
+.shell-context-menu__arrow {
+  font-size: 10px;
+  color: var(--text-1);
+  opacity: 0.7;
+}
+
+.shell-context-menu__parent {
+  position: relative;
+}
+
 .shell-context-menu__separator {
   height: 1px;
   background: var(--vscode-menu-separatorBackground, var(--border));
