@@ -5,7 +5,6 @@ import type { GridState } from "ag-grid-community";
 import { AllCommunityModule, ModuleRegistry, themeQuartz, colorSchemeDark, colorSchemeLight } from "ag-grid-community";
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { OutputContext, Column } from "../../contracts/extensions/OutputExtension";
-import { DEFAULT_OUTPUT_LIMITS } from "../../contracts/extensions/OutputExtension";
 import { getOutputRegistry } from "../core.queryengine/output/OutputRegistry";
 import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistryImpl";
 import { getTableOutputContextMenuProviders } from "../../core/plugin-runtime/ExtensionRegistry";
@@ -17,6 +16,7 @@ import outputTableIconUrl from "./output-table.svg";
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../core.settings/service";
 import {
   OUTPUT_TABLE_STACKED_MAX_ROWS_SETTING_ID,
+  OUTPUT_TABLE_MAX_ROWS_SETTING_ID,
   OUTPUT_TABLE_VIEW_MODE_SETTING_ID,
   resolveOutputTableSettings,
 } from "./output-table-settings";
@@ -1014,7 +1014,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
                     })()}
                     {resultSet.rowLimitExceeded && (
                       <div className="table-output-limit-banner">
-                        Showing {DEFAULT_OUTPUT_LIMITS.maxRows.toLocaleString()} rows — result was truncated.
+                        Showing {tableSettings.maxRows.toLocaleString()} rows — result was truncated.
                         {resultSet.exportPath && (
                           <button
                             className="table-output-limit-open"
@@ -1053,7 +1053,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
 
               {activeSet.rowLimitExceeded && (
                 <div className="table-output-limit-banner">
-                  Showing {DEFAULT_OUTPUT_LIMITS.maxRows.toLocaleString()} rows — result was truncated.
+                  Showing {tableSettings.maxRows.toLocaleString()} rows — result was truncated.
                   {activeSet.exportPath && (
                     <button
                       className="table-output-limit-open"
@@ -1153,6 +1153,17 @@ export const coreQueryEngineOutputTablePlugin: Plugin = {
             { value: "tabs", label: "Tabs" },
             { value: "stacked", label: "Stacked" },
           ],
+        },
+        {
+          id: OUTPUT_TABLE_MAX_ROWS_SETTING_ID,
+          moduleId: "core.queryengine.output.table",
+          title: "Maximum Rows",
+          description: "Maximum rows kept in the table before overflow rows are streamed to a temporary export file. Use -1 for no limit.",
+          sectionPath: ["Query Engine", "Table", "General"],
+          tags: ["query", "output", "table", "rows", "limit", "export"],
+          type: "number",
+          defaultValue: 100000,
+          constraints: { min: -1, max: 10000000 },
         },
         {
           id: OUTPUT_TABLE_STACKED_MAX_ROWS_SETTING_ID,

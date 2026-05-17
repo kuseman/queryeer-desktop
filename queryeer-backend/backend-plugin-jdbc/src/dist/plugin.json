@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "queryengine.jdbc",
+  "name": "JDBC Query Engine",
+  "version": "${project.version}",
+  "description": "JDBC query execution and connection runtime.",
+  "dependencies": ["queryengine.runtime.jdbc-foundation", "queryengine.runtime.sql-parser"],
+  "providesCapabilities": ["queryengine.execute", "queryengine.jdbc.connection"],
+  "requiredCapabilities": [],
+  "backend": {
+    "entrypointClass": "com.queryeer.backend.plugin.jdbc.JdbcBackendPlugin"
+  }
+}

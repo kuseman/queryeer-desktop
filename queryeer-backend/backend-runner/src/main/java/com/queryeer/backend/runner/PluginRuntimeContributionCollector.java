@@ -33,9 +33,7 @@ final class PluginRuntimeContributionCollector
             }
 
             if (isSharedRuntimePlugin(manifest)
-                    && manifest.backend() != null
-                    && manifest.backend()
-                            .classpath() != null)
+                    && manifest.backend() != null)
             {
                 sharedClasspath.addAll(PluginClassLoaderFactory.resolveClasspath(source.source(), manifest));
             }

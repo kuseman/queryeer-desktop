@@ -13,23 +13,27 @@ class BackendRunnerModuleTest
     void resolveConfigValuesReadsSystemProperties()
     {
         String previousAppDir = System.getProperty("queryeer.app.dir");
+        String previousResourcesDir = System.getProperty("queryeer.resources.dir");
         String previousSettingsDir = System.getProperty("queryeer.settings.dir");
         String previousSettingsPath = System.getProperty("queryeer.settings.path");
         try
         {
             System.setProperty("queryeer.app.dir", " C:/appdata ");
+            System.setProperty("queryeer.resources.dir", " C:/install/resources ");
             System.setProperty("queryeer.settings.dir", " C:/appdata/settings ");
             System.setProperty("queryeer.settings.path", " C:/appdata/settings/core.queryengine.jdbc.json ");
 
             Map<String, String> values = BackendRunnerModule.resolveConfigValues();
 
             Assertions.assertEquals("C:/appdata", values.get("queryeer.app.dir"));
+            Assertions.assertEquals("C:/install/resources", values.get("queryeer.resources.dir"));
             Assertions.assertEquals("C:/appdata/settings", values.get("queryeer.settings.dir"));
             Assertions.assertEquals("C:/appdata/settings/core.queryengine.jdbc.json", values.get("queryeer.settings.path"));
         }
         finally
         {
             restoreProperty("queryeer.app.dir", previousAppDir);
+            restoreProperty("queryeer.resources.dir", previousResourcesDir);
             restoreProperty("queryeer.settings.dir", previousSettingsDir);
             restoreProperty("queryeer.settings.path", previousSettingsPath);
         }

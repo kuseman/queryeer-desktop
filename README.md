@@ -106,9 +106,38 @@ The backend supports plugin discovery modes for development and troubleshooting:
 
 Most development should use the default `auto` mode.
 
-### Release Packaging Direction
+### Release Flow
 
-The repository `plugins/builtin` directory is development scaffolding only. A release build should generate a separate staged `plugins/builtin/<pluginId>/` layout under a build output directory, with production manifests pointing at plugin jars and `lib/` dependencies. Release packaging should not rewrite the repo's dev manifests.
+Release builds are local-first: the same `queryeer-desktop` scripts used by GitHub Actions can be run on a workstation before creating a real release.
+
+From `queryeer-desktop/`, create a local test release directory build:
+
+```bash
+QUERYEER_RELEASE_VERSION=0.1.0-test npm run dist:release -- --dir
+```
+
+Build the platform installer/package for the current OS:
+
+```bash
+QUERYEER_RELEASE_VERSION=0.1.0-test npm run dist:release
+```
+
+The release build performs these steps:
+
+- Generates `dist/generated/CHANGELOG.md` from git history. `queryeer-desktop/CHANGELOG.md` is not committed.
+- Builds the Java backend modules and creates a jlink runtime image.
+- Builds backend-owned plugin distributions with Maven Assembly under each plugin module's `target/<pluginId>/` directory.
+- Stages production backend resources under `queryeer-desktop/dist/release-resources/` from those assembled plugin distributions.
+- Runs Electron Builder, bundling the generated changelog into the app root so the About dialog can read `CHANGELOG.md`.
+
+The repository `plugins/builtin` directory is development scaffolding only. Release packaging must not rewrite those manifests.
+
+GitHub release automation is split into two workflows:
+
+- `create-release.yml`: manually dispatched with `major`, `minor`, or `patch`. It computes the next `vX.Y.Z`, bumps desktop and backend to that release version, commits and tags the release, then moves the backend Maven reactor to the next `-SNAPSHOT` version.
+- `release.yml`: triggered by `v*` tags. It verifies the backend, builds unsigned Windows, macOS, and Linux distributions in a matrix, generates the release changelog, and publishes a real GitHub release with the platform artifacts.
+
+Artifacts are intentionally unsigned for now. macOS downloads may be blocked by Gatekeeper until users explicitly open the app or remove quarantine; public-friendly macOS releases will require Developer ID signing and notarization later.
 
 ## Documentation
 

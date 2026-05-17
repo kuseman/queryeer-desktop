@@ -13,6 +13,7 @@
     <properties>
         <tree-sitter.version>0.26.6</tree-sitter.version>
         <tree-sitter-sql.version>gh-pages-a</tree-sitter-sql.version>
+        <queryeer.plugin.id>queryengine.runtime.sql-parser</queryeer.plugin.id>
     </properties>
 
     <artifactId>backend-lib-queryengine-sql-parser</artifactId>
@@ -59,6 +60,26 @@
                             <includeScope>runtime</includeScope>
                             <outputFile>${project.build.directory}/queryeer-plugin-deps.txt</outputFile>
                         </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <configuration>
+                    <descriptors>
+                        <descriptor>${project.parent.basedir}/src/assembly/backend-plugin.xml</descriptor>
+                    </descriptors>
+                    <finalName>${queryeer.plugin.id}</finalName>
+                    <appendAssemblyId>false</appendAssemblyId>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>assemble-queryeer-plugin</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>

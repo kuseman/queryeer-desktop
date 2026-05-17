@@ -17,8 +17,11 @@
     "assets:icons": "node scripts/generate-icons.mjs",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "lint": "eslint . --ext .ts,.tsx",
-    "dist": "npm run build && electron-builder",
-    "dist:dir": "npm run build && electron-builder --dir",
+    "changelog:release": "node scripts/generate-changelog.mjs",
+    "backend:stage-release": "node scripts/stage-backend-release.mjs",
+    "dist": "npm run dist:release",
+    "dist:dir": "npm run dist:release -- --dir",
+    "dist:release": "node scripts/dist-release.mjs",
     "backend:jlink": "node scripts/backend-jlink.mjs",
     "dev:jlink": "node -e \"process.env.QUERYEER_JLINK_HOME='../.backend-jlink';require('child_process').execSync('electron-vite dev',{cwd:__dirname,stdio:'inherit',shell:true,env:{...process.env}})\""
   },
@@ -64,7 +67,7 @@
   "overrides": {
     "dompurify": "3.4.3"
   },
-  "build": {
+    "build": {
     "appId": "com.queryeer.electron",
     "productName": "Queryeer",
     "directories": {
@@ -74,10 +77,27 @@
       "out/**/*",
       "resources/**/*",
       "package.json",
-      "CHANGELOG.md"
+      {
+        "from": "dist/generated",
+        "to": ".",
+        "filter": [
+          "CHANGELOG.md"
+        ]
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "dist/release-resources/backend",
+        "to": "backend"
+      },
+      {
+        "from": "dist/release-resources/plugins",
+        "to": "plugins"
+      }
     ],
     "win": {
       "icon": "resources/icon.ico",
+      "signAndEditExecutable": false,
       "target": [
         "nsis"
       ]

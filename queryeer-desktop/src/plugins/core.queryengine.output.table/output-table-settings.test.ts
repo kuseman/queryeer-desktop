@@ -26,6 +26,7 @@ describe("output-table-settings", () => {
       coerceOutputTableSettings({
         viewMode: "nope",
         stackedMaxRows: "a lot",
+        maxRows: "all",
       })
     ).toEqual(DEFAULT_OUTPUT_TABLE_SETTINGS);
   });
@@ -35,6 +36,7 @@ describe("output-table-settings", () => {
       getValue: (settingId: string) => {
         if (settingId.endsWith("viewMode")) return "stacked";
         if (settingId.endsWith("stackedMaxRows")) return 42.9;
+        if (settingId.endsWith("maxRows")) return 2500.8;
         return undefined;
       },
     });
@@ -42,6 +44,7 @@ describe("output-table-settings", () => {
     expect(resolveOutputTableSettings()).toEqual({
       viewMode: "stacked",
       stackedMaxRows: 42,
+      maxRows: 2500,
     });
   });
 });

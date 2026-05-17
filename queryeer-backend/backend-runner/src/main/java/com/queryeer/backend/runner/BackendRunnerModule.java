@@ -40,7 +40,8 @@ public final class BackendRunnerModule
 
         ClassLoader appClassLoader = BackendRunnerModule.class.getClassLoader();
         String appDir = config.getOrDefault("queryeer.app.dir", ".");
-        Path builtinsDir = resolveBuiltinsDir(Path.of(appDir));
+        String resourcesDir = config.getOrDefault("queryeer.resources.dir", appDir);
+        Path builtinsDir = resolveBuiltinsDir(Path.of(resourcesDir), Path.of(appDir));
         List<PluginRuntimeContributionCollector.ManifestSource> builtinManifests = loadBuiltinManifests(builtinsDir);
         PluginRuntimeContributionCollector.PluginRuntimeContributions runtimeContributions = new PluginRuntimeContributionCollector().collect(builtinManifests);
         List<URL> sharedLibUrls = new ArrayList<>(SharedLibraryLoader.collect(config.get("queryeer.app.dir")));
@@ -160,6 +161,7 @@ public final class BackendRunnerModule
     {
         Map<String, String> values = new LinkedHashMap<>();
         putIfPresent(values, "queryeer.app.dir", firstNonBlank(System.getProperty("queryeer.app.dir"), System.getenv("QUERYEER_APP_DIR")));
+        putIfPresent(values, "queryeer.resources.dir", firstNonBlank(System.getProperty("queryeer.resources.dir"), System.getenv("QUERYEER_RESOURCES_DIR")));
         putIfPresent(values, "queryeer.settings.dir", firstNonBlank(System.getProperty("queryeer.settings.dir"), System.getenv("QUERYEER_SETTINGS_DIR")));
         putIfPresent(values, "queryeer.settings.path", firstNonBlank(System.getProperty("queryeer.settings.path"), System.getenv("QUERYEER_SETTINGS_PATH")));
         return Map.copyOf(values);
@@ -225,8 +227,15 @@ public final class BackendRunnerModule
                 .toList();
     }
 
-    private Path resolveBuiltinsDir(Path appDir)
+    private Path resolveBuiltinsDir(Path resourcesDir, Path appDir)
     {
+        Path resourcesBuiltinsDir = resourcesDir.resolve("plugins")
+                .resolve("builtin");
+        if (java.nio.file.Files.isDirectory(resourcesBuiltinsDir))
+        {
+            return resourcesBuiltinsDir;
+        }
+
         Path appBuiltinsDir = appDir.resolve("plugins")
                 .resolve("builtin");
         if (java.nio.file.Files.isDirectory(appBuiltinsDir))

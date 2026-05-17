@@ -30,6 +30,24 @@ export const coreSettingsPlugin: Plugin = {
       ]
     });
 
+    context.settings.registerSettings({
+      moduleId: "core.backend",
+      title: "Backend",
+      order: 20,
+      settings: [
+        {
+          id: "core.backend.jvmArgs",
+          moduleId: "core.backend",
+          title: "JVM Arguments",
+          description: "Arguments used when starting the Java backend. Defaults to -Xms64m -Xmx512m. Restart the backend/app after changing this setting.",
+          sectionPath: ["Backend", "Java"],
+          tags: ["java", "jvm", "memory", "xmx", "xms"],
+          type: "string",
+          defaultValue: "-Xms64m -Xmx512m"
+        }
+      ]
+    });
+
     const service = await initializeCoreSettingsService(context.settings);
 
     context.commands.registerCommand({

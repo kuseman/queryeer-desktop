@@ -22,6 +22,7 @@
         <junit.jupiter.version>6.0.3</junit.jupiter.version>
         <mockito.core.version>5.23.0</mockito.core.version>
         <maven.dependency.plugin.version>3.8.1</maven.dependency.plugin.version>
+        <maven.assembly.plugin.version>3.7.1</maven.assembly.plugin.version>
         <checkstyle.skip>false</checkstyle.skip>
         <queryeer.config.root>${project.basedir}</queryeer.config.root>
     </properties>
@@ -114,6 +115,11 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-dependency-plugin</artifactId>
                     <version>${maven.dependency.plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-assembly-plugin</artifactId>
+                    <version>${maven.assembly.plugin.version}</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>

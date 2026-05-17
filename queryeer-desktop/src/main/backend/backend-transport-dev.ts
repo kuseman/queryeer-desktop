@@ -5,6 +5,7 @@ import { delimiter, join, resolve } from "node:path";
 import { redactLogMessage } from "./backend-log-redaction.js";
 import { StdioBackendTransportBase } from "./backend-transport-stdio-base.js";
 import type { BackendTransportCallbacks } from "./backend-transport.js";
+import { resolveBackendJvmArgs } from "./backend-jvm-options.js";
 
 export type DevTransportState = {
   dependenciesPrepared: boolean;
@@ -81,9 +82,11 @@ export class DevBackendTransport extends StdioBackendTransportBase {
     const appDirArg = appDir ? `-Dqueryeer.app.dir=${appDir}` : null;
     const settingsDirPath = this.launchContext?.settingsDirPath ?? process.env.QUERYEER_SETTINGS_DIR;
     const settingsDirArg = settingsDirPath ? `-Dqueryeer.settings.dir=${settingsDirPath}` : null;
+    const backendJvmArgs = await resolveBackendJvmArgs(settingsDirPath);
     const classpath = this.resolveRunnerClasspath(repoRoot);
     const args = [
       "--enable-native-access=ALL-UNNAMED",
+      ...backendJvmArgs,
       ...[debugArgs, libNativeArg, appDirArg, settingsDirArg].filter((arg): arg is string => Boolean(arg)),
       "-cp",
       classpath,

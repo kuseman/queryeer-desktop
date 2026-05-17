@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { TextEditorComponent } from "../core.editor/texteditor/TextEditorComponent";
 import { OutputPanel } from "./output/OutputPanel";
 import type { OutputContext, OutputMessage, ResultSet, ColumnType, Column } from "../../contracts/extensions/OutputExtension";
-import { IDLE_OUTPUT_CONTEXT, DEFAULT_OUTPUT_LIMITS } from "../../contracts/extensions/OutputExtension";
+import { IDLE_OUTPUT_CONTEXT } from "../../contracts/extensions/OutputExtension";
 import { getQueryEngineService } from "./QueryEngineService";
+import { resolveOutputMaxRows } from "./output-limits";
 import { getOutputRegistry } from "./output/OutputRegistry";
 import { getQueryOutputFormatRegistry } from "./QueryOutputFormatRegistry";
 import { queryTextRegistry } from "./QueryTextEditorRegistry";
@@ -79,18 +80,26 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     const storedContext = reg.get(fileId, OUTPUT_CONTEXT_KEY);
     const restoredContext = storedContext ?? IDLE_OUTPUT_CONTEXT;
     const queryViewState = getQueryViewStateStore().read(fileId);
+    const defaultRowsTargetPrimaryId = storedContext
+      ? storedContext.rowsTargetPrimaryId
+      : (queryViewState.executionTargetOutputId
+        ?? getOutputRegistry().getSelectablePrimaryContributors()[0]?.id
+        ?? restoredContext.rowsTargetPrimaryId
+        ?? null);
     setOutputContext({
       ...restoredContext,
       artifacts: restoredContext.artifacts ?? [],
       fileId,
       textOutputFormat: storedContext
         ? storedContext.textOutputFormat
-        : (queryViewState.textOutputFormat ?? restoredContext.textOutputFormat ?? "plain")
+        : (queryViewState.textOutputFormat ?? restoredContext.textOutputFormat ?? "plain"),
+      rowsTargetPrimaryId: defaultRowsTargetPrimaryId
     });
     const override = executionPrimaryOverrideByFileIdRef.current.get(fileId);
     setSelectedPrimaryId(
       queryViewState.panelActiveOutputId
       ?? override
+      ?? defaultRowsTargetPrimaryId
       ?? null
     );
   }, [file?.fileId]);
@@ -199,14 +208,12 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       const registrySelectedPrimaryId = outputRegistry.getSelectedPrimaryId();
       const fallbackPrimaryId = registrySelectedPrimaryId && selectablePrimaryIds.includes(registrySelectedPrimaryId)
         ? registrySelectedPrimaryId
-        : TEXT_OUTPUT_PRIMARY_ID;
+        : (selectablePrimaryIds[0] ?? TEXT_OUTPUT_PRIMARY_ID);
       const targetPrimaryCandidate = isSelectedPrimary ? selectedFromToolbar : panelState.executionTargetOutputId;
       const targetPrimaryId = targetPrimaryCandidate && selectablePrimaryIds.includes(targetPrimaryCandidate)
         ? targetPrimaryCandidate
         : fallbackPrimaryId;
-      const panelOutputId = selectedFromToolbar
-        ?? panelState.panelActiveOutputId
-        ?? targetPrimaryId;
+      const panelOutputId = executeOptions?.outputIdOverride ?? targetPrimaryId;
 
       const isFileOutput = targetPrimaryId === FILE_OUTPUT_PRIMARY_ID;
       fileOutputPathByFileIdRef.current.delete(targetFileId);
@@ -354,13 +361,14 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
             }
 
             updateOutputContextForFile(targetFileId, (prev) => {
+              const maxRows = resolveOutputMaxRows();
               const sets = prev.resultSets.map((rs): ResultSet => {
                 if (rs.resultSetIndex !== p.resultSetIndex) return rs;
                 const combined = [...rs.rows, ...p.rows];
-                if (combined.length >= DEFAULT_OUTPUT_LIMITS.maxRows) {
+                if (maxRows !== -1 && combined.length >= maxRows) {
                   // Open the export stream for this result set (fire-and-forget; path resolved on completed)
                   void window.appShell.openExportStream({ executionId, resultSetIndex: p.resultSetIndex });
-                  return { ...rs, rows: combined.slice(0, DEFAULT_OUTPUT_LIMITS.maxRows), rowLimitExceeded: true };
+                  return { ...rs, rows: combined.slice(0, maxRows), rowLimitExceeded: true };
                 }
                 return { ...rs, rows: combined };
               });

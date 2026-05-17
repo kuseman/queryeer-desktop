@@ -1,10 +1,10 @@
 import { execSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 const backendRoot = join(projectRoot, "..", "queryeer-backend");
-const jlinkOutput = join(projectRoot, "..", ".backend-jlink");
+const jlinkOutput = resolve(process.env.QUERYEER_JLINK_OUTPUT ?? join(projectRoot, "..", ".backend-jlink"));
 const mvnw = process.platform === "win32" ? "mvnw.cmd" : "mvnw";
 const mvnwPath = join(backendRoot, mvnw);
 
@@ -42,6 +42,8 @@ async function main() {
     "-Dmaven.source.skip=true",
     "install"
   ].join(" "));
+
+  rmSync(jlinkOutput, { recursive: true, force: true });
 
   run("jlink", [
     "jlink",
