@@ -305,7 +305,7 @@ export class BackendGateway {
     if (this.tracePayloads) {
       this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
     }
-    const response = await this.sendRequest(envelope);
+    const response = await this.sendRequest(envelope, 30_000);
     if (!response.result) {
       throw new Error("file.open failed: missing result");
     }
@@ -595,7 +595,7 @@ export class BackendGateway {
       const timeout = setTimeout(() => {
         this.pending.cancel(envelope.id);
         this.appendLog(
-          "error",
+          "warn",
           "gateway",
           `Request timeout ${envelope.id} ${envelope.method}; pending=${this.pending.size()}`
         );

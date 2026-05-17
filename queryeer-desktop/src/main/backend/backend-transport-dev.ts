@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
-import { delimiter, join } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { redactLogMessage } from "./backend-log-redaction.js";
 import { StdioBackendTransportBase } from "./backend-transport-stdio-base.js";
 import type { BackendTransportCallbacks } from "./backend-transport.js";
@@ -37,36 +37,45 @@ export class DevBackendTransport extends StdioBackendTransportBase {
 
   protected async spawnBackendProcess(): Promise<ChildProcessWithoutNullStreams> {
     const repoRoot = join(process.cwd(), "..");
-    const mvnwPath = join(repoRoot + '/queryeer-backend/', process.platform === "win32" ? "mvnw.cmd" : "mvnw");
+    const jlinkHomeRaw = process.env.QUERYEER_JLINK_HOME?.trim();
+    const jlinkHome = jlinkHomeRaw ? resolve(jlinkHomeRaw) : undefined;
+    const javaBin = jlinkHome
+      ? join(jlinkHome, "bin", process.platform === "win32" ? "java.exe" : "java")
+      : "java";
 
-    if (!existsSync(mvnwPath)) {
-      throw new Error(`Maven wrapper not found: ${mvnwPath}`);
-    }
+    if (jlinkHome) {
+      if (!existsSync(javaBin)) {
+        throw new Error(`QUERYEER_JLINK_HOME is set but java binary not found: ${javaBin}`);
+      }
+    } else {
+      const mvnwPath = join(repoRoot + '/queryeer-backend/', process.platform === "win32" ? "mvnw.cmd" : "mvnw");
+      if (!existsSync(mvnwPath)) {
+        throw new Error(`Maven wrapper not found: ${mvnwPath}`);
+      }
+      await this.verifyJavaAvailable(repoRoot);
 
-    await this.verifyJavaAvailable(repoRoot);
-
-    if (!this.state.dependenciesPrepared) {
-      await this.runMavenCommand(repoRoot, mvnwPath, [
-        "-q",
-        "-T", "1C",                     // Parallel build
-        "-f", "queryeer-backend/pom.xml",
-        "-pl", DevBackendTransport.builtinBackendModules.join(","),
-        "-am",
-        "-DskipTests=true",
-        "-Dspotless.check.skip=true",
-        "-DcheckstyleSkip=true",
-        "-Dmaven.javadoc.skip=true",    // Don't build docs
-        "-Dmaven.source.skip=true",     // Don't package source code
-        "-Dbuild.cache.skip=false",     // Enable build cache if plugin is present        
-        "install"
-      ]);
-      this.state.dependenciesPrepared = true;
+      if (!this.state.dependenciesPrepared) {
+        await this.runMavenCommand(repoRoot, mvnwPath, [
+          "-q",
+          "-T", "1C",
+          "-f", "queryeer-backend/pom.xml",
+          "-pl", DevBackendTransport.builtinBackendModules.join(","),
+          "-am",
+          "-DskipTests=true",
+          "-Dspotless.check.skip=true",
+          "-DcheckstyleSkip=true",
+          "-Dmaven.javadoc.skip=true",
+          "-Dmaven.source.skip=true",
+          "-Dbuild.cache.skip=false",
+          "install"
+        ]);
+        this.state.dependenciesPrepared = true;
+      }
     }
 
     const appDir = this.launchContext?.appDir ?? process.env.QUERYEER_APP_DIR;
     const debugArgs =
       process.env.QUERYEER_BACKEND_JDWP?.trim() ||
-      //"-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:51050";  // Sticky listening port and suspend JVM until debug connect
       "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=0";
     const libNativeArg = appDir ? `-Djava.library.path=${join(appDir, "libNative")}` : null;
     const appDirArg = appDir ? `-Dqueryeer.app.dir=${appDir}` : null;
@@ -86,7 +95,7 @@ export class DevBackendTransport extends StdioBackendTransportBase {
       QUERYEER_SETTINGS_DIR: settingsDirPath
     };
 
-    return spawn("java", args, {
+    return spawn(javaBin, args, {
       cwd: repoRoot,
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,

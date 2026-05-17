@@ -18,7 +18,9 @@
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "lint": "eslint . --ext .ts,.tsx",
     "dist": "npm run build && electron-builder",
-    "dist:dir": "npm run build && electron-builder --dir"
+    "dist:dir": "npm run build && electron-builder --dir",
+    "backend:jlink": "node scripts/backend-jlink.mjs",
+    "dev:jlink": "node -e \"process.env.QUERYEER_JLINK_HOME='../.backend-jlink';require('child_process').execSync('electron-vite dev',{cwd:__dirname,stdio:'inherit',shell:true,env:{...process.env}})\""
   },
   "engines": {
     "node": ">=20.0.0"
