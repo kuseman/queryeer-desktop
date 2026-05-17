@@ -11,6 +11,7 @@ import type { TooltipSectionContribution } from "../../contracts/extensions/Tool
 import type { MimeCapability, MimeIconProps } from "../../contracts/files/FilesRegistry";
 import { TabTooltip, buildTabTooltip } from "./TabTooltip";
 import { DocumentIcon } from "../../renderer/icons/DocumentIcon";
+import { getExpressionRuntime } from "../../plugins/core.expressions/runtime";
 
 type HoveredTab = {
   fileId: string;
@@ -210,7 +211,20 @@ export function EditorTabs({
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {allActions.map((action) => (
+          {allActions
+            .filter((action) => {
+              if (!action.enabledWhen) return true;
+              try {
+                return getExpressionRuntime().evaluateBooleanSync(
+                  action.enabledWhen,
+                  { uri: contextMenu.file.uri, mimeType: contextMenu.file.mimeType },
+                  { mode: "when", source: `tabContextMenu:${action.id}`, timeoutMs: 50 }
+                );
+              } catch {
+                return true;
+              }
+            })
+            .map((action) => (
             <div
               key={action.id}
               className="shell-context-menu__item shell-tab-context-menu-item"

@@ -141,8 +141,8 @@ export const coreLayoutPlugin: Plugin = {
         { id: "core.layout.tab.close", label: "Close", order: 10 },
         { id: "core.layout.tab.closeOthers", label: "Close Others", order: 20 },
         { id: "core.layout.tab.closeAll", label: "Close All", order: 30 },
-        { id: "core.layout.tab.copyPath", label: "Copy Path", order: 40 },
-        { id: "core.layout.tab.openInExplorer", label: "Open in System Explorer", order: 50 }
+        { id: "core.layout.tab.copyPath", label: "Copy Path", order: 40, enabledWhen: "uri.startsWith('file://')" },
+        { id: "core.layout.tab.openInExplorer", label: "Open in System Explorer", order: 50, enabledWhen: "uri.startsWith('file://')" }
       ]
     });
 

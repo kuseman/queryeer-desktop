@@ -53,8 +53,9 @@
 
 .jdbc-nav-tree {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .jdbc-nav-tree-header {
@@ -63,6 +64,7 @@
   justify-content: flex-end;
   padding: 2px 4px;
   border-bottom: 1px solid var(--border, #3c3c3c);
+  flex-shrink: 0;
 }
 
 .jdbc-nav-link-toggle {
@@ -82,6 +84,9 @@
 }
 
 .jdbc-nav-tree-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
   padding: 2px 0;
   width: 100%;
 }
@@ -156,7 +161,6 @@
 }
 
 .jdbc-nav-node.is-active {
-  background: var(--accent-soft, rgba(0, 120, 212, 0.12));
   color: var(--text-0, #fff);
 }
 
@@ -172,7 +176,12 @@
 }
 
 .jdbc-nav-node.is-selected {
-  background: var(--list-active-selection-bg, rgba(255, 255, 255, 0.08));
+  background: var(--state-select-bg, rgba(0, 120, 215, 0.25));
+  color: var(--text-0, #fff);
+}
+
+.jdbc-nav-node.is-selected:hover {
+  background: var(--state-select-bg-hover, rgba(0, 120, 215, 0.35));
 }
 
 .jdbc-nav-node.is-selected::before {
@@ -182,6 +191,6 @@
   top: 2px;
   bottom: 2px;
   width: 2px;
-  background: var(--text-muted, #888);
+  background: var(--accent, #0078d4);
   border-radius: 0 1px 1px 0;
 }
