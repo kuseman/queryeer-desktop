@@ -76,6 +76,11 @@ class QueryViewStateStore {
     };
   }
 
+  evict(fileId: string): void {
+    this.stateByFileId.delete(fileId);
+    this.listenersByFileId.delete(fileId);
+  }
+
   private patch(fileId: string, patch: QueryViewState): void {
     const files = this.filesRegistry;
     if (!files) {

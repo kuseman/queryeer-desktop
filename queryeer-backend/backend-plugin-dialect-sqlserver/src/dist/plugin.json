@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "id": "queryengine.jdbc.dialect.sqlserver",
+  "name": "SQL Server JDBC Dialect",
+  "version": "${project.version}",
+  "description": "SQL Server dialect, query plan, and native authentication runtime contribution.",
+  "dependencies": ["queryengine.jdbc"],
+  "providesCapabilities": ["queryengine.jdbc.dialect.sqlserver"],
+  "requiredCapabilities": ["queryengine.jdbc.connection"],
+  "backend": {
+    "entrypointClass": "com.queryeer.backend.plugin.jdbc.sqlserver.SqlServerBackendPlugin"
+  },
+  "runtime": {
+    "shared": {
+      "parentFirstPackagePrefixes": ["com.microsoft.sqlserver.jdbc."],
+      "nativeLibraries": [
+        {
+          "os": "windows",
+          "arch": "any",
+          "searchPaths": ["libNative"],
+          "filePatterns": ["mssql-jdbc_auth*.dll", "sqljdbc_auth.dll"],
+          "required": false,
+          "loaderClass": "com.queryeer.backend.queryengine.jdbc.runtime.SharedNativeLibraryLoader"
+        }
+      ],
+      "sharedArtifacts": [
+        {
+          "pattern": "mssql-jdbc-*.jar",
+          "required": false
+        }
+      ]
+    }
+  }
+}

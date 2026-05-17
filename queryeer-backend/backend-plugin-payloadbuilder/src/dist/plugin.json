@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "queryengine.payloadbuilder",
+  "name": "Payloadbuilder Query Engine",
+  "version": "${project.version}",
+  "description": "Payloadbuilder query execution runtime.",
+  "dependencies": ["queryengine.jdbc"],
+  "providesCapabilities": ["queryengine.execute", "queryengine.invoke", "queryengine.payloadbuilder.catalog"],
+  "requiredCapabilities": [],
+  "backend": {
+    "entrypointClass": "com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderBackendPlugin"
+  }
+}

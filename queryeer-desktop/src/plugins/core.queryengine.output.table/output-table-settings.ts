@@ -1,23 +1,28 @@
 import { getCoreSettingsService } from "../core.settings/service";
+import { OUTPUT_TABLE_MAX_ROWS_SETTING_ID, coerceOutputMaxRows } from "../core.queryengine/output-limits";
 
 export const OUTPUT_TABLE_VIEW_MODE_SETTING_ID = "core.queryengine.output.table.resultSets.viewMode";
 export const OUTPUT_TABLE_STACKED_MAX_ROWS_SETTING_ID = "core.queryengine.output.table.resultSets.stackedMaxRows";
+export { OUTPUT_TABLE_MAX_ROWS_SETTING_ID };
 
 export type OutputTableResultSetsViewMode = "tabs" | "stacked";
 
 export type OutputTableSettings = {
   viewMode: OutputTableResultSetsViewMode;
   stackedMaxRows: number;
+  maxRows: number;
 };
 
 export const DEFAULT_OUTPUT_TABLE_SETTINGS: OutputTableSettings = {
   viewMode: "tabs",
   stackedMaxRows: 500,
+  maxRows: 100_000,
 };
 
 export function coerceOutputTableSettings(values: {
   viewMode?: unknown;
   stackedMaxRows?: unknown;
+  maxRows?: unknown;
 }): OutputTableSettings {
   const viewMode = values.viewMode === "stacked" || values.viewMode === "tabs"
     ? values.viewMode
@@ -32,6 +37,7 @@ export function coerceOutputTableSettings(values: {
   return {
     viewMode,
     stackedMaxRows,
+    maxRows: coerceOutputMaxRows(values.maxRows),
   };
 }
 
@@ -43,5 +49,6 @@ export function resolveOutputTableSettings(): OutputTableSettings {
   return coerceOutputTableSettings({
     viewMode: settings.getValue(OUTPUT_TABLE_VIEW_MODE_SETTING_ID),
     stackedMaxRows: settings.getValue(OUTPUT_TABLE_STACKED_MAX_ROWS_SETTING_ID),
+    maxRows: settings.getValue(OUTPUT_TABLE_MAX_ROWS_SETTING_ID),
   });
 }

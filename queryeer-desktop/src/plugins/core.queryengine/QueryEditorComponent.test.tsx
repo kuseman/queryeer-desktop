@@ -198,6 +198,9 @@ describe("QueryEditorComponent execution state across tab switches", () => {
     mocks.cancelRequestListeners.clear();
     mocks.selectedPrimaryRef.value = "core.queryengine.output.table";
     queryFilesById.clear();
+    getQueryViewStateStore().evict("file-1");
+    getQueryViewStateStore().evict("file-2");
+    getQueryViewStateStore().evict("file-plan");
     getFileStateRegistry().evict("file-1");
     getFileStateRegistry().evict("file-2");
     mocks.executeMock.mockResolvedValue("exec-1");
@@ -259,6 +262,29 @@ const filesRegistry = {
       root.unmount();
     });
     rootElement.remove();
+  });
+
+  it("defaults new query files to table results output", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+    mocks.selectedPrimaryRef.value = null;
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    const output = rootElement.querySelector("[data-testid='mock-output']");
+    expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.table");
+    expect(output?.getAttribute("data-rows-target-primary")).toBe("core.queryengine.output.table");
+
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+
+    const context = getFileStateRegistry().get("file-1", OUTPUT_CONTEXT_KEY);
+    expect(context?.rowsTargetPrimaryId).toBe("core.queryengine.output.table");
   });
 
   it("keeps stop wired to running execution after switching tabs", async () => {
@@ -447,7 +473,7 @@ const filesRegistry = {
     expect(output?.getAttribute("data-state")).toBe("failed");
   });
 
-  it("temporarily switches active output to text when query has no rows", async () => {
+  it("keeps default results tab when query has no rows", async () => {
     const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
 
     await act(async () => {
@@ -471,7 +497,7 @@ const filesRegistry = {
     });
 
     const output = rootElement.querySelector('[data-testid="mock-output"]');
-    expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.text");
+    expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.table");
   });
 
   it("tab selection is independent from toolbar output selection", async () => {
@@ -597,6 +623,31 @@ const filesRegistry = {
     expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.text");
   });
 
+  it("selects toolbar output when executing after manually switching output tab", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+    mocks.selectedPrimaryRef.value = "core.queryengine.output.table";
+
+    getQueryViewStateStore().setPanelSelectedOutput("file-1", "core.queryengine.output.text");
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    let output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.text");
+
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+
+    output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.table");
+    expect(output?.getAttribute("data-rows-target-primary")).toBe("core.queryengine.output.table");
+  });
+
   it("selects plan tab without routing row chunks to the plan output", async () => {
     const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
     mocks.consumeExecuteOptionsMock.mockReturnValueOnce({
@@ -620,7 +671,70 @@ const filesRegistry = {
 
     const output = rootElement.querySelector('[data-testid="mock-output"]');
     expect(output?.getAttribute("data-selected-primary")).toBe("core.graph.queryPlanOutput");
+    expect(output?.getAttribute("data-rows-target-primary")).toBe("core.queryengine.output.table");
+  });
+
+  it("selects plan tab over toolbar-selected output when plan is returned", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+
+    getQueryViewStateStore().setSelectedOutput("file-1", "core.queryengine.output.text");
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+
+    const listener = [...mocks.subscribeByExecutionId.values()][0];
+    await act(async () => {
+      listener?.({
+        method: "queryengine.completed",
+        params: {
+          features: ["rows"],
+          artifacts: [{ capability: "plan", kind: "graph", title: "Actual plan" }]
+        }
+      });
+      await Promise.resolve();
+    });
+
+    const output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-selected-primary")).toBe("core.graph.queryPlanOutput");
     expect(output?.getAttribute("data-rows-target-primary")).toBe("core.queryengine.output.text");
+  });
+
+  it("preserves output tab selection separately from toolbar selection across active file switches", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+    const file2 = makeFile({ fileId: "file-2", uri: "file:///q2.sql" });
+
+    getQueryViewStateStore().setSelectedOutput("file-1", "core.queryengine.output.table");
+    getQueryViewStateStore().setPanelSelectedOutput("file-1", "core.queryengine.output.text");
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    let output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.text");
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file2} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.table");
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.text");
+    expect(getQueryViewStateStore().read("file-1").selectedOutputId).toBe("core.queryengine.output.table");
   });
 
   it("does not persist output selection when switching output tabs", async () => {

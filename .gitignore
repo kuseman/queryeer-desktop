@@ -48,6 +48,7 @@ queryeer-desktop/coverage/
 
 .DS_Store
 .backend-jlink/
+.backend-jlink-release/
 
 ### VS Code ###
 .vscode

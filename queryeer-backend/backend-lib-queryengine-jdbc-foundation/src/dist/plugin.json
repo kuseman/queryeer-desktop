@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "queryengine.runtime.jdbc-foundation",
+  "name": "JDBC Foundation Runtime",
+  "version": "${project.version}",
+  "description": "Shared runtime classes for JDBC query engine plugins.",
+  "dependencies": [],
+  "providesCapabilities": ["queryengine.runtime.jdbc-foundation"],
+  "requiredCapabilities": [],
+  "backend": {
+    "entrypointClass": "com.queryeer.backend.queryengine.jdbc.runtime.JdbcFoundationRuntimePlugin"
+  },
+  "runtime": {
+    "shared": {
+      "parentFirstPackagePrefixes": ["com.queryeer.backend.queryengine.jdbc."],
+      "nativeLibraries": [],
+      "sharedArtifacts": []
+    }
+  }
+}

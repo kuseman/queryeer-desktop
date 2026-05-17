@@ -12,6 +12,7 @@
 
     <properties>
         <payloadbuilder.version>1.10.1</payloadbuilder.version>
+        <queryeer.plugin.id>queryengine.payloadbuilder</queryeer.plugin.id>
     </properties>
 
     <artifactId>backend-plugin-payloadbuilder</artifactId>
@@ -74,6 +75,26 @@
                             <includeScope>runtime</includeScope>
                             <outputFile>${project.build.directory}/queryeer-plugin-deps.txt</outputFile>
                         </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <configuration>
+                    <descriptors>
+                        <descriptor>${project.parent.basedir}/src/assembly/backend-plugin.xml</descriptor>
+                    </descriptors>
+                    <finalName>${queryeer.plugin.id}</finalName>
+                    <appendAssemblyId>false</appendAssemblyId>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>assemble-queryeer-plugin</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>

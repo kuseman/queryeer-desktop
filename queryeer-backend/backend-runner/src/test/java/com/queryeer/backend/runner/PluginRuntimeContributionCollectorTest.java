@@ -37,6 +37,24 @@ class PluginRuntimeContributionCollectorTest
     }
 
     @Test
+    void collectsSharedClasspathFromPackagedRuntimePluginLayout() throws Exception
+    {
+        Path source = tempDir.resolve("runtime-plugin-dist");
+        Path lib = source.resolve("lib");
+        Path pluginJar = lib.resolve("runtime-plugin.jar");
+        Files.createDirectories(lib);
+        Files.writeString(pluginJar, "not-a-real-jar", StandardCharsets.UTF_8);
+        PluginManifest manifest = new PluginManifest(1, "queryengine.runtime.test", "Runtime Plugin", "1.0.0", new PluginManifest.BackendTarget("example.Plugin", null, null), null, List.of(),
+                List.of(), List.of(), null, null, new PluginManifest.RuntimeTarget(new PluginManifest.SharedRuntime(List.of("com.example.shared."), List.of(), List.of())));
+
+        PluginRuntimeContributionCollector.PluginRuntimeContributions contributions = new PluginRuntimeContributionCollector()
+                .collect(List.of(new PluginRuntimeContributionCollector.ManifestSource(manifest, source)));
+
+        Assertions.assertEquals(2, contributions.sharedClasspath()
+                .size());
+    }
+
+    @Test
     void doesNotPromoteDialectPluginClasspathToSharedClasspath() throws Exception
     {
         Path source = tempDir.resolve("dialect-plugin");
