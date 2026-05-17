@@ -98,7 +98,8 @@ export class JdbcNavigationStore {
   private async doFetchAndApply(nodeId: string, node: JdbcTreeNode, options?: { silent?: boolean }): Promise<void> {
     const children = await this.fetchChildren(node, options);
     const newNodeMap = new Map(this.state.nodeMap);
-    const childIds = this.materializeNodes(node.connectionId, node.dialectId, children, newNodeMap);
+    const catalog = node.kind === "database" ? node.name : (node.attributes.catalog as string | undefined);
+    const childIds = this.materializeNodes(node.connectionId, node.dialectId, children, newNodeMap, catalog);
     newNodeMap.set(nodeId, {
       ...newNodeMap.get(nodeId)!,
       isLoading: false,
@@ -173,18 +174,20 @@ export class JdbcNavigationStore {
     connectionId: string,
     dialectId: string,
     objects: JdbcSchemaObject[],
-    nodeMap: Map<string, JdbcTreeNode>
+    nodeMap: Map<string, JdbcTreeNode>,
+    catalog?: string
   ): string[] {
     const ids: string[] = [];
     for (const obj of objects) {
-      const nodeId = `${connectionId}::${obj.id}`;
+      const qualifier = catalog ? `${catalog}/` : "";
+      const nodeId = `${connectionId}::${qualifier}${obj.id}`;
       const nodeType: NodeType = obj.nodeType ?? inferNodeType(obj.kind);
       const isLeaf = nodeType === "property";
       const hasInlineChildren = (obj.children ?? []).length > 0;
       const children = obj.children ?? [];
       const childIds =
         children.length > 0
-          ? this.materializeNodes(connectionId, dialectId, children, nodeMap)
+          ? this.materializeNodes(connectionId, dialectId, children, nodeMap, catalog)
           : [];
       nodeMap.set(nodeId, {
         id: nodeId,

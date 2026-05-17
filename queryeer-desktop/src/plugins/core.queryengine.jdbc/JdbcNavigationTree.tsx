@@ -45,6 +45,10 @@ export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDa
     return store.subscribe(() => setRevision((r) => r + 1));
   }, [store]);
 
+  useEffect(() => {
+    setSelectedNodeId(null);
+  }, [activeFileConnectionId, activeFileDatabase]);
+
   // Auto-expand to active file connection when linkToActiveFile is on
   useEffect(() => {
     if (!store.getState().linkToActiveFile || !activeFileConnectionId) return;
@@ -134,7 +138,7 @@ export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDa
           title={state.linkToActiveFile ? "Unlink from active file" : "Link to active file"}
           onClick={() => store.toggleLinkToActiveFile()}
         >
-          {state.linkToActiveFile ? "⊟" : "⊞"}
+          {state.linkToActiveFile ? "⛓" : "⊘"}
         </button>
       </div>
       <div ref={treeBodyRef} className="jdbc-nav-tree-body">
@@ -147,6 +151,7 @@ export function JdbcNavigationTree({ store, activeFileConnectionId, activeFileDa
             dialectId={entry.dialectId}
             activeFileConnectionId={activeFileConnectionId}
             activeFileDatabase={activeFileDatabase}
+            linkToActiveFile={state.linkToActiveFile}
             selectedNodeId={selectedNodeId}
             onNodeClick={handleNodeClick}
             onContextMenu={handleContextMenu}
@@ -178,12 +183,13 @@ type NodeRowProps = {
   dialectId: string;
   activeFileConnectionId: string | undefined;
   activeFileDatabase: string | undefined;
+  linkToActiveFile: boolean;
   selectedNodeId: string | null;
   onNodeClick: (nodeId: string) => void;
   onContextMenu: (e: React.MouseEvent, node: JdbcTreeNode) => void;
 };
 
-function TreeNodeRow({ nodeId, store, depth, dialectId, activeFileConnectionId, activeFileDatabase, selectedNodeId, onNodeClick, onContextMenu }: NodeRowProps) {
+function TreeNodeRow({ nodeId, store, depth, dialectId, activeFileConnectionId, activeFileDatabase, linkToActiveFile, selectedNodeId, onNodeClick, onContextMenu }: NodeRowProps) {
   const node = store.getNode(nodeId);
   if (!node) return null;
 
@@ -193,7 +199,7 @@ function TreeNodeRow({ nodeId, store, depth, dialectId, activeFileConnectionId, 
   const label = formatNodeLabel(node);
 
   const isActive =
-    activeFileConnectionId && node.connectionId === activeFileConnectionId
+    selectedNodeId === null && linkToActiveFile && activeFileConnectionId && node.connectionId === activeFileConnectionId
       ? node.kind === "connection"
         ? true
         : node.kind === "database" && node.name === activeFileDatabase
@@ -236,6 +242,7 @@ function TreeNodeRow({ nodeId, store, depth, dialectId, activeFileConnectionId, 
           dialectId={dialectId}
           activeFileConnectionId={activeFileConnectionId}
           activeFileDatabase={activeFileDatabase}
+          linkToActiveFile={linkToActiveFile}
           selectedNodeId={selectedNodeId}
           onNodeClick={onNodeClick}
           onContextMenu={onContextMenu}

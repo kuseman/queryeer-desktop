@@ -76,13 +76,16 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       return;
     }
     const reg = getFileStateRegistry();
-    const restoredContext = reg.get(fileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT;
+    const storedContext = reg.get(fileId, OUTPUT_CONTEXT_KEY);
+    const restoredContext = storedContext ?? IDLE_OUTPUT_CONTEXT;
     const queryViewState = getQueryViewStateStore().read(fileId);
     setOutputContext({
       ...restoredContext,
       artifacts: restoredContext.artifacts ?? [],
       fileId,
-      textOutputFormat: queryViewState.textOutputFormat ?? restoredContext.textOutputFormat ?? "plain"
+      textOutputFormat: storedContext
+        ? storedContext.textOutputFormat
+        : (queryViewState.textOutputFormat ?? restoredContext.textOutputFormat ?? "plain")
     });
     const override = executionPrimaryOverrideByFileIdRef.current.get(fileId);
     setSelectedPrimaryId(
