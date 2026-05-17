@@ -94,6 +94,19 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
           activeFileId = existing.fileId;
           notifyActiveFileChanged(existing.fileId);
         }
+        // Hydrate may have restored backup content into the editor model.
+        // When the user explicitly opens a file, reload from disk so they
+        // see the current file content, not a stale backup.
+        if (existing.backupUri && readFile && onFileChanged) {
+          try {
+            const result = await readFile(existing.uri);
+            if (result.success) {
+              onFileChanged(existing, result.content);
+            }
+          } catch {
+            // best effort - disk read may fail if file was deleted
+          }
+        }
         return existing;
       }
 
@@ -133,11 +146,7 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
       });
 
       if (file.engineBinding) {
-        try {
-          await backendSync?.openFile?.(file);
-        } catch {
-          // best effort - backend may not be running
-        }
+        Promise.resolve(backendSync?.openFile?.(file)).catch(() => {});
       }
 
       activeFileId = file.fileId;

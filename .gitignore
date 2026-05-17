@@ -47,6 +47,7 @@ queryeer-desktop/coverage/
 /.nb-gradle/
 
 .DS_Store
+.backend-jlink/
 
 ### VS Code ###
 .vscode

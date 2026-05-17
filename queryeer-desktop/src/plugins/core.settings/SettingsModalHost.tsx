@@ -525,6 +525,14 @@ function compareTreeNodes(left: TreeNode, right: TreeNode): number {
   if (!leftIsGeneral && rightIsGeneral) {
     return 1;
   }
+  const leftIsGroup = left.children.length > 0;
+  const rightIsGroup = right.children.length > 0;
+  if (leftIsGroup && !rightIsGroup) {
+    return -1;
+  }
+  if (!leftIsGroup && rightIsGroup) {
+    return 1;
+  }
   return left.name.localeCompare(right.name);
 }
 

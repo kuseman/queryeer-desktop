@@ -312,7 +312,7 @@ export const coreQueryEnginePlugin: Plugin = {
           moduleId: "core.queryengine",
           title: "Symbol Actions",
           description: "Context menu actions that appear when right-clicking on symbols (tables, views, functions) in SQL editors.",
-          sectionPath: ["Query Engine", "Symbol Actions"],
+          sectionPath: ["Query Engine", "Text Editor", "Symbol Actions"],
           type: "json",
           defaultValue: [],
           advanced: { rendererId: SYMBOL_ACTIONS_SETTING_ID }

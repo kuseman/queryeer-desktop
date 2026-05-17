@@ -16,7 +16,7 @@ export function registerShortcuts(context: Pick<PluginContext, "commands" | "key
         moduleId: "core.queryengine",
         title: "Query Shortcuts",
         description: "Configurable query shortcuts. Each slot holds ordered rules; the first matching rule's query is executed.",
-        sectionPath: ["Query Engine", "Shortcuts"],
+        sectionPath: ["Query Engine", "Text Editor", "Shortcuts"],
         type: "json",
         defaultValue: { shortcuts: [] },
         advanced: { rendererId: "core.queryengine.shortcuts.renderer" }
