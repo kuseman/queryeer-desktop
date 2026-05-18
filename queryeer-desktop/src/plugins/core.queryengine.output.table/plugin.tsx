@@ -40,9 +40,8 @@ import { TableActionsSettingsEditor } from "./table-action-settings";
 import { getTableResultStore } from "./table-result-store";
 import { GridComponent } from "../../renderer/components/GridComponent";
 import type { GridComponentColumn, GridComponentRow, GridComponentSelectionSnapshot, GridComponentState } from "../../renderer/components/GridComponent";
-export { resolveFilterType } from "../../renderer/components/GridComponent";
 
-const GRID_STATE_KEY = defineStateKey<GridComponentState>("core.queryengine.output.table.gridState");
+const GRID_STATE_KEY = defineStateKey<Record<number, GridComponentState>>("core.queryengine.output.table.gridState");
 const ACTIVE_RESULT_SET_KEY = defineStateKey<number>("core.queryengine.output.table.activeResultSet");
 
 type SavedSelection = { selection: SelectionModel | null; anchor: SelectionAnchor | null };
@@ -315,6 +314,7 @@ function TableGrid({ resultSetIndex, schema, fileId, onPreviewValue }: TableGrid
   return (
     <>
       <GridComponent
+        key={`${fileId ?? ""}:${resultSetIndex}`}
         columns={gridColumns}
         rowNumberWidth={ROW_NUMBER_COL_WIDTH_PX}
         getRowCount={() => getTableResultStore().getRowCount(storeKey)}
@@ -327,9 +327,11 @@ function TableGrid({ resultSetIndex, schema, fileId, onPreviewValue }: TableGrid
           const map = getFileStateRegistry().get(fileId, SELECTION_KEY) ?? {};
           getFileStateRegistry().set(fileId, SELECTION_KEY, { ...map, [resultSetIndex]: { selection, anchor } });
         }}
-        getInitialGridState={() => fileId ? getFileStateRegistry().get(fileId, GRID_STATE_KEY) : undefined}
+        getInitialGridState={() => fileId ? getFileStateRegistry().get(fileId, GRID_STATE_KEY)?.[resultSetIndex] : undefined}
         onGridStateChange={(state) => {
-          if (fileId) getFileStateRegistry().set(fileId, GRID_STATE_KEY, state);
+          if (!fileId) return;
+          const map = getFileStateRegistry().get(fileId, GRID_STATE_KEY) ?? {};
+          getFileStateRegistry().set(fileId, GRID_STATE_KEY, { ...map, [resultSetIndex]: state });
         }}
         resolveCellDisplayValue={resolveCellDisplayValue}
         resolveCellLink={({ value, columnType }) => resolveTableLinkAction({ value, columnType: columnType as Column["type"] })}
@@ -692,16 +694,22 @@ export function createCopyAsCsvTableContextMenuProvider(): TableOutputContextMen
           id: "core.queryengine.output.table.contextMenu.copyAsCsv.item",
           label: "Copy as CSV",
           order: 100,
-          when: "tableSelection.isSingleColumnSelection == true",
           run: async () => {
-            if (!context.selection.isSingleColumnSelection) {
-              return;
+            const lines: string[] = [];
+            const cellsByRow = new Map<number, TableOutputSelectionSnapshot["selectedCells"]>();
+            for (const cell of context.selection.selectedCells) {
+              const row = cellsByRow.get(cell.rowIndex) ?? [];
+              row.push(cell);
+              cellsByRow.set(cell.rowIndex, row);
             }
-            const values = context.selection.selectedCells
-              .slice()
-              .sort((a, b) => a.rowIndex - b.rowIndex)
-              .map((cell) => toCsvScalar(cell.value));
-            await navigator.clipboard.writeText(values.join(","));
+            for (const [, cells] of [...cellsByRow.entries()].sort(([a], [b]) => a - b)) {
+              lines.push(cells
+                .slice()
+                .sort((a, b) => a.columnIndex - b.columnIndex)
+                .map((cell) => toCsvScalar(cell.value))
+                .join(","));
+            }
+            await navigator.clipboard.writeText(lines.join("\n"));
           }
         }
       ];

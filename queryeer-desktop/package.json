@@ -30,21 +30,22 @@
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",
+    "@glideapps/glide-data-grid": "^6.0.3",
     "@xterm/addon-fit": "^0.12.0-beta.204",
     "@xterm/addon-search": "^0.17.0-beta.204",
     "@xterm/addon-web-links": "^0.13.0-beta.204",
     "@xterm/xterm": "^6.1.0-beta.204",
     "@xyflow/react": "^12.10.2",
-    "ag-grid-community": "^35.2.1",
-    "ag-grid-react": "^35.2.1",
     "chokidar": "^4.0.3",
     "jszip": "^3.10.1",
+    "marked": "^4.3.0",
     "monaco-editor": "^0.55.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",
+    "@types/marked": "^5.0.2",
     "@types/node": "^22.15.2",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
@@ -67,7 +68,7 @@
   "overrides": {
     "dompurify": "3.4.3"
   },
-    "build": {
+  "build": {
     "appId": "com.queryeer.electron",
     "productName": "Queryeer",
     "directories": {

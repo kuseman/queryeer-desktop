@@ -6,38 +6,9 @@ import {
   createCopyAsCsvTableContextMenuProvider,
   getCellValueForCopy,
   resolveCellDisplayValue,
-  resolveFilterType,
   isPrimaryMouseButton,
   toCsvScalar,
 } from "./plugin";
-
-describe("table output column type filters", () => {
-  it("maps numeric canonical types to number filter", () => {
-    expect(resolveFilterType("int")).toBe("agNumberColumnFilter");
-    expect(resolveFilterType("long")).toBe("agNumberColumnFilter");
-    expect(resolveFilterType("decimal")).toBe("agNumberColumnFilter");
-    expect(resolveFilterType("float")).toBe("agNumberColumnFilter");
-    expect(resolveFilterType("double")).toBe("agNumberColumnFilter");
-  });
-
-  it("maps datetime canonical types to date filter", () => {
-    expect(resolveFilterType("datetime")).toBe("agDateColumnFilter");
-    expect(resolveFilterType("datetimeoffset")).toBe("agDateColumnFilter");
-  });
-
-  it("maps boolean to set filter", () => {
-    expect(resolveFilterType("boolean")).toBe("agSetColumnFilter");
-  });
-
-  it("falls back to text filter for non-optimized types", () => {
-    expect(resolveFilterType("string")).toBe("agTextColumnFilter");
-    expect(resolveFilterType("object")).toBe("agTextColumnFilter");
-    expect(resolveFilterType("array")).toBe("agTextColumnFilter");
-    expect(resolveFilterType("table")).toBe("agTextColumnFilter");
-    expect(resolveFilterType("any")).toBe("agTextColumnFilter");
-    expect(resolveFilterType("null")).toBe("agTextColumnFilter");
-  });
-});
 
 describe("table output value formatting", () => {
   it("formats decimal as visible string", () => {
@@ -115,7 +86,7 @@ describe("copy as csv table context action", () => {
       },
     });
     expect(provider.when).toBe("tableSelection.hasSelection == true");
-    expect(items[0]?.when).toBe("tableSelection.isSingleColumnSelection == true");
+    expect(items[0]?.when).toBeUndefined();
   });
 });
 
