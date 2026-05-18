@@ -79,7 +79,7 @@ function deriveUntitledCounter(snapshot: WorkspaceSnapshot): number {
   return maxFromFiles;
 }
 
-function stableBackupIdForUri(uri: string): string {
+export function stableBackupIdForUri(uri: string): string {
   let hash = 2166136261;
   for (let i = 0; i < uri.length; i += 1) {
     hash ^= uri.charCodeAt(i);

@@ -52,6 +52,22 @@ class PayloadbuilderEngineStateSupportTest
     }
 
     @Test
+    void buildEngineStatePatchIncludesDefaultCatalogAliasWhenSwitched()
+    {
+        PayloadbuilderEngineState engineState = new PayloadbuilderEngineState(
+                new PayloadbuilderEngineState.PayloadbuilderCatalogState("jdbc1", null, Map.of("jdbc1", new PayloadbuilderCatalogInstance("Jdbc", Map.of("database", "appdb")))));
+        PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state = PayloadbuilderEngineStateSupport.parse(engineState);
+        QuerySession session = new QuerySession(new CatalogRegistry());
+
+        PayloadbuilderEngineStateSupport.applyToSession(session, state);
+        session.setDefaultCatalogAlias("jdbc2");
+
+        Object patch = PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, state);
+
+        Assertions.assertEquals(Map.of("payloadbuilder", Map.of("catalogs", Map.of(), "defaultCatalogAlias", "jdbc2")), patch);
+    }
+
+    @Test
     void buildEngineStatePatchReturnsNullWhenNothingChanged()
     {
         Map<String, Object> properties = new LinkedHashMap<>();

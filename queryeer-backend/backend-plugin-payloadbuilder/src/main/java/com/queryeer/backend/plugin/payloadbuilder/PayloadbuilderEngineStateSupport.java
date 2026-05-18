@@ -1,10 +1,16 @@
 package com.queryeer.backend.plugin.payloadbuilder;
 
+import static com.queryeer.backend.api.PayloadUtils.trimToNull;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
 import se.kuseman.payloadbuilder.api.catalog.ResolvedType;
+import se.kuseman.payloadbuilder.api.execution.Decimal;
+import se.kuseman.payloadbuilder.api.execution.EpochDateTime;
+import se.kuseman.payloadbuilder.api.execution.EpochDateTimeOffset;
+import se.kuseman.payloadbuilder.api.execution.UTF8String;
 import se.kuseman.payloadbuilder.api.execution.ValueVector;
 import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
@@ -14,6 +20,8 @@ final class PayloadbuilderEngineStateSupport
     private static final String KEY_CATALOGS = "catalogs";
     private static final String KEY_CATALOG_ID = "catalogId";
     private static final String KEY_PROPERTIES = "properties";
+    private static final String KEY_DEFAULT_CATALOGALIAS = "defaultCatalogAlias";
+
     private static final String ERROR_ALIAS_REQUIRED = "Catalog alias is required";
     private static final String ERROR_DUPLICATE_ALIAS = "Duplicate catalog alias: ";
     private static final String ERROR_INSTANCE_OBJECT = "Catalog instance for alias '";
@@ -114,6 +122,7 @@ final class PayloadbuilderEngineStateSupport
     static Object buildEngineStatePatch(QuerySession session, PayloadbuilderCatalogState input)
     {
         Map<String, Object> catalogsPatch = new LinkedHashMap<>();
+        boolean defaultAliasSwitched = !Objects.equals(input.defaultCatalogAlias, session.getDefaultCatalogAlias());
         for (PayloadbuilderCatalogState.Instance instance : input.instancesByAlias()
                 .values())
         {
@@ -124,7 +133,7 @@ final class PayloadbuilderEngineStateSupport
                 ValueVector current = session.getCatalogProperty(instance.alias(), property.getKey());
                 Object currentValue = current == null
                         || current.size() == 0 ? null
-                                : current.valueAsObject(0);
+                                : unwrap(current.valueAsObject(0));
                 if (!Objects.equals(property.getValue(), currentValue))
                 {
                     changedProperties.put(property.getKey(), currentValue);
@@ -140,27 +149,43 @@ final class PayloadbuilderEngineStateSupport
             }
         }
 
-        if (catalogsPatch.isEmpty())
+        if (catalogsPatch.isEmpty()
+                && !defaultAliasSwitched)
         {
             return null;
         }
 
         Map<String, Object> payloadbuilderPatch = new LinkedHashMap<>();
         payloadbuilderPatch.put(KEY_CATALOGS, catalogsPatch);
+        if (defaultAliasSwitched)
+        {
+            payloadbuilderPatch.put(KEY_DEFAULT_CATALOGALIAS, session.getDefaultCatalogAlias());
+        }
         Map<String, Object> root = new LinkedHashMap<>();
         root.put(KEY_PAYLOADBUILDER, payloadbuilderPatch);
         return root;
     }
 
-    private static String trimToNull(String value)
+    /** Unwrap PLB internal types to avoid serialization issues. */
+    private static Object unwrap(Object object)
     {
-        if (value == null)
+        if (object instanceof UTF8String s)
         {
-            return null;
+            return s.toString();
         }
-        String trimmed = value.trim();
-        return trimmed.isBlank() ? null
-                : trimmed;
+        else if (object instanceof Decimal d)
+        {
+            return d.asBigDecimal();
+        }
+        else if (object instanceof EpochDateTime d)
+        {
+            return d.getLocalDateTime();
+        }
+        else if (object instanceof EpochDateTimeOffset d)
+        {
+            return d.getZonedDateTime();
+        }
+        return object;
     }
 
     record PayloadbuilderCatalogState(String defaultCatalogAlias, String selectedEnvironmentId, Map<String, Instance> instancesByAlias)

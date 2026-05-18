@@ -118,4 +118,37 @@ describe("payloadbuilder catalog state", () => {
       }
     });
   });
+
+  it("applies defaultCatalogAlias from engine state patch", () => {
+    const start = upsertInstance(emptyCatalogDocument(), {
+      alias: "jdbc1",
+      catalogId: "Jdbc"
+    });
+    start.defaultCatalogAlias = "jdbc1";
+
+    const patched = applyEngineStatePatch(start, {
+      payloadbuilder: {
+        catalogs: {},
+        defaultCatalogAlias: "jdbc2"
+      }
+    });
+
+    expect(patched.defaultCatalogAlias).toBe("jdbc2");
+  });
+
+  it("preserves existing defaultCatalogAlias when patch does not include it", () => {
+    const start = upsertInstance(emptyCatalogDocument(), {
+      alias: "jdbc1",
+      catalogId: "Jdbc"
+    });
+    start.defaultCatalogAlias = "jdbc1";
+
+    const patched = applyEngineStatePatch(start, {
+      payloadbuilder: {
+        catalogs: {}
+      }
+    });
+
+    expect(patched.defaultCatalogAlias).toBe("jdbc1");
+  });
 });
