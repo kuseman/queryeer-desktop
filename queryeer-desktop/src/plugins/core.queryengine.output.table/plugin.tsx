@@ -1,8 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { AgGridReact } from "ag-grid-react";
-import type { ColDef, GridApi, GridReadyEvent, FirstDataRenderedEvent, StateUpdatedEvent, ICellRendererParams, CellClickedEvent, CellClassParams, CellMouseDownEvent, CellMouseOverEvent, CellDoubleClickedEvent, CellKeyDownEvent } from "ag-grid-community";
-import type { GridState } from "ag-grid-community";
-import { AllCommunityModule, ModuleRegistry, themeQuartz, colorSchemeDark, colorSchemeLight } from "ag-grid-community";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { OutputContext, Column } from "../../contracts/extensions/OutputExtension";
 import { getOutputRegistry } from "../core.queryengine/output/OutputRegistry";
@@ -10,7 +6,7 @@ import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistr
 import { getTableOutputContextMenuProviders } from "../../core/plugin-runtime/ExtensionRegistry";
 import { defineStateKey } from "../../contracts/files/FileStateRegistry";
 import { writeToClipboard } from "./clipboard/ClipboardRegistry";
-import { computeSelection, extendSelection, isCellSelected, isRowSelected, getBoundingBox } from "./clipboard/CellSelectionModel";
+import { computeSelection, extendSelection, isCellSelected, getBoundingBox } from "./clipboard/CellSelectionModel";
 import type { SelectionAnchor, SelectionModel } from "./clipboard/CellSelectionModel";
 import outputTableIconUrl from "./output-table.svg";
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../core.settings/service";
@@ -41,36 +37,20 @@ import type { TableAction } from "./table-action-types";
 import { getTableActionRegistry } from "./table-action-registry";
 import { createTableActionProvider } from "./table-action-provider";
 import { TableActionsSettingsEditor } from "./table-action-settings";
+import { getTableResultStore } from "./table-result-store";
+import { GridComponent } from "../../renderer/components/GridComponent";
+import type { GridComponentColumn, GridComponentRow, GridComponentSelectionSnapshot, GridComponentState } from "../../renderer/components/GridComponent";
+export { resolveFilterType } from "../../renderer/components/GridComponent";
 
-ModuleRegistry.registerModules([AllCommunityModule]);
-
-const compactDarkTheme = themeQuartz.withPart(colorSchemeDark).withParams({
-  rowHeight: 24,
-  headerHeight: 26,
-  rowVerticalPaddingScale: 0.5,
-  cellHorizontalPaddingScale: 0.75,
-  fontSize: 12,
-});
-
-const compactLightTheme = themeQuartz.withPart(colorSchemeLight).withParams({
-  rowHeight: 24,
-  headerHeight: 26,
-  rowVerticalPaddingScale: 0.5,
-  cellHorizontalPaddingScale: 0.75,
-  fontSize: 12,
-});
-
-const GRID_STATE_KEY = defineStateKey<GridState>("core.queryengine.output.table.gridState");
+const GRID_STATE_KEY = defineStateKey<GridComponentState>("core.queryengine.output.table.gridState");
 const ACTIVE_RESULT_SET_KEY = defineStateKey<number>("core.queryengine.output.table.activeResultSet");
 
 type SavedSelection = { selection: SelectionModel | null; anchor: SelectionAnchor | null };
 const SELECTION_KEY = defineStateKey<Record<number, SavedSelection>>("core.queryengine.output.table.selection");
 
-type GridColumn = {
-  key: string;
-  title: string;
-  type: string;
-};
+type GridColumn = GridComponentColumn;
+
+type GridRowData = GridComponentRow;
 
 function toGridColumns(columns: Column[]): GridColumn[] {
   const used = new Set<string>();
@@ -90,10 +70,6 @@ function toGridColumns(columns: Column[]): GridColumn[] {
     };
   });
 }
-
-type GridRowData = {
-  __values: unknown[];
-};
 
 export function toCsvScalar(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -281,45 +257,10 @@ export function buildClipboardGridFromRows(
   return grid;
 }
 
-function mapRow(row: unknown[]): GridRowData {
-  return { __values: row };
-}
-
-const ROW_NUMBER_COL_ID = "__rownum__";
+const ROW_NUMBER_COL_WIDTH_PX = 78;
 const STACKED_GRID_HEADER_HEIGHT_PX = 26;
 const STACKED_GRID_ROW_HEIGHT_PX = 24;
 const STACKED_GRID_EXTRA_CHROME_PX = 26;
-
-function buildColDefs(columns: GridColumn[]): ColDef[] {
-  return columns.map((col, index) => ({
-    colId: col.key,
-    valueGetter: (params) => {
-      const data = params.data as GridRowData | undefined;
-      const values = data?.__values;
-      return Array.isArray(values) ? (values[index] ?? null) : null;
-    },
-    headerName: col.title,
-    headerTooltip: col.type,
-    resizable: true,
-    sortable: true,
-    filter: resolveFilterType(col.type),
-    valueFormatter: (params) => resolveCellDisplayValue(col.type, params.value),
-    minWidth: 60,
-  }));
-}
-
-export function resolveFilterType(type: string): string | boolean {
-  if (type === "boolean") {
-    return "agSetColumnFilter";
-  }
-  if (type === "int" || type === "long" || type === "decimal" || type === "float" || type === "double") {
-    return "agNumberColumnFilter";
-  }
-  if (type === "datetime" || type === "datetimeoffset") {
-    return "agDateColumnFilter";
-  }
-  return "agTextColumnFilter";
-}
 
 export function resolveCellDisplayValue(type: string, value: unknown): string {
   if (value === null || value === undefined) {
@@ -348,19 +289,13 @@ export function resolveCellDisplayValue(type: string, value: unknown): string {
 type TableGridProps = {
   resultSetIndex: number;
   schema: { columns: Column[] };
-  rows: unknown[][];
   fileId?: string;
   onPreviewValue: (options: { title: string; value: string; mimeType?: string }) => void;
 };
 
-function TableGrid({ resultSetIndex, schema, rows, fileId, onPreviewValue }: TableGridProps): JSX.Element {
-  const apiRef = useRef<GridApi | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const rowsRef = useRef(rows);
-  rowsRef.current = rows;
-  const appliedCountRef = useRef(0);
-  const bindingRef = useRef<string>("");
-  const gridColumns = useMemo(() => toGridColumns(schema.columns), [schema.columns]);
+function TableGrid({ resultSetIndex, schema, fileId, onPreviewValue }: TableGridProps): JSX.Element {
+  const storeKey = { fileId, resultSetIndex };
+  const gridColumns = toGridColumns(schema.columns);
   const [isDarkTheme, setIsDarkTheme] = useState<boolean>(() => (getThemeService()?.getActiveThemeMode() ?? "dark") === "dark");
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; sections: TableOutputContextMenuItem[][]; loading?: boolean } | null>(null);
 
@@ -375,413 +310,87 @@ function TableGrid({ resultSetIndex, schema, rows, fileId, onPreviewValue }: Tab
     });
   }, []);
 
-  // Custom rectangular cell selection — managed independently of AG Grid's row selection.
-  const [selection, setSelection] = useState<SelectionModel | null>(() =>
-    fileId ? (getFileStateRegistry().get(fileId, SELECTION_KEY)?.[resultSetIndex]?.selection ?? null) : null
-  );
-  // selectionRef mirrors state so useMemo cellClassRules closures can read it synchronously.
-  const selectionRef = useRef<SelectionModel | null>(null);
-  selectionRef.current = selection;
-  const anchorRef = useRef<SelectionAnchor | null>(null);
-
-  useEffect(() => {
-    if (fileId) {
-      anchorRef.current = getFileStateRegistry().get(fileId, SELECTION_KEY)?.[resultSetIndex]?.anchor ?? null;
-    } else {
-      anchorRef.current = null;
-    }
-  }, [fileId, resultSetIndex]);
-
-  // Drag state: tracks whether a mouse-drag selection is in progress.
-  const isDraggingRef = useRef(false);
-  const didDragMoveRef = useRef(false);
-
-  const applySelection = useCallback((newSel: SelectionModel | null, api: GridApi) => {
-    selectionRef.current = newSel;
-    setSelection(newSel);
-    if (fileId) {
-      const map = getFileStateRegistry().get(fileId, SELECTION_KEY) ?? {};
-      getFileStateRegistry().set(fileId, SELECTION_KEY, {
-        ...map,
-        [resultSetIndex]: { selection: newSel, anchor: anchorRef.current },
-      });
-    }
-    api.refreshCells({ force: true });
-  }, [fileId, resultSetIndex]);
-
-  // cellClassRules closures read selectionRef directly (ref is stable).
-  // refreshCells({ force: true }) triggers re-evaluation after every change.
-  const colDefs = useMemo<ColDef[]>(() => {
-    const rowNumCol: ColDef = {
-      colId: ROW_NUMBER_COL_ID,
-      headerName: "#",
-      width: 52,
-      minWidth: 52,
-      maxWidth: 52,
-      resizable: false,
-      sortable: false,
-      filter: false,
-      suppressMovable: true,
-      pinned: "left" as const,
-      cellClassRules: {
-        "table-cell-selected": (params: CellClassParams) =>
-          selectionRef.current != null && params.rowIndex != null &&
-          isRowSelected(selectionRef.current, params.rowIndex),
-      },
-      cellRenderer: (params: ICellRendererParams) => (
-        <span className="table-row-number">{(params.node.rowIndex ?? 0) + 1}</span>
-      ),
-    };
-    return [rowNumCol, ...buildColDefs(gridColumns)];
-  }, [gridColumns]);
-
-  const defaultColDef = useMemo<ColDef>(() => ({
-    resizable: true,
-    sortable: true,
-    filter: true,
-    minWidth: 60,
-    cellClassRules: {
-      "table-cell-selected": (params: CellClassParams) => {
-        const model = selectionRef.current;
-        if (model == null || params.rowIndex == null) return false;
-        const colIdx = gridColumns.findIndex((c) => c.key === params.column.getColId());
-        return colIdx !== -1 && isCellSelected(model, params.rowIndex, colIdx);
-      },
-      "table-cell-link": (params: CellClassParams) => {
-        if (params.rowIndex == null) return false;
-        const colIdx = gridColumns.findIndex((c) => c.key === params.column.getColId());
-        if (colIdx < 0) return false;
-        const rowData = params.data as GridRowData | undefined;
-        const value = getCellValueForCopy(rowData, colIdx);
-        return resolveTableLinkAction({ value, columnType: schema.columns[colIdx]?.type ?? "any" }) != null;
-      },
-    },
-  }), [gridColumns, schema.columns]);
-
-  const onGridReady = useCallback(
-    (params: GridReadyEvent) => {
-      apiRef.current = params.api;
-      params.api.setGridOption(
-        "rowData",
-        rowsRef.current.map((r) => mapRow(r))
-      );
-      appliedCountRef.current = rowsRef.current.length;
-    },
-    [gridColumns]
-  );
-
-  useEffect(() => {
-    const api = apiRef.current;
-    if (!api) return;
-
-    const binding = `${fileId ?? ""}:${resultSetIndex}`;
-    if (bindingRef.current === binding) return;
-    bindingRef.current = binding;
-
-    const savedSelection = fileId
-      ? (getFileStateRegistry().get(fileId, SELECTION_KEY)?.[resultSetIndex] ?? { selection: null, anchor: null })
-      : { selection: null, anchor: null };
-    selectionRef.current = savedSelection.selection;
-    setSelection(savedSelection.selection);
-    anchorRef.current = savedSelection.anchor;
-
-    api.setGridOption("rowData", rows.map((r) => mapRow(r)));
-    appliedCountRef.current = rows.length;
-
-    const savedState = fileId ? getFileStateRegistry().get(fileId, GRID_STATE_KEY) : undefined;
-    if (savedState) {
-      (api as unknown as { setState?: (state: GridState) => void }).setState?.(savedState);
-    }
-    api.refreshCells({ force: true });
-  }, [fileId, resultSetIndex, rows, gridColumns]);
-
-  // After AG Grid renders its first batch of rows, repaint cells so restored selection is visible.
-  const onFirstDataRendered = useCallback((params: FirstDataRenderedEvent) => {
-    if (selectionRef.current) params.api.refreshCells({ force: true });
-  }, []);
-
-  const onStateUpdated = useCallback(
-    (event: StateUpdatedEvent) => {
-      if (fileId) getFileStateRegistry().set(fileId, GRID_STATE_KEY, event.state);
-    },
-    [fileId]
-  );
-
-  const selectSingleCell = useCallback(
-    (e: CellMouseDownEvent | CellClickedEvent) => {
-      const colId = e.column.getColId();
-      const colIndex = colId === ROW_NUMBER_COL_ID ? -1 : gridColumns.findIndex((c) => c.key === colId);
-      const rowIndex = e.node.rowIndex ?? 0;
-      anchorRef.current = { row: rowIndex, colIndex };
-      applySelection(
-        { rect: computeSelection({ row: rowIndex, colIndex }, { row: rowIndex, colIndex }, schema.columns.length), cells: [] },
-        e.api
-      );
-    },
-    [schema.columns.length, gridColumns, applySelection]
-  );
-
-  const onCellMouseDown = useCallback(
-    (e: CellMouseDownEvent) => {
-      const me = e.event as MouseEvent | null;
-      if (!isPrimaryMouseButton(me)) {
-        // Right-click: select the cell only if it's outside the current selection,
-        // otherwise keep the existing selection intact
-        if (me?.button === 2) {
-          const colId = e.column.getColId();
-          const colIndex = colId === ROW_NUMBER_COL_ID ? -1 : gridColumns.findIndex((c) => c.key === colId);
-          const rowIndex = e.node.rowIndex ?? 0;
-          const model = selectionRef.current;
-          if (!model || !isCellSelected(model, rowIndex, colIndex)) {
-            selectSingleCell(e);
-          }
-        }
-        return;
-      }
-      if (me?.shiftKey || me?.ctrlKey || me?.metaKey) return;
-      isDraggingRef.current = true;
-      didDragMoveRef.current = false;
-      selectSingleCell(e);
-    },
-    [gridColumns, selectSingleCell]
-  );
-
-  const onCellMouseOver = useCallback(
-    (e: CellMouseOverEvent) => {
-      if (!isDraggingRef.current || !anchorRef.current) return;
-      const colId = e.column.getColId();
-      const colIndex = colId === ROW_NUMBER_COL_ID ? -1 : gridColumns.findIndex((c) => c.key === colId);
-      const rowIndex = e.node.rowIndex ?? 0;
-      didDragMoveRef.current = true;
-      applySelection(
-        { rect: computeSelection(anchorRef.current, { row: rowIndex, colIndex }, schema.columns.length), cells: [] },
-        e.api
-      );
-    },
-    [schema.columns.length, gridColumns, applySelection]
-  );
-
-  const onCellClicked = useCallback(
-    (e: CellClickedEvent) => {
-      if (didDragMoveRef.current) {
-        didDragMoveRef.current = false;
-        return;
-      }
-      const me = e.event as MouseEvent | null;
-      const colId = e.column.getColId();
-      const colIndex = colId === ROW_NUMBER_COL_ID ? -1 : gridColumns.findIndex((c) => c.key === colId);
-      const rowIndex = e.node.rowIndex ?? 0;
-      const totalCols = schema.columns.length;
-
-      if (colIndex >= 0) {
-        const rowData = e.data as GridRowData | undefined;
-        const value = getCellValueForCopy(rowData, colIndex);
-        const action = resolveTableLinkAction({ value, columnType: schema.columns[colIndex]?.type ?? "any" });
-        if (action) {
-          if (action.kind === "external") {
-            void window.appShell.openExternal(action.value);
-          } else {
-            onPreviewValue({
-              title: action.title,
-              value: action.value,
-              mimeType: action.mimeType,
-            });
-          }
-          return;
-        }
-      }
-
-      const next = computeNextSelectionFromClick({
-        mouseEvent: me,
-        rowIndex,
-        colIndex,
-        totalCols,
-        existing: selectionRef.current,
-        anchor: anchorRef.current,
-      });
-      if (!next.shouldApply) {
-        return;
-      }
-      anchorRef.current = next.anchor;
-      applySelection(next.selection, e.api);
-    },
-    [schema, gridColumns, applySelection, onPreviewValue]
-  );
-
-  const runCellPrimaryAction = useCallback((columnId: string, rowData: GridRowData | undefined): boolean => {
-    const colIndex = columnId === ROW_NUMBER_COL_ID ? -1 : gridColumns.findIndex((c) => c.key === columnId);
-    if (colIndex < 0) {
-      return false;
-    }
-    const rawValue = getCellValueForCopy(rowData, colIndex);
-    const action = resolveTableLinkAction({ value: rawValue, columnType: schema.columns[colIndex]?.type ?? "any" });
-    if (action) {
-      if (action.kind === "external") {
-        void window.appShell.openExternal(action.value);
-      } else {
-        onPreviewValue({
-          title: action.title,
-          value: action.value,
-          mimeType: action.mimeType,
-        });
-      }
-      return true;
-    }
-
-    const mimeType = inferPreviewMimeType(rawValue);
-    const value = formatPreviewValue(rawValue, mimeType);
-    onPreviewValue({
-      title: "Value Preview",
-      value,
-      mimeType,
-    });
-    return true;
-  }, [gridColumns, onPreviewValue, schema.columns]);
-
-  const onCellDoubleClicked = useCallback((e: CellDoubleClickedEvent) => {
-    void runCellPrimaryAction(e.column.getColId(), e.data as GridRowData | undefined);
-  }, [runCellPrimaryAction]);
-
-  const onCellKeyDown = useCallback((e: CellKeyDownEvent) => {
-    const keyboardEvent = e.event as KeyboardEvent | null;
-    if (!keyboardEvent || keyboardEvent.key !== "Enter") {
-      return;
-    }
-    keyboardEvent.preventDefault();
-    keyboardEvent.stopPropagation();
-    void runCellPrimaryAction(e.column.getColId(), e.data as GridRowData | undefined);
-  }, [runCellPrimaryAction]);
-
-  // Apply only newly arrived rows incrementally — no full re-render
-  useEffect(() => {
-    const api = apiRef.current;
-    if (!api) return;
-    const newRows = rows.slice(appliedCountRef.current);
-    if (newRows.length === 0) return;
-    api.applyTransaction({ add: newRows.map((r) => mapRow(r)) });
-    appliedCountRef.current = rows.length;
-  }, [rows, gridColumns]);
-
-  useEffect(() => {
-    const stop = () => { isDraggingRef.current = false; };
-    document.addEventListener("mouseup", stop);
-    return () => document.removeEventListener("mouseup", stop);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      apiRef.current = null;
-      appliedCountRef.current = 0;
-    };
-  }, []);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const handler = (e: KeyboardEvent) => {
-      if (!e.ctrlKey || e.key !== "c") return;
-      const api = apiRef.current;
-      const model = selectionRef.current;
-      if (!api || !model) return;
-      const box = getBoundingBox(model, schema.columns.length);
-      if (!box) return;
-      const rowsByIndex: Array<GridRowData | undefined> = [];
-      for (let r = box.rowStart; r <= box.rowEnd; r++) {
-        rowsByIndex[r] = api.getDisplayedRowAtIndex(r)?.data as GridRowData | undefined;
-      }
-      const grid = buildClipboardGridFromRows(rowsByIndex, box, (r, c) => isCellSelected(model, r, c));
-      // Drop columns where no row has a selected cell (bounding box may span unselected columns).
-      const numCols = box.colIndexEnd - box.colIndexStart + 1;
-      const selectedOffsets = Array.from({ length: numCols }, (_, i) => i)
-        .filter((ci) => grid.some((row) => row[ci].selected));
-      const filteredCols = selectedOffsets.map((ci) => schema.columns[box.colIndexStart + ci]);
-      const filteredGrid = grid.map((row) => selectedOffsets.map((ci) => row[ci]));
-      if (filteredGrid.length === 0 || filteredCols.length === 0) return;
-      e.preventDefault();
-      e.stopPropagation();
-      void writeToClipboard({ grid: filteredGrid, columns: filteredCols });
-    };
-    el.addEventListener("keydown", handler, true);
-    return () => el.removeEventListener("keydown", handler, true);
-  }, [schema]);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const openContextMenu = (e: MouseEvent) => {
-      const model = selectionRef.current;
-      const api = apiRef.current;
-      if (!model || !api) return;
-      e.preventDefault();
-      setContextMenu({ x: e.clientX, y: e.clientY, sections: [], loading: true });
-
-      const box = getBoundingBox(model, schema.columns.length);
-      if (!box) {
-        setContextMenu(null);
-        return;
-      }
-      const rowsByIndex: Array<GridRowData | undefined> = [];
-      for (let r = box.rowStart; r <= box.rowEnd; r++) {
-        rowsByIndex[r] = api.getDisplayedRowAtIndex(r)?.data as GridRowData | undefined;
-      }
-      const selection = buildSelectionSnapshot(model, rowsByIndex, schema.columns.length);
-      const cellValuesByRow: Record<number, unknown[]> = {};
-      for (const ri of selection.selectedRowIndexes) {
-        const data = rowsByIndex[ri];
-        if (data?.__values) {
-          cellValuesByRow[ri] = data.__values;
-        }
-      }
-      const menuContext: TableOutputContextMenuContext = {
-        resultSetIndex,
-        columns: schema.columns,
-        selection,
-        cellValuesByRow,
-      };
-      void resolveTableContextMenuItems(getTableOutputContextMenuProviders(), menuContext).then((sections) => {
-        if (sections.length === 0) {
-          setContextMenu(null);
-          return;
-        }
-        setContextMenu({ x: e.clientX, y: e.clientY, sections, loading: false });
-      });
-    };
-
-    el.addEventListener("contextmenu", openContextMenu, true);
-    return () => el.removeEventListener("contextmenu", openContextMenu, true);
-  }, [resultSetIndex, schema.columns]);
+  const getRowsBySelection = useCallback((snapshot: GridComponentSelectionSnapshot): Array<GridRowData | undefined> => snapshot.rowsByIndex, []);
 
   return (
-    <div ref={containerRef} style={{ height: "100%", width: "100%" }}>
-      <AgGridReact
-        theme={isDarkTheme ? compactDarkTheme : compactLightTheme}
-        columnDefs={colDefs}
-        defaultColDef={defaultColDef}
-        onGridReady={onGridReady}
-        onFirstDataRendered={onFirstDataRendered}
-        onStateUpdated={onStateUpdated}
-        onCellMouseDown={onCellMouseDown}
-        onCellMouseOver={onCellMouseOver}
-        onCellClicked={onCellClicked}
-        onCellDoubleClicked={onCellDoubleClicked}
-        onCellKeyDown={onCellKeyDown}
-        rowBuffer={30}
-        suppressMovableColumns={false}
+    <>
+      <GridComponent
+        columns={gridColumns}
+        rowNumberWidth={ROW_NUMBER_COL_WIDTH_PX}
+        getRowCount={() => getTableResultStore().getRowCount(storeKey)}
+        getRowsRange={(start, end) => getTableResultStore().getRowsRange(storeKey, start, end)}
+        getRow={(index) => getTableResultStore().getRow(storeKey, index)}
+        subscribeRowsChanged={(listener) => getTableResultStore().subscribe(storeKey, listener)}
+        getInitialSelection={() => fileId ? (getFileStateRegistry().get(fileId, SELECTION_KEY)?.[resultSetIndex] ?? { selection: null, anchor: null }) : { selection: null, anchor: null }}
+        onSelectionChange={(selection, anchor) => {
+          if (!fileId) return;
+          const map = getFileStateRegistry().get(fileId, SELECTION_KEY) ?? {};
+          getFileStateRegistry().set(fileId, SELECTION_KEY, { ...map, [resultSetIndex]: { selection, anchor } });
+        }}
+        getInitialGridState={() => fileId ? getFileStateRegistry().get(fileId, GRID_STATE_KEY) : undefined}
+        onGridStateChange={(state) => {
+          if (fileId) getFileStateRegistry().set(fileId, GRID_STATE_KEY, state);
+        }}
+        resolveCellDisplayValue={resolveCellDisplayValue}
+        resolveCellLink={({ value, columnType }) => resolveTableLinkAction({ value, columnType: columnType as Column["type"] })}
+        onCellPrimaryAction={({ value, columnType }) => {
+          const action = resolveTableLinkAction({ value, columnType: columnType as Column["type"] });
+          if (action) {
+            if (action.kind === "external") {
+              void window.appShell.openExternal(action.value);
+            } else {
+              onPreviewValue({ title: action.title, value: action.value, mimeType: action.mimeType });
+            }
+            return true;
+          }
+
+          const mimeType = inferPreviewMimeType(value);
+          onPreviewValue({ title: "Value Preview", value: formatPreviewValue(value, mimeType), mimeType });
+          return true;
+        }}
+        onCopySelection={(snapshot) => {
+          const model = snapshot.model;
+          const box = getBoundingBox(model, schema.columns.length);
+          if (!box) return;
+          const grid = buildClipboardGridFromRows(getRowsBySelection(snapshot), box, (r, c) => isCellSelected(model, r, c));
+          const numCols = box.colIndexEnd - box.colIndexStart + 1;
+          const selectedOffsets = Array.from({ length: numCols }, (_, i) => i).filter((ci) => grid.some((row) => row[ci].selected));
+          const filteredCols = selectedOffsets.map((ci) => schema.columns[box.colIndexStart + ci]);
+          const filteredGrid = grid.map((row) => selectedOffsets.map((ci) => row[ci]));
+          if (filteredGrid.length === 0 || filteredCols.length === 0) return;
+          void writeToClipboard({ grid: filteredGrid, columns: filteredCols });
+        }}
+        onContextMenuSelection={(event, snapshot) => {
+          setContextMenu({ x: event.clientX, y: event.clientY, sections: [], loading: true });
+          const selection = buildSelectionSnapshot(snapshot.model, getRowsBySelection(snapshot), schema.columns.length);
+          const cellValuesByRow: Record<number, unknown[]> = {};
+          for (const ri of selection.selectedRowIndexes) {
+            const data = snapshot.rowsByIndex[ri];
+            if (data?.__values) {
+              cellValuesByRow[ri] = data.__values;
+            }
+          }
+          const menuContext: TableOutputContextMenuContext = { resultSetIndex, columns: schema.columns, selection, cellValuesByRow };
+          void resolveTableContextMenuItems(getTableOutputContextMenuProviders(), menuContext).then((sections) => {
+            if (sections.length === 0) {
+              setContextMenu(null);
+              return;
+            }
+            setContextMenu({ x: event.clientX, y: event.clientY, sections, loading: false });
+          });
+        }}
+        isDarkTheme={isDarkTheme}
       />
       {contextMenu && (
         <ContextMenuSurface
           x={contextMenu.x}
           y={contextMenu.y}
-          sections={contextMenu.sections.map((section) => section.map((item) => ({
-            id: item.id,
-            label: item.label,
-            onSelect: item.run,
-          })))}
+          sections={contextMenu.sections.map((section) => section.map((item) => ({ id: item.id, label: item.label, onSelect: item.run })))}
           loading={contextMenu.loading}
           onClose={() => setContextMenu(null)}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -992,7 +601,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
                     <header className="table-output-stacked-header">Result {resultSet.resultSetIndex + 1}</header>
                     <ResultSetMetadata metadata={resultSet.metadata} />
                     {(() => {
-                      const defaultHeight = resolveStackedGridHeightPx(resultSet.rows.length, tableSettings.stackedMaxRows);
+                      const defaultHeight = resolveStackedGridHeightPx(resultSet.rowCount ?? resultSet.rows.length, tableSettings.stackedMaxRows);
                       const resolvedHeight = stackedGridHeightsByResultSet[resultSet.resultSetIndex] ?? defaultHeight;
                       return (
                     <div
@@ -1005,7 +614,6 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
                       <TableGrid
                         resultSetIndex={resultSet.resultSetIndex}
                         schema={resultSet.schema}
-                        rows={resultSet.rows}
                         fileId={context.fileId}
                         onPreviewValue={onPreviewValue}
                       />
@@ -1045,7 +653,6 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
                 <TableGrid
                   resultSetIndex={activeSet.resultSetIndex}
                   schema={activeSet.schema}
-                  rows={activeSet.rows}
                   fileId={context.fileId}
                   onPreviewValue={onPreviewValue}
                 />
@@ -1220,6 +827,8 @@ export const coreQueryEngineOutputTablePlugin: Plugin = {
       title: "Results",
       icon: outputTableIconUrl,
       priority: 0,
+      onExecutionStart: ({ fileId }) => getTableResultStore().clearFile(fileId),
+      onChunkRows: ({ fileId, resultSetIndex, rows }) => getTableResultStore().appendRows({ fileId, resultSetIndex }, rows),
       render: (outputContext) => <TableOutputView context={outputContext} onPreviewValue={(options) => void context.dialog.showValuePreview?.(options)} />
     });
   }

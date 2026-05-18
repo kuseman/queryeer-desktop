@@ -25,6 +25,7 @@ export type ResultSet = {
   resultSetIndex: number;
   schema: { columns: Column[] };
   rows: unknown[][];
+  rowCount?: number;
   /**
    * Optional metadata key/value pairs describing this result set
    * (e.g. connection title, database name).
@@ -76,8 +77,13 @@ export type OutputContext = {
 };
 
 export type RowChunk = {
+  fileId?: string;
   resultSetIndex: number;
   rows: unknown[][];
+};
+
+export type OutputExecutionStart = {
+  fileId?: string;
 };
 
 /**
@@ -111,6 +117,8 @@ export type OutputContributor = {
    * re-render. Only invoked for the currently selected primary contributor.
    */
   onChunkRows?: (chunk: RowChunk) => void;
+  /** Called when a new execution starts so contributors can clear execution-scoped caches. */
+  onExecutionStart?: (execution: OutputExecutionStart) => void;
 };
 
 export type OutputLimits = { maxRows: number };

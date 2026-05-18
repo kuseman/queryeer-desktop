@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => {
     consumeExecuteOptionsMock: vi.fn(() => null as { outputIdOverride?: string; optionsOverride?: QueryExecuteOptions } | null),
     cancelMock: vi.fn(async () => {}),
     ensureUnlockedForSecretAccessMock: vi.fn(async () => true),
+    notifyExecutionStartMock: vi.fn(),
     subscribeMock: vi.fn((executionId: string, listener: (event: { method: string; params?: unknown }) => void) => {
       subscribeByExecutionId.set(executionId, listener);
       return () => {
@@ -111,6 +112,7 @@ vi.mock("./output/OutputRegistry", () => ({
     },
     getSelectedPrimaryId: () => mocks.selectedPrimaryRef.value,
     notifyChunkRows: vi.fn(),
+    notifyExecutionStart: mocks.notifyExecutionStartMock,
     getContributors: () => [],
     getSelectablePrimaryContributors: () => [
       { id: "core.queryengine.output.table", mode: "primary", capability: "rows", title: "Results", render: () => null },
@@ -190,6 +192,7 @@ describe("QueryEditorComponent execution state across tab switches", () => {
     mocks.subscribeMock.mockClear();
     mocks.onExecuteRequestMock.mockClear();
     mocks.onCancelRequestMock.mockClear();
+    mocks.notifyExecutionStartMock.mockClear();
     mocks.ensureUnlockedForSecretAccessMock.mockReset();
     mocks.ensureUnlockedForSecretAccessMock.mockResolvedValue(true);
     mocks.getActiveEditorMock.mockClear();
@@ -646,6 +649,46 @@ const filesRegistry = {
     output = rootElement.querySelector('[data-testid="mock-output"]');
     expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.table");
     expect(output?.getAttribute("data-rows-target-primary")).toBe("core.queryengine.output.table");
+  });
+
+  it("does not accumulate table rows in output context", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+
+    const listener = [...mocks.subscribeByExecutionId.values()][0];
+    await act(async () => {
+      listener?.({
+        method: "queryengine.chunkStart",
+        params: {
+          resultSetIndex: 0,
+          schema: { columns: [{ name: "id", type: "int" }] }
+        }
+      });
+      listener?.({
+        method: "queryengine.chunkRows",
+        params: {
+          resultSetIndex: 0,
+          rows: [[1], [2]]
+        }
+      });
+      await Promise.resolve();
+    });
+
+    const context = getFileStateRegistry().get("file-1", OUTPUT_CONTEXT_KEY);
+    expect(context?.resultSets[0]?.rows).toEqual([]);
+    expect(context?.resultSets[0]?.rowCount).toBe(2);
+    expect(context?.fetchedRowCount).toBe(2);
+    expect(mocks.notifyExecutionStartMock).toHaveBeenCalledWith({ fileId: "file-1" }, "core.queryengine.output.table");
   });
 
   it("selects plan tab without routing row chunks to the plan output", async () => {

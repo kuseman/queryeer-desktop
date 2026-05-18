@@ -47,6 +47,7 @@ function toAbsoluteLocation(anchor: ExecutionAnchor, line?: number, column?: num
 const OUTPUT_CONTEXT_KEY = defineStateKey<OutputContext>("core.queryengine.outputContext");
 const PLAN_OUTPUT_ID = "core.graph.queryPlanOutput";
 const FILE_OUTPUT_PRIMARY_ID = "core.queryengine.output.file";
+const TABLE_OUTPUT_PRIMARY_ID = "core.queryengine.output.table";
 
 export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry }: Props): JSX.Element {
   const [outputContext, setOutputContext] = useState<OutputContext>(IDLE_OUTPUT_CONTEXT);
@@ -235,6 +236,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
         fileOutputSchemaByFileIdRef.current.set(targetFileId, new Map());
       }
 
+      outputRegistry.notifyExecutionStart({ fileId: targetFileId }, targetPrimaryId);
       getQueryViewStateStore().setPanelSelectedOutput(targetFileId, panelOutputId);
       setExecutionPrimaryOverride(targetFileId, panelOutputId ?? null);
 
@@ -296,6 +298,8 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
 
             const currentCtx = getFileStateRegistry().get(targetFileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT;
             const rowsTargetPrimaryId = currentCtx.rowsTargetPrimaryId;
+            const isTableOutput = rowsTargetPrimaryId === TABLE_OUTPUT_PRIMARY_ID;
+            const currentSet = currentCtx.resultSets.find((rs) => rs.resultSetIndex === p.resultSetIndex);
 
             // Handle output messages (info/warnings/errors from the engine)
             if (p.messages && p.messages.length > 0) {
@@ -325,13 +329,6 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
               fetchedRowCount: prev.fetchedRowCount + p.rows.length
             }));
 
-            // Notify the primary contributor before updating state so Ag-Grid can
-            // call applyTransaction() incrementally rather than diffing the full rows array.
-            registry.notifyChunkRows({ resultSetIndex: p.resultSetIndex, rows: p.rows }, rowsTargetPrimaryId);
-
-            // Check if this result set is already over the limit
-            const currentSet = currentCtx.resultSets.find((rs) => rs.resultSetIndex === p.resultSetIndex);
-
             // ---- File output: pipe ALL rows to the export stream, no in-memory accumulation ----
             if (rowsTargetPrimaryId === FILE_OUTPUT_PRIMARY_ID) {
               void window.appShell.appendExportChunk({
@@ -349,6 +346,53 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
               }));
               return;
             }
+
+            if (isTableOutput) {
+              if (currentSet?.rowLimitExceeded) {
+                void window.appShell.appendExportChunk({
+                  executionId,
+                  resultSetIndex: p.resultSetIndex,
+                  rows: p.rows
+                });
+                return;
+              }
+
+              const maxRows = resolveOutputMaxRows();
+              const previousRowCount = currentSet?.rowCount ?? currentSet?.rows.length ?? 0;
+              const remainingRows = maxRows === -1 ? p.rows.length : Math.max(0, maxRows - previousRowCount);
+              const retainedRows = remainingRows >= p.rows.length ? p.rows : p.rows.slice(0, remainingRows);
+              if (retainedRows.length > 0) {
+                registry.notifyChunkRows({ fileId: targetFileId, resultSetIndex: p.resultSetIndex, rows: retainedRows }, rowsTargetPrimaryId);
+              }
+
+              updateOutputContextForFile(targetFileId, (prev) => {
+                const sets = prev.resultSets.map((rs): ResultSet => {
+                  if (rs.resultSetIndex !== p.resultSetIndex) return rs;
+                  const rowCount = (rs.rowCount ?? rs.rows.length) + retainedRows.length;
+                  if (maxRows !== -1 && retainedRows.length < p.rows.length) {
+                    void (async () => {
+                      await window.appShell.openExportStream({ executionId, resultSetIndex: p.resultSetIndex });
+                      await window.appShell.appendExportChunk({
+                        executionId,
+                        resultSetIndex: p.resultSetIndex,
+                        rows: p.rows.slice(retainedRows.length)
+                      });
+                    })();
+                    return { ...rs, rowCount, rowLimitExceeded: true };
+                  }
+                  return { ...rs, rowCount };
+                });
+                return {
+                  ...prev,
+                  resultSets: sets
+                };
+              });
+              return;
+            }
+
+            // Notify the primary contributor before updating state so table-like outputs can
+            // apply chunk updates incrementally rather than diffing a full rows array.
+            registry.notifyChunkRows({ fileId: targetFileId, resultSetIndex: p.resultSetIndex, rows: p.rows }, rowsTargetPrimaryId);
 
             if (currentSet?.rowLimitExceeded) {
               // Pipe overflow rows to the export file — do not accumulate in memory
