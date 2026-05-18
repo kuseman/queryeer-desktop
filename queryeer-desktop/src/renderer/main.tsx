@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import type { ShellAppProps } from "./shell/ShellApp";
 import { ShellApp } from "./shell/ShellApp";
 import { bootstrapShell } from "./shell/bootstrap";
+import "@glideapps/glide-data-grid/dist/index.css";
 import "./styles/base.css";
 
 type BootstrapResult = Awaited<ReturnType<typeof bootstrapShell>>;
