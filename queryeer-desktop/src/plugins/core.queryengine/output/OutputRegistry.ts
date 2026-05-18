@@ -1,5 +1,5 @@
-export type { OutputContext, OutputContributor, RowChunk } from "../../../contracts/extensions/OutputExtension";
-import type { OutputContributor, RowChunk } from "../../../contracts/extensions/OutputExtension";
+export type { OutputContext, OutputContributor, OutputExecutionStart, RowChunk } from "../../../contracts/extensions/OutputExtension";
+import type { OutputContributor, OutputExecutionStart, RowChunk } from "../../../contracts/extensions/OutputExtension";
 
 let registryInstance: OutputRegistry | undefined;
 
@@ -49,6 +49,12 @@ export class OutputRegistry {
     const effectivePrimaryId = targetPrimaryId ?? this.selectedPrimaryId;
     const primary = this.contributors.find((c) => c.id === effectivePrimaryId);
     primary?.onChunkRows?.(chunk);
+  }
+
+  notifyExecutionStart(execution: OutputExecutionStart, targetPrimaryId?: string | null): void {
+    const effectivePrimaryId = targetPrimaryId ?? this.selectedPrimaryId;
+    const primary = this.contributors.find((c) => c.id === effectivePrimaryId);
+    primary?.onExecutionStart?.(execution);
   }
 
   subscribe(listener: () => void): () => void {
