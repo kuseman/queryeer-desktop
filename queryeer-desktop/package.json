@@ -109,6 +109,7 @@
     ],
     "mac": {
       "icon": "resources/icon.icns",
+      "strictVerify": false,
       "target": [
         "dmg"
       ]
