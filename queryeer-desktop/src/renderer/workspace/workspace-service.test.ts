@@ -14,6 +14,7 @@ import {
 } from "../../contracts/workspace/WorkspaceSnapshot";
 import {
   RendererWorkspaceService,
+  stableBackupIdForUri,
   type RendererWorkspaceServiceOptions,
   type WorkspaceBridge
 } from "./workspace-service";
@@ -830,7 +831,7 @@ describe("RendererWorkspaceService autosave", () => {
     await mediator.closeFile(file.fileId, { discardDirty: true });
     await vi.advanceTimersByTimeAsync(10);
 
-    expect(purgeMock).toHaveBeenCalledWith(file.fileId);
+    expect(purgeMock).toHaveBeenCalledWith(stableBackupIdForUri(file.uri));
   });
 
   it.skip("updates FileEntity.backupUri after a backup write", async () => {

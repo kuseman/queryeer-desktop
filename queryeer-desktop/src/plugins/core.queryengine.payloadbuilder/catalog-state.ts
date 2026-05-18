@@ -128,14 +128,14 @@ export function applyEngineStatePatch(
   if (!isRecord(payloadbuilder)) {
     return document;
   }
-  const patchCatalogs = payloadbuilder.catalogs;
-  if (!isRecord(patchCatalogs)) {
-    return document;
-  }
+  const patchDefaultAlias = typeof payloadbuilder.defaultCatalogAlias === "string"
+    ? payloadbuilder.defaultCatalogAlias
+    : undefined;
+  const patchCatalogs = isRecord(payloadbuilder.catalogs) ? payloadbuilder.catalogs : {};
 
   const merged: PayloadbuilderCatalogsDocument = {
     schemaVersion: SCHEMA_VERSION,
-    defaultCatalogAlias: document.defaultCatalogAlias,
+    defaultCatalogAlias: patchDefaultAlias ?? document.defaultCatalogAlias,
     selectedEnvironmentId: document.selectedEnvironmentId,
     instancesByAlias: {
       ...document.instancesByAlias

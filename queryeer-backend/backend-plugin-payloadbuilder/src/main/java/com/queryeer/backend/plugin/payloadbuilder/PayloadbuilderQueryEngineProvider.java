@@ -42,6 +42,7 @@ import se.kuseman.payloadbuilder.api.execution.UTF8String;
 import se.kuseman.payloadbuilder.api.execution.ValueVector;
 import se.kuseman.payloadbuilder.core.Payloadbuilder;
 import se.kuseman.payloadbuilder.core.RawQueryResult;
+import se.kuseman.payloadbuilder.core.cache.InMemoryGenericCache;
 import se.kuseman.payloadbuilder.core.catalog.CatalogRegistry;
 import se.kuseman.payloadbuilder.core.catalog.CoreColumn;
 import se.kuseman.payloadbuilder.core.execution.QuerySession;
@@ -67,6 +68,8 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
     private static final String ENV_MODULE_ID = "core.queryengine.payloadbuilder.environments";
     private static final String ENV_VALUES_KEY = "core.queryengine.payloadbuilder.environments.values";
 
+    /** Shared generic cache between all sessions. Catalogs can store information that is reused. */
+    private static final InMemoryGenericCache GENERIC_CACHE = new InMemoryGenericCache("QuerySession", true);
     private final Set<String> cancelledExecutionIds = ConcurrentHashMap.newKeySet();
     private final Map<String, QuerySession> activeSessions = new ConcurrentHashMap<>();
     private final ConfigService configService;
@@ -110,6 +113,7 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
             CatalogRegistry catalogRegistry = buildCatalogRegistry(catalogState);
             Map<String, Object> variables = resolveEnvironmentVariables(catalogState.selectedEnvironmentId());
             session = new QuerySession(catalogRegistry, variables);
+            session.setGenericCache(GENERIC_CACHE);
 
             injectCatalogProperties(session, catalogState);
 
@@ -165,7 +169,8 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
             }
             outputWriter.flushMessages(publisher);
             Object engineStatePatch = PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, catalogState);
-            publisher.completed(System.currentTimeMillis() - startMs, rowCount, engineStatePatch);
+            long total = System.currentTimeMillis() - startMs;
+            publisher.completed(total, rowCount, engineStatePatch);
         }
         catch (IllegalArgumentException e)
         {

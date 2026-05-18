@@ -9,6 +9,7 @@ Large features in prio
 - [ ] Modularize
     - Make sure all contributions have contracts and all API:s are located in a separate project
       that might end up on npmjs one day
+- [ ] Grid auto resize columns
 - [ ] Grid lacks sorting / filtering
     This was something that AG grid had nativly but since ag grid was bad with many rows this had to go.
 - [X] Create a distribution flow. Github etc.
