@@ -11,6 +11,13 @@ describe("MemoryIndicator", () => {
     container = document.createElement("div");
     root = createRoot(container);
 
+    // Mock performance.memory for the renderer heap
+    Object.defineProperty(performance, "memory", {
+      value: { usedJSHeapSize: 104857600, totalJSHeapSize: 209715200 },
+      configurable: true,
+      writable: true
+    });
+
     (window as unknown as Record<string, unknown>).appShell = {
       ...((window as unknown as Record<string, unknown>).appShell as Record<string, unknown>),
       getBackendStatus: vi.fn(async () => ({
@@ -22,11 +29,6 @@ describe("MemoryIndicator", () => {
         backendLogs: [],
         tracePayloads: false,
         jvmMemory: { heapUsedBytes: 536870912, heapMaxBytes: 2147483648 }
-      })),
-      getMemoryUsage: vi.fn(async () => ({
-        heapUsed: 125829120,
-        heapTotal: 209715200,
-        rss: 188743680
       }))
     };
   });
@@ -34,15 +36,16 @@ describe("MemoryIndicator", () => {
   afterEach(() => {
     act(() => { root.unmount(); });
     vi.clearAllMocks();
+    delete (performance as { memory?: unknown }).memory;
   });
 
-  it("renders JVM and Node memory when available", async () => {
+  it("renders JVM and Renderer memory when available", async () => {
     act(() => { root.render(<MemoryIndicator />); });
 
     await vi.waitFor(() => {
       expect(container.textContent).toContain("JVM: 512 MB");
     });
-    expect(container.textContent).toContain("Node: 120 MB");
+    expect(container.textContent).toContain("Renderer: 100 MB");
   });
 
   it("renders nothing when both sources return null", async () => {
@@ -55,7 +58,7 @@ describe("MemoryIndicator", () => {
       backendLogs: [],
       tracePayloads: false
     });
-    (window.appShell.getMemoryUsage as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    delete (performance as { memory?: unknown }).memory;
 
     act(() => { root.render(<MemoryIndicator />); });
 
@@ -74,8 +77,7 @@ describe("MemoryIndicator", () => {
 
     const span = container.querySelector("span");
     const tooltip = span!.getAttribute("title");
-    expect(tooltip).toContain("Node heap: 120 MB / 200 MB");
-    expect(tooltip).toContain("RSS: 180 MB");
+    expect(tooltip).toContain("Renderer heap: 100 MB / 200 MB");
   });
 
   it("refreshes data on interval", async () => {
@@ -88,7 +90,6 @@ describe("MemoryIndicator", () => {
     await vi.advanceTimersByTimeAsync(3000);
 
     expect(window.appShell.getBackendStatus).toHaveBeenCalledTimes(2);
-    expect(window.appShell.getMemoryUsage).toHaveBeenCalledTimes(2);
 
     vi.useRealTimers();
   });

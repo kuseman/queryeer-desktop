@@ -279,6 +279,13 @@ export class TextEditorRegistry {
     }
     model.setContent(recovered);
     this.pendingRecoveredContentByFileId.delete(fileId);
+    // Mark file dirty and trigger backup without using markDirty(), which
+    // would clobber the content via editorApi.getContent() -> setContent()
+    // since the editor hasn't switched to this model yet.
+    this.filesRegistry?.markDirty(fileId);
+    for (const listener of this.contentDirtyListeners) {
+      listener(fileId, recovered);
+    }
   }
 
   onEditorDisposed(capturedViewState?: unknown): void {

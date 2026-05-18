@@ -201,12 +201,26 @@ export class RendererWorkspaceService {
     if (!this.hydrated) {
       return;
     }
+    // Assign the backup file ID eagerly so the next workspace snapshot
+    // includes it, even if the debounced fireBackup hasn't run yet.
+    // Without this, the snapshot (saved after 250ms) lacks a backupFileId
+    // and the content is lost on restart.
+    const firstContent = !this.autosaveStates.has(file.fileId);
+    this.getOrAssignBackupFileId(file.fileId);
+
     let state = this.autosaveStates.get(file.fileId);
     if (!state) {
       state = { latestText: text, debounceTimer: null, maxIntervalTimer: null };
       this.autosaveStates.set(file.fileId, state);
     } else {
       state.latestText = text;
+    }
+
+    // Fire backup immediately on the first content change so the
+    // backup file exists on disk before any snapshot is taken.
+    if (firstContent) {
+      void this.fireBackup(file.fileId);
+      return;
     }
 
     if (state.debounceTimer !== null) {

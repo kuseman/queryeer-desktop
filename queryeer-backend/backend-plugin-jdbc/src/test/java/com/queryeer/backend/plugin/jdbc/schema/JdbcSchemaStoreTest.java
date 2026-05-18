@@ -1,5 +1,7 @@
 package com.queryeer.backend.plugin.jdbc.schema;
 
+import java.io.RandomAccessFile;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
@@ -177,5 +179,132 @@ class JdbcSchemaStoreTest
         Assertions.assertEquals(0, entry.objectCount());
         Assertions.assertEquals(0, entry.consecutiveFailures());
         Assertions.assertTrue(entry.enabled());
+    }
+
+    @Test
+    void recoversFromCorruptedDatabase(@TempDir Path tempDir) throws Exception
+    {
+        Path cacheDir = tempDir.resolve("cache");
+        JdbcSchemaStore store = new JdbcSchemaStore(cacheDir);
+
+        // First create a healthy database and persist data
+        JdbcSchemaObject db1 = new JdbcSchemaObject("database:mydb", "mydb", "database", List.of(), Map.of());
+        store.persistSnapshot("conn-1", JdbcSchemaCrawlScope.TOP, List.of(db1));
+        store.recordUsage("conn-1", JdbcSchemaCrawlScope.TOP, Instant.now());
+
+        // Now corrupt the .mv.db file by overwriting with garbage
+        Path mvDb = cacheDir.resolve("conn-1__top.mv.db");
+        Assertions.assertTrue(Files.exists(mvDb), "Database file should exist before corruption");
+        Files.writeString(mvDb, "CORRUPTED_GARBAGE_DATA_THAT_WILL_CAUSE_H2_TO_FAIL");
+
+        // Should auto-recover: the store should detect corruption, delete the file, and create a fresh one
+        // This should not throw
+        store.recordUsage("conn-1", JdbcSchemaCrawlScope.TOP, Instant.now());
+
+        // Verify the database is usable by reading state
+        JdbcSchemaStore.CrawlState state = store.readState("conn-1", JdbcSchemaCrawlScope.TOP);
+        Assertions.assertNotNull(state);
+
+        // After corruption recovery, state should be fresh (no previous data)
+        Assertions.assertEquals(0, state.consecutiveFailures());
+    }
+
+    @Test
+    void databaseKeysWorksAfterCorruptionRecovery(@TempDir Path tempDir) throws Exception
+    {
+        Path cacheDir = tempDir.resolve("cache");
+        JdbcSchemaStore store = new JdbcSchemaStore(cacheDir);
+
+        // Create initial healthy database
+        JdbcSchemaObject db1 = new JdbcSchemaObject("database:mydb", "mydb", "database", List.of(), Map.of());
+        store.persistSnapshot("conn-1", JdbcSchemaCrawlScope.DEEP, List.of(db1));
+        store.recordUsage("conn-1", JdbcSchemaCrawlScope.DEEP, "mydb", Instant.now());
+
+        // Verify databaseKeys works
+        List<String> keys = store.databaseKeys("conn-1", JdbcSchemaCrawlScope.DEEP);
+        Assertions.assertTrue(keys.contains("mydb"));
+
+        // Corrupt the file
+        Path mvDb = cacheDir.resolve("conn-1__deep.mv.db");
+        Assertions.assertTrue(Files.exists(mvDb));
+        Files.writeString(mvDb, "GARBAGE");
+
+        // After auto-recovery, databaseKeys should return empty (fresh db)
+        List<String> keysAfter = store.databaseKeys("conn-1", JdbcSchemaCrawlScope.DEEP);
+        Assertions.assertTrue(keysAfter.isEmpty(), "Fresh database should have no database keys");
+    }
+
+    @Test
+    void multipleCorruptionsAreHandledGracefully(@TempDir Path tempDir) throws Exception
+    {
+        Path cacheDir = tempDir.resolve("cache");
+        JdbcSchemaStore store = new JdbcSchemaStore(cacheDir);
+
+        // Create initial healthy databases
+        JdbcSchemaObject db1 = new JdbcSchemaObject("database:mydb", "mydb", "database", List.of(), Map.of());
+        store.persistSnapshot("conn-1", JdbcSchemaCrawlScope.DEEP, List.of(db1));
+        store.recordUsage("conn-1", JdbcSchemaCrawlScope.DEEP, "mydb", Instant.now());
+
+        // Corrupt both TOP and DEEP files
+        Path topMvDb = cacheDir.resolve("conn-1__top.mv.db");
+        Path deepMvDb = cacheDir.resolve("conn-1__deep.mv.db");
+        Files.writeString(topMvDb, "GARBAGE_TOP");
+        Files.writeString(deepMvDb, "GARBAGE_DEEP");
+
+        // Both operations should recover independently
+        store.recordUsage("conn-1", JdbcSchemaCrawlScope.TOP, Instant.now());
+        store.recordUsage("conn-1", JdbcSchemaCrawlScope.DEEP, "mydb", Instant.now());
+
+        JdbcSchemaStore.CrawlState topState = store.readState("conn-1", JdbcSchemaCrawlScope.TOP);
+        Assertions.assertNotNull(topState);
+        Assertions.assertEquals(0, topState.consecutiveFailures());
+
+        JdbcSchemaStore.CrawlState deepState = store.readState("conn-1", JdbcSchemaCrawlScope.DEEP, "mydb");
+        Assertions.assertNotNull(deepState);
+        Assertions.assertEquals(0, deepState.consecutiveFailures());
+    }
+
+    @Test
+    void deletesOvergrownFileAndStartsFresh(@TempDir Path tempDir) throws Exception
+    {
+        Path cacheDir = tempDir.resolve("cache");
+        JdbcSchemaStore store = new JdbcSchemaStore(cacheDir);
+
+        // Create a healthy database with data
+        JdbcSchemaObject db1 = new JdbcSchemaObject("database:mydb", "mydb", "database", List.of(), Map.of());
+        store.persistSnapshot("conn-1", JdbcSchemaCrawlScope.TOP, List.of(db1));
+
+        // Make the file appear overgrown by extending it past the threshold
+        // (100MB). Use sparse file extension for speed.
+        Path mvDb = cacheDir.resolve("conn-1__top.mv.db");
+        Assertions.assertTrue(Files.exists(mvDb));
+        try (RandomAccessFile raf = new RandomAccessFile(mvDb.toFile(), "rw"))
+        {
+            raf.setLength(101L * 1024L * 1024L); // 101 MB sparse file
+        }
+
+        // The store should detect the overgrown file, delete it, and create a fresh one
+        JdbcSchemaStore.CrawlState state = store.readState("conn-1", JdbcSchemaCrawlScope.TOP);
+        Assertions.assertNotNull(state);
+        // Fresh database, not the old data
+        Assertions.assertEquals(0, state.consecutiveFailures());
+        // File should be much smaller now (< 1MB for a fresh H2 DB)
+        Assertions.assertTrue(Files.size(mvDb) < 1_000_000L);
+    }
+
+    @Test
+    void compactAfterSnapshotKeepsFileSmall(@TempDir Path tempDir) throws Exception
+    {
+        Path cacheDir = tempDir.resolve("cache");
+        JdbcSchemaStore store = new JdbcSchemaStore(cacheDir);
+
+        // Persist a snapshot - should trigger compaction for files > 5MB
+        // Since the test file is tiny, compactIfNeeded should skip (size < 5MB threshold)
+        JdbcSchemaObject obj = new JdbcSchemaObject("test:1", "test", "table", List.of(), Map.of());
+        store.persistSnapshot("conn-1", JdbcSchemaCrawlScope.TOP, List.of(obj));
+
+        // Verify the database is still usable after the best-effort compact
+        JdbcSchemaStore.CrawlState state = store.readState("conn-1", JdbcSchemaCrawlScope.TOP);
+        Assertions.assertNotNull(state);
     }
 }

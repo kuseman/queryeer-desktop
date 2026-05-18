@@ -9,8 +9,16 @@ function formatBytes(bytes: number): string {
 
 type MemoryData = {
   jvm?: { heapUsedBytes: number; heapMaxBytes: number };
-  node?: { heapUsed: number; heapTotal: number; rss: number };
+  renderer?: { heapUsed: number; heapTotal: number };
 };
+
+function readRendererMemory(): { heapUsed: number; heapTotal: number } | null {
+  const m = (performance as { memory?: { usedJSHeapSize: number; totalJSHeapSize: number } }).memory;
+  if (m) {
+    return { heapUsed: m.usedJSHeapSize, heapTotal: m.totalJSHeapSize };
+  }
+  return null;
+}
 
 export function MemoryIndicator() {
   const [data, setData] = useState<MemoryData | null>(null);
@@ -18,15 +26,15 @@ export function MemoryIndicator() {
   useEffect(() => {
     let active = true;
     const refresh = async () => {
-      const [backendStatus, nodeMemory] = await Promise.all([
-        window.appShell.getBackendStatus().catch((): BackendGatewayStatus | null => null),
-        window.appShell.getMemoryUsage().catch(() => null)
+      const [backendStatus] = await Promise.all([
+        window.appShell.getBackendStatus().catch((): BackendGatewayStatus | null => null)
       ]);
       if (!active) return;
       const jvm = backendStatus?.jvmMemory;
+      const rendererMem = readRendererMemory();
       setData({
         jvm: jvm ? { heapUsedBytes: jvm.heapUsedBytes, heapMaxBytes: jvm.heapMaxBytes } : undefined,
-        node: nodeMemory ? { heapUsed: nodeMemory.heapUsed, heapTotal: nodeMemory.heapTotal, rss: nodeMemory.rss } : undefined
+        renderer: rendererMem ?? undefined
       });
     };
     void refresh();
@@ -37,7 +45,7 @@ export function MemoryIndicator() {
     };
   }, []);
 
-  if (!data || (!data.jvm && !data.node)) {
+  if (!data || (!data.jvm && !data.renderer)) {
     return null;
   }
 
@@ -48,10 +56,9 @@ export function MemoryIndicator() {
     parts.push(`JVM: ${formatBytes(data.jvm.heapUsedBytes)}`);
     tooltipParts.push(`JVM heap: ${formatBytes(data.jvm.heapUsedBytes)} / ${formatBytes(data.jvm.heapMaxBytes)}`);
   }
-  if (data.node) {
-    parts.push(`Node: ${formatBytes(data.node.heapUsed)}`);
-    tooltipParts.push(`Node heap: ${formatBytes(data.node.heapUsed)} / ${formatBytes(data.node.heapTotal)}`);
-    tooltipParts.push(`RSS: ${formatBytes(data.node.rss)}`);
+  if (data.renderer) {
+    parts.push(`Renderer: ${formatBytes(data.renderer.heapUsed)}`);
+    tooltipParts.push(`Renderer heap: ${formatBytes(data.renderer.heapUsed)} / ${formatBytes(data.renderer.heapTotal)}`);
   }
 
   return (
