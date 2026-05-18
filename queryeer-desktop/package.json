@@ -103,6 +103,10 @@
         "nsis"
       ]
     },
+    "asarUnpack": [
+      "node_modules/esbuild/**",
+      "node_modules/@esbuild/**"
+    ],
     "mac": {
       "icon": "resources/icon.icns",
       "target": [

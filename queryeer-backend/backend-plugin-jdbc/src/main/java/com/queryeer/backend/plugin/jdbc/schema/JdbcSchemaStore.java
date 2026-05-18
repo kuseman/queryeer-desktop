@@ -1,5 +1,6 @@
 package com.queryeer.backend.plugin.jdbc.schema;
 
+import java.io.EOFException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -14,6 +15,13 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import com.queryeer.backend.plugin.jdbc.MapperUtils;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
@@ -21,6 +29,9 @@ import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 public final class JdbcSchemaStore
 {
     private static final String H2_DRIVER_CLASS_NAME = "org.h2.Driver";
+    private static final long CONNECTION_TIMEOUT_MS = 10_000L;
+    private static final long MAX_FILE_SIZE_BYTES = 100L * 1024L * 1024L;
+    private static final Set<Path> CORRUPTED_FILES = ConcurrentHashMap.newKeySet();
     private final Path baseDir;
 
     public JdbcSchemaStore(Path baseDir)
@@ -50,6 +61,8 @@ public final class JdbcSchemaStore
         {
             throw new RuntimeException("Failed to persist schema snapshot for connection " + connectionId, e);
         }
+        // Compact after snapshot to prevent unbounded MVStore growth
+        compactIfNeeded(connectionId, scope);
     }
 
     public List<JdbcSchemaObject> latestSnapshot(String connectionId, JdbcSchemaCrawlScope scope)
@@ -221,11 +234,193 @@ public final class JdbcSchemaStore
         String fileName = sanitize(connectionId + "__"
                                    + scope.name()
                                            .toLowerCase());
+        Path dbPath = baseDir.resolve(fileName + ".mv.db");
         String url = "jdbc:h2:file:" + baseDir.resolve(fileName)
                 .toAbsolutePath() + ";MODE=PostgreSQL;AUTO_SERVER=TRUE";
-        Connection connection = DriverManager.getConnection(url);
-        migrate(connection);
-        return connection;
+
+        // If this file was previously detected as corrupted, delete it upfront
+        if (CORRUPTED_FILES.remove(dbPath))
+        {
+            deleteDbFiles(dbPath);
+        }
+
+        // Prophylactic size limit: schema cache should never exceed ~100MB.
+        // Overgrown files indicate MVStore bloat; delete and start fresh.
+        if (isOvergrown(dbPath))
+        {
+            deleteDbFiles(dbPath);
+        }
+
+        try
+        {
+            Connection connection = connectWithTimeout(url, CONNECTION_TIMEOUT_MS);
+            migrate(connection);
+            return connection;
+        }
+        catch (Exception e)
+        {
+            if (isCorruptionError(e))
+            {
+                // Corruption detected — delete database files and retry once
+                deleteDbFiles(dbPath);
+                try
+                {
+                    Connection connection = connectWithTimeout(url, CONNECTION_TIMEOUT_MS);
+                    migrate(connection);
+                    return connection;
+                }
+                catch (Exception e2)
+                {
+                    CORRUPTED_FILES.add(dbPath);
+                    throw new SQLException("Schema cache unrecoverable for " + connectionId + "/" + scope, e2);
+                }
+            }
+            throw e;
+        }
+    }
+
+    private static Connection connectWithTimeout(String url, long timeoutMs) throws SQLException
+    {
+        ClassLoader pluginCl = JdbcSchemaStore.class.getClassLoader();
+        try
+        {
+            return CompletableFuture.supplyAsync(() ->
+            {
+                Thread thread = Thread.currentThread();
+                ClassLoader previous = thread.getContextClassLoader();
+                thread.setContextClassLoader(pluginCl);
+                try
+                {
+                    return DriverManager.getConnection(url);
+                }
+                catch (SQLException e)
+                {
+                    throw new RuntimeException(e);
+                }
+                finally
+                {
+                    thread.setContextClassLoader(previous);
+                }
+            })
+                    .get(timeoutMs, TimeUnit.MILLISECONDS);
+        }
+        catch (TimeoutException e)
+        {
+            throw new SQLException("Connection timeout opening H2 database (possible corruption): " + url, "90030", e);
+        }
+        catch (ExecutionException e)
+        {
+            if (e.getCause() instanceof SQLException sqle)
+            {
+                throw sqle;
+            }
+            throw new SQLException("Failed to open H2 database: " + url, e.getCause());
+        }
+        catch (InterruptedException | CancellationException e)
+        {
+            Thread.currentThread()
+                    .interrupt();
+            throw new SQLException("Interrupted while opening H2 database: " + url);
+        }
+    }
+
+    private static void deleteDbFiles(Path dbPath)
+    {
+        try
+        {
+            Files.deleteIfExists(dbPath);
+        }
+        catch (Exception ignored)
+        {
+        }
+        String name = dbPath.toString();
+        if (name.endsWith(".mv.db"))
+        {
+            try
+            {
+                Files.deleteIfExists(Path.of(name.substring(0, name.length() - 6) + ".trace.db"));
+            }
+            catch (Exception ignored)
+            {
+            }
+        }
+    }
+
+    private static boolean isOvergrown(Path dbPath)
+    {
+        try
+        {
+            return Files.size(dbPath) > MAX_FILE_SIZE_BYTES;
+        }
+        catch (Exception e)
+        {
+            return false;
+        }
+    }
+
+    private void compactIfNeeded(String connectionId, JdbcSchemaCrawlScope scope)
+    {
+        try
+        {
+            String fileName = sanitize(connectionId + "__"
+                                       + scope.name()
+                                               .toLowerCase());
+            Path dbPath = baseDir.resolve(fileName + ".mv.db");
+            // Only compact if the file is large enough to matter (> 20 MB)
+            if (!Files.exists(dbPath)
+                    || Files.size(dbPath) < 20L * 1024L * 1024L)
+            {
+                return;
+            }
+            // Use the same URL parameters as open() to avoid metadata mismatches
+            String url = "jdbc:h2:file:" + baseDir.resolve(fileName)
+                    .toAbsolutePath() + ";MODE=PostgreSQL;AUTO_SERVER=TRUE";
+            try (Connection connection = DriverManager.getConnection(url); Statement statement = connection.createStatement())
+            {
+                statement.execute("SHUTDOWN COMPACT");
+            }
+        }
+        catch (Exception ignored)
+        {
+        }
+    }
+
+    private static boolean isCorruptionError(Throwable e)
+    {
+        if (e == null)
+        {
+            return false;
+        }
+        String msg = e.getMessage();
+        if (msg != null)
+        {
+            // H2 error codes related to file corruption / I/O errors
+            if (msg.contains("[90028-") // IO Exception (Reading from file failed)
+                    || msg.contains("[90030-") // File corrupted while reading record
+                    || msg.contains("File corrupted while reading record")
+                    || msg.contains("Reading from file"))
+            {
+                return true;
+            }
+            // MVStore corruption indicators
+            if (msg.contains("Double mark")
+                    || msg.contains("Chunk"))
+            {
+                return true;
+            }
+        }
+        // EOFException at the root means a truncated/corrupted file
+        if (e instanceof EOFException)
+        {
+            return true;
+        }
+        // TimeoutException means H2 hung on reading the file (corrupted or overgrown)
+        if (e instanceof TimeoutException)
+        {
+            return true;
+        }
+        // Check root cause chain
+        return isCorruptionError(e.getCause());
     }
 
     private static void ensureH2DriverLoaded()
@@ -639,16 +834,28 @@ public final class JdbcSchemaStore
             {
                 // Use recursive CTE to attribute each object to its root database
                 try (PreparedStatement statement = connection.prepareStatement("""
-                        with recursive db_tree as (
-                          select object_id, object_name, object_id as root_id
+                        with recursive db_tree(root_id, root_name, current_id) as
+                        (
+                          -- Anchor Member: Find all top-level databases
+                          select object_id   as root_id
+                          ,      object_name as root_name
+                          ,      object_id   as current_id
                           from schema_object
-                          where kind = 'database' and is_deleted = false
+                          where kind = 'database'
+                          and is_deleted = false
+
                           union all
-                          select child.object_id, child.object_name, dt.root_id
+
+                          -- Recursive Member: Walk down the tree to find all children/descendants
+                          select dt.root_id
+                          ,      dt.root_name
+                          ,      child.object_id as current_id
                           from schema_object child
-                          join db_tree dt on child.parent_object_id = dt.object_id
+                          join db_tree dt
+                            on child.parent_object_id = dt.current_id
                           where child.is_deleted = false
                         )
+                        -- Final Selection: Now group by the root_id we tracked
                         select root_id, count(*) as object_count
                         from db_tree
                         group by root_id
@@ -668,40 +875,6 @@ public final class JdbcSchemaStore
                                 {
                                     objectCountByDatabase.put(nameRs.getString(1), count);
                                 }
-                            }
-                        }
-                    }
-                }
-                catch (SQLException e)
-                {
-                    // Fallback: use total count if recursive CTE fails
-                }
-
-                // If CTE produced no results, fall back to total count distributed across known databases
-                if (objectCountByDatabase.isEmpty())
-                {
-                    try (PreparedStatement statement = connection.prepareStatement("select count(*) from schema_object where is_deleted = false"); ResultSet resultSet = statement.executeQuery())
-                    {
-                        if (resultSet.next())
-                        {
-                            int totalCount = resultSet.getInt(1);
-                            List<String> dbKeys = stateMap.keySet()
-                                    .stream()
-                                    .filter(k -> !k.isBlank())
-                                    .toList();
-                            if (!dbKeys.isEmpty())
-                            {
-                                int perDb = totalCount / dbKeys.size();
-                                int remainder = totalCount % dbKeys.size();
-                                for (int i = 0; i < dbKeys.size(); i++)
-                                {
-                                    objectCountByDatabase.put(dbKeys.get(i), perDb + (i < remainder ? 1
-                                            : 0));
-                                }
-                            }
-                            else
-                            {
-                                objectCountByDatabase.put("", totalCount);
                             }
                         }
                     }

@@ -573,7 +573,6 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
           ))}
         </div>
       )}
-
       {isStacked
         ? (
             <>
@@ -600,7 +599,6 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
               <div className="table-output-stacked-list" ref={stackedContainerRef}>
                 {context.resultSets.map((resultSet) => (
                   <section key={resultSet.resultSetIndex} className="table-output-stacked-section" data-result-set-index={resultSet.resultSetIndex}>
-                    <header className="table-output-stacked-header">Result {resultSet.resultSetIndex + 1}</header>
                     <ResultSetMetadata metadata={resultSet.metadata} />
                     {(() => {
                       const defaultHeight = resolveStackedGridHeightPx(resultSet.rowCount ?? resultSet.rows.length, tableSettings.stackedMaxRows);

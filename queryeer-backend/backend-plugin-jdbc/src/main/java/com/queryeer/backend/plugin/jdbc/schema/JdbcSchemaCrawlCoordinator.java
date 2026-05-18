@@ -84,8 +84,9 @@ public final class JdbcSchemaCrawlCoordinator
                     crawlOneSilent(cid, JdbcSchemaCrawlScope.DEEP, false, new JdbcSchemaTarget(db, null), Instant.now());
                 }
             }
-            catch (RuntimeException ignored)
+            catch (RuntimeException e)
             {
+                logger.warn("Schema usage recording failed: " + e.getMessage());
             }
         });
     }

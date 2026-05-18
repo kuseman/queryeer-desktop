@@ -513,6 +513,27 @@ describe("TextEditorRegistry view state", () => {
       const model = registry.getModelForFile(file.fileId);
       expect(model?.getContent()).toBe("queued content");
     });
+
+    it("marks file dirty and fires dirty listeners when pending content is consumed", async () => {
+      const file = makeFile({ fileId: "file-1" });
+      const filesRegistry = {
+        markDirty: vi.fn(),
+        getFile: vi.fn(() => file),
+        setEditorState: vi.fn(),
+        getEditorState: vi.fn()
+      };
+      registry.setFilesRegistry(filesRegistry as any);
+      registry.applyRecoveredContent(file.fileId, "queued content");
+      registry["editorApi"] = api;
+
+      const dirtyListener = vi.fn();
+      registry.onContentDirty(dirtyListener);
+
+      await registry.openFileAsync(file);
+
+      expect(filesRegistry.markDirty).toHaveBeenCalledWith(file.fileId);
+      expect(dirtyListener).toHaveBeenCalledWith(file.fileId, "queued content");
+    });
   });
 
   describe("markDirty", () => {
@@ -636,7 +657,7 @@ describe("TextEditorRegistry view state", () => {
         persistentViewState: { [STATE_KEY]: { cursor: { line: 44 } } },
         dirtyVsDisk: true
       });
-      registry.setFilesRegistry({ getFile: () => file } as any);
+      registry.setFilesRegistry({ getFile: () => file, markDirty: vi.fn() } as any);
 
       registry.applyRecoveredContent(file.fileId, "recovered");
       registry["activeFileId"] = file.fileId;

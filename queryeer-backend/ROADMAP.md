@@ -1,15 +1,21 @@
 # Queryeer Roadmap
 
+Bugs
+- [ ] The First time glide grid is shown in the application and the result only has 1 row that rows columns is blank UI-wise, switching file back and forth corrects it
+- [ ] Selection and scroll is not persisted in grid during switches of output tabs/active files
+
 Large features in prio
 
-- [ ] Create a distribution flow. Github etc.
-    - [ ] jlink
-    - [ ] matrix releases
-    - [ ] change log (app bundled)
-    - [ ] change log (gitgub release)
 - [ ] Modularize
     - Make sure all contributions have contracts and all API:s are located in a separate project
       that might end up on npmjs one day
+- [ ] Grid lacks sorting / filtering
+    This was something that AG grid had nativly but since ag grid was bad with many rows this had to go.
+- [X] Create a distribution flow. Github etc.
+    - [X] jlink
+    - [X] matrix releases
+    - [X] change log (app bundled)
+    - [X] change log (gitgub release)
 - [X] User actions in JDBC navigation
     - Pre.req. Tree content menu contribution done
     - Rulebased actions based on node type etc

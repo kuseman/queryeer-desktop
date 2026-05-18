@@ -529,7 +529,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
           return null;
         }
         return {
-          label: "Session",
+          label: "Session Id",
           value: sessionId
         };
       }
@@ -546,7 +546,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
         const state = file.metadata?.[JDBC_SESSION_STATE_METADATA_KEY];
         if (state === "dead") {
           return {
-            label: "State",
+            label: "Connection State",
             value: "dead",
             severity: "warning"
           };
@@ -555,7 +555,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
           return null;
         }
         return {
-          label: "State",
+          label: "Connection State",
           value: "alive"
         };
       }
