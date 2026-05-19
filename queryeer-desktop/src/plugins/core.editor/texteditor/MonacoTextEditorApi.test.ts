@@ -122,4 +122,57 @@ describe("MonacoTextEditorApi edit actions", () => {
     expect(trigger).toHaveBeenNthCalledWith(6, "command", "editor.action.selectAll", null);
     expect(focus).toHaveBeenCalledTimes(6);
   });
+
+  it("routes line operations through Monaco actions", () => {
+    const api = new MonacoTextEditorApi();
+    const run = vi.fn();
+    const getAction = vi.fn(() => ({ run }));
+    (api as unknown as { editor: unknown }).editor = { getAction };
+
+    api.copyLineUp();
+    expect(getAction).toHaveBeenCalledWith("editor.action.copyLinesUpAction");
+    expect(run).toHaveBeenCalledTimes(1);
+
+    api.copyLineDown();
+    expect(getAction).toHaveBeenCalledWith("editor.action.copyLinesDownAction");
+
+    api.moveLineUp();
+    expect(getAction).toHaveBeenCalledWith("editor.action.moveLinesUpAction");
+
+    api.moveLineDown();
+    expect(getAction).toHaveBeenCalledWith("editor.action.moveLinesDownAction");
+
+    api.joinLines();
+    expect(getAction).toHaveBeenCalledWith("editor.action.joinLines");
+
+    api.sortLinesAscending();
+    expect(getAction).toHaveBeenCalledWith("editor.action.sortLinesAscending");
+
+    api.sortLinesDescending();
+    expect(getAction).toHaveBeenCalledWith("editor.action.sortLinesDescending");
+
+    api.indentLines();
+    expect(getAction).toHaveBeenCalledWith("editor.action.indentLines");
+
+    api.outdentLines();
+    expect(getAction).toHaveBeenCalledWith("editor.action.outdentLines");
+
+    expect(run).toHaveBeenCalledTimes(9);
+  });
+
+  it("safely handles missing editor for line operations", () => {
+    const api = new MonacoTextEditorApi();
+
+    expect(() => {
+      api.copyLineUp();
+      api.copyLineDown();
+      api.moveLineUp();
+      api.moveLineDown();
+      api.joinLines();
+      api.sortLinesAscending();
+      api.sortLinesDescending();
+      api.indentLines();
+      api.outdentLines();
+    }).not.toThrow();
+  });
 });

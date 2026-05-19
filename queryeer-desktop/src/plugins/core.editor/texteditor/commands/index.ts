@@ -132,7 +132,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.format",
     title: "Format Document",
     handler: async () => {
-      await registry.getActiveEditor()?.format();
+      await registry.getCommandTargetEditor()?.format();
     }
   });
 
@@ -140,7 +140,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.formatSelection",
     title: "Format Selection",
     handler: async () => {
-      const editor = registry.getActiveEditor();
+      const editor = registry.getCommandTargetEditor();
       const selection = editor?.getSelection();
       if (editor && selection) {
         const range: TextRange = {
@@ -166,7 +166,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.findNext",
     title: "Find Next",
     handler: async () => {
-      registry.getActiveEditor()?.findNext("");
+      registry.getCommandTargetEditor()?.findNext("");
     }
   });
 
@@ -174,7 +174,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.findPrevious",
     title: "Find Previous",
     handler: async () => {
-      registry.getActiveEditor()?.findPrevious("");
+      registry.getCommandTargetEditor()?.findPrevious("");
     }
   });
 
@@ -182,55 +182,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.closeFindWidget",
     title: "Close Find Widget",
     handler: async () => {
-      registry.getActiveEditor()?.closeFindWidget();
-    }
-  });
-
-  context.commands.registerCommand({
-    id: "core.editor.text.goToDefinition",
-    title: "Go to Definition",
-    handler: async () => {
-      await registry.getActiveEditor()?.goToDefinition();
-    }
-  });
-
-  context.commands.registerCommand({
-    id: "core.editor.text.peekDefinition",
-    title: "Peek Definition",
-    handler: async () => {
-      await registry.getActiveEditor()?.peekDefinition();
-    }
-  });
-
-  context.commands.registerCommand({
-    id: "core.editor.text.goToTypeDefinition",
-    title: "Go to Type Definition",
-    handler: async () => {
-      await registry.getActiveEditor()?.goToTypeDefinition();
-    }
-  });
-
-  context.commands.registerCommand({
-    id: "core.editor.text.goToImplementation",
-    title: "Go to Implementation",
-    handler: async () => {
-      await registry.getActiveEditor()?.goToImplementation();
-    }
-  });
-
-  context.commands.registerCommand({
-    id: "core.editor.text.peekImplementation",
-    title: "Peek Implementation",
-    handler: async () => {
-      await registry.getActiveEditor()?.peekImplementation();
-    }
-  });
-
-  context.commands.registerCommand({
-    id: "core.editor.text.findReferences",
-    title: "Find References",
-    handler: async () => {
-      await registry.getActiveEditor()?.findReferences();
+      registry.getCommandTargetEditor()?.closeFindWidget();
     }
   });
 
@@ -238,7 +190,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.toggleCommentLine",
     title: "Toggle Line Comment",
     handler: async () => {
-      registry.getActiveEditor()?.toggleCommentLine();
+      registry.getCommandTargetEditor()?.toggleCommentLine();
     }
   });
 
@@ -246,7 +198,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.addCommentLine",
     title: "Add Line Comment",
     handler: async () => {
-      registry.getActiveEditor()?.addCommentLine();
+      registry.getCommandTargetEditor()?.addCommentLine();
     }
   });
 
@@ -254,7 +206,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.removeCommentLine",
     title: "Remove Line Comment",
     handler: async () => {
-      registry.getActiveEditor()?.removeCommentLine();
+      registry.getCommandTargetEditor()?.removeCommentLine();
     }
   });
 
@@ -262,7 +214,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.insertSnippet",
     title: "Insert Snippet",
     handler: async () => {
-      registry.getActiveEditor()?.insertSnippetAtCursor("");
+      registry.getCommandTargetEditor()?.insertSnippetAtCursor("");
     }
   });
 
@@ -278,7 +230,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.copyLineUp",
     title: "Copy Line Up",
     handler: async () => {
-      registry.getActiveEditor()?.insertSnippet("\n");
+      registry.getCommandTargetEditor()?.copyLineUp();
     }
   });
 
@@ -286,7 +238,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.copyLineDown",
     title: "Copy Line Down",
     handler: async () => {
-      registry.getActiveEditor()?.insertSnippet("\n");
+      registry.getCommandTargetEditor()?.copyLineDown();
     }
   });
 
@@ -294,7 +246,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.moveLineUp",
     title: "Move Line Up",
     handler: async () => {
-      registry.getActiveEditor()?.insertSnippet("\n");
+      registry.getCommandTargetEditor()?.moveLineUp();
     }
   });
 
@@ -302,7 +254,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.moveLineDown",
     title: "Move Line Down",
     handler: async () => {
-      registry.getActiveEditor()?.insertSnippet("\n");
+      registry.getCommandTargetEditor()?.moveLineDown();
     }
   });
 
@@ -330,7 +282,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.joinLines",
     title: "Join Lines",
     handler: async () => {
-      registry.getActiveEditor()?.insertSnippet("");
+      registry.getCommandTargetEditor()?.joinLines();
     }
   });
 
@@ -338,7 +290,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.sortLinesAscending",
     title: "Sort Lines Ascending",
     handler: async () => {
-      registry.getActiveEditor()?.insertSnippet("");
+      registry.getCommandTargetEditor()?.sortLinesAscending();
     }
   });
 
@@ -346,7 +298,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.sortLinesDescending",
     title: "Sort Lines Descending",
     handler: async () => {
-      registry.getActiveEditor()?.insertSnippet("");
+      registry.getCommandTargetEditor()?.sortLinesDescending();
     }
   });
 
@@ -354,7 +306,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.trimTrailingWhitespace",
     title: "Trim Trailing Whitespace",
     handler: async () => {
-      const editor = registry.getActiveEditor();
+      const editor = registry.getCommandTargetEditor();
       if (!editor) return;
       const model = editor.getModel();
       if (!model) return;
@@ -374,10 +326,10 @@ export function registerTextEditorCommands(
   });
 
   context.commands.registerCommand({
-    id: "core.editor.textindent",
+    id: "core.editor.text.indent",
     title: "Indent",
     handler: async () => {
-      registry.getActiveEditor()?.insertSnippet("");
+      registry.getCommandTargetEditor()?.indentLines();
     }
   });
 
@@ -385,7 +337,7 @@ export function registerTextEditorCommands(
     id: "core.editor.text.outdent",
     title: "Outdent",
     handler: async () => {
-      registry.getActiveEditor()?.insertSnippet("");
+      registry.getCommandTargetEditor()?.outdentLines();
     }
   });
 }

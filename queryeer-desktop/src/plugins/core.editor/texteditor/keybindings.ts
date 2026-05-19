@@ -20,24 +20,6 @@ export function registerTextEditorKeybindings(context: PluginContext): void {
   });
 
   context.keybindings.registerKeybinding({
-    id: "core.editor.text.keybinding.format",
-    commandId: "core.editor.text.format",
-    key: "Shift+Alt+F",
-    when: "editorFocus",
-    scope: "editor",
-    order: 20
-  });
-
-  context.keybindings.registerKeybinding({
-    id: "core.editor.text.keybinding.formatSelection",
-    commandId: "core.editor.text.formatSelection",
-    key: "CmdOrCtrl+K CmdOrCtrl+F",
-    when: "editorFocus",
-    scope: "editor",
-    order: 21
-  });
-
-  context.keybindings.registerKeybinding({
     id: "core.editor.text.keybinding.find",
     commandId: "core.editor.text.find",
     key: "CmdOrCtrl+F",
@@ -71,60 +53,6 @@ export function registerTextEditorKeybindings(context: PluginContext): void {
     when: "editorFocus",
     scope: "editor",
     order: 33
-  });
-
-  context.keybindings.registerKeybinding({
-    id: "core.editor.text.keybinding.goToDefinition",
-    commandId: "core.editor.text.goToDefinition",
-    key: "F12",
-    when: "editorFocus",
-    scope: "editor",
-    order: 40
-  });
-
-  context.keybindings.registerKeybinding({
-    id: "core.editor.text.keybinding.peekDefinition",
-    commandId: "core.editor.text.peekDefinition",
-    key: "Alt+F12",
-    when: "editorFocus",
-    scope: "editor",
-    order: 41
-  });
-
-  context.keybindings.registerKeybinding({
-    id: "core.editor.text.keybinding.goToTypeDefinition",
-    commandId: "core.editor.text.goToTypeDefinition",
-    key: "CmdOrCtrl+Shift+F12",
-    when: "editorFocus",
-    scope: "editor",
-    order: 42
-  });
-
-  context.keybindings.registerKeybinding({
-    id: "core.editor.text.keybinding.goToImplementation",
-    commandId: "core.editor.text.goToImplementation",
-    key: "CmdOrCtrl+F12",
-    when: "editorFocus",
-    scope: "editor",
-    order: 43
-  });
-
-  context.keybindings.registerKeybinding({
-    id: "core.editor.text.keybinding.peekImplementation",
-    commandId: "core.editor.text.peekImplementation",
-    key: "CmdOrCtrl+Shift+F12",
-    when: "editorFocus",
-    scope: "editor",
-    order: 44
-  });
-
-  context.keybindings.registerKeybinding({
-    id: "core.editor.text.keybinding.findReferences",
-    commandId: "core.editor.text.findReferences",
-    key: "Shift+F12",
-    when: "editorFocus",
-    scope: "editor",
-    order: 45
   });
 
   context.keybindings.registerKeybinding({
@@ -253,21 +181,5 @@ export function registerTextEditorKeybindings(context: PluginContext): void {
     order: 120
   });
 
-  context.keybindings.registerKeybinding({
-    id: "core.editor.text.keybinding.indent",
-    commandId: "core.editor.text.indent",
-    key: "Tab",
-    when: "editorFocus",
-    scope: "editor",
-    order: 130
-  });
-
-  context.keybindings.registerKeybinding({
-    id: "core.editor.text.keybinding.outdent",
-    commandId: "core.editor.text.outdent",
-    key: "Shift+Tab",
-    when: "editorFocus",
-    scope: "editor",
-    order: 131
-  });
+  // Tab/Shift+Tab handled natively by Monaco for smart indentation
 }

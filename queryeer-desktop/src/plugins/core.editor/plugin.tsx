@@ -123,16 +123,6 @@ export const coreEditorPlugin: Plugin = {
           ]
         },
         {
-          id: "core.editor.texteditor.formatOnSave",
-          moduleId: "core.editor.texteditor",
-          title: "Format On Save",
-          description: "Format files automatically when saving.",
-          sectionPath: ["Editor", "Formatting"],
-          tags: ["format", "save"],
-          type: "boolean",
-          defaultValue: false
-        },
-        {
           id: "core.editor.texteditor.cursorBlinking",
           moduleId: "core.editor.texteditor",
           title: "Cursor Blinking",
@@ -161,12 +151,8 @@ export const coreEditorPlugin: Plugin = {
       order: 10,
       getItems: (_query, _ctx) => {
         const actions = [
-          { id: "editor.format", title: "Format Document", description: "Format the active file", commandId: "core.editor.text.format" },
-          { id: "editor.formatSelection", title: "Format Selection", description: "Format the selected text", commandId: "core.editor.text.formatSelection" },
           { id: "editor.find", title: "Find", description: "Open find widget", commandId: "core.editor.text.find" },
           { id: "editor.toggleComment", title: "Toggle Line Comment", description: "Comment or uncomment lines", commandId: "core.editor.text.toggleCommentLine" },
-          { id: "editor.goToDefinition", title: "Go to Definition", description: "Navigate to the symbol definition", commandId: "core.editor.text.goToDefinition" },
-          { id: "editor.findReferences", title: "Find References", description: "Find all references to the symbol", commandId: "core.editor.text.findReferences" },
           { id: "editor.trimWhitespace", title: "Trim Trailing Whitespace", description: "Remove trailing whitespace from all lines", commandId: "core.editor.text.trimTrailingWhitespace" },
           { id: "editor.selectAll", title: "Select All", description: "Select all content in the editor", commandId: "core.editor.text.selectAll" }
         ];
