@@ -303,6 +303,12 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
         title: "Filesystem",
         defaultAlias: "fs",
         allowMultiple: false
+      },
+      {
+        catalogId: "http",
+        title: "HTTP",
+        defaultAlias: "http",
+        allowMultiple: false
       }
     ]);
     mocks.getCoreSettingsServiceMock.mockReturnValue({
@@ -322,6 +328,12 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
           alias: "fs",
           catalogId: "filesystem",
           title: "Filesystem",
+          enabled: true
+        },
+        {
+          alias: "http",
+          catalogId: "http",
+          title: "HTTP",
           enabled: true
         }
       ]
@@ -353,6 +365,12 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
         title: "Filesystem",
         defaultAlias: "fs",
         allowMultiple: false
+      },
+      {
+        catalogId: "http",
+        title: "HTTP",
+        defaultAlias: "http",
+        allowMultiple: false
       }
     ]);
     contributionListener?.();
@@ -365,6 +383,12 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
           alias: "fs",
           catalogId: "filesystem",
           title: "Filesystem",
+          enabled: true
+        },
+        {
+          alias: "http",
+          catalogId: "http",
+          title: "HTTP",
           enabled: true
         }
       ]

@@ -52,7 +52,7 @@ class PayloadbuilderQueryEngineProviderTest
         Assertions.assertTrue(result instanceof Map);
         Map<?, ?> asMap = (Map<?, ?>) result;
         Assertions.assertEquals(Set.of("engine.capabilities", "sql.parse.snapshot", "sql.complete", "payloadbuilder.es.listIndices"), Set.copyOf((List<String>) asMap.get("actions")));
-        Assertions.assertEquals(Set.of("jdbc", "elasticsearch", "filesystem"), Set.copyOf((Set<String>) asMap.get("catalogIds")));
+        Assertions.assertEquals(Set.of("jdbc", "elasticsearch", "filesystem", "http"), Set.copyOf((Set<String>) asMap.get("catalogIds")));
     }
 
     @Test
