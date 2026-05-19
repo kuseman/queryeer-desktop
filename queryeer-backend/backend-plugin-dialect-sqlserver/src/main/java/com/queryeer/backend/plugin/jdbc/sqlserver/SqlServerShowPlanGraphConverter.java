@@ -2,9 +2,11 @@ package com.queryeer.backend.plugin.jdbc.sqlserver;
 
 import java.io.StringReader;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 
@@ -51,12 +53,14 @@ final class SqlServerShowPlanGraphConverter
                     .parse(new InputSource(new StringReader(xml)));
             List<GraphVertex> vertices = new ArrayList<>();
             List<EdgeDraft> edgeDrafts = new ArrayList<>();
+            List<SpoolTargetDraft> spoolTargetDrafts = new ArrayList<>();
             Element rootRelOp = firstElement(document.getDocumentElement(), "RelOp");
             if (rootRelOp != null)
             {
-                appendRelOp(rootRelOp, null, true, missingIndexProperties(document), vertices, edgeDrafts);
+                appendRelOp(rootRelOp, null, true, numberAttr(rootRelOp, "EstimatedTotalSubtreeCost"), missingIndexProperties(document), vertices, edgeDrafts, spoolTargetDrafts);
             }
             List<GraphEdge> edges = buildEdges(edgeDrafts);
+            edges.addAll(buildSpoolTargetEdges(spoolTargetDrafts, vertices));
             return new GraphDocument(graphId, "SQL Server Query Plan", null, new GraphLayoutOptions("right-left", 110, 80), vertices, edges);
         }
         catch (Exception e)
@@ -65,7 +69,8 @@ final class SqlServerShowPlanGraphConverter
         }
     }
 
-    private static String appendRelOp(Element relOp, String parentId, boolean root, List<GraphProperty> missingIndexProperties, List<GraphVertex> vertices, List<EdgeDraft> edges)
+    private static String appendRelOp(Element relOp, String parentId, boolean root, Double planCost, List<GraphProperty> missingIndexProperties, List<GraphVertex> vertices, List<EdgeDraft> edges,
+            List<SpoolTargetDraft> spoolTargets)
     {
         final String nodeId = attr(relOp, "NodeId");
         final String id = nodeId.isBlank() ? "relop-" + vertices.size()
@@ -73,8 +78,11 @@ final class SqlServerShowPlanGraphConverter
         final String physicalOp = attr(relOp, "PhysicalOp");
         final String logicalOp = attr(relOp, "LogicalOp");
         final Double estimateRows = numberAttr(relOp, "EstimateRows");
+        final Double estimatedCost = numberAttr(relOp, "EstimatedTotalSubtreeCost");
+        final Double estimatedCostPercent = estimatedCostPercent(estimatedOperatorCost(relOp, estimatedCost), planCost);
         final Double actualRows = runtimeCounterSum(relOp, "ActualRows");
         final boolean parallel = booleanAttr(relOp, "Parallel");
+        final String targetNodeId = firstAttributeWithinRelOp(relOp, List.of("TargetNodeId", "TargetNodeID", "PrimaryNodeId", "PrimaryNodeID"));
         final List<String> warnings = warningSummaries(relOp);
         if (root
                 && !missingIndexProperties.isEmpty())
@@ -83,10 +91,11 @@ final class SqlServerShowPlanGraphConverter
         }
 
         List<GraphPropertyGroup> groups = new ArrayList<>();
-        addGroup(groups, "operator", "Operator", operatorProperties(relOp, physicalOp, logicalOp, parallel));
-        addGroup(groups, "estimates", "Estimates", estimateProperties(relOp, estimateRows));
+        addGroup(groups, "operator", "Operator", operatorProperties(relOp, physicalOp, logicalOp, parallel, targetNodeId));
+        addGroup(groups, "estimates", "Estimates", estimateProperties(relOp, estimateRows, estimatedCost, estimatedCostPercent));
         addGroup(groups, "runtime", "Runtime", runtimeProperties(relOp, actualRows));
         addGroup(groups, "object", "Object", objectProperties(relOp));
+        addGroup(groups, "columns", "Columns", columnProperties(relOp));
         addGroup(groups, "predicates", "Predicates", predicateProperties(relOp));
         if (root)
         {
@@ -108,17 +117,69 @@ final class SqlServerShowPlanGraphConverter
                 : physicalOp,
                 logicalOp.isBlank() ? "operator"
                         : logicalOp,
-                null, new GraphVertexStyle("rounded", null, "#1e3a8a", "#60a5fa", null, null, 210, 86), groups, overlays, List.of()));
+                estimatedCostPercent == null ? null
+                        : "Cost: " + formatPercent(estimatedCostPercent),
+                operatorHeatStyle(estimatedCostPercent), groups, overlays, List.of()));
         if (parentId != null)
         {
             edges.add(new EdgeDraft(id + "-" + parentId, id, parentId, estimateRows, actualRows));
         }
+        if (!targetNodeId.isBlank())
+        {
+            spoolTargets.add(new SpoolTargetDraft("spool-target-" + id + "-relop-" + targetNodeId, id, "relop-" + targetNodeId, targetNodeId));
+        }
 
         for (Element child : directChildRelOps(relOp))
         {
-            appendRelOp(child, id, false, List.of(), vertices, edges);
+            appendRelOp(child, id, false, planCost, List.of(), vertices, edges, spoolTargets);
         }
         return id;
+    }
+
+    private static Double estimatedOperatorCost(Element relOp, Double estimatedCost)
+    {
+        if (estimatedCost == null)
+        {
+            return null;
+        }
+        double childCost = directChildRelOps(relOp).stream()
+                .map(child -> numberAttr(child, "EstimatedTotalSubtreeCost"))
+                .filter(Objects::nonNull)
+                .mapToDouble(Double::doubleValue)
+                .sum();
+        return Math.max(0D, estimatedCost - childCost);
+    }
+
+    private static Double estimatedCostPercent(Double operatorCost, Double planCost)
+    {
+        if (operatorCost == null
+                || planCost == null
+                || planCost <= 0D)
+        {
+            return null;
+        }
+        return operatorCost / planCost * 100D;
+    }
+
+    private static GraphVertexStyle operatorHeatStyle(Double estimatedCostPercent)
+    {
+        if (estimatedCostPercent == null)
+        {
+            return new GraphVertexStyle("rounded", null, "#1e3a8a", "#60a5fa", null, null, 210, 86);
+        }
+        if (estimatedCostPercent >= 50D)
+        {
+            return new GraphVertexStyle("rounded", null, "#7f1d1d", "#f87171", null, null, 210, 86);
+        }
+        if (estimatedCostPercent >= 20D)
+        {
+            return new GraphVertexStyle("rounded", null, "#7c2d12", "#fb923c", null, null, 210, 86);
+        }
+        if (estimatedCostPercent >= 5D)
+        {
+            return new GraphVertexStyle("rounded", null, "#713f12", "#facc15", null, null, 210, 86);
+        }
+        return new GraphVertexStyle("rounded", null, "#1e3a8a", "#60a5fa", null, null, 210, 86);
     }
 
     private static List<GraphEdge> buildEdges(List<EdgeDraft> drafts)
@@ -145,6 +206,28 @@ final class SqlServerShowPlanGraphConverter
         return edges;
     }
 
+    private static List<GraphEdge> buildSpoolTargetEdges(List<SpoolTargetDraft> drafts, List<GraphVertex> vertices)
+    {
+        Set<String> vertexIds = new HashSet<>();
+        for (GraphVertex vertex : vertices)
+        {
+            vertexIds.add(vertex.id());
+        }
+        List<GraphEdge> edges = new ArrayList<>();
+        for (SpoolTargetDraft draft : drafts)
+        {
+            if (!vertexIds.contains(draft.sourceVertexId())
+                    || !vertexIds.contains(draft.targetVertexId()))
+            {
+                continue;
+            }
+            List<GraphPropertyGroup> groups = List.of(new GraphPropertyGroup("spool", "Spool", List.of(new GraphProperty("targetNodeId", "Target node ID", draft.targetNodeId(), null, true))));
+            edges.add(new GraphEdge(draft.id(), draft.sourceVertexId(), draft.targetVertexId(), "spool target", "spool target", new GraphEdgeStyle("smoothstep", "#f59e0b", 2D, true, "arrow"), groups,
+                    List.of()));
+        }
+        return edges;
+    }
+
     private static double edgeWidth(Double actualRows, double maxActualRows)
     {
         if (actualRows == null
@@ -156,22 +239,24 @@ final class SqlServerShowPlanGraphConverter
         return 1.5D + (ratio * 5.5D);
     }
 
-    private static List<GraphProperty> operatorProperties(Element relOp, String physicalOp, String logicalOp, boolean parallel)
+    private static List<GraphProperty> operatorProperties(Element relOp, String physicalOp, String logicalOp, boolean parallel, String targetNodeId)
     {
         List<GraphProperty> properties = new ArrayList<>();
         addStringProperty(properties, "nodeId", "Node ID", attr(relOp, "NodeId"), null, false);
+        addStringProperty(properties, "targetNodeId", "Target node ID", targetNodeId, null, true);
         addStringProperty(properties, "physical", "Physical", physicalOp, null, true);
         addStringProperty(properties, "logical", "Logical", logicalOp, null, true);
         addStringProperty(properties, "parallel", "Parallel", Boolean.toString(parallel), null, parallel);
         return properties;
     }
 
-    private static List<GraphProperty> estimateProperties(Element relOp, Double estimateRows)
+    private static List<GraphProperty> estimateProperties(Element relOp, Double estimateRows, Double estimatedCost, Double estimatedCostPercent)
     {
         List<GraphProperty> properties = new ArrayList<>();
         addNumberProperty(properties, "estimatedRows", "Estimated rows", estimateRows, null, true);
         addNumberProperty(properties, "estimatedExecutions", "Estimated executions", numberAttr(relOp, "EstimateExecutions"), null, false);
-        addNumberProperty(properties, "estimatedCost", "Estimated subtree cost", numberAttr(relOp, "EstimatedTotalSubtreeCost"), null, true);
+        addNumberProperty(properties, "estimatedCost", "Estimated subtree cost", estimatedCost, null, true);
+        addNumberProperty(properties, "estimatedCostPercent", "Estimated operator cost", estimatedCostPercent, "%", true);
         addNumberProperty(properties, "estimatedCpu", "Estimated CPU", numberAttr(relOp, "EstimateCPU"), null, false);
         addNumberProperty(properties, "estimatedIo", "Estimated IO", numberAttr(relOp, "EstimateIO"), null, false);
         addNumberProperty(properties, "avgRowSize", "Average row size", numberAttr(relOp, "AvgRowSize"), "bytes", false);
@@ -194,13 +279,57 @@ final class SqlServerShowPlanGraphConverter
                 : (double) counters.size(), null, counters.size() > 1);
         for (Element counter : counters)
         {
-            String thread = attr(counter, "Thread");
-            addStringProperty(properties, "runtimeThread-" + (thread.isBlank() ? properties.size()
-                    : thread), thread.isBlank() ? "Runtime counter"
-                            : "Runtime thread " + thread,
-                    runtimeCounterSummary(counter), null, false);
+            addRuntimeCounterProperties(properties, counter);
         }
         return properties;
+    }
+
+    private static void addRuntimeCounterProperties(List<GraphProperty> properties, Element counter)
+    {
+        String thread = attr(counter, "Thread");
+        String threadId = thread.isBlank() ? Integer.toString(properties.size())
+                : thread;
+        String labelPrefix = thread.isBlank() ? "Runtime counter"
+                : "Runtime thread " + thread;
+        NamedNodeMap attributes = counter.getAttributes();
+        for (int i = 0; i < attributes.getLength(); i++)
+        {
+            Node attribute = attributes.item(i);
+            String name = attribute.getNodeName();
+            if ("Thread".equals(name))
+            {
+                continue;
+            }
+            String id = "runtimeThread-" + threadId + "-" + name;
+            String label = labelPrefix + " " + runtimeCounterAttributeLabel(name);
+            String unit = name.endsWith("ms") ? "ms"
+                    : null;
+            Double number = parseDouble(attribute.getNodeValue());
+            if (number != null)
+            {
+                addNumberProperty(properties, id, label, number, unit, false);
+            }
+            else
+            {
+                addStringProperty(properties, id, label, attribute.getNodeValue(), unit, false);
+            }
+        }
+    }
+
+    private static String runtimeCounterAttributeLabel(String name)
+    {
+        return switch (name)
+        {
+            case "ActualRows" -> "actual rows";
+            case "ActualExecutions" -> "actual executions";
+            case "ActualRowsRead" -> "actual rows read";
+            case "ActualEndOfScans" -> "actual end of scans";
+            case "ActualRebinds" -> "actual rebinds";
+            case "ActualRewinds" -> "actual rewinds";
+            case "ActualElapsedms" -> "actual elapsed";
+            case "ActualCPUms" -> "actual CPU";
+            default -> name;
+        };
     }
 
     private static List<GraphProperty> objectProperties(Element relOp)
@@ -226,6 +355,76 @@ final class SqlServerShowPlanGraphConverter
         addElementText(properties, "seekPredicates", "Seek predicates", firstDescendantWithinRelOp(relOp, "SeekPredicates"));
         addElementText(properties, "probeColumn", "Probe column", firstDescendantWithinRelOp(relOp, "ProbeColumn"));
         return properties;
+    }
+
+    private static List<GraphProperty> columnProperties(Element relOp)
+    {
+        List<GraphProperty> properties = new ArrayList<>();
+        Element outputList = firstDescendantWithinRelOp(relOp, "OutputList");
+        if (outputList != null)
+        {
+            addStringProperties(properties, "outputColumn", "Output column", columnReferences(outputList), false);
+        }
+
+        List<String> definedValues = new ArrayList<>();
+        for (Element definedValue : descendantsWithinRelOp(relOp, "DefinedValue"))
+        {
+            String value = definedValueSummary(definedValue);
+            if (!value.isBlank())
+            {
+                definedValues.add(value);
+            }
+        }
+        addStringProperties(properties, "definedValue", "Defined value", definedValues, false);
+        return properties;
+    }
+
+    private static String definedValueSummary(Element definedValue)
+    {
+        List<String> columns = columnReferences(definedValue);
+        String target = columns.isEmpty() ? ""
+                : columns.getFirst();
+        Element scalar = firstDescendant(definedValue, "ScalarOperator");
+        String expression = scalar == null ? compactText(definedValue.getTextContent())
+                : attr(scalar, "ScalarString");
+        if (target.isBlank())
+        {
+            return expression;
+        }
+        if (expression.isBlank())
+        {
+            return target;
+        }
+        return target + " = " + expression;
+    }
+
+    private static List<String> columnReferences(Element root)
+    {
+        List<String> columns = new ArrayList<>();
+        NodeList nodes = root.getElementsByTagNameNS(SHOWPLAN_NAMESPACE, "ColumnReference");
+        for (int i = 0; i < nodes.getLength(); i++)
+        {
+            String column = columnReference((Element) nodes.item(i));
+            if (!column.isBlank())
+            {
+                columns.add(column);
+            }
+        }
+        return columns;
+    }
+
+    private static String columnReference(Element column)
+    {
+        List<String> parts = new ArrayList<>();
+        for (String attribute : List.of("Database", "Schema", "Table", "Column"))
+        {
+            String value = trimBrackets(attr(column, attribute));
+            if (!value.isBlank())
+            {
+                parts.add(value);
+            }
+        }
+        return String.join(".", parts);
     }
 
     private static List<GraphProperty> warningProperties(List<String> warnings)
@@ -314,23 +513,6 @@ final class SqlServerShowPlanGraphConverter
         return counters;
     }
 
-    private static String runtimeCounterSummary(Element counter)
-    {
-        List<String> parts = new ArrayList<>();
-        NamedNodeMap attributes = counter.getAttributes();
-        for (int i = 0; i < attributes.getLength(); i++)
-        {
-            Node attribute = attributes.item(i);
-            String name = attribute.getNodeName();
-            if ("Thread".equals(name))
-            {
-                continue;
-            }
-            parts.add(name + "=" + attribute.getNodeValue());
-        }
-        return String.join(", ", parts);
-    }
-
     private static List<GraphProperty> missingIndexProperties(Document document)
     {
         List<GraphProperty> properties = new ArrayList<>();
@@ -347,9 +529,9 @@ final class SqlServerShowPlanGraphConverter
                 addStringProperty(properties, prefix + "-database", "Database " + (i + 1), trimBrackets(attr(index, "Database")), null, false);
                 addStringProperty(properties, prefix + "-schema", "Schema " + (i + 1), trimBrackets(attr(index, "Schema")), null, false);
                 addStringProperty(properties, prefix + "-table", "Table " + (i + 1), trimBrackets(attr(index, "Table")), null, true);
-                addStringProperty(properties, prefix + "-equality", "Equality columns " + (i + 1), columnGroup(index, "EQUALITY"), null, true);
-                addStringProperty(properties, prefix + "-inequality", "Inequality columns " + (i + 1), columnGroup(index, "INEQUALITY"), null, false);
-                addStringProperty(properties, prefix + "-include", "Include columns " + (i + 1), columnGroup(index, "INCLUDE"), null, false);
+                addStringProperties(properties, prefix + "-equality", "Equality column " + (i + 1), columnGroupColumns(index, "EQUALITY"), true);
+                addStringProperties(properties, prefix + "-inequality", "Inequality column " + (i + 1), columnGroupColumns(index, "INEQUALITY"), false);
+                addStringProperties(properties, prefix + "-include", "Include column " + (i + 1), columnGroupColumns(index, "INCLUDE"), false);
             }
         }
         return properties;
@@ -398,6 +580,11 @@ final class SqlServerShowPlanGraphConverter
 
     private static String columnGroup(Element missingIndex, String usage)
     {
+        return String.join(", ", columnGroupColumns(missingIndex, usage));
+    }
+
+    private static List<String> columnGroupColumns(Element missingIndex, String usage)
+    {
         List<String> columns = new ArrayList<>();
         NodeList groups = missingIndex.getElementsByTagNameNS(SHOWPLAN_NAMESPACE, "ColumnGroup");
         for (int i = 0; i < groups.getLength(); i++)
@@ -417,7 +604,7 @@ final class SqlServerShowPlanGraphConverter
                 }
             }
         }
-        return String.join(", ", columns);
+        return columns;
     }
 
     private static Element firstDirectOrDescendant(Element root, String localName)
@@ -508,6 +695,71 @@ final class SqlServerShowPlanGraphConverter
         return null;
     }
 
+    private static String firstAttributeWithinRelOp(Element root, List<String> names)
+    {
+        return firstAttributeWithinRelOp(root, names, true);
+    }
+
+    private static String firstAttributeWithinRelOp(Element root, List<String> names, boolean rootElement)
+    {
+        if (!rootElement
+                && "RelOp".equals(root.getLocalName()))
+        {
+            return "";
+        }
+        for (String name : names)
+        {
+            String value = attr(root, name);
+            if (!value.isBlank())
+            {
+                return value;
+            }
+        }
+        NodeList children = root.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++)
+        {
+            Node child = children.item(i);
+            if (child instanceof Element element)
+            {
+                String value = firstAttributeWithinRelOp(element, names, false);
+                if (!value.isBlank())
+                {
+                    return value;
+                }
+            }
+        }
+        return "";
+    }
+
+    private static List<Element> descendantsWithinRelOp(Element root, String localName)
+    {
+        List<Element> result = new ArrayList<>();
+        collectDescendantsWithinRelOp(root, localName, true, result);
+        return result;
+    }
+
+    private static void collectDescendantsWithinRelOp(Element root, String localName, boolean rootElement, List<Element> result)
+    {
+        if (!rootElement
+                && "RelOp".equals(root.getLocalName()))
+        {
+            return;
+        }
+        if (localName.equals(root.getLocalName()))
+        {
+            result.add(root);
+        }
+        NodeList children = root.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++)
+        {
+            Node child = children.item(i);
+            if (child instanceof Element element)
+            {
+                collectDescendantsWithinRelOp(element, localName, false, result);
+            }
+        }
+    }
+
     private static boolean booleanAttr(Element element, String name)
     {
         return "true".equalsIgnoreCase(attr(element, name))
@@ -583,6 +835,14 @@ final class SqlServerShowPlanGraphConverter
         properties.add(new GraphProperty(id, label, value, unit, important));
     }
 
+    private static void addStringProperties(List<GraphProperty> properties, String idPrefix, String label, List<String> values, boolean important)
+    {
+        for (int i = 0; i < values.size(); i++)
+        {
+            addStringProperty(properties, idPrefix + "-" + (i + 1), label + " " + (i + 1), truncate(values.get(i), 300), null, important);
+        }
+    }
+
     private static void addNumberProperty(List<GraphProperty> properties, String id, String label, Double value, String unit, boolean important)
     {
         if (value == null)
@@ -636,7 +896,29 @@ final class SqlServerShowPlanGraphConverter
         return String.format(Locale.ROOT, "%.2f rows", value);
     }
 
+    private static String formatPercent(Double value)
+    {
+        if (value == null)
+        {
+            return "";
+        }
+        if (value >= 10D
+                || Math.rint(value) == value)
+        {
+            return String.format(Locale.ROOT, "%.0f%%", value);
+        }
+        if (value >= 1D)
+        {
+            return String.format(Locale.ROOT, "%.1f%%", value);
+        }
+        return String.format(Locale.ROOT, "%.2f%%", value);
+    }
+
     private record EdgeDraft(String id, String sourceVertexId, String targetVertexId, Double estimatedRows, Double actualRows)
+    {
+    }
+
+    private record SpoolTargetDraft(String id, String sourceVertexId, String targetVertexId, String targetNodeId)
     {
     }
 }

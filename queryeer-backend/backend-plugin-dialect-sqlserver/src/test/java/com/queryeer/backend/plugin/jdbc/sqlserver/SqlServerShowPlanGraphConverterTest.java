@@ -47,6 +47,30 @@ class SqlServerShowPlanGraphConverterTest
         Assertions.assertEquals("SELECT", graph.vertices()
                 .getFirst()
                 .label());
+        Assertions.assertEquals("Cost: 90%", graph.vertices()
+                .getFirst()
+                .description());
+        Assertions.assertEquals("#7f1d1d", graph.vertices()
+                .getFirst()
+                .style()
+                .backgroundColor());
+        Assertions.assertEquals("#f87171", graph.vertices()
+                .getFirst()
+                .style()
+                .borderColor());
+        Assertions.assertEquals("Cost: 10%", graph.vertices()
+                .stream()
+                .filter(vertex -> "relop-1".equals(vertex.id()))
+                .findFirst()
+                .orElseThrow()
+                .description());
+        Assertions.assertEquals("#713f12", graph.vertices()
+                .stream()
+                .filter(vertex -> "relop-1".equals(vertex.id()))
+                .findFirst()
+                .orElseThrow()
+                .style()
+                .backgroundColor());
         Assertions.assertEquals(2, graph.vertices()
                 .getFirst()
                 .overlays()
@@ -84,9 +108,29 @@ class SqlServerShowPlanGraphConverterTest
                         && Double.valueOf(2D)
                                 .equals(property.value())));
         Assertions.assertTrue(runtimeProperties.stream()
-                .anyMatch(property -> "runtimeThread-1".equals(property.id())
-                        && String.valueOf(property.value())
-                                .contains("ActualCPUms=2")));
+                .anyMatch(property -> "runtimeThread-1-ActualCPUms".equals(property.id())
+                        && Double.valueOf(2D)
+                                .equals(property.value())));
+        Assertions.assertTrue(graph.vertices()
+                .getFirst()
+                .properties()
+                .stream()
+                .filter(group -> "estimates".equals(group.id()))
+                .flatMap(group -> group.properties()
+                        .stream())
+                .anyMatch(property -> "estimatedCostPercent".equals(property.id())
+                        && Double.valueOf(90D)
+                                .equals(property.value())));
+        Assertions.assertEquals(100D, graph.vertices()
+                .stream()
+                .flatMap(vertex -> vertex.properties()
+                        .stream())
+                .filter(group -> "estimates".equals(group.id()))
+                .flatMap(group -> group.properties()
+                        .stream())
+                .filter(property -> "estimatedCostPercent".equals(property.id()))
+                .mapToDouble(property -> (Double) property.value())
+                .sum(), 0.0001D);
         Assertions.assertTrue(SqlServerShowPlanGraphConverter.isShowPlanXml(xml));
     }
 
@@ -234,11 +278,11 @@ class SqlServerShowPlanGraphConverterTest
                 .anyMatch(overlay -> "warning".equals(overlay.kind())));
         Assertions.assertTrue(missingIndexGroup.properties()
                 .stream()
-                .anyMatch(property -> "missingIndex-1-equality".equals(property.id())
+                .anyMatch(property -> "missingIndex-1-equality-1".equals(property.id())
                         && "Email".equals(property.value())));
         Assertions.assertTrue(missingIndexGroup.properties()
                 .stream()
-                .anyMatch(property -> "missingIndex-1-include".equals(property.id())
+                .anyMatch(property -> "missingIndex-1-include-1".equals(property.id())
                         && "Name".equals(property.value())));
     }
 
@@ -323,5 +367,122 @@ class SqlServerShowPlanGraphConverterTest
                         .stream())
                 .anyMatch(property -> "predicate".equals(property.id())
                         && "[dbo].[Users].[IsActive]=(1)".equals(property.value())));
+    }
+
+    @Test
+    void extractsOutputColumnsAndDefinedValuesWithoutChildPropagation()
+    {
+        String xml = """
+                <ShowPlanXML xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/showplan\">
+                  <BatchSequence>
+                    <Batch>
+                      <Statements>
+                        <StmtSimple StatementText=\"select Name + Surname from dbo.Users\">
+                          <QueryPlan>
+                            <RelOp NodeId=\"0\" PhysicalOp=\"Compute Scalar\" LogicalOp=\"Compute Scalar\" EstimateRows=\"1\" EstimatedTotalSubtreeCost=\"0.1\">
+                              <OutputList>
+                                <ColumnReference Database=\"[db]\" Schema=\"[dbo]\" Table=\"[Users]\" Column=\"FullName\" />
+                              </OutputList>
+                              <ComputeScalar>
+                                <DefinedValues>
+                                  <DefinedValue>
+                                    <ColumnReference Column=\"FullName\" />
+                                    <ScalarOperator ScalarString=\"[dbo].[Users].[Name]+[dbo].[Users].[Surname]\" />
+                                  </DefinedValue>
+                                </DefinedValues>
+                                <RelOp NodeId=\"1\" PhysicalOp=\"Index Scan\" LogicalOp=\"Index Scan\" EstimateRows=\"1\" EstimatedTotalSubtreeCost=\"0.01\">
+                                  <OutputList>
+                                    <ColumnReference Database=\"[db]\" Schema=\"[dbo]\" Table=\"[Users]\" Column=\"Name\" />
+                                  </OutputList>
+                                </RelOp>
+                              </ComputeScalar>
+                            </RelOp>
+                          </QueryPlan>
+                        </StmtSimple>
+                      </Statements>
+                    </Batch>
+                  </BatchSequence>
+                </ShowPlanXML>
+                """;
+
+        var graph = SqlServerShowPlanGraphConverter.convert(xml, "plan");
+        var parentColumns = graph.vertices()
+                .stream()
+                .filter(vertex -> "relop-0".equals(vertex.id()))
+                .findFirst()
+                .orElseThrow()
+                .properties()
+                .stream()
+                .filter(group -> "columns".equals(group.id()))
+                .flatMap(group -> group.properties()
+                        .stream())
+                .toList();
+
+        Assertions.assertTrue(parentColumns.stream()
+                .anyMatch(property -> "outputColumn-1".equals(property.id())
+                        && "db.dbo.Users.FullName".equals(property.value())));
+        Assertions.assertTrue(parentColumns.stream()
+                .anyMatch(property -> "definedValue-1".equals(property.id())
+                        && "FullName = [dbo].[Users].[Name]+[dbo].[Users].[Surname]".equals(property.value())));
+        Assertions.assertFalse(parentColumns.stream()
+                .anyMatch(property -> String.valueOf(property.value())
+                        .contains("Name, db.dbo.Users.Name")));
+    }
+
+    @Test
+    void extractsTableSpoolTargetNodeId()
+    {
+        String xml = """
+                <ShowPlanXML xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/showplan\">
+                  <BatchSequence>
+                    <Batch>
+                      <Statements>
+                        <StmtSimple StatementText=\"select * from dbo.Users\">
+                          <QueryPlan>
+                            <RelOp NodeId=\"10\" PhysicalOp=\"Nested Loops\" LogicalOp=\"Inner Join\" EstimateRows=\"1\" EstimatedTotalSubtreeCost=\"0.2\">
+                              <NestedLoops>
+                                <RelOp NodeId=\"0\" PhysicalOp=\"Table Spool\" LogicalOp=\"Lazy Spool\" EstimateRows=\"1\" EstimatedTotalSubtreeCost=\"0.1\">
+                                  <Spool PrimaryNodeId=\"42\">
+                                    <RelOp NodeId=\"1\" PhysicalOp=\"Index Scan\" LogicalOp=\"Index Scan\" EstimateRows=\"1\" EstimatedTotalSubtreeCost=\"0.01\">
+                                      <IndexScan TargetNodeId=\"99\" />
+                                    </RelOp>
+                                  </Spool>
+                                </RelOp>
+                                <RelOp NodeId=\"42\" PhysicalOp=\"Table Spool\" LogicalOp=\"Eager Spool\" EstimateRows=\"1\" EstimatedTotalSubtreeCost=\"0.05\" />
+                              </NestedLoops>
+                            </RelOp>
+                          </QueryPlan>
+                        </StmtSimple>
+                      </Statements>
+                    </Batch>
+                  </BatchSequence>
+                </ShowPlanXML>
+                """;
+
+        var graph = SqlServerShowPlanGraphConverter.convert(xml, "plan");
+        var operatorProperties = graph.vertices()
+                .stream()
+                .filter(vertex -> "relop-0".equals(vertex.id()))
+                .findFirst()
+                .orElseThrow()
+                .properties()
+                .stream()
+                .filter(group -> "operator".equals(group.id()))
+                .flatMap(group -> group.properties()
+                        .stream())
+                .toList();
+
+        Assertions.assertTrue(operatorProperties.stream()
+                .anyMatch(property -> "targetNodeId".equals(property.id())
+                        && "42".equals(property.value())));
+        Assertions.assertFalse(operatorProperties.stream()
+                .anyMatch(property -> "99".equals(property.value())));
+        Assertions.assertTrue(graph.edges()
+                .stream()
+                .anyMatch(edge -> "spool target".equals(edge.kind())
+                        && "relop-0".equals(edge.sourceVertexId())
+                        && "relop-42".equals(edge.targetVertexId())
+                        && edge.style()
+                                .dash()));
     }
 }

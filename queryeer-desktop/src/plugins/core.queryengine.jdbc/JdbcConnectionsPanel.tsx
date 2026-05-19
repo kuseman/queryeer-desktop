@@ -19,6 +19,7 @@ type Row = {
   sessionId: string;
   state: string;
   lastAccess: string;
+  canForceClose: boolean;
 };
 
 export function JdbcConnectionsPanel({ files, fileMediator }: JdbcConnectionsPanelProps) {
@@ -64,10 +65,15 @@ export function JdbcConnectionsPanel({ files, fileMediator }: JdbcConnectionsPan
           connectionName,
           sessionId,
           state: entry.status || "alive",
-          lastAccess
+          lastAccess,
+          canForceClose: entry.status !== "dead"
         };
       });
   }, [entries, files]);
+
+  const handleForceClose = async (row: Row): Promise<void> => {
+    await getJdbcSessionStore().forceClose(row.fileId);
+  };
 
   return (
     <div className="jdbc-sessions-panel">
@@ -79,6 +85,7 @@ export function JdbcConnectionsPanel({ files, fileMediator }: JdbcConnectionsPan
             <th className="jdbc-sessions-panel__header">Session</th>
             <th className="jdbc-sessions-panel__header">State</th>
             <th className="jdbc-sessions-panel__header">Last access</th>
+            <th className="jdbc-sessions-panel__header">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -102,6 +109,17 @@ export function JdbcConnectionsPanel({ files, fileMediator }: JdbcConnectionsPan
               <td className="jdbc-sessions-panel__cell">{row.sessionId}</td>
               <td className={`jdbc-sessions-panel__cell${row.state === "dead" ? " jdbc-sessions-panel__state--dead" : ""}`}>{row.state}</td>
               <td className="jdbc-sessions-panel__cell">{row.lastAccess}</td>
+              <td className="jdbc-sessions-panel__cell">
+                <button
+                  type="button"
+                  className="jdbc-sessions-panel__force-close"
+                  disabled={!row.canForceClose}
+                  onClick={() => void handleForceClose(row)}
+                  title="Force close this JDBC session connection"
+                >
+                  Force close
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>

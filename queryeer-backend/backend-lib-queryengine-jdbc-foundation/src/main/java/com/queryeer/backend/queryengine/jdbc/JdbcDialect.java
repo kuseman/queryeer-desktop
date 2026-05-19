@@ -107,16 +107,7 @@ public interface JdbcDialect
         {
             properties.setProperty("password", password);
         }
-        int previousLoginTimeout = DriverManager.getLoginTimeout();
-        DriverManager.setLoginTimeout(15);
-        try
-        {
-            return DriverManager.getConnection(url, properties);
-        }
-        finally
-        {
-            DriverManager.setLoginTimeout(previousLoginTimeout);
-        }
+        return DriverManager.getConnection(url, properties);
     }
 
     /**

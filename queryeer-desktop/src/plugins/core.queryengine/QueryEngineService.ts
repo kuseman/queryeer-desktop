@@ -171,6 +171,24 @@ export class QueryEngineService {
   async cancel(queryExecutionId: string): Promise<void> {
     await ensureBackendHealthy();
     await window.appShell.cancelBackendQuery({ queryExecutionId });
+    const context = this.executionContextById.get(queryExecutionId);
+    if (!context) {
+      return;
+    }
+    const event = {
+      method: "queryengine.failed",
+      params: {
+        queryExecutionId,
+        error: {
+          code: "CANCELLED",
+          message: "Execution cancelled by client"
+        }
+      }
+    };
+    for (const listener of this.globalEventListeners) {
+      listener(event, context);
+    }
+    this.executionContextById.delete(queryExecutionId);
   }
 
   /**

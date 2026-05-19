@@ -194,13 +194,23 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
         }
     }
 
-    private long runStatement(String sql, String queryExecutionId, JdbcQueryEventListener eventListener, Statement statement) throws SQLException
+    protected final void registerActiveStatement(String queryExecutionId, Statement statement)
     {
         activeStatements.put(queryExecutionId, statement);
+    }
+
+    protected final void unregisterActiveStatement(String queryExecutionId, Statement statement)
+    {
+        activeStatements.remove(queryExecutionId, statement);
+    }
+
+    private long runStatement(String sql, String queryExecutionId, JdbcQueryEventListener eventListener, Statement statement) throws SQLException
+    {
+        registerActiveStatement(queryExecutionId, statement);
         long rowCount = 0L;
-        boolean hasResultSet = statement.execute(sql);
         try
         {
+            boolean hasResultSet = statement.execute(sql);
             while (true)
             {
                 if (hasResultSet)
@@ -231,8 +241,15 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
         }
         finally
         {
-            forwardWarnings(statement.getWarnings(), eventListener);
-            statement.clearWarnings();
+            try
+            {
+                forwardWarnings(statement.getWarnings(), eventListener);
+                statement.clearWarnings();
+            }
+            finally
+            {
+                unregisterActiveStatement(queryExecutionId, statement);
+            }
         }
         return rowCount;
     }

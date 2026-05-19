@@ -17,6 +17,7 @@ import type { GraphActionInvocation, GraphDocument, GraphEntity, GraphLayoutDire
 import { ContextMenuSurface } from "../../renderer/components/ContextMenuSurface";
 import { dagreGraphLayoutProvider, type GraphLayoutProvider } from "./graph-layout";
 import { formatGraphPropertyValue, getGraphEntityActions, getGraphEntityProperties, getImportantProperties, resolveGraphEntity, validateGraphDocument } from "./graph-utils";
+import { resolveQueryPlanOperatorIcon } from "./query-plan-icons";
 import "@xyflow/react/dist/style.css";
 import "./graph.css";
 
@@ -150,6 +151,7 @@ export function GraphViewer({
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
+          proOptions={{ hideAttribution: true }}
           fitView
           minZoom={0.1}
           maxZoom={2.5}
@@ -288,6 +290,7 @@ function GraphVertexNode({ data, selected }: { data: GraphVertexNodeData; select
   const vertex = data.vertex;
   const style = vertex.style ?? {};
   const handles = getHandlePositions(data.layoutDirection);
+  const iconUrl = style.iconUrl ?? style.imageUrl ?? resolveQueryPlanOperatorIcon(vertex.label, vertex.kind);
   const className = [
     "graph-node",
     `graph-node-${style.shape ?? "rounded"}`,
@@ -305,9 +308,7 @@ function GraphVertexNode({ data, selected }: { data: GraphVertexNodeData; select
     >
       <Handle type="target" position={handles.target} className="graph-node-handle" />
       <Handle type="source" position={handles.source} className="graph-node-handle" />
-      {(style.iconUrl || style.imageUrl) && (
-        <img src={style.iconUrl ?? style.imageUrl} alt="" className="graph-node-icon" aria-hidden="true" />
-      )}
+      <img src={iconUrl} alt="" className="graph-node-icon" aria-hidden="true" />
       {vertex.overlays && vertex.overlays.length > 0 && (
         <div className="graph-node-overlays" aria-hidden="true">
           {vertex.overlays.map((overlay) => (
@@ -371,7 +372,12 @@ function GraphTooltip({ state }: { state: TooltipState }): JSX.Element | null {
 function GraphPropertiesPanel({ entity }: { entity: GraphEntity | null }): JSX.Element {
   const [collapsed, setCollapsed] = useState(false);
   const [width, setWidth] = useState(300);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const groups = getGraphEntityProperties(entity);
+
+  useEffect(() => {
+    setCollapsedGroups({});
+  }, [entity?.type, entity?.entity.id]);
 
   const startResize = (event: React.MouseEvent): void => {
     event.preventDefault();
@@ -412,8 +418,17 @@ function GraphPropertiesPanel({ entity }: { entity: GraphEntity | null }): JSX.E
         <div className="graph-properties-groups">
           {groups.map((group) => (
             <section key={group.id} className="graph-properties-group">
-              <h4>{group.label}</h4>
-              {group.properties.map((property) => (
+              <button
+                type="button"
+                className="graph-properties-group-header"
+                aria-expanded={!collapsedGroups[group.id]}
+                onClick={() => setCollapsedGroups((current) => ({ ...current, [group.id]: !current[group.id] }))}
+              >
+                <span className="graph-properties-group-caret" aria-hidden="true">v</span>
+                <span>{group.label}</span>
+                <span className="graph-properties-group-count">{group.properties.length}</span>
+              </button>
+              {!collapsedGroups[group.id] && group.properties.map((property) => (
                 <div key={property.id} className="graph-properties-row">
                   <span className="graph-properties-label">{property.label}</span>
                   <span className="graph-properties-value">{formatGraphPropertyValue(property)}</span>

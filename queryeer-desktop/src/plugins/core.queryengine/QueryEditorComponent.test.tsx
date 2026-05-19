@@ -476,6 +476,42 @@ const filesRegistry = {
     expect(output?.getAttribute("data-state")).toBe("failed");
   });
 
+  it("preserves one-shot execute options when retrying after SECURITY_SESSION_CLOSED", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+    const executeOptions = {
+      outputIdOverride: "core.graph.queryPlanOutput",
+      optionsOverride: {
+        intent: "plan.estimated" as const,
+        requestedArtifacts: [{ capability: "plan" as const, kind: "graph" as const }]
+      }
+    };
+    mocks.consumeExecuteOptionsMock.mockReturnValueOnce(executeOptions);
+    mocks.executeMock.mockResolvedValueOnce("exec-1").mockResolvedValueOnce("exec-2");
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+
+    const firstListener = mocks.subscribeByExecutionId.get("exec-1");
+    await act(async () => {
+      firstListener?.({ method: "queryengine.failed", params: { error: { code: "SECURITY_SESSION_CLOSED", message: "locked" } } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.executeMock).toHaveBeenCalledTimes(2);
+    expect(mocks.executeMock).toHaveBeenNthCalledWith(1, expect.objectContaining({ options: executeOptions.optionsOverride }));
+    expect(mocks.executeMock).toHaveBeenNthCalledWith(2, expect.objectContaining({ options: executeOptions.optionsOverride }));
+    expect(mocks.consumeExecuteOptionsMock).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps default results tab when query has no rows", async () => {
     const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
 

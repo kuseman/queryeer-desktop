@@ -99,7 +99,7 @@ final class SqlServerQueryExecutor extends AbstractJdbcQueryExecutor implements 
                             : "SET STATISTICS XML ON");
                     for (String sql : splitStatements(request.sql()))
                     {
-                        rowCount += runPlanStatement(statement, sql, eventListener, planXmlDocuments, includeRawXml);
+                        rowCount += runPlanStatement(statement, request.queryExecutionId(), sql, eventListener, planXmlDocuments, includeRawXml);
                     }
                 }
                 finally
@@ -138,62 +138,77 @@ final class SqlServerQueryExecutor extends AbstractJdbcQueryExecutor implements 
                 : List.of("rows", "plan"), artifacts);
     }
 
-    private long runPlanStatement(Statement statement, String sql, JdbcQueryEventListener eventListener, List<String> planXmlDocuments, boolean includeRawXml) throws SQLException
+    private long runPlanStatement(Statement statement, String queryExecutionId, String sql, JdbcQueryEventListener eventListener, List<String> planXmlDocuments, boolean includeRawXml)
+            throws SQLException
     {
+        registerActiveStatement(queryExecutionId, statement);
         long rowCount = 0L;
-        boolean hasResultSet = statement.execute(sql);
-        while (true)
+        try
         {
-            if (hasResultSet)
+            boolean hasResultSet = statement.execute(sql);
+            while (true)
             {
-                try (ResultSet resultSet = statement.getResultSet())
+                if (hasResultSet)
                 {
-                    ResultSetRows rows = readResultSet(resultSet);
-                    boolean planXml = rows.rows.stream()
-                            .flatMap(List::stream)
-                            .filter(String.class::isInstance)
-                            .map(String.class::cast)
-                            .anyMatch(SqlServerShowPlanGraphConverter::isShowPlanXml);
-                    if (planXml)
+                    try (ResultSet resultSet = statement.getResultSet())
                     {
-                        rows.rows.stream()
+                        ResultSetRows rows = readResultSet(resultSet);
+                        boolean planXml = rows.rows.stream()
                                 .flatMap(List::stream)
                                 .filter(String.class::isInstance)
                                 .map(String.class::cast)
-                                .filter(SqlServerShowPlanGraphConverter::isShowPlanXml)
-                                .forEach(planXmlDocuments::add);
-                        if (includeRawXml)
+                                .anyMatch(SqlServerShowPlanGraphConverter::isShowPlanXml);
+                        if (planXml)
+                        {
+                            rows.rows.stream()
+                                    .flatMap(List::stream)
+                                    .filter(String.class::isInstance)
+                                    .map(String.class::cast)
+                                    .filter(SqlServerShowPlanGraphConverter::isShowPlanXml)
+                                    .forEach(planXmlDocuments::add);
+                            if (includeRawXml)
+                            {
+                                eventListener.onResultSetStart(rows.columns);
+                                eventListener.onRows(rows.rows);
+                            }
+                        }
+                        else
                         {
                             eventListener.onResultSetStart(rows.columns);
                             eventListener.onRows(rows.rows);
+                            rowCount += rows.rows.size();
                         }
                     }
-                    else
-                    {
-                        eventListener.onResultSetStart(rows.columns);
-                        eventListener.onRows(rows.rows);
-                        rowCount += rows.rows.size();
-                    }
                 }
-            }
-            else
-            {
-                int updateCount = statement.getUpdateCount();
-                if (updateCount < 0)
+                else
+                {
+                    int updateCount = statement.getUpdateCount();
+                    if (updateCount < 0)
+                    {
+                        break;
+                    }
+                    rowCount += Math.max(0, updateCount);
+                }
+                hasResultSet = statement.getMoreResults();
+                if (!hasResultSet
+                        && statement.getUpdateCount() < 0)
                 {
                     break;
                 }
-                rowCount += Math.max(0, updateCount);
-            }
-            hasResultSet = statement.getMoreResults();
-            if (!hasResultSet
-                    && statement.getUpdateCount() < 0)
-            {
-                break;
             }
         }
-        forwardWarnings(statement.getWarnings(), eventListener);
-        statement.clearWarnings();
+        finally
+        {
+            try
+            {
+                forwardWarnings(statement.getWarnings(), eventListener);
+                statement.clearWarnings();
+            }
+            finally
+            {
+                unregisterActiveStatement(queryExecutionId, statement);
+            }
+        }
         return rowCount;
     }
 

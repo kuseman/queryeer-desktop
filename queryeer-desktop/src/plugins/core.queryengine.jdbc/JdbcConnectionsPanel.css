@@ -50,3 +50,24 @@
 .jdbc-sessions-panel__state--dead {
   color: var(--warning);
 }
+
+.jdbc-sessions-panel__force-close {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-2);
+  color: var(--text-0);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ui-font-size-xs);
+  padding: 2px 7px;
+}
+
+.jdbc-sessions-panel__force-close:hover:not(:disabled) {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.jdbc-sessions-panel__force-close:disabled {
+  cursor: default;
+  opacity: 0.45;
+}

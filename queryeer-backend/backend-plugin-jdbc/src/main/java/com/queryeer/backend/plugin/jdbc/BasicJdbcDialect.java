@@ -19,8 +19,6 @@ import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryExecutor;
 
 final class BasicJdbcDialect implements JdbcDialect
 {
-    private static final int CONNECTION_TIMEOUT_SECONDS = 15;
-
     private final JdbcQueryExecutor queryExecutor = new AbstractJdbcQueryExecutor()
     {
     };
@@ -70,17 +68,7 @@ final class BasicJdbcDialect implements JdbcDialect
         }
         try
         {
-            // DriverManager.setLoginTimeout is respected by all JDBC 4+ drivers
-            int previousLoginTimeout = DriverManager.getLoginTimeout();
-            DriverManager.setLoginTimeout(CONNECTION_TIMEOUT_SECONDS);
-            try
-            {
-                return DriverManager.getConnection(url, properties);
-            }
-            finally
-            {
-                DriverManager.setLoginTimeout(previousLoginTimeout);
-            }
+            return DriverManager.getConnection(url, properties);
         }
         catch (SQLException e)
         {
