@@ -1,3 +1,4 @@
+import "./GridComponent.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CompactSelection,
@@ -60,6 +61,7 @@ export type GridComponentRow = {
 export type GridComponentSelectionSnapshot = {
   model: SelectionModel;
   rowsByIndex: Array<GridComponentRow | undefined>;
+  colOrder?: string[];
 };
 
 export type GridComponentContextMenuEvent = {
@@ -86,6 +88,7 @@ export type GridComponentProps = {
   onCopySelection: (snapshot: GridComponentSelectionSnapshot) => void;
   onContextMenuSelection: (event: GridComponentContextMenuEvent, snapshot: GridComponentSelectionSnapshot) => void;
   isDarkTheme: boolean;
+  isStreaming?: boolean;
 };
 
 type VisibleRowsCache = {
@@ -107,6 +110,15 @@ function getCellValue(rowData: GridComponentRow | undefined, columnIndex: number
     return null;
   }
   return rowData.__values[columnIndex] ?? null;
+}
+
+export function compareValues(a: unknown, b: unknown): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  if (typeof a === "string" && typeof b === "string") return a.localeCompare(b);
+  return String(a).localeCompare(String(b));
 }
 
 export function isPrimaryMouseButton(event: Pick<MouseEvent, "button"> | Pick<CellClickedEventArgs, "button"> | null): boolean {
@@ -306,6 +318,7 @@ export function GridComponent({
   onCopySelection,
   onContextMenuSelection,
   isDarkTheme,
+  isStreaming = false,
 }: GridComponentProps): JSX.Element {
   const gridRef = useRef<DataEditorRef | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -329,6 +342,12 @@ export function GridComponent({
   const clickTimerRef = useRef<number | null>(null);
   const isKeyboardActivationRef = useRef<boolean>(false);
   const [columnOrder, setColumnOrder] = useState<string[] | undefined>(() => initialGridState?.columnOrder);
+  const [sortColumnKey, setSortColumnKey] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>(null);
+  const sortedRowsRef = useRef<unknown[][] | null>(null);
+  const [isSorting, setIsSorting] = useState(false);
+  const isSortingGuardRef = useRef(false);
+  const sortTimeoutRef = useRef<number | null>(null);
   selectionRef.current = selection;
 
   const getDataIndex = useCallback((visualColIndex: number): number => {
@@ -362,12 +381,18 @@ export function GridComponent({
     const ordered = columnOrder
       ? columnOrder.map((key) => columns.find((c) => c.key === key)).filter((c): c is GridComponentColumn => c !== undefined)
       : columns;
-    return ordered.map((column) => ({
-      id: column.key,
-      title: column.title,
-      width: columnWidths[column.key] ?? DEFAULT_COLUMN_WIDTH_PX,
-    }));
-  }, [columnWidths, columns, columnOrder]);
+    return ordered.map((column) => {
+      let title = column.title;
+      if (sortColumnKey === column.key) {
+        title = sortDirection === "asc" ? `\u25B2 ${title}` : `\u25BC ${title}`;
+      }
+      return {
+        id: column.key,
+        title,
+        width: columnWidths[column.key] ?? DEFAULT_COLUMN_WIDTH_PX,
+      };
+    });
+  }, [columnWidths, columns, columnOrder, sortColumnKey, sortDirection]);
 
   const [theme, setTheme] = useState<Partial<Theme>>(() => createTheme(isDarkTheme));
 
@@ -438,14 +463,28 @@ export function GridComponent({
   const refreshVisibleRows = useCallback((start: number, end: number) => {
     const safeStart = Math.max(0, start);
     const safeEnd = Math.max(safeStart, Math.min(getRowCount(), end));
+    const sorted = sortedRowsRef.current;
     visibleRowsRef.current = {
       start: safeStart,
       end: safeEnd,
-      rows: getRowsRange(safeStart, safeEnd).map(mapRow),
+      rows: sorted
+        ? sorted.slice(safeStart, safeEnd).map(mapRow)
+        : getRowsRange(safeStart, safeEnd).map(mapRow),
     };
   }, [getRowCount, getRowsRange]);
 
   const getRowData = useCallback((rowIndex: number): GridComponentRow | undefined => {
+    const sorted = sortedRowsRef.current;
+    if (sorted) {
+      if (rowIndex >= 0 && rowIndex < sorted.length) {
+        const cached = visibleRowsRef.current;
+        if (rowIndex >= cached.start && rowIndex < cached.end) {
+          return cached.rows[rowIndex - cached.start];
+        }
+        return mapRow(sorted[rowIndex]);
+      }
+      return undefined;
+    }
     const cached = visibleRowsRef.current;
     if (rowIndex >= cached.start && rowIndex < cached.end) {
       return cached.rows[rowIndex - cached.start];
@@ -517,8 +556,8 @@ export function GridComponent({
     for (let row = box.rowStart; row <= box.rowEnd; row++) {
       rowsByIndex[row] = getRowData(row);
     }
-    return { model, rowsByIndex };
-  }, [columns.length, getRowData]);
+    return { model, rowsByIndex, colOrder: columnOrder ?? undefined };
+  }, [columns.length, getRowData, columnOrder]);
 
   const onGridSelectionChange = useCallback((newGlideSelection: GridSelection) => {
     const hasReordered = !!columnOrder;
@@ -544,6 +583,95 @@ export function GridComponent({
       return reordered;
     });
   }, [columns, onGridStateChange]);
+
+  const onHeaderClicked = useCallback((colIndex: number) => {
+    if (isStreaming || isSortingGuardRef.current) return;
+    isSortingGuardRef.current = true;
+
+    const dataIndex = getDataIndex(colIndex);
+    const column = columns[dataIndex];
+    if (!column) {
+      isSortingGuardRef.current = false;
+      return;
+    }
+
+    const alreadySorted = sortColumnKey === column.key;
+
+    let ascending: boolean;
+    if (!alreadySorted) {
+      setSortColumnKey(column.key);
+      setSortDirection("asc");
+      ascending = true;
+    } else if (sortDirection === "asc") {
+      setSortDirection("desc");
+      ascending = false;
+    } else {
+      setSortColumnKey(null);
+      setSortDirection(null);
+      sortedRowsRef.current = null;
+      isSortingGuardRef.current = false;
+      const visible = visibleRegionRef.current;
+      if (visible && gridRef.current) {
+        refreshVisibleRows(visible.y, visible.y + visible.height + 1);
+        const cells: Array<{ cell: Item }> = [];
+        const rowEnd = Math.min(getRowCount(), visible.y + visible.height + 1);
+        const colEnd = Math.min(columns.length, visible.x + visible.width + 1);
+        for (let row = visible.y; row < rowEnd; row++) {
+          for (let col = visible.x; col < colEnd; col++) {
+            cells.push({ cell: [col, row] });
+          }
+        }
+        if (cells.length > 0) {
+          gridRef.current.updateCells(cells);
+        }
+      }
+      return;
+    }
+
+    setIsSorting(true);
+
+    if (sortTimeoutRef.current !== null) {
+      window.clearTimeout(sortTimeoutRef.current);
+    }
+    sortTimeoutRef.current = window.setTimeout(() => {
+      sortTimeoutRef.current = null;
+      const count = getRowCount();
+      const allRows = getRowsRange(0, count);
+      const indices = Array.from({ length: count }, (_, i) => i);
+      const sortStart = performance.now();
+      indices.sort((a, b) => {
+        const valA = allRows[a]?.[dataIndex] ?? null;
+        const valB = allRows[b]?.[dataIndex] ?? null;
+        return compareValues(valA, valB) * (ascending ? 1 : -1);
+      });
+      const sortElapsed = performance.now() - sortStart;
+      sortedRowsRef.current = indices.map((i) => allRows[i]);
+      isSortingGuardRef.current = false;
+      if (sortElapsed < 50) {
+        setIsSorting(false);
+      }
+      const visible = visibleRegionRef.current;
+      if (visible && gridRef.current) {
+        refreshVisibleRows(visible.y, visible.y + visible.height + 1);
+        const cells: Array<{ cell: Item }> = [];
+        const rowEnd = Math.min(count, visible.y + visible.height + 1);
+        const colEnd = Math.min(columns.length, visible.x + visible.width + 1);
+        for (let row = visible.y; row < rowEnd; row++) {
+          for (let col = visible.x; col < colEnd; col++) {
+            cells.push({ cell: [col, row] });
+          }
+        }
+        if (cells.length > 0) {
+          gridRef.current.updateCells(cells);
+        }
+      }
+      if (sortElapsed >= 50) {
+        window.setTimeout(() => {
+          setIsSorting(false);
+        }, 200);
+      }
+    }, 0);
+  }, [isStreaming, sortColumnKey, sortDirection, columns, getDataIndex, getRowCount, getRowsRange, refreshVisibleRows]);
 
   const onCellClicked = useCallback((cell: Item, event: CellClickedEventArgs) => {
     const [visCol, rowIndex] = cell;
@@ -602,6 +730,11 @@ export function GridComponent({
     const applyRowsChanged = () => {
       pendingRowRefreshRef.current = null;
       const nextRowCount = getRowCount();
+      if (sortedRowsRef.current !== null) {
+        sortedRowsRef.current = null;
+        setSortColumnKey(null);
+        setSortDirection(null);
+      }
       setRowCount(nextRowCount);
       const visible = visibleRegionRef.current;
       if (!visible || !gridRef.current) return;
@@ -637,6 +770,10 @@ export function GridComponent({
         window.clearTimeout(pendingAutoSizeTimerRef.current);
         pendingAutoSizeTimerRef.current = null;
       }
+      if (sortTimeoutRef.current !== null) {
+        window.clearTimeout(sortTimeoutRef.current);
+        sortTimeoutRef.current = null;
+      }
     };
   }, []);
 
@@ -664,7 +801,7 @@ export function GridComponent({
   }, [collectSelectionSnapshot, onCopySelection]);
 
   return (
-    <div ref={containerRef} style={{ height: "100%", width: "100%" }}>
+    <div ref={containerRef} style={{ height: "100%", width: "100%", position: "relative" }}>
       <DataEditor
         ref={gridRef}
         width="100%"
@@ -677,6 +814,7 @@ export function GridComponent({
         onCellClicked={onCellClicked}
         onCellActivated={onCellActivated}
         onCellContextMenu={onCellContextMenu}
+        onHeaderClicked={onHeaderClicked}
         onVisibleRegionChanged={(range) => {
           visibleRegionRef.current = range;
           refreshVisibleRows(range.y, range.y + range.height + 1);
@@ -715,6 +853,22 @@ export function GridComponent({
         onPaste={false}
         theme={theme}
       />
+      {isSorting && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(0,0,0,0.25)",
+            zIndex: 10,
+            pointerEvents: "none",
+          }}
+        >
+          <div className="grid-component-spinner" />
+        </div>
+      )}
     </div>
   );
 }

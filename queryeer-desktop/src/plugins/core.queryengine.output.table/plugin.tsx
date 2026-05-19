@@ -290,9 +290,10 @@ type TableGridProps = {
   schema: { columns: Column[] };
   fileId?: string;
   onPreviewValue: (options: { title: string; value: string; mimeType?: string }) => void;
+  isStreaming?: boolean;
 };
 
-function TableGrid({ resultSetIndex, schema, fileId, onPreviewValue }: TableGridProps): JSX.Element {
+function TableGrid({ resultSetIndex, schema, fileId, onPreviewValue, isStreaming }: TableGridProps): JSX.Element {
   const storeKey = { fileId, resultSetIndex };
   const gridColumns = toGridColumns(schema.columns);
   const [isDarkTheme, setIsDarkTheme] = useState<boolean>(() => (getThemeService()?.getActiveThemeMode() ?? "dark") === "dark");
@@ -357,6 +358,15 @@ function TableGrid({ resultSetIndex, schema, fileId, onPreviewValue }: TableGrid
           const grid = buildClipboardGridFromRows(getRowsBySelection(snapshot), box, (r, c) => isCellSelected(model, r, c));
           const numCols = box.colIndexEnd - box.colIndexStart + 1;
           const selectedOffsets = Array.from({ length: numCols }, (_, i) => i).filter((ci) => grid.some((row) => row[ci].selected));
+          const colOrder = snapshot.colOrder;
+          if (colOrder && selectedOffsets.length > 1) {
+            selectedOffsets.sort((a, b) => {
+              const keyA = gridColumns[box.colIndexStart + a]?.key;
+              const keyB = gridColumns[box.colIndexStart + b]?.key;
+              if (!keyA || !keyB) return 0;
+              return colOrder.indexOf(keyA) - colOrder.indexOf(keyB);
+            });
+          }
           const filteredCols = selectedOffsets.map((ci) => schema.columns[box.colIndexStart + ci]);
           const filteredGrid = grid.map((row) => selectedOffsets.map((ci) => row[ci]));
           if (filteredGrid.length === 0 || filteredCols.length === 0) return;
@@ -382,6 +392,7 @@ function TableGrid({ resultSetIndex, schema, fileId, onPreviewValue }: TableGrid
           });
         }}
         isDarkTheme={isDarkTheme}
+        isStreaming={isStreaming}
       />
       {contextMenu && (
         <ContextMenuSurface
@@ -619,6 +630,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
                         schema={resultSet.schema}
                         fileId={context.fileId}
                         onPreviewValue={onPreviewValue}
+                        isStreaming={context.state === "running"}
                       />
                     </div>
                       );
@@ -658,6 +670,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
                   schema={activeSet.schema}
                   fileId={context.fileId}
                   onPreviewValue={onPreviewValue}
+                  isStreaming={context.state === "running"}
                 />
               </div>
 

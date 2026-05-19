@@ -5,13 +5,21 @@ import { GridComponent } from "./GridComponent";
 
 void React;
 
+type GridColumnLike = {
+  id?: string;
+  title: string;
+  width?: number;
+};
+
 type DataEditorProps = {
   rows: number;
+  columns: readonly GridColumnLike[];
   getCellContent: (cell: readonly [number, number]) => { displayData?: string; data?: string };
   onVisibleRegionChanged: (range: { x: number; y: number; width: number; height: number }, tx: number, ty: number) => void;
   onCellClicked: (cell: readonly [number, number], event: CellEvent) => void;
   onCellActivated: (cell: readonly [number, number]) => void;
   onCellContextMenu: (cell: readonly [number, number], event: CellEvent) => void;
+  onHeaderClicked: (colIndex: number) => void;
   onGridSelectionChange: (selection: GridSelectionLike) => void;
   onColumnMoved?: (startIndex: number, endIndex: number) => void;
   reorderColumns?: boolean;
@@ -849,6 +857,443 @@ describe("GridComponent", () => {
     expect(snapshot.model).toEqual(
       expect.objectContaining({ cells: expect.arrayContaining([{ row: 0, colIndex: 1 }]) })
     );
+
+    expect(snapshot.colOrder).toEqual(["b", "a", "c"]);
+  });
+
+  it("copy without column reorder has undefined colOrder", async () => {
+    const onCopySelection = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "a", title: "A", type: "int" }, { key: "b", title: "B", type: "string" }]}
+          getRowCount={() => 2}
+          getRowsRange={(start, end) => [[1, "hello"], [2, "world"]].slice(start, end)}
+          getRow={(index) => [[1, "hello"], [2, "world"]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          onCopySelection={onCopySelection}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 2, height: 2 }, 0, 0);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onGridSelectionChange(createGridSelection({ x: 0, y: 0, width: 2, height: 2 }));
+    });
+
+    const container = rootElement.firstElementChild;
+    expect(container).not.toBeNull();
+    act(() => {
+      container!.dispatchEvent(new KeyboardEvent("keydown", { key: "c", ctrlKey: true, bubbles: true }));
+    });
+
+    expect(onCopySelection).toHaveBeenCalledTimes(1);
+    const snapshot = onCopySelection.mock.calls[0]?.[0];
+    expect(snapshot.colOrder).toBeUndefined();
+  });
+
+  it("copy after column reorder carries colOrder matching visual order", async () => {
+    const onCopySelection = vi.fn();
+    const onSelectionChange = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "x", title: "X", type: "int" }, { key: "y", title: "Y", type: "string" }, { key: "z", title: "Z", type: "int" }]}
+          getRowCount={() => 2}
+          getRowsRange={(start, end) => [[1, "hello", 2], [4, "world", 5]].slice(start, end)}
+          getRow={(index) => [[1, "hello", 2], [4, "world", 5]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          onSelectionChange={onSelectionChange}
+          onCopySelection={onCopySelection}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 3, height: 3 }, 0, 0);
+    });
+
+    // Reorder: move Y from index 1 to visual index 0 => visual order [Y, X, Z]
+    act(() => {
+      latestDataEditorProps?.onColumnMoved?.(1, 0);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onGridSelectionChange(createGridSelection({ x: 0, y: 0, width: 2, height: 1 }));
+    });
+
+    const container = rootElement.firstElementChild;
+    expect(container).not.toBeNull();
+    act(() => {
+      container!.dispatchEvent(new KeyboardEvent("keydown", { key: "c", ctrlKey: true, bubbles: true }));
+    });
+
+    expect(onCopySelection).toHaveBeenCalledTimes(1);
+    const snapshot = onCopySelection.mock.calls[0]?.[0];
+    expect(snapshot.colOrder).toEqual(["y", "x", "z"]);
+  });
+
+  it("ignores header click when isStreaming is true", async () => {
+    const getRow = vi.fn((index: number) => [["b"], ["a"]][index]);
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "name", title: "Name", type: "string" }]}
+          getRowCount={() => 2}
+          getRowsRange={(start, end) => [["b"], ["a"]].slice(start, end)}
+          getRow={getRow}
+          subscribeRowsChanged={() => () => undefined}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+          isStreaming={true}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onHeaderClicked(0);
+    });
+
+    expect(latestDataEditorProps?.getCellContent([0, 0]).displayData).toBe("b");
+    expect(latestDataEditorProps?.getCellContent([0, 1]).displayData).toBe("a");
+  });
+
+  it("sorts rows ascending on header click when streaming is complete", async () => {
+    vi.useFakeTimers();
+    let rowCount = 2;
+    const getRow = vi.fn((index: number) => [["c"], ["a"], ["b"]][index]);
+    const getRowsRange = vi.fn((start: number, end: number) => [["c"], ["a"], ["b"]].slice(start, end));
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "name", title: "Name", type: "string" }]}
+          getRowCount={() => rowCount}
+          getRowsRange={getRowsRange}
+          getRow={getRow}
+          subscribeRowsChanged={() => () => undefined}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 1, height: 3 }, 0, 0);
+    });
+
+    rowCount = 3;
+    act(() => {
+      latestDataEditorProps?.onHeaderClicked(0);
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(10);
+    });
+
+    expect(latestDataEditorProps?.getCellContent([0, 0]).displayData).toBe("a");
+    expect(latestDataEditorProps?.getCellContent([0, 1]).displayData).toBe("b");
+    expect(latestDataEditorProps?.getCellContent([0, 2]).displayData).toBe("c");
+  });
+
+  it("sorts rows descending on second header click", async () => {
+    vi.useFakeTimers();
+    const rowCount = 3;
+    const getRowsRange = vi.fn((start: number, end: number) => [["c"], ["a"], ["b"]].slice(start, end));
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "name", title: "Name", type: "string" }]}
+          getRowCount={() => rowCount}
+          getRowsRange={getRowsRange}
+          getRow={(index) => [["c"], ["a"], ["b"]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 1, height: 3 }, 0, 0);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onHeaderClicked(0);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(10);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onHeaderClicked(0);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(10);
+    });
+
+    expect(latestDataEditorProps?.getCellContent([0, 0]).displayData).toBe("c");
+    expect(latestDataEditorProps?.getCellContent([0, 1]).displayData).toBe("b");
+    expect(latestDataEditorProps?.getCellContent([0, 2]).displayData).toBe("a");
+  });
+
+  it("clears sort on third header click restoring original order", async () => {
+    vi.useFakeTimers();
+    const rowCount = 3;
+    const getRowsRange = vi.fn((start: number, end: number) => [["c"], ["a"], ["b"]].slice(start, end));
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "name", title: "Name", type: "string" }]}
+          getRowCount={() => rowCount}
+          getRowsRange={getRowsRange}
+          getRow={(index) => [["c"], ["a"], ["b"]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 1, height: 3 }, 0, 0);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onHeaderClicked(0);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(10);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onHeaderClicked(0);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(10);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onHeaderClicked(0);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(10);
+    });
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 1, height: 3 }, 0, 0);
+    });
+
+    expect(latestDataEditorProps?.getCellContent([0, 0]).displayData).toBe("c");
+    expect(latestDataEditorProps?.getCellContent([0, 1]).displayData).toBe("a");
+    expect(latestDataEditorProps?.getCellContent([0, 2]).displayData).toBe("b");
+  });
+
+  it("sorts numeric columns numerically rather than lexicographically", async () => {
+    vi.useFakeTimers();
+    const rowCount = 3;
+    const getRowsRange = vi.fn((start: number, end: number) => [[100], [20], [3]].slice(start, end));
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "val", title: "Val", type: "int" }]}
+          getRowCount={() => rowCount}
+          getRowsRange={getRowsRange}
+          getRow={(index) => [[100], [20], [3]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 1, height: 3 }, 0, 0);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onHeaderClicked(0);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(10);
+    });
+
+    expect(latestDataEditorProps?.getCellContent([0, 0]).displayData).toBe("3");
+    expect(latestDataEditorProps?.getCellContent([0, 1]).displayData).toBe("20");
+    expect(latestDataEditorProps?.getCellContent([0, 2]).displayData).toBe("100");
+  });
+
+  it("places null rows at the end when sorting ascending", async () => {
+    vi.useFakeTimers();
+    const rowCount = 3;
+    const getRowsRange = vi.fn((start: number, end: number) => [["b"], [null], ["a"]].slice(start, end));
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "name", title: "Name", type: "string" }]}
+          getRowCount={() => rowCount}
+          getRowsRange={getRowsRange}
+          getRow={(index) => [["b"], [null], ["a"]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 1, height: 3 }, 0, 0);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onHeaderClicked(0);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(10);
+    });
+
+    expect(latestDataEditorProps?.getCellContent([0, 0]).displayData).toBe("a");
+    expect(latestDataEditorProps?.getCellContent([0, 1]).displayData).toBe("b");
+    expect(latestDataEditorProps?.getCellContent([0, 2]).displayData).toBe("");
+  });
+
+  it("displays sort indicator arrow in column header title", async () => {
+    vi.useFakeTimers();
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "name", title: "Name", type: "string" }]}
+          getRowCount={() => 2}
+          getRowsRange={(start, end) => [["b"], ["a"]].slice(start, end)}
+          getRow={(index) => [["b"], ["a"]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 1, height: 2 }, 0, 0);
+    });
+
+    const columnsBefore = latestDataEditorProps?.columns;
+    expect(columnsBefore?.[0]?.title).toBe("Name");
+
+    act(() => {
+      latestDataEditorProps?.onHeaderClicked(0);
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(10);
+    });
+
+    const columnsAfterAsc = latestDataEditorProps?.columns;
+    expect(columnsAfterAsc?.[0]?.title).toBe("\u25B2 Name");
+  });
+
+  it("clears sort when new streaming rows arrive", async () => {
+    vi.useFakeTimers();
+    const rowCount = 2;
+    let listener: (() => void) | null = null;
+    const getRowsRange = vi.fn((start: number, end: number) => [["b"], ["a"]].slice(start, end));
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "name", title: "Name", type: "string" }]}
+          getRowCount={() => rowCount}
+          getRowsRange={getRowsRange}
+          getRow={(index) => [["b"], ["a"]][index]}
+          subscribeRowsChanged={(nextListener) => {
+            listener = nextListener;
+            return () => undefined;
+          }}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 1, height: 2 }, 0, 0);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onHeaderClicked(0);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(10);
+    });
+
+    expect(latestDataEditorProps?.getCellContent([0, 0]).displayData).toBe("a");
+    expect(latestDataEditorProps?.getCellContent([0, 1]).displayData).toBe("b");
+
+    getRowsRange.mockImplementation((start: number, end: number) => [["x"], ["y"]].slice(start, end));
+
+    await act(async () => {
+      listener?.();
+      vi.advanceTimersByTime(100);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 1, height: 2 }, 0, 0);
+    });
+
+    expect(latestDataEditorProps?.getCellContent([0, 0]).displayData).toBe("x");
+    expect(latestDataEditorProps?.getCellContent([0, 1]).displayData).toBe("y");
   });
 
   it("passes valid snapshot with row data to onContextMenuSelection right after left-click", async () => {
