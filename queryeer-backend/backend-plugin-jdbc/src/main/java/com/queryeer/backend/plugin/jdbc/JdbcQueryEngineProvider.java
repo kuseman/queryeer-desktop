@@ -61,6 +61,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private static final String ACTION_SCHEMA_FETCH = "jdbc.schema.fetch";
     private static final String ACTION_SCHEMA_STATUS = "jdbc.schema.status";
     private static final String ACTION_CONNECTION_SESSIONS = "jdbc.connection.sessions";
+    private static final String ACTION_CONNECTION_SESSION_CLOSE = "jdbc.connection.session.close";
     private static final String ACTION_SQL_PARSE_SNAPSHOT = "sql.parse.snapshot";
     private static final String ACTION_SQL_COMPLETE = "sql.complete";
     private static final String ACTION_SQL_SYMBOL_AT_POSITION = "sql.symbolAtPosition";
@@ -292,6 +293,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             case ACTION_SCHEMA_FETCH -> schemaActions.fetch(payload);
             case ACTION_SCHEMA_STATUS -> schemaActions.status(payload);
             case ACTION_CONNECTION_SESSIONS -> connectionSessions();
+            case ACTION_CONNECTION_SESSION_CLOSE -> connectionSessionClose(payload);
             case ACTION_SQL_PARSE_SNAPSHOT -> sqlSemanticHandler.parseSnapshot(fileId);
             case ACTION_SQL_COMPLETE -> sqlSemanticHandler.complete(fileId, payload);
             case ACTION_SQL_SYMBOL_AT_POSITION -> sqlSemanticHandler.symbolAtPosition(fileId, payload);
@@ -332,6 +334,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                 ACTION_SCHEMA_FETCH,
                 ACTION_SCHEMA_STATUS,
                 ACTION_CONNECTION_SESSIONS,
+                ACTION_CONNECTION_SESSION_CLOSE,
                 ACTION_SQL_PARSE_SNAPSHOT,
                 ACTION_SQL_COMPLETE,
                 ACTION_SQL_SYMBOL_AT_POSITION,
@@ -342,6 +345,21 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private Object connectionSessions()
     {
         return connectionSnapshots(System.currentTimeMillis());
+    }
+
+    private Object connectionSessionClose(Object payload)
+    {
+        Map<?, ?> params = payload instanceof Map<?, ?> map ? map
+                : Map.of();
+        Object fileId = params.get("fileId");
+        if (!(fileId instanceof String value)
+                || value.isBlank())
+        {
+            throw new IllegalArgumentException("fileId is required");
+        }
+        boolean closed = forceCloseFile(value);
+        return Map.of(KEY_OK, closed, KEY_MESSAGE, closed ? "Session closed"
+                : "No active session");
     }
 
     private static final class QueryCancelledException extends RuntimeException
@@ -528,12 +546,19 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
 
     private void closeFile(String fileId)
     {
+        forceCloseFile(fileId);
+    }
+
+    private boolean forceCloseFile(String fileId)
+    {
         FileSessionHandle removed = byFileId.remove(fileId);
-        if (removed != null)
+        if (removed == null)
         {
-            rollbackAndClose(removed.connection());
-            deadByFileId.put(fileId, new DeadSessionSnapshot(fileId, removed.connectionId(), removed.sessionId(), System.currentTimeMillis() + DEFAULT_DEAD_SNAPSHOT_TTL_MS));
+            return false;
         }
+        rollbackAndClose(removed.connection());
+        deadByFileId.put(fileId, new DeadSessionSnapshot(fileId, removed.connectionId(), removed.sessionId(), System.currentTimeMillis() + DEFAULT_DEAD_SNAPSHOT_TTL_MS));
+        return true;
     }
 
     private List<Map<String, Object>> connectionSnapshots(long now)

@@ -1,6 +1,7 @@
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 
 const JDBC_CONNECTION_SESSIONS_ACTION = "jdbc.connection.sessions";
+const JDBC_CONNECTION_SESSION_CLOSE_ACTION = "jdbc.connection.session.close";
 
 export type JdbcConnectionSessionSnapshot = {
   fileId: string;
@@ -43,7 +44,15 @@ class JdbcSessionStore {
     return this.state;
   }
 
-  private async refresh(): Promise<void> {
+  async forceClose(fileId: string): Promise<void> {
+    await getQueryEngineService().invoke(
+      { engineId: "jdbc", action: JDBC_CONNECTION_SESSION_CLOSE_ACTION, payload: { fileId } },
+      { silent: true }
+    );
+    await this.refresh();
+  }
+
+  async refresh(): Promise<void> {
     try {
       const result = await getQueryEngineService().invoke(
         { engineId: "jdbc", action: JDBC_CONNECTION_SESSIONS_ACTION },

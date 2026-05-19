@@ -159,10 +159,11 @@
 }
 
 .graph-node-icon {
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
   object-fit: contain;
   flex-shrink: 0;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.28));
 }
 
 .graph-node-overlays {
@@ -196,14 +197,15 @@
 }
 
 .graph-node-overlay-parallel {
-  border-color: #60a5fa;
-  background: #1d4ed8;
+  border-color: #a7f3d0;
+  background: #047857;
+  color: #ecfdf5;
 }
 
 .graph-node-overlay-warning {
-  border-color: #fbbf24;
-  background: #92400e;
-  color: #fff7ed;
+  border-color: #fde68a;
+  background: #b45309;
+  color: #fffbeb;
 }
 
 .graph-node-overlay-info,
@@ -361,10 +363,35 @@
   border-bottom: 0;
 }
 
-.graph-properties-group h4 {
+.graph-properties-group-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0 0 6px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
   color: var(--text-0);
   font-size: var(--ui-font-size-sm);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.graph-properties-group-header[aria-expanded="false"] .graph-properties-group-caret {
+  transform: rotate(-90deg);
+}
+
+.graph-properties-group-caret {
+  color: var(--text-1);
+  transition: transform 120ms ease;
+}
+
+.graph-properties-group-count {
+  margin-left: auto;
+  color: var(--text-1);
+  font-size: var(--ui-font-size-xs);
 }
 
 .react-flow__edge-path {

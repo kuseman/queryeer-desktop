@@ -3,7 +3,7 @@ import { TextEditorComponent } from "../core.editor/texteditor/TextEditorCompone
 import { OutputPanel } from "./output/OutputPanel";
 import type { OutputContext, OutputMessage, ResultSet, ColumnType, Column } from "../../contracts/extensions/OutputExtension";
 import { IDLE_OUTPUT_CONTEXT } from "../../contracts/extensions/OutputExtension";
-import { getQueryEngineService } from "./QueryEngineService";
+import { getQueryEngineService, type ExecuteRequestOptions } from "./QueryEngineService";
 import { resolveOutputMaxRows } from "./output-limits";
 import { getOutputRegistry } from "./output/OutputRegistry";
 import { getQueryOutputFormatRegistry } from "./QueryOutputFormatRegistry";
@@ -62,7 +62,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
   const fileOutputPathByFileIdRef = useRef(new Map<string, string>());
   /** File output: per-result-set schema indexed by resultSetIndex. */
   const fileOutputSchemaByFileIdRef = useRef(new Map<string, Map<number, { columns: Column[] }>>());
-  const handleExecuteRef = useRef<() => void>(() => {});
+  const handleExecuteRef = useRef<(retryExecuteOptions?: ExecuteRequestOptions | null) => void>(() => {});
   const handleCancelRef = useRef<() => void>(() => {});
   const splitContainerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
@@ -161,7 +161,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     }
   }, []);
 
-  const handleExecute = useCallback(() => {
+  const handleExecute = useCallback((retryExecuteOptions?: ExecuteRequestOptions | null) => {
     const run = async () => {
       const targetFileId = file?.fileId;
       if (!targetFileId) return;
@@ -177,7 +177,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
         activeExecutionByFileIdRef.current.delete(targetFileId);
       }
 
-      const executeOptions = getQueryEngineService().consumeExecuteOptions();
+      const executeOptions = retryExecuteOptions ?? getQueryEngineService().consumeExecuteOptions();
 
       const handle = editorRegistryHost?.getActiveEditor();
       const selectedText = handle?.selection?.getSelectedText() ?? "";
@@ -545,7 +545,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
                   const retryCount = securityRetryCountByFileIdRef.current.get(targetFileId) ?? 0;
                   if (accepted && retryCount < 1) {
                     securityRetryCountByFileIdRef.current.set(targetFileId, retryCount + 1);
-                    handleExecuteRef.current();
+                    handleExecuteRef.current(executeOptions);
                     return;
                   }
                 }

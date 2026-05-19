@@ -258,4 +258,41 @@ describe("QueryEngineService backend readiness", () => {
     expect(failedParams.error?.code).toBe("EXECUTE_ERROR");
     expect(failedParams.error?.message).toContain("Security vault is locked");
   });
+
+  it("emits a terminal cancelled event immediately after cancel", async () => {
+    const executeBackendQuery = vi.fn(async () => ({ accepted: true, queryExecutionId: "exec-1" }));
+    const cancelBackendQuery = vi.fn(async () => ({ accepted: true, queryExecutionId: "exec-1" }));
+    window.appShell = {
+      ...originalAppShell,
+      getBackendStatus: async () => ({
+        mode: "mock-stdio",
+        state: "healthy",
+        supportedCapabilities: [],
+        activeExecutionIds: [],
+        recentExecutions: [],
+        backendLogs: []
+      }),
+      executeBackendQuery,
+      cancelBackendQuery
+    };
+
+    const service = new QueryEngineService();
+    const events: Array<{ method: string; params?: unknown; contextFileId?: string }> = [];
+    service.onQueryEvent((event, context) => {
+      events.push({ method: event.method, params: event.params, contextFileId: context?.fileId });
+    });
+
+    const executionId = await service.execute({
+      engineId: "jdbc",
+      fileId: "file-1",
+      text: "select * from t"
+    });
+    await service.cancel(executionId);
+
+    expect(cancelBackendQuery).toHaveBeenCalledWith({ queryExecutionId: executionId });
+    const cancelled = events.find((event) => event.method === "queryengine.failed");
+    expect(cancelled).toEqual(expect.objectContaining({ contextFileId: "file-1" }));
+    const failedParams = cancelled?.params as { error?: { code?: string; message?: string } };
+    expect(failedParams.error?.code).toBe("CANCELLED");
+  });
 });
