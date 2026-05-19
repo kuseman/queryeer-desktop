@@ -598,18 +598,21 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
               )}
               <div className="table-output-stacked-list" ref={stackedContainerRef}>
                 {context.resultSets.map((resultSet) => (
-                  <section key={resultSet.resultSetIndex} className="table-output-stacked-section" data-result-set-index={resultSet.resultSetIndex}>
+                  <section
+                    key={resultSet.resultSetIndex}
+                    className="table-output-stacked-section"
+                    data-result-set-index={resultSet.resultSetIndex}
+                    style={context.resultSets.length === 1 ? { flex: 1, minHeight: 0 } : undefined}
+                  >
                     <ResultSetMetadata metadata={resultSet.metadata} />
                     {(() => {
+                      const isOnlyOne = context.resultSets.length === 1;
                       const defaultHeight = resolveStackedGridHeightPx(resultSet.rowCount ?? resultSet.rows.length, tableSettings.stackedMaxRows);
                       const resolvedHeight = stackedGridHeightsByResultSet[resultSet.resultSetIndex] ?? defaultHeight;
                       return (
                     <div
                       className="table-output-grid table-output-grid-stacked"
-                      style={{
-                        height: `${resolvedHeight}px`,
-                        maxHeight: `${resolvedHeight}px`
-                      }}
+                      style={isOnlyOne ? { flex: 1, minHeight: 0 } : { height: `${resolvedHeight}px`, maxHeight: `${resolvedHeight}px` }}
                     >
                       <TableGrid
                         resultSetIndex={resultSet.resultSetIndex}

@@ -144,6 +144,83 @@
   margin-top: 2px;
 }
 
+.when-expr-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: var(--ui-font-size-xs);
+}
+
+.when-expr-tree li {
+  margin: 0;
+  padding: 0;
+}
+
+.when-expr-tree-toggle {
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 2px;
+  border-radius: 3px;
+  color: var(--text-2);
+  font-size: 10px;
+  width: 14px;
+  flex-shrink: 0;
+}
+
+.when-expr-tree-toggle:hover {
+  background: var(--bg-2);
+}
+
+.when-expr-tree-leaf {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.when-expr-tree-leaf:hover {
+  background: var(--bg-2);
+}
+
+.when-expr-tree-group-label {
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-weight: 500;
+  color: var(--text-0);
+}
+
+.when-expr-tree-group-label:hover {
+  background: var(--bg-2);
+}
+
+.when-expr-tree-children {
+  padding-left: 18px;
+}
+
+.when-expr-tree-name {
+  font-family: var(--font-mono, monospace);
+  color: var(--accent, #7aa2f7);
+}
+
+.when-expr-tree-type {
+  color: var(--text-3);
+  font-style: italic;
+}
+
+.when-expr-tree-desc {
+  color: var(--text-1);
+  margin-left: 4px;
+}
+
 .when-expr-info-example code {
   font-family: var(--font-mono, monospace);
   color: var(--accent, #7aa2f7);

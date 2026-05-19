@@ -35,7 +35,7 @@ export function buildTableActionData(ctx: TableOutputContextMenuContext): TableA
   return {
     rows,
     columns,
-    primaryRowIndex: selection.selectedRowIndexes[0] ?? 0,
+    primaryRowIndex: 0,
     selectedRowIndexes: selection.selectedRowIndexes.slice(),
     selectedColumnIndexes: selection.selectedColumnIndexes.slice(),
   };
@@ -62,6 +62,16 @@ export function createTableActionProvider(context: PluginContext): TableOutputCo
       const mergedContext = {
         ...baseContext,
         tableData,
+        tableSelection: {
+          hasSelection: ctx.selection.hasSelection,
+          selectedCellCount: ctx.selection.selectedCells.length,
+          selectedRowCount: ctx.selection.selectedRowIndexes.length,
+          selectedColumnCount: ctx.selection.selectedColumnIndexes.length,
+          isSingleColumnSelection: ctx.selection.isSingleColumnSelection,
+          isSingleRowSelection: ctx.selection.isSingleRowSelection,
+          columns: ctx.columns,
+          columnNames: ctx.columns.map((c) => c.name),
+        },
       };
 
       const matching: TableAction[] = [];

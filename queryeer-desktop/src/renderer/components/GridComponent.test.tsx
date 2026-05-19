@@ -13,6 +13,8 @@ type DataEditorProps = {
   onCellActivated: (cell: readonly [number, number]) => void;
   onCellContextMenu: (cell: readonly [number, number], event: CellEvent) => void;
   onGridSelectionChange: (selection: GridSelectionLike) => void;
+  onColumnMoved?: (startIndex: number, endIndex: number) => void;
+  reorderColumns?: boolean;
   scrollOffsetX?: number;
   scrollOffsetY?: number;
 };
@@ -39,6 +41,7 @@ type CellEvent = {
 };
 
 let latestDataEditorProps: DataEditorProps | null = null;
+const latestDataEditorRef: { current: { remeasureColumns: ReturnType<typeof vi.fn> } | null } = { current: null };
 
 vi.mock("@glideapps/glide-data-grid", () => {
   class CompactSelectionMock {
@@ -64,9 +67,14 @@ vi.mock("@glideapps/glide-data-grid", () => {
   return {
     CompactSelection: CompactSelectionMock,
     GridCellKind: { Text: "text", Uri: "uri" },
-    DataEditor: React.forwardRef((_props: DataEditorProps, _ref) => {
+    DataEditor: React.forwardRef((_props: DataEditorProps, _ref: React.Ref<unknown>) => {
       latestDataEditorProps = _props;
-      return React.createElement("div", { "data-testid": "glide-data-editor" });
+      const refObj = { remeasureColumns: vi.fn(), updateCells: vi.fn() };
+      if (_ref && typeof _ref === "object" && "current" in _ref) {
+        (_ref as React.MutableRefObject<{ remeasureColumns: ReturnType<typeof vi.fn>; updateCells: ReturnType<typeof vi.fn> }>).current = refObj;
+        latestDataEditorRef.current = refObj;
+      }
+      return null;
     }),
   };
 });
@@ -186,6 +194,8 @@ describe("GridComponent", () => {
       );
     });
 
+    getRowCount.mockClear();
+
     rowCount = 3;
     await act(async () => {
       listener?.();
@@ -200,7 +210,7 @@ describe("GridComponent", () => {
     });
 
     expect(latestDataEditorProps?.rows).toBe(3);
-    expect(getRowCount).toHaveBeenCalledTimes(2);
+    expect(getRowCount).toHaveBeenCalledTimes(1);
   });
 
   it("restores saved scroll offset and persists scroll changes", async () => {
@@ -233,10 +243,10 @@ describe("GridComponent", () => {
       latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 5, width: 1, height: 1 }, 80, 240);
     });
 
-    expect(onGridStateChange).toHaveBeenLastCalledWith({ columnWidths: {}, scrollOffset: { x: 0, y: 120 } });
+    expect(onGridStateChange).toHaveBeenLastCalledWith(expect.objectContaining({ scrollOffset: { x: 0, y: 120 } }));
   });
 
-  it("opens regular values only on activation and links on single click", async () => {
+  it("opens links on single click and non-link cells on double-click or Enter", async () => {
     const onCellPrimaryAction = vi.fn(() => true);
 
     await act(async () => {
@@ -261,8 +271,25 @@ describe("GridComponent", () => {
     act(() => {
       latestDataEditorProps?.onCellClicked([0, 0], event);
     });
+    act(() => {
+      latestDataEditorProps?.onCellActivated([0, 0]);
+    });
     expect(onCellPrimaryAction).not.toHaveBeenCalled();
 
+    act(() => {
+      latestDataEditorProps?.onCellClicked([0, 0], createCellEvent());
+    });
+    act(() => {
+      latestDataEditorProps?.onCellClicked([0, 0], createCellEvent());
+    });
+    act(() => {
+      latestDataEditorProps?.onCellActivated([0, 0]);
+    });
+    expect(onCellPrimaryAction).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      latestDataEditorProps?.onCellClicked([0, 0], createCellEvent());
+    });
     act(() => {
       latestDataEditorProps?.onCellActivated([0, 0]);
     });
@@ -272,6 +299,38 @@ describe("GridComponent", () => {
       latestDataEditorProps?.onCellClicked([0, 1], createCellEvent());
     });
     expect(onCellPrimaryAction).toHaveBeenCalledTimes(2);
+  });
+
+  it("activates cell via Enter key", async () => {
+    const onCellPrimaryAction = vi.fn(() => true);
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "value", title: "Value", type: "string" }]}
+          getRowCount={() => 2}
+          getRowsRange={(start, end) => [["plain"], ["text"]].slice(start, end)}
+          getRow={(index) => [["plain"], ["text"]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={onCellPrimaryAction}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    const container = rootElement.firstElementChild;
+    expect(container).not.toBeNull();
+    act(() => {
+      container!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    act(() => {
+      latestDataEditorProps?.onCellActivated([0, 0]);
+    });
+    expect(onCellPrimaryAction).toHaveBeenCalledTimes(1);
   });
 
   it("positions context menu from Glide cell screen bounds", async () => {
@@ -393,6 +452,446 @@ describe("GridComponent", () => {
       { rect: { rowStart: 0, rowEnd: 1, colIndexStart: 0, colIndexEnd: 0 }, cells: [{ row: 2, colIndex: 0 }] },
       { row: 2, colIndex: 0 }
     );
+  });
+
+  it("auto-sizes columns when data arrives after mount", async () => {
+    vi.useFakeTimers();
+    let rowCount = 0;
+    let listener: (() => void) | null = null;
+    const onGridStateChange = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "id", title: "Id", type: "int" }]}
+          autoSizeColumnThreshold={30}
+          getRowCount={() => rowCount}
+          getRowsRange={(start, end) => [[42]].slice(start, end)}
+          getRow={() => [42]}
+          subscribeRowsChanged={(nextListener) => {
+            listener = nextListener;
+            return () => undefined;
+          }}
+          onGridStateChange={onGridStateChange}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    expect(onGridStateChange).not.toHaveBeenCalledWith(expect.objectContaining({ columnWidths: { id: 60 } }));
+
+    rowCount = 1;
+    await act(async () => {
+      listener?.();
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(onGridStateChange).toHaveBeenCalledWith(expect.objectContaining({ columnWidths: { id: 60 } }));
+  });
+
+  it("auto-sizes columns on threshold crossing during streaming", async () => {
+    vi.useFakeTimers();
+    let rowCount = 2;
+    let listener: (() => void) | null = null;
+    const onGridStateChange = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "id", title: "Id", type: "int" }]}
+          autoSizeColumnThreshold={5}
+          getRowCount={() => rowCount}
+          getRowsRange={(start, end) => [[1], [2], [3], [4], [5], [6]].slice(start, end)}
+          getRow={(index) => [[1], [2], [3], [4], [5], [6]][index]}
+          subscribeRowsChanged={(nextListener) => {
+            listener = nextListener;
+            return () => undefined;
+          }}
+          onGridStateChange={onGridStateChange}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 1, height: 2 }, 0, 0);
+    });
+
+    onGridStateChange.mockClear();
+
+    rowCount = 6;
+    await act(async () => {
+      listener?.();
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(onGridStateChange).toHaveBeenCalledWith(expect.objectContaining({ columnWidths: { id: 60 } }));
+  });
+
+  it("auto-sizes columns after debounce when streaming pauses", async () => {
+    vi.useFakeTimers();
+    let rowCount = 1;
+    let listener: (() => void) | null = null;
+    const onGridStateChange = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "id", title: "Id", type: "int" }]}
+          autoSizeColumnThreshold={30}
+          getRowCount={() => rowCount}
+          getRowsRange={(start, end) => [[1], [2]].slice(start, end)}
+          getRow={(index) => [[1], [2]][index]}
+          subscribeRowsChanged={(nextListener) => {
+            listener = nextListener;
+            return () => undefined;
+          }}
+          onGridStateChange={onGridStateChange}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 1, height: 2 }, 0, 0);
+    });
+
+    onGridStateChange.mockClear();
+
+    rowCount = 2;
+    await act(async () => {
+      listener?.();
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(onGridStateChange).not.toHaveBeenCalledWith(expect.objectContaining({ columnWidths: { id: 60 } }));
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(onGridStateChange).toHaveBeenCalledWith(expect.objectContaining({ columnWidths: { id: 60 } }));
+  });
+
+  it("enables column reorder via onColumnMoved callback", async () => {
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "a", title: "A", type: "int" }, { key: "b", title: "B", type: "string" }]}
+          getRowCount={() => 1}
+          getRowsRange={(start, end) => [[1, "x"]].slice(start, end)}
+          getRow={(index) => [[1, "x"]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    expect(typeof latestDataEditorProps?.onColumnMoved).toBe("function");
+  });
+
+  it("persists column order on move via onGridStateChange", async () => {
+    const onGridStateChange = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "a", title: "A", type: "int" }, { key: "b", title: "B", type: "string" }, { key: "c", title: "C", type: "int" }]}
+          getRowCount={() => 1}
+          getRowsRange={(start, end) => [[1, "x", 2]].slice(start, end)}
+          getRow={(index) => [[1, "x", 2]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          onGridStateChange={onGridStateChange}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onColumnMoved?.(0, 1);
+    });
+
+    expect(onGridStateChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ columnOrder: ["b", "a", "c"] })
+    );
+  });
+
+  it("returns correct cell content after column reorder", async () => {
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "a", title: "A", type: "int" }, { key: "b", title: "B", type: "string" }]}
+          getRowCount={() => 2}
+          getRowsRange={(start, end) => [[1, "hello"], [2, "world"]].slice(start, end)}
+          getRow={(index) => [[1, "hello"], [2, "world"]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 2, height: 2 }, 0, 0);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onColumnMoved?.(0, 1);
+    });
+
+    expect(latestDataEditorProps?.getCellContent([0, 0]).displayData).toBe("hello");
+    expect(latestDataEditorProps?.getCellContent([0, 1]).displayData).toBe("world");
+    expect(latestDataEditorProps?.getCellContent([1, 0]).displayData).toBe("1");
+  });
+
+  it("resets column order when columns change", async () => {
+    let gridColumns = [{ key: "a", title: "A", type: "int" }, { key: "b", title: "B", type: "string" }];
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={gridColumns}
+          getRowCount={() => 1}
+          getRowsRange={(start, end) => [[1, "x"]].slice(start, end)}
+          getRow={(index) => [[1, "x"]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onColumnMoved?.(0, 1);
+    });
+
+    gridColumns = [{ key: "x", title: "X", type: "int" }, { key: "y", title: "Y", type: "string" }];
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={gridColumns}
+          getRowCount={() => 2}
+          getRowsRange={(start, end) => [[1, "x"], [2, "y"]].slice(start, end)}
+          getRow={(index) => [[1, "x"], [2, "y"]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 2, height: 2 }, 0, 0);
+    });
+
+    expect(latestDataEditorProps?.getCellContent([0, 0]).displayData).toBe("1");
+    expect(latestDataEditorProps?.getCellContent([1, 0]).displayData).toBe("x");
+  });
+
+  it("ctrl+click selects correct data index after column reorder", async () => {
+    const onSelectionChange = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "a", title: "A", type: "int" }, { key: "b", title: "B", type: "string" }, { key: "c", title: "C", type: "int" }]}
+          getRowCount={() => 3}
+          getRowsRange={(start, end) => [[1, "hello", 2], [4, "world", 5], [7, "!", 9]].slice(start, end)}
+          getRow={(index) => [[1, "hello", 2], [4, "world", 5], [7, "!", 9]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          onSelectionChange={onSelectionChange}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onColumnMoved?.(1, 0);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onCellClicked([0, 0], createCellEvent({ ctrlKey: true }));
+    });
+
+    expect(onSelectionChange).toHaveBeenLastCalledWith(
+      { rect: null, cells: [{ row: 0, colIndex: 1 }] },
+      { row: 0, colIndex: 1 }
+    );
+  });
+
+  it("drag selection bounding box maps to correct data indices after column reorder", async () => {
+    const onSelectionChange = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "a", title: "A", type: "int" }, { key: "b", title: "B", type: "string" }, { key: "c", title: "C", type: "int" }]}
+          getRowCount={() => 3}
+          getRowsRange={(start, end) => [[1, "x", 2], [3, "y", 4], [5, "z", 6]].slice(start, end)}
+          getRow={(index) => [[1, "x", 2], [3, "y", 4], [5, "z", 6]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          onSelectionChange={onSelectionChange}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onColumnMoved?.(1, 0);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onGridSelectionChange(createGridSelection({ x: 0, y: 0, width: 2, height: 2 }));
+    });
+
+    expect(onSelectionChange).toHaveBeenLastCalledWith(
+      { rect: { rowStart: 0, rowEnd: 1, colIndexStart: 0, colIndexEnd: 1 }, cells: [] },
+      { row: 0, colIndex: 0 }
+    );
+  });
+
+  it("ctrl+c copies selection with correct data indices after column reorder", async () => {
+    const onCopySelection = vi.fn();
+    const onSelectionChange = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "a", title: "A", type: "int" }, { key: "b", title: "B", type: "string" }, { key: "c", title: "C", type: "int" }]}
+          getRowCount={() => 3}
+          getRowsRange={(start, end) => [[1, "hello", 2], [4, "world", 5], [7, "!", 9]].slice(start, end)}
+          getRow={(index) => [[1, "hello", 2], [4, "world", 5], [7, "!", 9]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          onSelectionChange={onSelectionChange}
+          onCopySelection={onCopySelection}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 3, height: 3 }, 0, 0);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onColumnMoved?.(1, 0);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onCellClicked([0, 0], createCellEvent({ ctrlKey: true }));
+    });
+
+    expect(onSelectionChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cells: expect.arrayContaining([{ row: 0, colIndex: 1 }]) }),
+      expect.anything()
+    );
+
+    const container = rootElement.firstElementChild;
+    expect(container).not.toBeNull();
+    act(() => {
+      container!.dispatchEvent(new KeyboardEvent("keydown", { key: "c", ctrlKey: true, bubbles: true }));
+    });
+
+    expect(onCopySelection).toHaveBeenCalledTimes(1);
+    const snapshot = onCopySelection.mock.calls[0]?.[0];
+    expect(snapshot).toBeDefined();
+    expect(snapshot.model).toEqual(
+      expect.objectContaining({ cells: expect.arrayContaining([{ row: 0, colIndex: 1 }]) })
+    );
+  });
+
+  it("passes valid snapshot with row data to onContextMenuSelection right after left-click", async () => {
+    const onContextMenuSelection = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "a", title: "A", type: "int" }, { key: "b", title: "B", type: "string" }]}
+          getRowCount={() => 2}
+          getRowsRange={(start, end) => [[1, "hello"], [2, "world"]].slice(start, end)}
+          getRow={(index) => [[1, "hello"], [2, "world"]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          onContextMenuSelection={onContextMenuSelection}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 2, height: 2 }, 0, 0);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onGridSelectionChange(createGridSelection({ x: 0, y: 0, width: 1, height: 1 }));
+    });
+
+    act(() => {
+      latestDataEditorProps?.onCellContextMenu([0, 0], createCellEvent({ button: 2 }));
+    });
+
+    expect(onContextMenuSelection).toHaveBeenCalledTimes(1);
+    const snapshot = onContextMenuSelection.mock.calls[0]?.[1];
+    expect(snapshot).toBeDefined();
+    expect(snapshot.model).toBeDefined();
+    expect(snapshot.model.rect).not.toBeNull();
+    expect(snapshot.rowsByIndex).toBeDefined();
+    expect(snapshot.rowsByIndex[0]).toBeDefined();
+    expect(snapshot.rowsByIndex[0]?.__values).toEqual([1, "hello"]);
   });
 });
 

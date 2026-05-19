@@ -16,17 +16,40 @@ void React;
 // ---------------------------------------------------------------------------
 
 function buildMergedContext(file: FileEntity | undefined, liveCtx: ContextValues): ContextValues {
-  if (!file) return liveCtx;
+  const base = file
+    ? {
+        ...liveCtx,
+        hasActiveFile: true,
+        activeFile: {
+          fileId: file.fileId,
+          uri: file.uri,
+          mimeType: file.mimeType,
+          metadata: inflateDottedKeys(file.metadata ?? {}),
+          engineBinding: file.engineBinding,
+        }
+      }
+    : liveCtx;
+
+  // Add sample table action context so it's visible in the Playground
   return {
-    ...liveCtx,
-    hasActiveFile: true,
-    activeFile: {
-      fileId: file.fileId,
-      uri: file.uri,
-      mimeType: file.mimeType,
-      metadata: inflateDottedKeys(file.metadata ?? {}),
-      engineBinding: file.engineBinding,
-    }
+    ...base,
+    tableData: {
+      rows: [],
+      columns: [] as { name: string; type: string }[],
+      primaryRowIndex: 0,
+      selectedRowIndexes: [],
+      selectedColumnIndexes: [],
+    },
+    tableSelection: {
+      hasSelection: false,
+      selectedCellCount: 0,
+      selectedRowCount: 0,
+      selectedColumnCount: 0,
+      isSingleColumnSelection: false,
+      isSingleRowSelection: false,
+      columns: [] as { name: string; type: string }[],
+      columnNames: [] as string[],
+    },
   };
 }
 
