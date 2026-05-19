@@ -1,18 +1,21 @@
 package com.queryeer.backend.core;
 
+import static com.queryeer.backend.api.PayloadUtils.isBlank;
+import static com.queryeer.backend.core.MapperUtils.MAPPER;
+
 import java.util.List;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.type.CollectionType;
 import com.fasterxml.jackson.databind.type.TypeFactory;
 import com.queryeer.backend.api.PayloadMapper;
 
-public record JacksonPayloadMapper(ObjectMapper objectMapper) implements PayloadMapper
+public record JacksonPayloadMapper() implements PayloadMapper
 {
     @Override
     public <T> T convert(Object fromValue, Class<T> toValueType)
     {
-        return objectMapper.convertValue(fromValue, toValueType);
+        return MAPPER.convertValue(fromValue, toValueType);
     }
 
     @Override
@@ -27,6 +30,37 @@ public record JacksonPayloadMapper(ObjectMapper objectMapper) implements Payload
                 : List.of(fromValue);
         CollectionType type = TypeFactory.defaultInstance()
                 .constructCollectionType(List.class, toValueType);
-        return objectMapper.convertValue(list, type);
+        return MAPPER.convertValue(list, type);
+    }
+
+    @Override
+    public <T> T parseJson(String json, Class<T> toValueType)
+    {
+        if (isBlank(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            return MAPPER.readValue(json, toValueType);
+        }
+        catch (JsonProcessingException e)
+        {
+            throw new RuntimeException("Error reading JSON value: " + json, e);
+        }
+    }
+
+    @Override
+    public String writeJson(Object value)
+    {
+        try
+        {
+            return MAPPER.writeValueAsString(value);
+        }
+        catch (JsonProcessingException e)
+        {
+            throw new RuntimeException("Error writing JSON from: " + value, e);
+        }
     }
 }

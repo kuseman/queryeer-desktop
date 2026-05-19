@@ -1,8 +1,5 @@
 package com.queryeer.backend.core.query;
 
-import static org.mockito.Mockito.mock;
-
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -13,22 +10,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import com.queryeer.backend.api.BackendPluginContext;
-import com.queryeer.backend.api.ChangelogRegistry;
-import com.queryeer.backend.api.ConfigService;
-import com.queryeer.backend.api.EventBus;
-import com.queryeer.backend.api.FileSessionHandlerRegistry;
-import com.queryeer.backend.api.LoggerService;
-import com.queryeer.backend.api.PayloadMapper;
-import com.queryeer.backend.api.PluginServiceRegistry;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.QueryPublisher;
-import com.queryeer.backend.api.SchedulerService;
-import com.queryeer.backend.api.SettingsModule;
-import com.queryeer.backend.core.JacksonPayloadMapper;
-import com.queryeer.backend.core.MapperUtils;
-import com.queryeer.backend.plugin.jdbc.JdbcBackendPlugin;
 
 class QueryExecutionServiceTest
 {
@@ -91,7 +75,27 @@ class QueryExecutionServiceTest
     private static QueryEngineRegistry activateJdbcRegistry()
     {
         RecordingQueryEngineRegistry registry = new RecordingQueryEngineRegistry();
-        new JdbcBackendPlugin().activate(new JdbcPluginContext(registry), null);
+        registry.register(new QueryEngineProvider()
+        {
+            @Override
+            public String engineId()
+            {
+                return "jdbc";
+            }
+
+            @Override
+            public void execute(String queryExecutionId, String fileId, String text, Object engineState, QueryPublisher publisher)
+            {
+                publisher.resultSetStart(List.of("one"), List.of("INTEGER"));
+                publisher.resultSetRows(List.of(List.of(1)));
+                publisher.completed(10L, 1L);
+            }
+
+            @Override
+            public void cancel(String queryExecutionId)
+            {
+            }
+        });
         return registry;
     }
 
@@ -235,132 +239,4 @@ class QueryExecutionServiceTest
         }
     }
 
-    private static final class JdbcPluginContext implements BackendPluginContext
-    {
-        private final QueryEngineRegistry registry;
-        private final PayloadMapper payloadMapper = new JacksonPayloadMapper(MapperUtils.MAPPER);
-
-        private JdbcPluginContext(QueryEngineRegistry registry)
-        {
-            this.registry = registry;
-        }
-
-        @Override
-        public LoggerService logger()
-        {
-            return new LoggerService()
-            {
-                @Override
-                public void info(String message)
-                {
-                }
-
-                @Override
-                public void warn(String message)
-                {
-                }
-
-                @Override
-                public void error(String message, Throwable error)
-                {
-                }
-            };
-        }
-
-        @Override
-        public ConfigService config()
-        {
-            return new ConfigService()
-            {
-                @Override
-                public String get(String key)
-                {
-                    if ("queryeer.jdbc.schemaCache.dir".equals(key))
-                    {
-                        return Path.of("target", "test-work", "jdbc-schema-cache", "qes")
-                                .toString();
-                    }
-                    return null;
-                }
-
-                @Override
-                public SettingsModule getModule(String moduleId)
-                {
-                    if (!"core.queryengine.jdbc".equals(moduleId))
-                    {
-                        return null;
-                    }
-                    return new SettingsModule(moduleId, 0L, "2010-10-10T10:10:10Z", Map.of("core.queryengine.jdbc.connections",
-                            List.of(Map.of("connectionId", "jdbc-qes", "dialectId", "jdbc", "url", "jdbc:h2:mem:test_qes_1;DB_CLOSE_DELAY=-1", "enabled", true))));
-                }
-            };
-        }
-
-        @Override
-        public QueryEngineRegistry queryEngines()
-        {
-            return registry;
-        }
-
-        @Override
-        public FileSessionHandlerRegistry fileSessions()
-        {
-            return _ ->
-            {
-            };
-        }
-
-        @Override
-        public EventBus events()
-        {
-            return (_, _) ->
-            {
-            };
-        }
-
-        @Override
-        public SchedulerService scheduler()
-        {
-            return (_, task) ->
-            {
-                task.run();
-            };
-        }
-
-        @Override
-        public PayloadMapper payloadMapper()
-        {
-            return payloadMapper;
-        }
-
-        @Override
-        public PluginServiceRegistry services()
-        {
-            return mock(PluginServiceRegistry.class);
-        }
-
-        @Override
-        public ChangelogRegistry changelogs()
-        {
-            return new ChangelogRegistry()
-            {
-                @Override
-                public void registerChangelog(String pluginId, String changelog)
-                {
-                }
-
-                @Override
-                public java.util.List<String> pluginIds()
-                {
-                    return java.util.List.of();
-                }
-
-                @Override
-                public String getChangelog(String pluginId)
-                {
-                    return null;
-                }
-            };
-        }
-    }
 }

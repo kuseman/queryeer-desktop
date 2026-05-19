@@ -16,6 +16,7 @@ import com.queryeer.backend.api.QueryPublisher;
 import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
+import com.queryeer.backend.core.MapperUtils;
 import com.queryeer.backend.core.query.QueryExecutionService;
 
 class QueryExecutionTransportIntegrationTest
@@ -23,7 +24,7 @@ class QueryExecutionTransportIntegrationTest
     @Test
     void executePublishesWireFormatNotifications() throws Exception
     {
-        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectMapper objectMapper = MapperUtils.MAPPER;
         EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         ResponseWriter responseWriter = new ResponseWriter(output, codec);

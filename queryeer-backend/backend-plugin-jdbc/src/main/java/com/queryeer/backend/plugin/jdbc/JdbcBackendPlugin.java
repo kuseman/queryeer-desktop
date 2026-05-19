@@ -31,33 +31,22 @@ public final class JdbcBackendPlugin implements BackendPlugin
     private static final String SCHEMA_CACHE_DIR_KEY = "queryeer.jdbc.schemaCache.dir";
     private static final String SCHEMA_CRAWL_INTERVAL_KEY = "queryeer.jdbc.schemaCrawl.intervalMs";
     private static final String APP_DIR_KEY = "queryeer.app.dir";
-    private JdbcDialectDiscovery dialectDiscovery;
 
     public JdbcBackendPlugin()
     {
     }
 
-    JdbcBackendPlugin(JdbcDialectDiscovery dialectDiscovery)
-    {
-        this.dialectDiscovery = dialectDiscovery;
-    }
-
     @Override
     public void activate(BackendPluginContext context, PluginDescriptor descriptor)
     {
-        if (dialectDiscovery == null)
-        {
-            dialectDiscovery = new ServiceLoaderJdbcDialectDiscovery(getClass().getClassLoader());
-        }
         JdbcDialectRegistry registry = new DefaultJdbcDialectRegistry();
         registry.register(new BasicJdbcDialect());
         context.logger()
                 .info("Registered built-in generic JDBC dialect");
-        dialectDiscovery.discoverAndRegister(registry, context.logger());
         DefaultJdbcConnections connections = new DefaultJdbcConnections(context.config(), context.payloadMapper(), registry);
         context.services()
                 .register(JdbcRuntimeService.class, new DefaultJdbcRuntimeService(registry, connections));
-        JdbcSchemaStore schemaStore = new JdbcSchemaStore(resolveSchemaCacheDir(context.config()));
+        JdbcSchemaStore schemaStore = new JdbcSchemaStore(resolveSchemaCacheDir(context.config()), context.payloadMapper());
         DefaultJdbcSchemaResolver defaultResolver = new DefaultJdbcSchemaResolver();
         JdbcSchemaRouter router = new JdbcSchemaRouter(defaultResolver);
         JdbcConnectionHealth connectionHealth = new JdbcConnectionHealth();

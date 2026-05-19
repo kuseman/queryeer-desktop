@@ -12,9 +12,9 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+import com.queryeer.backend.core.JacksonPayloadMapper;
 import com.queryeer.backend.plugin.jdbc.DefaultJdbcConnections;
 import com.queryeer.backend.plugin.jdbc.DefaultJdbcSchemaResolver;
-import com.queryeer.backend.plugin.jdbc.TestPayloadMapper;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialect;
 import com.queryeer.backend.queryengine.jdbc.JdbcTreeBranch;
@@ -44,7 +44,7 @@ class JdbcSchemaActionHandlerTest
         JdbcSchemaStore store = mock(JdbcSchemaStore.class);
         JdbcSchemaCrawlCoordinator coordinator = mock(JdbcSchemaCrawlCoordinator.class);
         JdbcConnectionHealth health = new JdbcConnectionHealth();
-        JdbcSchemaActionHandler handler = new JdbcSchemaActionHandler(TestPayloadMapper.INSTANCE, connections, router, store, coordinator, health);
+        JdbcSchemaActionHandler handler = new JdbcSchemaActionHandler(new JacksonPayloadMapper(), connections, router, store, coordinator, health);
 
         // This must NOT throw UnsupportedOperationException (regression test)
         Object result = handler.fetch(Map.of("connectionId", "conn-1", "parentKind", "connection"));
@@ -64,7 +64,7 @@ class JdbcSchemaActionHandlerTest
         JdbcSchemaRouter router = new JdbcSchemaRouter(new DefaultJdbcSchemaResolver());
         JdbcSchemaStore store = mock(JdbcSchemaStore.class);
         JdbcSchemaCrawlCoordinator coordinator = mock(JdbcSchemaCrawlCoordinator.class);
-        JdbcSchemaActionHandler handler = new JdbcSchemaActionHandler(TestPayloadMapper.INSTANCE, connections, router, store, coordinator, new JdbcConnectionHealth());
+        JdbcSchemaActionHandler handler = new JdbcSchemaActionHandler(new JacksonPayloadMapper(), connections, router, store, coordinator, new JdbcConnectionHealth());
 
         handler.refresh(Map.of("connectionId", "conn-1", "scope", "top", "mode", "due", "waitForCompletion", false));
 
@@ -78,7 +78,7 @@ class JdbcSchemaActionHandlerTest
         JdbcSchemaRouter router = new JdbcSchemaRouter(new DefaultJdbcSchemaResolver());
         JdbcSchemaStore store = mock(JdbcSchemaStore.class);
         JdbcSchemaCrawlCoordinator coordinator = mock(JdbcSchemaCrawlCoordinator.class);
-        JdbcSchemaActionHandler handler = new JdbcSchemaActionHandler(TestPayloadMapper.INSTANCE, connections, router, store, coordinator, new JdbcConnectionHealth());
+        JdbcSchemaActionHandler handler = new JdbcSchemaActionHandler(new JacksonPayloadMapper(), connections, router, store, coordinator, new JdbcConnectionHealth());
 
         handler.refresh(Map.of("connectionId", "conn-1", "scope", "deep", "mode", "due", "waitForCompletion", false, "target", Map.of("database", "db1")));
 
@@ -93,7 +93,7 @@ class JdbcSchemaActionHandlerTest
         JdbcSchemaRouter router = new JdbcSchemaRouter(new DefaultJdbcSchemaResolver());
         JdbcSchemaStore store = mock(JdbcSchemaStore.class);
         JdbcSchemaCrawlCoordinator coordinator = mock(JdbcSchemaCrawlCoordinator.class);
-        JdbcSchemaActionHandler handler = new JdbcSchemaActionHandler(TestPayloadMapper.INSTANCE, connections, router, store, coordinator, new JdbcConnectionHealth());
+        JdbcSchemaActionHandler handler = new JdbcSchemaActionHandler(new JacksonPayloadMapper(), connections, router, store, coordinator, new JdbcConnectionHealth());
 
         handler.refresh(Map.of("connectionId", "conn-1", "scope", "deep", "mode", "force", "waitForCompletion", true, "target", Map.of("database", "mydb")));
 
@@ -108,7 +108,7 @@ class JdbcSchemaActionHandlerTest
         JdbcSchemaRouter router = new JdbcSchemaRouter(new DefaultJdbcSchemaResolver());
         JdbcSchemaStore store = mock(JdbcSchemaStore.class);
         JdbcSchemaCrawlCoordinator coordinator = mock(JdbcSchemaCrawlCoordinator.class);
-        JdbcSchemaActionHandler handler = new JdbcSchemaActionHandler(TestPayloadMapper.INSTANCE, connections, router, store, coordinator, new JdbcConnectionHealth());
+        JdbcSchemaActionHandler handler = new JdbcSchemaActionHandler(new JacksonPayloadMapper(), connections, router, store, coordinator, new JdbcConnectionHealth());
 
         handler.refresh(Map.of("connectionId", "conn-1", "scope", "top", "mode", "force"));
 

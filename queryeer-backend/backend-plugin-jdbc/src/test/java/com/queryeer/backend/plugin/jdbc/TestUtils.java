@@ -11,6 +11,7 @@ import org.mockito.stubbing.Answer;
 
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.SettingsModule;
+import com.queryeer.backend.core.MapperUtils;
 
 public class TestUtils
 {

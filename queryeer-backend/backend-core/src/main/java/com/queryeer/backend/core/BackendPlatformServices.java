@@ -42,30 +42,6 @@ public final class BackendPlatformServices implements PluginHostServices
         this.changelogs = changelogs;
     }
 
-    public static BackendPlatformServices defaultServices()
-    {
-        return defaultServices(Map.of());
-    }
-
-    /** Creates services with {@link InMemoryConfigService}. For tests. */
-    public static BackendPlatformServices defaultServices(Map<String, String> configValues)
-    {
-        DefaultLoggerService logger = new DefaultLoggerService();
-        ConfigService config = new InMemoryConfigService(configValues);
-        InMemoryQueryEngineRegistry queryEngines = new InMemoryQueryEngineRegistry();
-        DefaultFileRegistry fileRegistry = new DefaultFileRegistry();
-        InMemoryEventBus events = new InMemoryEventBus();
-        InlineSchedulerService scheduler = new InlineSchedulerService(logger);
-        PayloadMapper payloadMapper = new JacksonPayloadMapper(MapperUtils.MAPPER);
-        PluginServiceRegistry services = new InMemoryPluginServiceRegistry();
-        services.register(IncrementalParseSessionService.class, new DefaultIncrementalParseSessionService());
-        InMemoryChangelogRegistry changelogs = new InMemoryChangelogRegistry();
-
-        BackendPluginContext context = new DefaultBackendPluginContext(logger, config, queryEngines, fileRegistry, events, scheduler, payloadMapper, services, changelogs);
-
-        return new BackendPlatformServices(logger, config, queryEngines, fileRegistry, events, scheduler, context, payloadMapper, changelogs);
-    }
-
     /** Creates services with {@link FileBasedConfigService} connected to the given security session. */
     public static BackendPlatformServices fileBased(Map<String, String> configValues, SecuritySession securitySession)
     {
@@ -75,7 +51,7 @@ public final class BackendPlatformServices implements PluginHostServices
         DefaultFileRegistry fileRegistry = new DefaultFileRegistry();
         InMemoryEventBus events = new InMemoryEventBus();
         InlineSchedulerService scheduler = new InlineSchedulerService(logger);
-        PayloadMapper payloadMapper = new JacksonPayloadMapper(MapperUtils.MAPPER);
+        PayloadMapper payloadMapper = new JacksonPayloadMapper();
         PluginServiceRegistry services = new InMemoryPluginServiceRegistry();
         services.register(IncrementalParseSessionService.class, new DefaultIncrementalParseSessionService());
         InMemoryChangelogRegistry changelogs = new InMemoryChangelogRegistry();

@@ -2,6 +2,7 @@ package com.queryeer.backend.runner;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,7 @@ import com.queryeer.backend.api.BackendPlugin;
 import com.queryeer.backend.api.BackendPluginContext;
 import com.queryeer.backend.api.PluginDescriptor;
 import com.queryeer.backend.core.BackendPlatformServices;
+import com.queryeer.backend.core.security.SecuritySession;
 
 class PluginResourceCloserTest
 {
@@ -24,8 +26,9 @@ class PluginResourceCloserTest
         RecordingCloseable closeable = new RecordingCloseable();
         DiscoveredPlugin discovered = new DiscoveredPlugin(manifest(), plugin(), Path.of("plugins/sample"), true, closeable);
 
-        PluginResourceCloser.closeAll(List.of(discovered), emptySharedLoader(), BackendPlatformServices.defaultServices()
-                .logger());
+        BackendPlatformServices platformServices = BackendPlatformServices.fileBased(Map.of(), new SecuritySession());
+
+        PluginResourceCloser.closeAll(List.of(discovered), emptySharedLoader(), platformServices.logger());
 
         Assertions.assertTrue(closeable.closed);
     }
@@ -35,8 +38,9 @@ class PluginResourceCloserTest
     {
         DiscoveredPlugin discovered = new DiscoveredPlugin(manifest(), plugin(), null, false, null);
 
-        Assertions.assertDoesNotThrow(() -> PluginResourceCloser.closeAll(List.of(discovered), emptySharedLoader(), BackendPlatformServices.defaultServices()
-                .logger()));
+        BackendPlatformServices platformServices = BackendPlatformServices.fileBased(Map.of(), new SecuritySession());
+
+        Assertions.assertDoesNotThrow(() -> PluginResourceCloser.closeAll(List.of(discovered), emptySharedLoader(), platformServices.logger()));
     }
 
     private static PluginManifest manifest()

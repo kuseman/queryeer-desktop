@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.queryeer.backend.core.JacksonPayloadMapper;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 
 class JdbcSchemaStoreTest
@@ -18,7 +19,7 @@ class JdbcSchemaStoreTest
     @Test
     void persistsAndLoadsLatestSnapshot(@TempDir Path tempDir)
     {
-        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"));
+        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
 
         JdbcSchemaObject personId = new JdbcSchemaObject("column:public:person:id", "id", "column", List.of(), Map.of());
         JdbcSchemaObject table = new JdbcSchemaObject("table:public:person", "person", "table",
@@ -53,7 +54,7 @@ class JdbcSchemaStoreTest
     @Test
     void crawlStatusForConnection_TopScope_ReturnsSingleEntryWithObjectCount(@TempDir Path tempDir)
     {
-        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"));
+        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
 
         // Persist a TOP scope snapshot with 3 objects (2 databases + 1 schema)
         JdbcSchemaObject db1 = new JdbcSchemaObject("database:db1", "db1", "database", List.of(), Map.of());
@@ -73,7 +74,7 @@ class JdbcSchemaStoreTest
     @Test
     void crawlStatusForConnection_DeepScope_ReturnsEntriesPerDatabaseWithObjectCount(@TempDir Path tempDir)
     {
-        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"));
+        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
 
         // Persist a DEEP scope snapshot with database nodes and children
         JdbcSchemaObject col1 = new JdbcSchemaObject("col1", "id", "column", List.of(), Map.of());
@@ -101,7 +102,7 @@ class JdbcSchemaStoreTest
     @Test
     void crawlStatusForConnection_DeepScope_ReturnsDifferentCountsPerDatabase(@TempDir Path tempDir)
     {
-        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"));
+        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
 
         // Database "small" has 2 objects (db + 1 table)
         JdbcSchemaObject smallTable = new JdbcSchemaObject("table:small:t1", "t1", "table", List.of(), Map.of("schema", "public", "catalog", "small"));
@@ -146,7 +147,7 @@ class JdbcSchemaStoreTest
     @Test
     void crawlStatusForConnection_DeepScope_SkipsEmptyDatabaseKey(@TempDir Path tempDir)
     {
-        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"));
+        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
 
         // Persist a DEEP scope snapshot
         JdbcSchemaObject db1 = new JdbcSchemaObject("database:mydb", "mydb", "database", List.of(), Map.of());
@@ -168,7 +169,7 @@ class JdbcSchemaStoreTest
     @Test
     void crawlStatusForConnection_NoCrawlState_ReturnsDefaultEntryForTopScope(@TempDir Path tempDir)
     {
-        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"));
+        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
 
         // Don't persist anything, just check default behavior
         List<JdbcSchemaStore.CrawlStatusEntry> entries = store.crawlStatusForConnection("conn-new", JdbcSchemaCrawlScope.TOP);
@@ -185,7 +186,7 @@ class JdbcSchemaStoreTest
     void recoversFromCorruptedDatabase(@TempDir Path tempDir) throws Exception
     {
         Path cacheDir = tempDir.resolve("cache");
-        JdbcSchemaStore store = new JdbcSchemaStore(cacheDir);
+        JdbcSchemaStore store = new JdbcSchemaStore(cacheDir, new JacksonPayloadMapper());
 
         // First create a healthy database and persist data
         JdbcSchemaObject db1 = new JdbcSchemaObject("database:mydb", "mydb", "database", List.of(), Map.of());
@@ -213,7 +214,7 @@ class JdbcSchemaStoreTest
     void databaseKeysWorksAfterCorruptionRecovery(@TempDir Path tempDir) throws Exception
     {
         Path cacheDir = tempDir.resolve("cache");
-        JdbcSchemaStore store = new JdbcSchemaStore(cacheDir);
+        JdbcSchemaStore store = new JdbcSchemaStore(cacheDir, new JacksonPayloadMapper());
 
         // Create initial healthy database
         JdbcSchemaObject db1 = new JdbcSchemaObject("database:mydb", "mydb", "database", List.of(), Map.of());
@@ -238,7 +239,7 @@ class JdbcSchemaStoreTest
     void multipleCorruptionsAreHandledGracefully(@TempDir Path tempDir) throws Exception
     {
         Path cacheDir = tempDir.resolve("cache");
-        JdbcSchemaStore store = new JdbcSchemaStore(cacheDir);
+        JdbcSchemaStore store = new JdbcSchemaStore(cacheDir, new JacksonPayloadMapper());
 
         // Create initial healthy databases
         JdbcSchemaObject db1 = new JdbcSchemaObject("database:mydb", "mydb", "database", List.of(), Map.of());
@@ -268,7 +269,7 @@ class JdbcSchemaStoreTest
     void deletesOvergrownFileAndStartsFresh(@TempDir Path tempDir) throws Exception
     {
         Path cacheDir = tempDir.resolve("cache");
-        JdbcSchemaStore store = new JdbcSchemaStore(cacheDir);
+        JdbcSchemaStore store = new JdbcSchemaStore(cacheDir, new JacksonPayloadMapper());
 
         // Create a healthy database with data
         JdbcSchemaObject db1 = new JdbcSchemaObject("database:mydb", "mydb", "database", List.of(), Map.of());
@@ -296,7 +297,7 @@ class JdbcSchemaStoreTest
     void compactAfterSnapshotKeepsFileSmall(@TempDir Path tempDir) throws Exception
     {
         Path cacheDir = tempDir.resolve("cache");
-        JdbcSchemaStore store = new JdbcSchemaStore(cacheDir);
+        JdbcSchemaStore store = new JdbcSchemaStore(cacheDir, new JacksonPayloadMapper());
 
         // Persist a snapshot - should trigger compaction for files > 5MB
         // Since the test file is tiny, compactIfNeeded should skip (size < 5MB threshold)

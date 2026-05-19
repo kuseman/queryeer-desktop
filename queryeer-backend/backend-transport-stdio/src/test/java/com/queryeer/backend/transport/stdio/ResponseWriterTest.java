@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
+import com.queryeer.backend.core.MapperUtils;
 
 class ResponseWriterTest
 {
@@ -26,7 +27,7 @@ class ResponseWriterTest
     @Test
     void writesContentLengthFramedEnvelope() throws Exception
     {
-        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectMapper objectMapper = MapperUtils.MAPPER;
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
         ResponseWriter writer = new ResponseWriter(output, codec);
@@ -47,7 +48,7 @@ class ResponseWriterTest
     @Test
     void roundtripsViaFramedReader() throws Exception
     {
-        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectMapper objectMapper = MapperUtils.MAPPER;
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
         ResponseWriter writer = new ResponseWriter(output, codec);
@@ -66,7 +67,7 @@ class ResponseWriterTest
     @Test
     void writesMultipleEnvelopesReadableInOrder() throws Exception
     {
-        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectMapper objectMapper = MapperUtils.MAPPER;
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
         ResponseWriter writer = new ResponseWriter(output, codec);
@@ -90,7 +91,7 @@ class ResponseWriterTest
     @Test
     void contentLengthReflectsByteCountNotCharCount() throws Exception
     {
-        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectMapper objectMapper = MapperUtils.MAPPER;
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
         ResponseWriter writer = new ResponseWriter(output, codec);
@@ -114,7 +115,7 @@ class ResponseWriterTest
     @Test
     void invokesBrokenPipeListenerWhenWriteFails() throws Exception
     {
-        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectMapper objectMapper = MapperUtils.MAPPER;
         EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
         AtomicBoolean listenerInvoked = new AtomicBoolean(false);
         ResponseWriter writer = new ResponseWriter(new OutputStream()
@@ -138,7 +139,7 @@ class ResponseWriterTest
     @Test
     void doesNotInvokeBrokenPipeListenerWhenEncodingFails() throws Exception
     {
-        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectMapper objectMapper = MapperUtils.MAPPER;
         EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
         AtomicBoolean listenerInvoked = new AtomicBoolean(false);
         ResponseWriter writer = new ResponseWriter(new ByteArrayOutputStream(), codec);

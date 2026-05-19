@@ -3,10 +3,12 @@ package com.queryeer.backend.plugin.jdbc.schema;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
@@ -23,13 +25,15 @@ import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaTarget;
 class JdbcSchemaCrawlerTest
 {
     @Test
-    void deepTablesMergeKeepsTablesUnderTheirOwnSchemas()
+    void deepTablesMergeKeepsTablesUnderTheirOwnSchemas() throws SQLException
     {
         JdbcSchemaStore store = mock(JdbcSchemaStore.class);
         JdbcDialect dialect = mock(JdbcDialect.class);
         JdbcSchemaResolver resolver = mock(JdbcSchemaResolver.class);
         JdbcConnection connection = new JdbcConnection("jdbc-1", "title", dialect, Map.of());
 
+        doThrow(new RuntimeException("Some SQL error")).when(dialect)
+                .openSessionConnection(anyMap());
         when(dialect.branchResolvers()).thenReturn(Map.of("tables_folder", resolver));
         when(store.latestSnapshot("jdbc-1", JdbcSchemaCrawlScope.DEEP)).thenReturn(List.of());
         when(resolver.resolveSchema(eq(connection), anyMap()))

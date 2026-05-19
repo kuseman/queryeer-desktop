@@ -18,6 +18,7 @@ import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.parse.IncrementalParseFunction;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 import com.queryeer.backend.api.parse.ParseSessionSnapshot;
+import com.queryeer.backend.core.JacksonPayloadMapper;
 
 class SqlCompletionSupportTest
 {
@@ -31,7 +32,7 @@ class SqlCompletionSupportTest
     @Test
     void completeHandlesMissingSnapshotWithoutThrowing()
     {
-        PayloadMapper payloadMapper = new PassthroughPayloadMapper();
+        PayloadMapper payloadMapper = new JacksonPayloadMapper();
         IncrementalParseSessionService parseSessions = new EmptyParseSessionService();
         SqlCompletionSupport.SqlCompletePayload payload = new SqlCompletionSupport.SqlCompletePayload("file-1", 4L, "sel", null, null, new SqlCompletionSupport.SqlCompleteCursor(1, 4), null);
 
@@ -234,21 +235,6 @@ class SqlCompletionSupportTest
             // Cursor on 'my_table' (column 15)
             String result = SqlCompletionSupport.identifierAtPosition(sessions, "jdbc", "file-cached", sql, 1, 15);
             assertEquals("my_table", result);
-        }
-    }
-
-    private static final class PassthroughPayloadMapper implements PayloadMapper
-    {
-        @Override
-        public <T> T convert(Object fromValue, Class<T> toValueType)
-        {
-            return toValueType.cast(fromValue);
-        }
-
-        @Override
-        public <T> List<T> convertToList(Object fromValue, Class<T> toValueType)
-        {
-            throw new UnsupportedOperationException();
         }
     }
 

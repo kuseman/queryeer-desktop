@@ -16,10 +16,11 @@ import com.queryeer.backend.api.Events;
 import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
+import com.queryeer.backend.core.MapperUtils;
 
 class SettingsModuleChangedNotificationHandlerTest
 {
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = MapperUtils.MAPPER;
     private final EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
 
     @Test

@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.SettingsModule;
-import com.queryeer.backend.plugin.payloadbuilder.TestPayloadMapper;
+import com.queryeer.backend.core.JacksonPayloadMapper;
 
 import se.kuseman.payloadbuilder.catalog.es.ESCatalog;
 import se.kuseman.payloadbuilder.core.catalog.CatalogRegistry;
@@ -19,7 +19,7 @@ import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
 class ElasticsearchCatalogProviderTest
 {
-    private static final PayloadMapper TEST_MAPPER = TestPayloadMapper.INSTANCE;
+    private static final PayloadMapper TEST_MAPPER = new JacksonPayloadMapper();
 
     @Test
     void resolveConnectionReturnsConfigFromSettingsModule()

@@ -15,10 +15,11 @@ import com.queryeer.backend.api.PluginDescriptor;
 import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.about.PluginChangelogsResult;
+import com.queryeer.backend.core.MapperUtils;
 
 class AboutPluginChangelogsRequestHandlerTest
 {
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = MapperUtils.MAPPER;
 
     @Test
     void returnsEmptyListWhenNoChangelogsRegistered() throws IOException
