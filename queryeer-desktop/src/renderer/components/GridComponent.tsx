@@ -16,9 +16,30 @@ import type { SelectionAnchor, SelectionModel } from "../../plugins/core.queryen
 
 const DEFAULT_ROW_NUMBER_COL_WIDTH_PX = 78;
 const DEFAULT_COLUMN_WIDTH_PX = 160;
+const MIN_COLUMN_WIDTH_PX = 60;
+const MAX_COLUMN_AUTO_WIDTH_PX = 500;
 const ROW_HEIGHT_PX = 24;
 const HEADER_HEIGHT_PX = 26;
 const ROW_REFRESH_THROTTLE_MS = 100;
+const AUTO_SIZE_DEBOUNCE_MS = 500;
+const CELL_PADDING_PX = 16;
+
+let textMeasureCanvas: HTMLCanvasElement | null = null;
+
+function measureTextWidth(text: string, font: string): number {
+  if (!textMeasureCanvas) {
+    textMeasureCanvas = document.createElement("canvas");
+  }
+  const ctx = textMeasureCanvas.getContext("2d");
+  if (!ctx) return text.length * 7;
+  ctx.font = font;
+  return ctx.measureText(text).width;
+}
+
+function measureCellWidth(text: string | null | undefined, font: string): number {
+  const display = text != null ? String(text) : "";
+  return measureTextWidth(display, font) + CELL_PADDING_PX;
+}
 
 export type GridComponentColumn = {
   key: string;
@@ -29,6 +50,7 @@ export type GridComponentColumn = {
 export type GridComponentState = {
   columnWidths: Record<string, number>;
   scrollOffset?: { x: number; y: number };
+  columnOrder?: string[];
 };
 
 export type GridComponentRow = {
@@ -49,6 +71,7 @@ export type GridComponentContextMenuEvent = {
 export type GridComponentProps = {
   columns: GridComponentColumn[];
   rowNumberWidth?: number;
+  autoSizeColumnThreshold?: number;
   getRowCount: () => number;
   getRowsRange: (start: number, end: number) => unknown[][];
   getRow: (index: number) => unknown[] | undefined;
@@ -125,31 +148,35 @@ export function computeNextSelectionFromClick(input: {
   return { shouldApply: true, selection: nextSelection, anchor: nextAnchor };
 }
 
-function toGlideSelection(model: SelectionModel | null): GridSelection {
+function toGlideSelection(
+  model: SelectionModel | null,
+  toVisualIndex: (dataCol: number) => number = (i) => i
+): GridSelection {
   const rowSelection = (model?.cells ?? []).filter((cell) => cell.colIndex === -1).reduce((selection, cell) => selection.add(cell.row), CompactSelection.empty());
   const individualCells = (model?.cells ?? []).filter((cell) => cell.colIndex >= 0);
-  const individualRanges = individualCells.map((cell) => ({ x: cell.colIndex, y: cell.row, width: 1, height: 1 }));
+  const individualRanges = individualCells.map((cell) => ({ x: toVisualIndex(cell.colIndex), y: cell.row, width: 1, height: 1 }));
   if (!model?.rect) {
     const first = individualCells[0];
     return {
       current: first ? {
-        cell: [first.colIndex, first.row],
-        range: { x: first.colIndex, y: first.row, width: 1, height: 1 },
+        cell: [toVisualIndex(first.colIndex), first.row],
+        range: { x: toVisualIndex(first.colIndex), y: first.row, width: 1, height: 1 },
         rangeStack: individualRanges.slice(1),
       } : undefined,
       columns: CompactSelection.empty(),
       rows: rowSelection,
     };
   }
+  const colStart = model.rect.colIndexStart;
+  const colEnd = model.rect.colIndexEnd;
+  const visStart = toVisualIndex(colStart);
+  const visEnd = toVisualIndex(colEnd);
+  const x = Math.min(visStart, visEnd);
+  const width = Math.abs(visEnd - visStart) + 1;
   return {
     current: {
-      cell: [model.rect.colIndexStart, model.rect.rowStart],
-      range: {
-        x: model.rect.colIndexStart,
-        y: model.rect.rowStart,
-        width: model.rect.colIndexEnd - model.rect.colIndexStart + 1,
-        height: model.rect.rowEnd - model.rect.rowStart + 1,
-      },
+      cell: [visStart, model.rect.rowStart],
+      range: { x, y: model.rect.rowStart, width, height: model.rect.rowEnd - model.rect.rowStart + 1 },
       rangeStack: individualRanges,
     },
     columns: CompactSelection.empty(),
@@ -157,7 +184,12 @@ function toGlideSelection(model: SelectionModel | null): GridSelection {
   };
 }
 
-function fromGlideSelection(selection: GridSelection, totalCols: number): { selection: SelectionModel | null; anchor: SelectionAnchor | null } {
+function fromGlideSelection(
+  selection: GridSelection,
+  totalCols: number,
+  toDataIndex: (visualCol: number) => number = (i) => i,
+  hasReorderedColumns: boolean = false
+): { selection: SelectionModel | null; anchor: SelectionAnchor | null } {
   const cells = [...selection.rows].map((row) => ({ row, colIndex: -1 }));
   const current = selection.current;
   if (!current) {
@@ -165,23 +197,39 @@ function fromGlideSelection(selection: GridSelection, totalCols: number): { sele
   }
   for (const range of current.rangeStack) {
     if (range.width === 1 && range.height === 1 && range.x >= 0 && range.x < totalCols) {
-      cells.push({ row: range.y, colIndex: range.x });
+      cells.push({ row: range.y, colIndex: toDataIndex(range.x) });
     }
   }
   const rowStart = current.range.y;
   const rowEnd = current.range.y + current.range.height - 1;
-  const colIndexStart = Math.max(0, current.range.x);
-  const colIndexEnd = Math.min(totalCols - 1, current.range.x + current.range.width - 1);
+  const colVisStart = current.range.x;
+  const colVisEnd = current.range.x + current.range.width - 1;
+  let colIndexStart: number;
+  let colIndexEnd: number;
+  if (hasReorderedColumns) {
+    let dataMin = totalCols;
+    let dataMax = 0;
+    for (let c = colVisStart; c <= colVisEnd; c++) {
+      const dataIdx = toDataIndex(c);
+      if (dataIdx < dataMin) dataMin = dataIdx;
+      if (dataIdx > dataMax) dataMax = dataIdx;
+    }
+    colIndexStart = Math.max(0, dataMin);
+    colIndexEnd = Math.min(totalCols - 1, dataMax);
+  } else {
+    colIndexStart = Math.max(0, colVisStart);
+    colIndexEnd = Math.min(totalCols - 1, colVisEnd);
+  }
   if (current.range.width === 1 && current.range.height === 1 && cells.length > 0) {
     cells.push({ row: rowStart, colIndex: colIndexStart });
     return {
       selection: { rect: null, cells },
-      anchor: { row: current.cell[1], colIndex: current.cell[0] },
+      anchor: { row: current.cell[1], colIndex: colIndexStart },
     };
   }
   return {
     selection: { rect: { rowStart, rowEnd, colIndexStart, colIndexEnd }, cells },
-    anchor: { row: current.cell[1], colIndex: current.cell[0] },
+    anchor: { row: current.cell[1], colIndex: colIndexStart },
   };
 }
 
@@ -243,6 +291,7 @@ function resolveScrollOffsetFromVisibleRegion(range: { x: number; y: number }, c
 export function GridComponent({
   columns,
   rowNumberWidth = DEFAULT_ROW_NUMBER_COL_WIDTH_PX,
+  autoSizeColumnThreshold = 30,
   getRowCount,
   getRowsRange,
   getRow,
@@ -273,28 +322,118 @@ export function GridComponent({
   const visibleRegionRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const visibleRowsRef = useRef<VisibleRowsCache>({ start: 0, end: 0, rows: [] });
   const pendingRowRefreshRef = useRef<number | null>(null);
+  const lastAutoSizeRowCountRef = useRef<number>(-1);
+  const pendingAutoSizeTimerRef = useRef<number | null>(null);
+  const lastClickedCellRef = useRef<[number, number] | null>(null);
+  const clickCountRef = useRef<number>(0);
+  const clickTimerRef = useRef<number | null>(null);
+  const isKeyboardActivationRef = useRef<boolean>(false);
+  const [columnOrder, setColumnOrder] = useState<string[] | undefined>(() => initialGridState?.columnOrder);
   selectionRef.current = selection;
 
-  const glideColumns = useMemo<readonly GridColumn[]>(() => columns.map((column) => ({
-    id: column.key,
-    title: column.title,
-    width: columnWidths[column.key] ?? DEFAULT_COLUMN_WIDTH_PX,
-  })), [columnWidths, columns]);
+  const getDataIndex = useCallback((visualColIndex: number): number => {
+    if (!columnOrder || visualColIndex < 0 || visualColIndex >= columnOrder.length) return visualColIndex;
+    const key = columnOrder[visualColIndex];
+    if (!key) return visualColIndex;
+    return columns.findIndex(c => c.key === key);
+  }, [columnOrder, columns]);
+
+  const getVisualIndex = useCallback((dataColIndex: number): number => {
+    if (!columnOrder || dataColIndex < 0 || dataColIndex >= columns.length) return dataColIndex;
+    const key = columns[dataColIndex]?.key;
+    if (!key) return dataColIndex;
+    return columnOrder.indexOf(key);
+  }, [columnOrder, columns]);
+
+  useEffect(() => {
+    setColumnOrder((current) => {
+      if (!current) return current;
+      const validKeys = new Set(columns.map((c) => c.key));
+      if (current.every((k) => validKeys.has(k))) return current;
+      const nextState = { ...gridStateRef.current };
+      delete nextState.columnOrder;
+      gridStateRef.current = nextState;
+      onGridStateChange?.(nextState);
+      return undefined;
+    });
+  }, [columns, onGridStateChange]);
+
+  const glideColumns = useMemo<readonly GridColumn[]>(() => {
+    const ordered = columnOrder
+      ? columnOrder.map((key) => columns.find((c) => c.key === key)).filter((c): c is GridComponentColumn => c !== undefined)
+      : columns;
+    return ordered.map((column) => ({
+      id: column.key,
+      title: column.title,
+      width: columnWidths[column.key] ?? DEFAULT_COLUMN_WIDTH_PX,
+    }));
+  }, [columnWidths, columns, columnOrder]);
 
   const [theme, setTheme] = useState<Partial<Theme>>(() => createTheme(isDarkTheme));
+
+  const autoSizeColumns = useCallback(() => {
+    if (columns.length === 0) return;
+    let sample = visibleRowsRef.current.rows;
+    if (sample.length === 0) {
+      const count = getRowCount();
+      if (count > 0) {
+        sample = getRowsRange(0, Math.min(50, count)).map(mapRow);
+      }
+    }
+    const font = theme.fontFamily
+      ? `12px ${theme.fontFamily.replace(/['"]/g, "")}`
+      : "12px Segoe UI, Arial, sans-serif";
+    const next = { ...columnWidths };
+    for (let i = 0; i < columns.length; i++) {
+      const col = columns[i];
+      let maxW = measureCellWidth(col.title, font);
+      for (const row of sample) {
+        const value = getCellValue(row, i);
+        const str = resolveCellDisplayValue(col.type, value);
+        const w = measureCellWidth(str, font);
+        if (w > maxW) maxW = w;
+      }
+      next[col.key] = Math.min(Math.max(Math.ceil(maxW), MIN_COLUMN_WIDTH_PX), MAX_COLUMN_AUTO_WIDTH_PX);
+    }
+    setColumnWidths(next);
+    const autoState = { ...gridStateRef.current, columnWidths: next };
+    gridStateRef.current = autoState;
+    onGridStateChange?.(autoState);
+  }, [columns, columnWidths, getRowCount, getRowsRange, resolveCellDisplayValue, getCellValue, onGridStateChange, theme.fontFamily]);
 
   useEffect(() => {
     setTheme(createTheme(isDarkTheme, containerRef.current));
   }, [isDarkTheme]);
+
+  useEffect(() => {
+    if (rowCount === 0) return;
+    const threshold = Math.max(1, autoSizeColumnThreshold);
+    const currentBucket = Math.floor(rowCount / threshold);
+    const lastBucket = Math.floor(lastAutoSizeRowCountRef.current / threshold);
+    if (currentBucket > lastBucket) {
+      lastAutoSizeRowCountRef.current = rowCount;
+      autoSizeColumns();
+    }
+    if (pendingAutoSizeTimerRef.current !== null) {
+      window.clearTimeout(pendingAutoSizeTimerRef.current);
+    }
+    pendingAutoSizeTimerRef.current = window.setTimeout(() => {
+      pendingAutoSizeTimerRef.current = null;
+      if (rowCount > lastAutoSizeRowCountRef.current) {
+        lastAutoSizeRowCountRef.current = rowCount;
+        autoSizeColumns();
+      }
+    }, AUTO_SIZE_DEBOUNCE_MS);
+  }, [rowCount, autoSizeColumns, autoSizeColumnThreshold]);
 
   const applySelection = useCallback((newSelection: SelectionModel | null, newAnchor: SelectionAnchor | null) => {
     previousSelectionRef.current = selectionRef.current;
     selectionRef.current = newSelection;
     anchorRef.current = newAnchor;
     setSelection(newSelection);
-    setGlideSelection(toGlideSelection(newSelection));
+    setGlideSelection(toGlideSelection(newSelection, getVisualIndex));
     onSelectionChange?.(newSelection, newAnchor);
-  }, [onSelectionChange]);
+  }, [getVisualIndex, onSelectionChange]);
 
   const refreshVisibleRows = useCallback((start: number, end: number) => {
     const safeStart = Math.max(0, start);
@@ -315,36 +454,46 @@ export function GridComponent({
   }, [getRow, getRowsRange]);
 
   const runCellPrimaryAction = useCallback((colIndex: number, rowIndex: number): boolean => {
-    if (colIndex < 0 || colIndex >= columns.length) return false;
+    const dataIndex = getDataIndex(colIndex);
+    if (dataIndex < 0 || dataIndex >= columns.length) return false;
     const rowData = getRowData(rowIndex);
-    return onCellPrimaryAction({ columnIndex: colIndex, value: getCellValue(rowData, colIndex), columnType: columns[colIndex]?.type ?? "any" });
-  }, [columns, getRowData, onCellPrimaryAction]);
+    return onCellPrimaryAction({ columnIndex: dataIndex, value: getCellValue(rowData, dataIndex), columnType: columns[dataIndex]?.type ?? "any" });
+  }, [columns, getDataIndex, getRowData, onCellPrimaryAction]);
 
   const hasCellLink = useCallback((colIndex: number, rowIndex: number): boolean => {
-    const column = columns[colIndex];
+    const dataIndex = getDataIndex(colIndex);
+    const column = columns[dataIndex];
     if (!column) return false;
     const rowData = getRowData(rowIndex);
-    return resolveCellLink({ value: getCellValue(rowData, colIndex), columnType: column.type }) != null;
-  }, [columns, getRowData, resolveCellLink]);
+    return resolveCellLink({ value: getCellValue(rowData, dataIndex), columnType: column.type }) != null;
+  }, [columns, getDataIndex, getRowData, resolveCellLink]);
 
   const getCellContent = useCallback((cell: Item): GridCell => {
     const [colIndex, rowIndex] = cell;
-    const column = columns[colIndex];
+    const dataIndex = getDataIndex(colIndex);
+    const column = columns[dataIndex];
     if (!column) {
       return { kind: GridCellKind.Text, allowOverlay: false, readonly: true, displayData: "", data: "" };
     }
     const rowData = getRowData(rowIndex);
-    const value = getCellValue(rowData, colIndex);
+    const value = getCellValue(rowData, dataIndex);
+    const isNull = value === null || value === undefined;
     const displayValue = resolveCellDisplayValue(column.type, value);
     const link = resolveCellLink({ value, columnType: column.type });
-    const selected = selectionRef.current != null && isCellSelected(selectionRef.current, rowIndex, colIndex);
+    const selected = selectionRef.current != null && isCellSelected(selectionRef.current, rowIndex, dataIndex);
+    let themeOverride: Record<string, string> | undefined;
+    if (selected) {
+      themeOverride = { bgCell: "rgba(100, 160, 255, 0.22)" };
+    } else if (isNull) {
+      themeOverride = { bgCell: isDarkTheme ? "rgba(128, 100, 0, 0.35)" : "rgba(255, 255, 200, 0.55)" };
+    }
     const base = {
-      allowOverlay: true,
+      allowOverlay: false,
       readonly: true,
       displayData: displayValue,
       data: displayValue,
       copyData: displayValue,
-      themeOverride: selected ? { bgCell: "rgba(100, 160, 255, 0.22)" } : undefined,
+      themeOverride,
     };
     if (link != null) {
       return {
@@ -352,14 +501,14 @@ export function GridComponent({
         kind: GridCellKind.Text,
         cursor: "pointer",
         themeOverride: {
-          ...base.themeOverride,
+          ...themeOverride,
           textDark: theme.linkColor,
         },
         hoverEffect: true,
       };
     }
     return { ...base, kind: GridCellKind.Text };
-  }, [columns, getRowData, resolveCellDisplayValue, resolveCellLink, theme.linkColor]);
+  }, [columns, getDataIndex, getRowData, resolveCellDisplayValue, resolveCellLink, isDarkTheme, theme.linkColor]);
 
   const collectSelectionSnapshot = useCallback((model: SelectionModel): GridComponentSelectionSnapshot | null => {
     const box = getBoundingBox(model, columns.length);
@@ -372,18 +521,44 @@ export function GridComponent({
   }, [columns.length, getRowData]);
 
   const onGridSelectionChange = useCallback((newGlideSelection: GridSelection) => {
-    const next = fromGlideSelection(newGlideSelection, columns.length);
+    const hasReordered = !!columnOrder;
+    const next = fromGlideSelection(newGlideSelection, columns.length, getDataIndex, hasReordered);
     setGlideSelection(newGlideSelection);
     previousSelectionRef.current = selectionRef.current;
     selectionRef.current = next.selection;
     anchorRef.current = next.anchor;
     setSelection(next.selection);
     onSelectionChange?.(next.selection, next.anchor);
-  }, [columns.length, onSelectionChange]);
+  }, [columnOrder, columns.length, getDataIndex, onSelectionChange]);
+
+  const onColumnMoved = useCallback((startIndex: number, endIndex: number) => {
+    setColumnOrder((current) => {
+      const keys = current ?? columns.map((c) => c.key);
+      if (startIndex < 0 || startIndex >= keys.length || endIndex < 0 || endIndex >= keys.length) return current;
+      const reordered = [...keys];
+      const [moved] = reordered.splice(startIndex, 1);
+      reordered.splice(endIndex, 0, moved);
+      const nextState = { ...gridStateRef.current, columnOrder: reordered };
+      gridStateRef.current = nextState;
+      onGridStateChange?.(nextState);
+      return reordered;
+    });
+  }, [columns, onGridStateChange]);
 
   const onCellClicked = useCallback((cell: Item, event: CellClickedEventArgs) => {
-    const [colIndex, rowIndex] = cell;
-    if (!event.ctrlKey && !event.metaKey && !event.shiftKey && colIndex >= 0 && hasCellLink(colIndex, rowIndex) && runCellPrimaryAction(colIndex, rowIndex)) {
+    const [visCol, rowIndex] = cell;
+    lastClickedCellRef.current = [visCol, rowIndex];
+    clickCountRef.current++;
+    if (clickTimerRef.current !== null) {
+      window.clearTimeout(clickTimerRef.current);
+    }
+    clickTimerRef.current = window.setTimeout(() => {
+      clickCountRef.current = 0;
+      clickTimerRef.current = null;
+    }, 300);
+    isKeyboardActivationRef.current = false;
+    const colIndex = getDataIndex(visCol);
+    if (!event.ctrlKey && !event.metaKey && !event.shiftKey && colIndex >= 0 && hasCellLink(visCol, rowIndex) && runCellPrimaryAction(visCol, rowIndex)) {
       return;
     }
     if (!event.ctrlKey && !event.metaKey) return;
@@ -392,14 +567,22 @@ export function GridComponent({
     const next = computeNextSelectionFromClick({ mouseEvent: event, rowIndex, colIndex, totalCols: columns.length, existing, anchor: anchorRef.current });
     if (!next.shouldApply) return;
     applySelection(next.selection, next.anchor);
-  }, [applySelection, columns.length, hasCellLink, runCellPrimaryAction]);
+  }, [applySelection, columns.length, getDataIndex, hasCellLink, runCellPrimaryAction]);
 
   const onCellActivated = useCallback((cell: Item) => {
-    runCellPrimaryAction(cell[0], cell[1]);
+    const [visCol, rowIndex] = cell;
+    if (isKeyboardActivationRef.current) {
+      isKeyboardActivationRef.current = false;
+      runCellPrimaryAction(visCol, rowIndex);
+    } else if (clickCountRef.current >= 2 && lastClickedCellRef.current !== null && lastClickedCellRef.current[0] === visCol && lastClickedCellRef.current[1] === rowIndex) {
+      clickCountRef.current = 0;
+      runCellPrimaryAction(visCol, rowIndex);
+    }
   }, [runCellPrimaryAction]);
 
   const onCellContextMenu = useCallback((cell: Item, event: CellClickedEventArgs) => {
-    const [colIndex, rowIndex] = cell;
+    const [visCol, rowIndex] = cell;
+    const colIndex = getDataIndex(visCol);
     let model = selectionRef.current;
     if (!model || !isCellSelected(model, rowIndex, colIndex)) {
       model = { rect: computeSelection({ row: rowIndex, colIndex }, { row: rowIndex, colIndex }, columns.length), cells: [] };
@@ -413,7 +596,7 @@ export function GridComponent({
       clientY: event.bounds.y + event.localEventY,
       preventDefault: event.preventDefault,
     }, snapshot);
-  }, [applySelection, collectSelectionSnapshot, columns.length, onContextMenuSelection]);
+  }, [applySelection, collectSelectionSnapshot, columns.length, getDataIndex, onContextMenuSelection]);
 
   useEffect(() => {
     const applyRowsChanged = () => {
@@ -450,6 +633,10 @@ export function GridComponent({
         window.clearTimeout(pendingRowRefreshRef.current);
         pendingRowRefreshRef.current = null;
       }
+      if (pendingAutoSizeTimerRef.current !== null) {
+        window.clearTimeout(pendingAutoSizeTimerRef.current);
+        pendingAutoSizeTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -457,6 +644,10 @@ export function GridComponent({
     const el = containerRef.current;
     if (!el) return;
     const handler = (event: KeyboardEvent) => {
+      if (event.key === "Enter" && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+        isKeyboardActivationRef.current = true;
+        return;
+      }
       if (!event.ctrlKey || event.key !== "c") return;
       const model = selectionRef.current;
       if (!model) return;
@@ -467,7 +658,9 @@ export function GridComponent({
       onCopySelection(snapshot);
     };
     el.addEventListener("keydown", handler, true);
-    return () => el.removeEventListener("keydown", handler, true);
+    return () => {
+      el.removeEventListener("keydown", handler, true);
+    };
   }, [collectSelectionSnapshot, onCopySelection]);
 
   return (
@@ -502,6 +695,7 @@ export function GridComponent({
             return next;
           });
         }}
+        onColumnMoved={onColumnMoved}
         scrollOffsetX={initialGridState?.scrollOffset?.x}
         scrollOffsetY={initialGridState?.scrollOffset?.y}
         rowMarkers={{ kind: "clickable-number", width: rowNumberWidth, startIndex: 1 }}
