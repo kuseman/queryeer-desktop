@@ -1,0 +1,14 @@
+.grid-component-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border, #454545);
+  border-top-color: var(--accent, #0e639c);
+  border-radius: 50%;
+  animation: grid-spinner-rotate 0.7s linear infinite;
+}
+
+@keyframes grid-spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
