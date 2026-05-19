@@ -5,12 +5,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.queryeer.backend.core.BackendPlatformServices;
+import com.queryeer.backend.core.security.SecuritySession;
 
 class BuiltinPluginDiscoveryTest
 {
@@ -40,7 +42,8 @@ class BuiltinPluginDiscoveryTest
                 """, StandardCharsets.UTF_8);
 
         PluginClassLoaderFactory classLoaderFactory = new PluginClassLoaderFactory(new SharedClassLoader(List.of(), getClass().getClassLoader()));
-        PluginDiscoveryService discoveryService = new PluginDiscoveryService(BackendPlatformServices.defaultServices(), classLoaderFactory);
+        BackendPlatformServices platformServices = BackendPlatformServices.fileBased(Map.of(), new SecuritySession());
+        PluginDiscoveryService discoveryService = new PluginDiscoveryService(platformServices, classLoaderFactory);
         BuiltinPluginDiscovery discovery = new BuiltinPluginDiscovery(discoveryService, builtinsDir);
 
         List<DiscoveredPlugin> discovered = discovery.discover();

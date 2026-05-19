@@ -2,6 +2,7 @@ package com.queryeer.backend.runner;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -12,6 +13,7 @@ import com.queryeer.backend.api.BackendPluginFactory;
 import com.queryeer.backend.api.PluginDescriptor;
 import com.queryeer.backend.api.PluginHostServices;
 import com.queryeer.backend.core.BackendPlatformServices;
+import com.queryeer.backend.core.security.SecuritySession;
 
 class PluginFactoryTest
 {
@@ -22,7 +24,8 @@ class PluginFactoryTest
         PluginManifest manifest = new PluginManifest(1, "test.plugin", "Test Plugin", "1.0.0", new PluginManifest.BackendTarget(TestEntrypointPlugin.class.getName(), null, null), null, List.of(),
                 List.of(), List.of(), null, null, null);
 
-        BackendPlugin plugin = pluginFactory.instantiate(manifest, getClass().getClassLoader(), Path.of("test"), BackendPlatformServices.defaultServices());
+        BackendPlatformServices platformServices = BackendPlatformServices.fileBased(Map.of(), new SecuritySession());
+        BackendPlugin plugin = pluginFactory.instantiate(manifest, getClass().getClassLoader(), Path.of("test"), platformServices);
 
         Assertions.assertEquals("entrypoint.plugin", plugin.descriptor()
                 .id());
@@ -35,7 +38,8 @@ class PluginFactoryTest
         PluginManifest manifest = new PluginManifest(1, "test.plugin", "Test Plugin", "1.0.0", new PluginManifest.BackendTarget(null, TestPluginFactory.class.getName(), null), null, List.of(),
                 List.of(), List.of(), null, null, null);
 
-        BackendPlugin plugin = pluginFactory.instantiate(manifest, getClass().getClassLoader(), Path.of("test"), BackendPlatformServices.defaultServices());
+        BackendPlatformServices platformServices = BackendPlatformServices.fileBased(Map.of(), new SecuritySession());
+        BackendPlugin plugin = pluginFactory.instantiate(manifest, getClass().getClassLoader(), Path.of("test"), platformServices);
 
         Assertions.assertEquals("factory.plugin", plugin.descriptor()
                 .id());

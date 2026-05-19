@@ -20,6 +20,7 @@ import com.queryeer.backend.api.SecuritySessionClosedException;
 import com.queryeer.backend.api.SettingsModule;
 import com.queryeer.backend.api.parse.IncrementalParseFunction;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
+import com.queryeer.backend.core.JacksonPayloadMapper;
 import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
 
 import se.kuseman.payloadbuilder.api.catalog.Column;
@@ -36,7 +37,7 @@ class PayloadbuilderQueryEngineProviderTest
 {
     private static final ConfigService NOOP_CONFIG = _ -> null;
     private static final JdbcRuntimeService JDBCRUNTIMESERVICE = Mockito.mock(JdbcRuntimeService.class);
-    private static final PayloadMapper TEST_MAPPER = TestPayloadMapper.INSTANCE;
+    private static final PayloadMapper TEST_MAPPER = new JacksonPayloadMapper();
     private static final IncrementalParseSessionService PARSE_SESSIONS = Mockito.mock(IncrementalParseSessionService.class);
     private static final IncrementalParseFunction PARSE_FUNCTION = Mockito.mock(IncrementalParseFunction.class);
 

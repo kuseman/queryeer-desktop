@@ -2,6 +2,7 @@ package com.queryeer.backend.core;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -10,13 +11,14 @@ import com.queryeer.backend.api.BackendPlugin;
 import com.queryeer.backend.api.BackendPluginContext;
 import com.queryeer.backend.api.PluginDescriptor;
 import com.queryeer.backend.api.QueryEngineProvider;
+import com.queryeer.backend.core.security.SecuritySession;
 
 class PluginRuntimeArchitectureTest
 {
     @Test
     void activateAllInjectsContextServicesAndRegistersEngines() throws Exception
     {
-        BackendPlatformServices services = BackendPlatformServices.defaultServices(java.util.Map.of("env", "test"));
+        BackendPlatformServices services = BackendPlatformServices.fileBased(Map.of("env", "test"), new SecuritySession());
 
         PluginRuntime runtime = new PluginRuntime();
         runtime.register(new RecordingPlugin("plugin.one", "engine.one"));
@@ -37,7 +39,7 @@ class PluginRuntimeArchitectureTest
         RecordingPlugin.activationOrder.clear();
         RecordingPlugin.deactivationOrder.clear();
 
-        BackendPlatformServices services = BackendPlatformServices.defaultServices();
+        BackendPlatformServices services = BackendPlatformServices.fileBased(Map.of(), new SecuritySession());
         PluginRuntime runtime = new PluginRuntime();
         runtime.register(new RecordingPlugin("plugin.one", "engine.one"));
         runtime.register(new RecordingPlugin("plugin.two", "engine.two"));
@@ -52,7 +54,7 @@ class PluginRuntimeArchitectureTest
     @Test
     void skipsPluginWithMissingDependency() throws Exception
     {
-        BackendPlatformServices services = BackendPlatformServices.defaultServices();
+        BackendPlatformServices services = BackendPlatformServices.fileBased(Map.of(), new SecuritySession());
         PluginRuntime runtime = new PluginRuntime();
         runtime.register(new RecordingPlugin("plugin.dep", "engine.dep", List.of("plugin.missing"), List.of(), false));
 
@@ -67,7 +69,7 @@ class PluginRuntimeArchitectureTest
     @Test
     void skipsPluginWithMissingRequiredCapability() throws Exception
     {
-        BackendPlatformServices services = BackendPlatformServices.defaultServices();
+        BackendPlatformServices services = BackendPlatformServices.fileBased(Map.of(), new SecuritySession());
         PluginRuntime runtime = new PluginRuntime();
         runtime.register(new RecordingPlugin("plugin.cap", "engine.cap", List.of(), List.of("cap.missing"), false));
 
@@ -84,7 +86,7 @@ class PluginRuntimeArchitectureTest
     {
         RecordingPlugin.activationOrder.clear();
 
-        BackendPlatformServices services = BackendPlatformServices.defaultServices();
+        BackendPlatformServices services = BackendPlatformServices.fileBased(Map.of(), new SecuritySession());
         PluginRuntime runtime = new PluginRuntime();
         runtime.register(new RecordingPlugin("plugin.consumer", "engine.consumer", List.of("plugin.provider"), List.of("cap.provider"), false));
         runtime.register(new RecordingPlugin("plugin.provider", "engine.provider", List.of(), List.of(), false, List.of("cap.provider")));
@@ -97,7 +99,7 @@ class PluginRuntimeArchitectureTest
     @Test
     void marksFailedWhenActivationThrowsAndContinues() throws Exception
     {
-        BackendPlatformServices services = BackendPlatformServices.defaultServices();
+        BackendPlatformServices services = BackendPlatformServices.fileBased(Map.of(), new SecuritySession());
         PluginRuntime runtime = new PluginRuntime();
         runtime.register(new RecordingPlugin("plugin.fail", "engine.fail", List.of(), List.of(), true));
         runtime.register(new RecordingPlugin("plugin.ok", "engine.ok"));
@@ -118,8 +120,9 @@ class PluginRuntimeArchitectureTest
         runtime.register(new RecordingPlugin("plugin.one", "engine.one", List.of("plugin.two"), List.of(), false));
         runtime.register(new RecordingPlugin("plugin.two", "engine.two", List.of("plugin.one"), List.of(), false));
 
-        IllegalStateException error = Assertions.assertThrows(IllegalStateException.class, () -> runtime.activateAll(BackendPlatformServices.defaultServices()
-                .pluginContext()));
+        BackendPlatformServices services = BackendPlatformServices.fileBased(Map.of(), new SecuritySession());
+
+        IllegalStateException error = Assertions.assertThrows(IllegalStateException.class, () -> runtime.activateAll(services.pluginContext()));
         Assertions.assertTrue(error.getMessage()
                 .contains("cycle"));
     }

@@ -28,6 +28,7 @@ import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.QueryPublisher;
 import com.queryeer.backend.api.SchedulerService;
+import com.queryeer.backend.core.JacksonPayloadMapper;
 import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionSetupDefinition;
 
 class JdbcBackendPluginTest
@@ -970,7 +971,7 @@ class JdbcBackendPluginTest
         private final ConfigService configService;
         private final SchedulerService schedulerService;
         private final EventBus eventBus;
-        private final PayloadMapper payloadMapper = TestPayloadMapper.INSTANCE;
+        private final PayloadMapper payloadMapper = new JacksonPayloadMapper();
         private final String cacheDir = Path.of("target", "test-work", "jdbc-schema-cache", java.util.UUID.randomUUID()
                 .toString())
                 .toString();

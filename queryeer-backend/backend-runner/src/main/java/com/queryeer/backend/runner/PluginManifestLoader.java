@@ -9,6 +9,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 
+import com.queryeer.backend.core.MapperUtils;
+
 final class PluginManifestLoader
 {
     static final String MANIFEST_FILE = "plugin.json";

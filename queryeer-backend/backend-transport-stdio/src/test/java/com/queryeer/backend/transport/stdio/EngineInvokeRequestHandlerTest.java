@@ -13,6 +13,7 @@ import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
+import com.queryeer.backend.core.MapperUtils;
 import com.queryeer.backend.core.engine.EngineInvokeService;
 
 class EngineInvokeRequestHandlerTest
@@ -20,7 +21,7 @@ class EngineInvokeRequestHandlerTest
     @Test
     void returnsInvokeResultForKnownEngine() throws Exception
     {
-        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectMapper objectMapper = MapperUtils.MAPPER;
         EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         ResponseWriter responseWriter = new ResponseWriter(output, codec);
@@ -71,7 +72,7 @@ class EngineInvokeRequestHandlerTest
     @Test
     void returnsEngineNotFoundErrorWhenNoProviderExists() throws Exception
     {
-        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectMapper objectMapper = MapperUtils.MAPPER;
         EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         ResponseWriter responseWriter = new ResponseWriter(output, codec);

@@ -1,5 +1,7 @@
 package com.queryeer.backend.plugin.jdbc.schema;
 
+import static com.queryeer.backend.api.PayloadUtils.getIfNull;
+
 import java.io.EOFException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,7 +25,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import com.queryeer.backend.plugin.jdbc.MapperUtils;
+import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 
 public final class JdbcSchemaStore
@@ -33,10 +35,12 @@ public final class JdbcSchemaStore
     private static final long MAX_FILE_SIZE_BYTES = 100L * 1024L * 1024L;
     private static final Set<Path> CORRUPTED_FILES = ConcurrentHashMap.newKeySet();
     private final Path baseDir;
+    private final PayloadMapper mapper;
 
-    public JdbcSchemaStore(Path baseDir)
+    public JdbcSchemaStore(Path baseDir, PayloadMapper mapper)
     {
         this.baseDir = baseDir;
+        this.mapper = mapper;
     }
 
     public void persistSnapshot(String connectionId, JdbcSchemaCrawlScope scope, List<JdbcSchemaObject> roots)
@@ -566,7 +570,7 @@ public final class JdbcSchemaStore
 
     private void upsertObject(Connection connection, long runId, String parentObjectId, JdbcSchemaObject object, long[] ordinal, long[] edgeOrdinal) throws Exception
     {
-        String attributes = MapperUtils.MAPPER.writeValueAsString(object.attributes() == null ? Map.of()
+        String attributes = mapper.writeJson(object.attributes() == null ? Map.of()
                 : object.attributes());
         String upsertSql = """
                 merge into schema_object
@@ -662,7 +666,8 @@ public final class JdbcSchemaStore
                 String kind = resultSet.getString(2);
                 String attributesJson = resultSet.getString(3);
                 String parentObjectId = resultSet.getString(4);
-                Map<String, Object> attributes = parseAttributes(attributesJson);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> attributes = getIfNull(mapper.parseJson(attributesJson, Map.class), Map.of());
                 String columnName = stringValue(attributes.get("column"));
                 if (columnName == null
                         || parentObjectId == null)
@@ -994,7 +999,8 @@ public final class JdbcSchemaStore
         Map<String, JdbcSchemaObject> byId = new LinkedHashMap<>();
         for (Row row : rows)
         {
-            Map<String, Object> attrs = parseAttributes(row.attributesJson());
+            @SuppressWarnings("unchecked")
+            Map<String, Object> attrs = getIfNull(mapper.parseJson(row.attributesJson(), Map.class), Map.of());
             JdbcSchemaObject object = new JdbcSchemaObject(row.objectId(), row.name(), row.kind(), new ArrayList<>(), attrs);
             byId.put(row.objectId(), object);
             byParent.computeIfAbsent(row.parentObjectId(), _ -> new ArrayList<>())
@@ -1011,24 +1017,6 @@ public final class JdbcSchemaStore
             }
         }
         return byParent.getOrDefault(null, List.of());
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> parseAttributes(String json)
-    {
-        if (json == null
-                || json.isBlank())
-        {
-            return Map.of();
-        }
-        try
-        {
-            return MapperUtils.MAPPER.readValue(json, Map.class);
-        }
-        catch (Exception e)
-        {
-            return Map.of();
-        }
     }
 
     private static String sanitize(String value)

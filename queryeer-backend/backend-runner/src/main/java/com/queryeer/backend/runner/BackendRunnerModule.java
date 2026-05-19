@@ -21,6 +21,7 @@ import com.queryeer.backend.contract.runtime.RuntimePluginState;
 import com.queryeer.backend.contract.runtime.RuntimePluginStatus;
 import com.queryeer.backend.contract.runtime.RuntimeStatusResult;
 import com.queryeer.backend.core.BackendPlatformServices;
+import com.queryeer.backend.core.MapperUtils;
 import com.queryeer.backend.core.PluginRuntime;
 import com.queryeer.backend.core.PluginRuntimeStatus;
 import com.queryeer.backend.core.security.SecuritySession;

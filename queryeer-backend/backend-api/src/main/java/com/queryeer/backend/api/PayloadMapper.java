@@ -11,4 +11,8 @@ public interface PayloadMapper
     <T> T convert(Object fromValue, Class<T> toValueType);
 
     <T> List<T> convertToList(Object fromValue, Class<T> toValueType);
+
+    <T> T parseJson(String json, Class<T> toValueType);
+
+    String writeJson(Object value);
 }

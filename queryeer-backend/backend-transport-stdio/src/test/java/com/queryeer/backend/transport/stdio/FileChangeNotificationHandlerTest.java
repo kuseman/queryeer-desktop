@@ -12,12 +12,12 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.FileRegistry;
 import com.queryeer.backend.api.FileSession;
 import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
+import com.queryeer.backend.core.MapperUtils;
 
 class FileChangeNotificationHandlerTest
 {
@@ -28,7 +28,7 @@ class FileChangeNotificationHandlerTest
         when(fileRegistry.get("f-1")).thenReturn(Optional.empty());
         when(fileRegistry.change("f-1", 2L, "select 2")).thenReturn(Optional.empty());
 
-        FileChangeNotificationHandler handler = new FileChangeNotificationHandler(new EnvelopeCodec(new ObjectMapper()), fileRegistry);
+        FileChangeNotificationHandler handler = new FileChangeNotificationHandler(new EnvelopeCodec(MapperUtils.MAPPER), fileRegistry);
 
         BackendEnvelope envelope = new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, null, "file.change", Map.of("fileId", "f-1", "version", 2, "text", "select 2", "uri",
                 "file:///tmp/a.sql", "mimeType", "application/sql", "engineBinding", Map.of("engineId", "jdbc", "connectionId", "conn-1")), null, null);
@@ -46,7 +46,7 @@ class FileChangeNotificationHandlerTest
         FileSession existing = new FileSession("f-1", URI.create("file:///tmp/a.sql"), "application/sql", "payloadbuilder", "old-conn", 1L);
         when(fileRegistry.get("f-1")).thenReturn(Optional.of(existing));
 
-        FileChangeNotificationHandler handler = new FileChangeNotificationHandler(new EnvelopeCodec(new ObjectMapper()), fileRegistry);
+        FileChangeNotificationHandler handler = new FileChangeNotificationHandler(new EnvelopeCodec(MapperUtils.MAPPER), fileRegistry);
 
         BackendEnvelope envelope = new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, null, "file.change",
                 Map.of("fileId", "f-1", "version", 3, "text", "select 3", "engineBinding", Map.of("engineId", "jdbc", "connectionId", "conn-1")), null, null);
