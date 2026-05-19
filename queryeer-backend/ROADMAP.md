@@ -10,8 +10,8 @@ Large features in prio
     - Make sure all contributions have contracts and all API:s are located in a separate project
       that might end up on npmjs one day
 - [ ] Payloadbuilder sessions are not persisted between queries which means that temp tables won't persist
-- [ ] Wire Payloadbuilder HTTP catalog
-- [ ] Grid auto resize columns
+- [X] Wire Payloadbuilder HTTP catalog
+- [X] Grid auto resize columns
 - [ ] Grid lacks sorting / filtering
     This was something that AG grid had nativly but since ag grid was bad with many rows this had to go.
 - [X] Create a distribution flow. Github etc.

@@ -10,6 +10,7 @@ import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.plugin.payloadbuilder.elasticsearch.ElasticsearchCatalogProvider;
 import com.queryeer.backend.plugin.payloadbuilder.filesystem.FilesystemCatalogProvider;
+import com.queryeer.backend.plugin.payloadbuilder.http.HttpCatalogProvider;
 import com.queryeer.backend.plugin.payloadbuilder.jdbc.JdbcCatalogProvider;
 import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
 
@@ -39,7 +40,7 @@ final class PayloadbuilderCatalogProviderRegistry
     static PayloadbuilderCatalogProviderRegistry defaults(ConfigService configService, PayloadMapper payloadMapper, JdbcRuntimeService jdbcRuntimeServices)
     {
         return new PayloadbuilderCatalogProviderRegistry(
-                List.of(new JdbcCatalogProvider(jdbcRuntimeServices), new ElasticsearchCatalogProvider(configService, payloadMapper), new FilesystemCatalogProvider()));
+                List.of(new JdbcCatalogProvider(jdbcRuntimeServices), new ElasticsearchCatalogProvider(configService, payloadMapper), new FilesystemCatalogProvider(), new HttpCatalogProvider()));
     }
 
     Catalog createCatalog(String catalogId)

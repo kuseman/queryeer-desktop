@@ -529,7 +529,7 @@ Success result:
 {
   "result": {
     "actions": ["engine.capabilities", "payloadbuilder.es.listIndices"],
-    "catalogIds": ["jdbc", "elasticsearch", "filesystem"]
+    "catalogIds": ["jdbc", "elasticsearch", "filesystem", "http"]
   },
   "features": ["rows", "plan"],
   "artifacts": [
