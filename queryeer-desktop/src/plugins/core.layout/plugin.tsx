@@ -1,6 +1,11 @@
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import { confirmCloseDirtyFile } from "../../renderer/shell/close-file-guard";
 import { fileUriToPath } from "../../contracts/files/Resolvers";
+import { getCoreSettingsService } from "../core.settings/service";
+import { closeAboutDialog, isAboutDialogOpen } from "../core.about/about-service";
+import { getQuickCommandService } from "../core.quickcommand/service";
+import { resolveActiveMessageDialog } from "../core.dialog/message-dialog-service";
+import { resolveActiveInputDialog } from "../core.dialog/input-dialog-service";
 
 export const coreLayoutPlugin: Plugin = {
   manifest: {
@@ -24,10 +29,22 @@ export const coreLayoutPlugin: Plugin = {
       id: "core.closeActive",
       title: "Close Active",
       handler: async () => {
-        const closedValuePreview = context.dialog.closeActiveValuePreview?.() ?? false;
-        if (closedValuePreview) {
+        // Close the topmost open overlay/dialog
+        getQuickCommandService()?.close();
+        if (getCoreSettingsService()?.isModalOpen()) {
+          getCoreSettingsService()?.closeModal();
           return;
         }
+        if (isAboutDialogOpen()) {
+          closeAboutDialog();
+          return;
+        }
+        if (context.dialog.closeActiveValuePreview?.()) {
+          return;
+        }
+        resolveActiveMessageDialog({ action: "" });
+        resolveActiveInputDialog({ canceled: true, value: undefined });
+
         const activeFileId = context.fileMediator.getActiveFileId();
         if (!activeFileId) {
           return;

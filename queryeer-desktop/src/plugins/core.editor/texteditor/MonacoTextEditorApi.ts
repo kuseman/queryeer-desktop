@@ -441,6 +441,51 @@ export class MonacoTextEditorApi extends TextEditorApi {
     this.editor.trigger("command", "editor.action.selectAll", null);
   }
 
+  copyLineUp(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.copyLinesUpAction")?.run();
+  }
+
+  copyLineDown(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.copyLinesDownAction")?.run();
+  }
+
+  moveLineUp(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.moveLinesUpAction")?.run();
+  }
+
+  moveLineDown(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.moveLinesDownAction")?.run();
+  }
+
+  joinLines(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.joinLines")?.run();
+  }
+
+  sortLinesAscending(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.sortLinesAscending")?.run();
+  }
+
+  sortLinesDescending(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.sortLinesDescending")?.run();
+  }
+
+  indentLines(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.indentLines")?.run();
+  }
+
+  outdentLines(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.outdentLines")?.run();
+  }
+
   pushUndoStop(): boolean {
     if (!this.editor) return false;
     return this.editor.pushUndoStop();

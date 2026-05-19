@@ -77,6 +77,16 @@ export abstract class TextEditorApi {
   abstract paste(): void;
   abstract selectAll(): void;
 
+  abstract copyLineUp(): void;
+  abstract copyLineDown(): void;
+  abstract moveLineUp(): void;
+  abstract moveLineDown(): void;
+  abstract joinLines(): void;
+  abstract sortLinesAscending(): void;
+  abstract sortLinesDescending(): void;
+  abstract indentLines(): void;
+  abstract outdentLines(): void;
+
   abstract pushUndoStop(): boolean;
   abstract popUndoStop(): boolean;
 

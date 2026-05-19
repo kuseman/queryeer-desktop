@@ -35,6 +35,12 @@ function hasModifierKeybinding(key: string): boolean {
   return /(^|\+)(Ctrl|Cmd|Meta|Alt|Option|Shift)(\+|$)/i.test(key);
 }
 
+function isInEditor(): boolean {
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  if (!active) return false;
+  return active.closest("[data-context='editor'], .shell-editor-pane, .shell-editor-content") !== null;
+}
+
 function shouldSkipForInput(when: string | undefined, contextInputFocus: boolean, key: string): boolean {
   if (!contextInputFocus) {
     return false;
@@ -104,6 +110,9 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
     }
 
     event.preventDefault();
+    if (isInEditor()) {
+      event.stopPropagation();
+    }
     void options.executeCommand(matched.commandId);
   };
 
