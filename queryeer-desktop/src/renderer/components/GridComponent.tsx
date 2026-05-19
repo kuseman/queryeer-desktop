@@ -330,6 +330,7 @@ export function GridComponent({
   const previousSelectionRef = useRef<SelectionModel | null>(initialSelection.selection);
   const anchorRef = useRef<SelectionAnchor | null>(initialSelection.anchor);
   const [rowCount, setRowCount] = useState(() => getRowCount());
+  const rowCountRef = useRef(rowCount);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => initialGridState?.columnWidths ?? {});
   const gridStateRef = useRef<GridComponentState>(initialGridState ?? { columnWidths: {} });
   const visibleRegionRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
@@ -349,6 +350,7 @@ export function GridComponent({
   const isSortingGuardRef = useRef(false);
   const sortTimeoutRef = useRef<number | null>(null);
   selectionRef.current = selection;
+  rowCountRef.current = rowCount;
 
   const getDataIndex = useCallback((visualColIndex: number): number => {
     if (!columnOrder || visualColIndex < 0 || visualColIndex >= columnOrder.length) return visualColIndex;
@@ -727,10 +729,12 @@ export function GridComponent({
   }, [applySelection, collectSelectionSnapshot, columns.length, getDataIndex, onContextMenuSelection]);
 
   useEffect(() => {
-    const applyRowsChanged = () => {
+    const applyRowsChanged = (resetSort: boolean, force = false) => {
       pendingRowRefreshRef.current = null;
       const nextRowCount = getRowCount();
-      if (sortedRowsRef.current !== null) {
+      if (!force && nextRowCount === rowCountRef.current) return;
+      rowCountRef.current = nextRowCount;
+      if (resetSort && sortedRowsRef.current !== null) {
         sortedRowsRef.current = null;
         setSortColumnKey(null);
         setSortDirection(null);
@@ -752,12 +756,14 @@ export function GridComponent({
       }
     };
 
-    return subscribeRowsChanged(() => {
+    const unsubscribe = subscribeRowsChanged(() => {
       if (pendingRowRefreshRef.current !== null) {
         return;
       }
-      pendingRowRefreshRef.current = window.setTimeout(applyRowsChanged, ROW_REFRESH_THROTTLE_MS);
+      pendingRowRefreshRef.current = window.setTimeout(() => applyRowsChanged(true, true), ROW_REFRESH_THROTTLE_MS);
     });
+    applyRowsChanged(false);
+    return unsubscribe;
   }, [columns.length, getRowCount, refreshVisibleRows, subscribeRowsChanged]);
 
   useEffect(() => {

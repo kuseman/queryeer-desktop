@@ -175,6 +175,34 @@ describe("GridComponent", () => {
     expect(latestDataEditorProps?.rows).toBe(2);
   });
 
+  it("syncs the initial row count when the first row arrives before subscription", async () => {
+    let rowCount = 0;
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "id", title: "Id", type: "int" }]}
+          getRowCount={() => rowCount}
+          getRowsRange={(start, end) => [[1]].slice(start, end)}
+          getRow={(index) => [[1]][index]}
+          subscribeRowsChanged={() => {
+            rowCount = 1;
+            return () => undefined;
+          }}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    expect(latestDataEditorProps?.rows).toBe(1);
+    expect(latestDataEditorProps?.getCellContent([0, 0]).displayData).toBe("1");
+  });
+
   it("coalesces frequent streaming row notifications", async () => {
     vi.useFakeTimers();
     let rowCount = 1;
