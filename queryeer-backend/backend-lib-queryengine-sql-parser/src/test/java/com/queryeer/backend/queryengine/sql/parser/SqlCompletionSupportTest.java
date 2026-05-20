@@ -134,7 +134,7 @@ class SqlCompletionSupportTest
         String sql = "INSERT INTO tableB (";
         TSTree tree = parser.parseString(null, sql);
         Map<String, String> aliases = SqlCompletionSupport.extractAliases(tree, sql, 1, 21);
-        assertEquals(Map.of("tableB", "tableB"), aliases);
+        assertEquals(Map.of("tableb", "tableB"), aliases);
     }
 
     @Test

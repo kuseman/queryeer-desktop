@@ -79,13 +79,13 @@ class SqlRelationExtractorTest
     @Test
     void extractsInsertTargetForColumnList()
     {
-        assertEquals(Map.of("tableB", "tableB"), SqlRelationExtractor.extractAliases("INSERT INTO tableB (", 1, 21));
+        assertEquals(Map.of("tableb", "tableB"), SqlRelationExtractor.extractAliases("INSERT INTO tableB (", 1, 21));
     }
 
     @Test
     void extractsQualifiedInsertTargetForColumnList()
     {
-        assertEquals(Map.of("public.tableB", "public.tableB"), SqlRelationExtractor.extractAliases("INSERT INTO public.tableB (na", 1, 30));
+        assertEquals(Map.of("public.tableb", "public.tableB"), SqlRelationExtractor.extractAliases("INSERT INTO public.tableB (na", 1, 30));
     }
 
     @Test

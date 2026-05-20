@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.queryeer.backend.plugin.jdbc.DefaultJdbcConnections;
+import com.queryeer.backend.plugin.jdbc.JdbcUtils;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 
@@ -32,7 +33,7 @@ public final class JdbcSchemaNavigator
 
     public List<TableInfo> tableNamesForCompletion(String connectionId, String selectedDatabase)
     {
-        String normalizedSelectedDatabase = normalizeIdentifier(selectedDatabase);
+        String normalizedSelectedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
         List<JdbcSchemaObject> snapshot = loadSnapshotForLookup(connectionId, selectedDatabase, normalizedSelectedDatabase);
         List<TableInfo> tableInfos = new ArrayList<>();
         collectTableNames(snapshot, new NodePath(null, null), normalizedSelectedDatabase, tableInfos);
@@ -58,7 +59,7 @@ public final class JdbcSchemaNavigator
         {
             return result;
         }
-        String normalizedSelectedDatabase = normalizeIdentifier(selectedDatabase);
+        String normalizedSelectedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
         List<JdbcSchemaObject> snapshot = loadSnapshotForLookup(connectionId, selectedDatabase, normalizedSelectedDatabase);
         for (String tableName : tableNames)
         {
@@ -70,7 +71,7 @@ public final class JdbcSchemaNavigator
     /** Walks the schema tree to find a table node by name and collect its column names. */
     private static List<String> collectColumnNames(List<JdbcSchemaObject> nodes, String lookupTable)
     {
-        String normalizedLookup = normalizeIdentifier(lookupTable);
+        String normalizedLookup = JdbcUtils.normalizeIdentifier(lookupTable);
         if (normalizedLookup == null)
         {
             return List.of();
@@ -80,8 +81,8 @@ public final class JdbcSchemaNavigator
                 : parts[0];
         String lookupSchema = parts.length == 2 ? parts[0]
                 : null;
-        String normalizedLookupName = normalizeIdentifier(lookupName);
-        String normalizedLookupSchema = lookupSchema != null ? normalizeIdentifier(lookupSchema)
+        String normalizedLookupName = JdbcUtils.normalizeIdentifier(lookupName);
+        String normalizedLookupSchema = lookupSchema != null ? JdbcUtils.normalizeIdentifier(lookupSchema)
                 : null;
         List<String> result = new ArrayList<>();
         collectColumnNamesRecursive(nodes, new NodePath(null, null), normalizedLookupName, normalizedLookupSchema, result);
@@ -119,14 +120,16 @@ public final class JdbcSchemaNavigator
             {
                 String name = trimToNull(node.name());
                 if (name != null
-                        && normalizeIdentifier(name).equals(normalizedLookupTable))
+                        && JdbcUtils.normalizeIdentifier(name)
+                                .equals(normalizedLookupTable))
                 {
                     // If a schema qualifier was specified, check it
                     if (normalizedLookupSchema != null)
                     {
                         String effectiveSchema = effectiveSchema(nextPath.schema(), node);
                         if (effectiveSchema == null
-                                || !normalizeIdentifier(effectiveSchema).equals(normalizedLookupSchema))
+                                || !JdbcUtils.normalizeIdentifier(effectiveSchema)
+                                        .equals(normalizedLookupSchema))
                         {
                             // Schema mismatch — continue searching
                             List<JdbcSchemaObject> children = node.children();
@@ -177,7 +180,7 @@ public final class JdbcSchemaNavigator
         {
             return null;
         }
-        String normalizedDatabase = normalizeIdentifier(selectedDatabase);
+        String normalizedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
         // Try DEEP cache first
         List<JdbcSchemaObject> snapshot = loadCachedSnapshot(connectionId);
         Map<String, Object> result = findSymbolInSchema(snapshot, rawToken, normalizedDatabase);
@@ -257,9 +260,9 @@ public final class JdbcSchemaNavigator
     private static Map<String, Object> findSymbolInSchema(List<JdbcSchemaObject> snapshot, String rawToken, String normalizedDatabase)
     {
         String[] parts = rawToken.split("\\.", 2);
-        String lookupTable = normalizeIdentifier(parts.length == 2 ? parts[1]
+        String lookupTable = JdbcUtils.normalizeIdentifier(parts.length == 2 ? parts[1]
                 : parts[0]);
-        String lookupSchema = parts.length == 2 ? normalizeIdentifier(parts[0])
+        String lookupSchema = parts.length == 2 ? JdbcUtils.normalizeIdentifier(parts[0])
                 : null;
         if (isBlank(lookupTable))
         {
@@ -298,7 +301,7 @@ public final class JdbcSchemaNavigator
             {
                 if (filterDatabase != null
                         && nextPath.database() != null
-                        && !filterDatabase.equals(normalizeIdentifier(nextPath.database())))
+                        && !filterDatabase.equals(JdbcUtils.normalizeIdentifier(nextPath.database())))
                 {
                     continue;
                 }
@@ -306,11 +309,12 @@ public final class JdbcSchemaNavigator
                 String effectiveSchema = effectiveSchema(nextPath.schema(), node);
                 String tableName = trimToNull(node.name());
                 if (tableName != null
-                        && normalizeIdentifier(tableName).equals(lookupTable))
+                        && JdbcUtils.normalizeIdentifier(tableName)
+                                .equals(lookupTable))
                 {
                     if (filterSchema != null
                             && effectiveSchema != null
-                            && !filterSchema.equals(normalizeIdentifier(effectiveSchema)))
+                            && !filterSchema.equals(JdbcUtils.normalizeIdentifier(effectiveSchema)))
                     {
                         continue;
                     }
@@ -358,7 +362,7 @@ public final class JdbcSchemaNavigator
             if ("table".equalsIgnoreCase(kind)
                     || "view".equalsIgnoreCase(kind))
             {
-                String normalizedNodeDatabase = normalizeIdentifier(nextPath.database());
+                String normalizedNodeDatabase = JdbcUtils.normalizeIdentifier(nextPath.database());
                 if (normalizedSelectedDatabase != null
                         && normalizedNodeDatabase != null
                         && !normalizedSelectedDatabase.equals(normalizedNodeDatabase))
@@ -397,36 +401,6 @@ public final class JdbcSchemaNavigator
             return trimToNull(attrSchema);
         }
         return null;
-    }
-
-    private static String normalizeIdentifier(String value)
-    {
-        String trimmed = trimToNull(value);
-        if (trimmed == null)
-        {
-            return null;
-        }
-        String unwrapped = trimmed;
-        if (unwrapped.startsWith("[")
-                && unwrapped.endsWith("]")
-                && unwrapped.length() > 1)
-        {
-            unwrapped = unwrapped.substring(1, unwrapped.length() - 1);
-        }
-        if ((unwrapped.startsWith("\"")
-                && unwrapped.endsWith("\""))
-                || (unwrapped.startsWith("`")
-                        && unwrapped.endsWith("`")
-                        || (unwrapped.startsWith("'")
-                                && unwrapped.endsWith("'"))))
-        {
-            if (unwrapped.length() > 1)
-            {
-                unwrapped = unwrapped.substring(1, unwrapped.length() - 1);
-            }
-        }
-        return unwrapped.trim()
-                .toLowerCase();
     }
 
     private record NodePath(String database, String schema)

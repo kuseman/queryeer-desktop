@@ -150,7 +150,7 @@ final class JdbcSqlSemanticHandler
             int dotIndex = prefix.lastIndexOf('.');
             String partialColumn = prefix.substring(dotIndex + 1);
             String qualifier = prefix.substring(0, dotIndex);
-            String resolvedTable = aliases.getOrDefault(qualifier, qualifier);
+            String resolvedTable = aliases.getOrDefault(qualifier.toLowerCase(), qualifier);
             tableNames = List.of(resolvedTable);
             Map<String, List<String>> allTableColumns = schemaNavigator.columnNamesForTables(connectionId, tableNames, selectedDatabase);
             for (String col : allTableColumns.getOrDefault(resolvedTable, List.of()))
@@ -182,7 +182,7 @@ final class JdbcSqlSemanticHandler
                 for (String col : entry.getValue())
                 {
                     String displayPrefix = (alias != null
-                            && !alias.equals(tableName)) ? alias
+                            && !alias.equalsIgnoreCase(tableName)) ? alias
                                     : null;
                     String prefixed = displayPrefix != null ? displayPrefix + "." + col
                             : col;
@@ -206,8 +206,7 @@ final class JdbcSqlSemanticHandler
 
     // -- Semantic hover provider --
 
-    private Map<String, Object> semanticHover(SqlHoverSupport.SqlHoverPayload payload, String fileId, SqlHoverSupport.SqlHoverCursor cursor, String token, SqlParseContext context,
-            Map<String, String> aliases)
+    Map<String, Object> semanticHover(SqlHoverSupport.SqlHoverPayload payload, String fileId, SqlHoverSupport.SqlHoverCursor cursor, String token, SqlParseContext context, Map<String, String> aliases)
     {
         if (context == SqlParseContext.OTHER
                 || token == null)
@@ -237,7 +236,7 @@ final class JdbcSqlSemanticHandler
 
         if (context == SqlParseContext.TABLE_REFERENCE)
         {
-            String tableMarkdown = buildTableHoverMarkdown(snapshot, token);
+            String tableMarkdown = buildTableHoverMarkdown(snapshot, token, selectedDatabase);
             if (tableMarkdown == null)
             {
                 return null;
@@ -246,7 +245,7 @@ final class JdbcSqlSemanticHandler
         }
         else if (context == SqlParseContext.COLUMN_REFERENCE)
         {
-            String columnMarkdown = buildColumnHoverMarkdown(snapshot, token, aliases);
+            String columnMarkdown = buildColumnHoverMarkdown(snapshot, token, aliases, selectedDatabase);
             if (columnMarkdown == null)
             {
                 return null;
@@ -265,7 +264,7 @@ final class JdbcSqlSemanticHandler
 
     // -- Markdown builders --
 
-    private static String buildTableHoverMarkdown(List<JdbcSchemaObject> snapshot, String token)
+    private static String buildTableHoverMarkdown(List<JdbcSchemaObject> snapshot, String token, String selectedDatabase)
     {
         String[] parts = token.split("\\.", 2);
         String lookupName = parts.length == 2 ? parts[1]
@@ -273,7 +272,7 @@ final class JdbcSqlSemanticHandler
         String lookupSchema = parts.length == 2 ? parts[0]
                 : null;
 
-        JdbcSchemaObject tableNode = findTableInSnapshot(snapshot, lookupName, lookupSchema);
+        JdbcSchemaObject tableNode = findTableInSnapshot(snapshot, lookupName, lookupSchema, selectedDatabase);
         if (tableNode == null)
         {
             return null;
@@ -310,7 +309,7 @@ final class JdbcSqlSemanticHandler
         return md.toString();
     }
 
-    private static String buildColumnHoverMarkdown(List<JdbcSchemaObject> snapshot, String token, Map<String, String> aliases)
+    private static String buildColumnHoverMarkdown(List<JdbcSchemaObject> snapshot, String token, Map<String, String> aliases, String selectedDatabase)
     {
         int dotIndex = token.lastIndexOf('.');
         String colName;
@@ -337,18 +336,18 @@ final class JdbcSqlSemanticHandler
 
         if (qualifier != null)
         {
-            String tableName = aliases.getOrDefault(qualifier, qualifier);
+            String tableName = aliases.getOrDefault(qualifier.toLowerCase(), qualifier);
             String[] nameParts = tableName.split("\\.", 2);
             String lookupName = nameParts.length == 2 ? nameParts[1]
                     : nameParts[0];
             String lookupSchema = nameParts.length == 2 ? nameParts[0]
                     : null;
-            tableNode = findTableInSnapshot(snapshot, lookupName, lookupSchema);
+            tableNode = findTableInSnapshot(snapshot, lookupName, lookupSchema, selectedDatabase);
             resolvedTableName = tableName;
         }
         else
         {
-            for (JdbcSchemaObject candidateTable : flattenTables(snapshot))
+            for (JdbcSchemaObject candidateTable : flattenTablesInDatabase(snapshot, selectedDatabase))
             {
                 if (candidateTable.children() == null)
                 {
@@ -449,14 +448,15 @@ final class JdbcSqlSemanticHandler
 
     // -- Snapshot tree helpers --
 
-    private static List<JdbcSchemaObject> flattenTables(List<JdbcSchemaObject> nodes)
+    private static List<JdbcSchemaObject> flattenTablesInDatabase(List<JdbcSchemaObject> nodes, String selectedDatabase)
     {
         List<JdbcSchemaObject> tables = new ArrayList<>();
-        flattenTablesRecursive(nodes, tables);
+        String normalizedSelectedDb = JdbcUtils.normalizeIdentifier(selectedDatabase);
+        flattenTablesRecursive(nodes, new NodePath(null, null), normalizedSelectedDb, tables);
         return tables;
     }
 
-    private static void flattenTablesRecursive(List<JdbcSchemaObject> nodes, List<JdbcSchemaObject> target)
+    private static void flattenTablesRecursive(List<JdbcSchemaObject> nodes, NodePath path, String normalizedSelectedDb, List<JdbcSchemaObject> target)
     {
         for (JdbcSchemaObject node : nodes)
         {
@@ -465,27 +465,60 @@ final class JdbcSqlSemanticHandler
             {
                 continue;
             }
+
+            NodePath nextPath = path;
+            if (kind.endsWith("_container")
+                    || kind.endsWith("_folder"))
+            {
+                // fall through to children recursion
+            }
+            else if ("database".equalsIgnoreCase(kind))
+            {
+                nextPath = new NodePath(node.name(), path.schema());
+            }
+            else if ("schema".equalsIgnoreCase(kind))
+            {
+                nextPath = new NodePath(path.database(), node.name());
+            }
+
             if ("table".equalsIgnoreCase(kind)
                     || "view".equalsIgnoreCase(kind))
             {
+                if (normalizedSelectedDb != null
+                        && nextPath.database() != null)
+                {
+                    String normalizedNodeDb = JdbcUtils.normalizeIdentifier(nextPath.database());
+                    if (!normalizedSelectedDb.equals(normalizedNodeDb))
+                    {
+                        List<JdbcSchemaObject> children = node.children();
+                        if (children != null
+                                && !children.isEmpty())
+                        {
+                            flattenTablesRecursive(children, nextPath, normalizedSelectedDb, target);
+                        }
+                        continue;
+                    }
+                }
                 target.add(node);
             }
+
             List<JdbcSchemaObject> children = node.children();
             if (children != null
                     && !children.isEmpty())
             {
-                flattenTablesRecursive(children, target);
+                flattenTablesRecursive(children, nextPath, normalizedSelectedDb, target);
             }
         }
     }
 
-    private static JdbcSchemaObject findTableInSnapshot(List<JdbcSchemaObject> nodes, String lookupName, String lookupSchema)
+    private static JdbcSchemaObject findTableInSnapshot(List<JdbcSchemaObject> nodes, String lookupName, String lookupSchema, String selectedDatabase)
     {
-        return findTableInSnapshotRecursive(nodes, new NodePath(null, null), lookupName, lookupSchema);
+        return findTableInSnapshotRecursive(nodes, new NodePath(null, null), lookupName, lookupSchema, selectedDatabase);
     }
 
-    private static JdbcSchemaObject findTableInSnapshotRecursive(List<JdbcSchemaObject> nodes, NodePath path, String lookupName, String lookupSchema)
+    private static JdbcSchemaObject findTableInSnapshotRecursive(List<JdbcSchemaObject> nodes, NodePath path, String lookupName, String lookupSchema, String selectedDatabase)
     {
+        String normalizedSelectedDb = JdbcUtils.normalizeIdentifier(selectedDatabase);
         for (JdbcSchemaObject node : nodes)
         {
             String kind = trimToNull(node.kind());
@@ -516,6 +549,26 @@ final class JdbcSqlSemanticHandler
                         && node.name()
                                 .equalsIgnoreCase(lookupName))
                 {
+                    if (normalizedSelectedDb != null
+                            && nextPath.database() != null)
+                    {
+                        String normalizedNodeDb = JdbcUtils.normalizeIdentifier(nextPath.database());
+                        if (!normalizedSelectedDb.equals(normalizedNodeDb))
+                        {
+                            List<JdbcSchemaObject> children = node.children();
+                            if (children != null
+                                    && !children.isEmpty())
+                            {
+                                JdbcSchemaObject found = findTableInSnapshotRecursive(children, nextPath, lookupName, lookupSchema, selectedDatabase);
+                                if (found != null)
+                                {
+                                    return found;
+                                }
+                            }
+                            continue;
+                        }
+                    }
+
                     if (lookupSchema != null
                             && nextPath.schema() != null
                             && !nextPath.schema()
@@ -525,7 +578,7 @@ final class JdbcSqlSemanticHandler
                         if (children != null
                                 && !children.isEmpty())
                         {
-                            JdbcSchemaObject found = findTableInSnapshotRecursive(children, nextPath, lookupName, lookupSchema);
+                            JdbcSchemaObject found = findTableInSnapshotRecursive(children, nextPath, lookupName, lookupSchema, selectedDatabase);
                             if (found != null)
                             {
                                 return found;
@@ -541,7 +594,7 @@ final class JdbcSqlSemanticHandler
             if (children != null
                     && !children.isEmpty())
             {
-                JdbcSchemaObject found = findTableInSnapshotRecursive(children, nextPath, lookupName, lookupSchema);
+                JdbcSchemaObject found = findTableInSnapshotRecursive(children, nextPath, lookupName, lookupSchema, selectedDatabase);
                 if (found != null)
                 {
                     return found;
