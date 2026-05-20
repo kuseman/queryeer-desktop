@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import type { ShellAppProps } from "./shell/ShellApp";
 import { ShellApp } from "./shell/ShellApp";
 import { bootstrapShell } from "./shell/bootstrap";
+import { installGlobalExternalLinkHandler } from "./shell/external-link-handler";
 import "@glideapps/glide-data-grid/dist/index.css";
 import "./styles/base.css";
 
@@ -21,6 +22,8 @@ function App({
       setExtensions(bootstrap.getExtensions());
     });
   }, [bootstrap]);
+
+  useEffect(() => installGlobalExternalLinkHandler(), []);
 
   return <ShellApp {...shellProps} extensions={extensions} />;
 }

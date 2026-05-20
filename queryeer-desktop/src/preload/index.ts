@@ -28,6 +28,12 @@ import type {
   SecurityMasterPasswordStorage,
   SecurityStatus
 } from "../contracts/security/Security.js";
+import type {
+  AssistantChatRequest,
+  AssistantChatResponse,
+  AssistantListModelsRequest,
+  AssistantListModelsResponse
+} from "../contracts/assistant/Assistant.js";
 
 type DialogShowMessageOptions = {
   title: string;
@@ -114,6 +120,8 @@ type AppShellApi = {
     newMasterPassword: string;
     masterPasswordStorage: SecurityMasterPasswordStorage;
   }) => Promise<{ accepted: boolean; reason?: string }>;
+  listAssistantModels: (params: AssistantListModelsRequest) => Promise<AssistantListModelsResponse>;
+  completeAssistantChat: (params: AssistantChatRequest) => Promise<AssistantChatResponse>;
   saveWorkspaceBackup: (params: {
     fileId: string;
     text: string;
@@ -315,6 +323,12 @@ const appShellApi: AppShellApi = {
   },
   rotateSecurityMasterPassword: async (params) => {
     return ipcRenderer.invoke("security:rotate-master-password", params);
+  },
+  listAssistantModels: async (params) => {
+    return ipcRenderer.invoke("assistant:list-models", params);
+  },
+  completeAssistantChat: async (params) => {
+    return ipcRenderer.invoke("assistant:chat-completion", params);
   },
   saveWorkspaceBackup: async (params) => {
     return ipcRenderer.invoke("workspace:save-backup", params);

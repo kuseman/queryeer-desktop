@@ -28,6 +28,7 @@ import { defaultSettingsDirPath, SettingsStore } from "./settings/settings-store
 import { defaultRecentFilesPath, RecentFilesStore } from "./recent-files/recent-files-store.js";
 import { SecurityService } from "./security/security-service.js";
 import { defaultSecurityDirPath, VaultStore } from "./security/vault-store.js";
+import { AssistantHttpService } from "./assistant/assistant-http-service.js";
 import { createBeforeQuitHandler } from "./app-shutdown.js";
 import { wireExpressionEvaluatorIpc } from "./expressions/expression-evaluator.js";
 
@@ -338,6 +339,10 @@ app.whenReady().then(() => {
     void securityService?.invalidateBackendSession();
   });
   securityService.wireIpc();
+  const assistantHttpService = new AssistantHttpService({
+    resolveSecret: (secretRef) => securityService!.resolveSecret(secretRef)
+  });
+  assistantHttpService.wireIpc();
   ipcMain.handle("plugins:get-frontend-targets", async () => discoverExternalFrontendPlugins());
   ipcMain.handle("file:read", async (_event, { uri }: { uri: string }) => {
     try {

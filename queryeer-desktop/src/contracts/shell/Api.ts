@@ -13,6 +13,12 @@ import type {
   SecurityMasterPasswordStorage,
   SecurityStatus
 } from "../security/Security.js";
+import type {
+  AssistantChatRequest,
+  AssistantChatResponse,
+  AssistantListModelsRequest,
+  AssistantListModelsResponse
+} from "../assistant/Assistant.js";
 
 type RecentFileEntry = {
   uri: string;
@@ -74,6 +80,8 @@ export interface ShellApi {
     newMasterPassword: string;
     masterPasswordStorage: SecurityMasterPasswordStorage;
   }) => Promise<{ accepted: boolean; reason?: string }>;
+  listAssistantModels: (params: AssistantListModelsRequest) => Promise<AssistantListModelsResponse>;
+  completeAssistantChat: (params: AssistantChatRequest) => Promise<AssistantChatResponse>;
   saveWorkspaceBackup: (params: { fileId: string; text: string }) => Promise<{ backupUri: string }>;
   purgeWorkspaceBackups: (params: { fileId: string }) => Promise<{ purged: number }>;
   listWorkspaceBackups: (params: { fileId: string }) => Promise<{ backupPaths: string[] }>;
