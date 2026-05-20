@@ -46,7 +46,7 @@ class PayloadbuilderEngineStateSupportTest
         PayloadbuilderEngineStateSupport.applyToSession(session, state);
         session.setCatalogProperty("jdbc1", "database", se.kuseman.payloadbuilder.api.execution.ValueVector.literalAny(1, "reporting"));
 
-        Object patch = PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, state);
+        Object patch = PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, state, Map.of());
 
         Assertions.assertEquals(Map.of("payloadbuilder", Map.of("catalogs", Map.of("jdbc1", Map.of("catalogId", "Jdbc", "properties", Map.of("database", "reporting"))))), patch);
     }
@@ -62,7 +62,7 @@ class PayloadbuilderEngineStateSupportTest
         PayloadbuilderEngineStateSupport.applyToSession(session, state);
         session.setDefaultCatalogAlias("jdbc2");
 
-        Object patch = PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, state);
+        Object patch = PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, state, Map.of());
 
         Assertions.assertEquals(Map.of("payloadbuilder", Map.of("catalogs", Map.of(), "defaultCatalogAlias", "jdbc2")), patch);
     }
@@ -80,7 +80,7 @@ class PayloadbuilderEngineStateSupportTest
 
         PayloadbuilderEngineStateSupport.applyToSession(session, state);
 
-        Assertions.assertNull(PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, state));
+        Assertions.assertNull(PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, state, Map.of()));
     }
 
     @Test

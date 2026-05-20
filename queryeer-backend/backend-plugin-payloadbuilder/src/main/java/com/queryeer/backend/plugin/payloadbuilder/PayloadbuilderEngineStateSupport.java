@@ -7,10 +7,6 @@ import java.util.Map;
 import java.util.Objects;
 
 import se.kuseman.payloadbuilder.api.catalog.ResolvedType;
-import se.kuseman.payloadbuilder.api.execution.Decimal;
-import se.kuseman.payloadbuilder.api.execution.EpochDateTime;
-import se.kuseman.payloadbuilder.api.execution.EpochDateTimeOffset;
-import se.kuseman.payloadbuilder.api.execution.UTF8String;
 import se.kuseman.payloadbuilder.api.execution.ValueVector;
 import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
@@ -119,25 +115,22 @@ final class PayloadbuilderEngineStateSupport
         }
     }
 
-    static Object buildEngineStatePatch(QuerySession session, PayloadbuilderCatalogState input)
+    static Object buildEngineStatePatch(QuerySession session, PayloadbuilderCatalogState input, Map<String, PayloadbuilderCatalogProvider> providersByAlias)
     {
         Map<String, Object> catalogsPatch = new LinkedHashMap<>();
         boolean defaultAliasSwitched = !Objects.equals(input.defaultCatalogAlias, session.getDefaultCatalogAlias());
         for (PayloadbuilderCatalogState.Instance instance : input.instancesByAlias()
                 .values())
         {
-            Map<String, Object> changedProperties = new LinkedHashMap<>();
-            for (Map.Entry<String, Object> property : instance.properties()
-                    .entrySet())
+            PayloadbuilderCatalogProvider provider = providersByAlias.get(instance.alias());
+            Map<String, Object> changedProperties;
+            if (provider != null)
             {
-                ValueVector current = session.getCatalogProperty(instance.alias(), property.getKey());
-                Object currentValue = current == null
-                        || current.size() == 0 ? null
-                                : unwrap(current.valueAsObject(0));
-                if (!Objects.equals(property.getValue(), currentValue))
-                {
-                    changedProperties.put(property.getKey(), currentValue);
-                }
+                changedProperties = provider.buildCatalogPatch(session, instance.alias(), instance.properties());
+            }
+            else
+            {
+                changedProperties = PayloadbuilderCatalogProvider.compareInputProperties(session, instance.alias(), instance.properties());
             }
 
             if (!changedProperties.isEmpty())
@@ -164,28 +157,6 @@ final class PayloadbuilderEngineStateSupport
         Map<String, Object> root = new LinkedHashMap<>();
         root.put(KEY_PAYLOADBUILDER, payloadbuilderPatch);
         return root;
-    }
-
-    /** Unwrap PLB internal types to avoid serialization issues. */
-    private static Object unwrap(Object object)
-    {
-        if (object instanceof UTF8String s)
-        {
-            return s.toString();
-        }
-        else if (object instanceof Decimal d)
-        {
-            return d.asBigDecimal();
-        }
-        else if (object instanceof EpochDateTime d)
-        {
-            return d.getLocalDateTime();
-        }
-        else if (object instanceof EpochDateTimeOffset d)
-        {
-            return d.getZonedDateTime();
-        }
-        return object;
     }
 
     record PayloadbuilderCatalogState(String defaultCatalogAlias, String selectedEnvironmentId, Map<String, Instance> instancesByAlias)

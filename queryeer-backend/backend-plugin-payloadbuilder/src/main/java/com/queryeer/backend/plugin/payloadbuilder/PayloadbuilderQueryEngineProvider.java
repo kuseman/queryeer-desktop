@@ -5,6 +5,7 @@ import static java.util.Objects.requireNonNull;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -168,7 +169,8 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
                 rowCount += rowCounter.value;
             }
             outputWriter.flushMessages(publisher);
-            Object engineStatePatch = PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, catalogState);
+            Map<String, PayloadbuilderCatalogProvider> providersByAlias = buildProvidersByAlias(catalogState);
+            Object engineStatePatch = PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, catalogState, providersByAlias);
             long total = System.currentTimeMillis() - startMs;
             publisher.completed(total, rowCount, engineStatePatch);
         }
@@ -286,6 +288,21 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
                 provider.injectProperties(querySession, instance.alias(), instance.properties());
             }
         }
+    }
+
+    private Map<String, PayloadbuilderCatalogProvider> buildProvidersByAlias(PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
+    {
+        Map<String, PayloadbuilderCatalogProvider> result = new LinkedHashMap<>();
+        for (PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState.Instance instance : state.instancesByAlias()
+                .values())
+        {
+            PayloadbuilderCatalogProvider provider = catalogProviders.getCatalogProvider(instance.catalogId());
+            if (provider != null)
+            {
+                result.put(instance.alias(), provider);
+            }
+        }
+        return result;
     }
 
     private Map<String, Object> resolveEnvironmentVariables(String selectedEnvironmentId)
