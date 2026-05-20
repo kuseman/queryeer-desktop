@@ -227,6 +227,21 @@ function createContext(args: {
       getActiveEditor: vi.fn(() => null),
       onActiveEditorChanged: vi.fn(() => ({ dispose: vi.fn() }))
     },
-    about: { registerChangelog: vi.fn() }
+    about: { registerChangelog: vi.fn() },
+    notifications: createNotificationMock()
+  };
+}
+
+function createNotificationMock() {
+  return {
+    notify: vi.fn(),
+    list: vi.fn(() => []),
+    unreadCount: vi.fn(() => 0),
+    markRead: vi.fn(),
+    markAllRead: vi.fn(),
+    dismissToast: vi.fn(),
+    clear: vi.fn(),
+    clearAll: vi.fn(),
+    subscribe: vi.fn(() => () => {})
   };
 }

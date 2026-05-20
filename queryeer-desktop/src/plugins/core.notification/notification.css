@@ -1,0 +1,202 @@
+.notification-toast-stack {
+  position: fixed;
+  right: 16px;
+  bottom: 42px;
+  z-index: 1600;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(360px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.notification-card {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: var(--bg-1);
+  color: var(--text-0);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.38);
+  pointer-events: auto;
+}
+
+.notification-card-toast {
+  animation: notification-slide-in 0.16s ease-out;
+}
+
+.notification-success {
+  border-left-color: #4dbf6b;
+}
+
+.notification-warning {
+  border-left-color: #d6a84f;
+}
+
+.notification-error {
+  border-left-color: #e05d5d;
+}
+
+.notification-card-main {
+  padding: 10px 12px;
+}
+
+.notification-card-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.notification-card-title-row strong {
+  font-size: var(--ui-font-size-sm);
+}
+
+.notification-card p {
+  margin: 6px 0 0;
+  color: var(--text-1);
+  font-size: var(--ui-font-size-xs);
+  line-height: 1.35;
+}
+
+.notification-card-close {
+  border: none;
+  background: transparent;
+  color: var(--text-1);
+  cursor: pointer;
+  font-size: var(--ui-font-size-xs);
+  padding: 0 2px;
+}
+
+.notification-card-close:hover {
+  color: var(--text-0);
+}
+
+.notification-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.notification-card-actions button,
+.notification-popover-actions button {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-2);
+  color: var(--text-0);
+  cursor: pointer;
+  font-size: var(--ui-font-size-xs);
+  padding: 4px 8px;
+}
+
+.notification-card-actions button:hover:not(:disabled),
+.notification-popover-actions button:hover:not(:disabled) {
+  background: var(--titlebar-hover);
+}
+
+.notification-status {
+  position: relative;
+  display: inline-flex;
+}
+
+.notification-status-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-white);
+  cursor: pointer;
+}
+
+.notification-status-button:hover,
+.notification-status-button.has-unread {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.notification-bell-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.notification-status-badge {
+  position: absolute;
+  top: -5px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 8px;
+  background: #d94b4b;
+  color: #fff;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+}
+
+.notification-popover {
+  position: absolute;
+  right: 0;
+  bottom: 28px;
+  width: min(420px, calc(100vw - 24px));
+  max-height: 460px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-1);
+  color: var(--text-0);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
+  z-index: 1700;
+}
+
+.notification-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.notification-popover-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.notification-popover-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  padding: 10px;
+}
+
+.notification-empty {
+  margin: 0;
+  color: var(--text-1);
+  font-size: var(--ui-font-size-sm);
+}
+
+@keyframes notification-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .notification-toast-stack {
+    right: 8px;
+    bottom: 8px;
+    width: calc(100vw - 16px);
+  }
+}

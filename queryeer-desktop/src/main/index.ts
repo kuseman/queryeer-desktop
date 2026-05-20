@@ -32,6 +32,7 @@ import { createBeforeQuitHandler } from "./app-shutdown.js";
 import { wireExpressionEvaluatorIpc } from "./expressions/expression-evaluator.js";
 
 const isDev = !app.isPackaged;
+const queryeerReleasesUrl = "https://api.github.com/repos/kuseman/queryeer-desktop/releases";
 
 function createBackendFactory(): BackendTransportFactory {
   const appDir = app.getPath("userData");
@@ -256,6 +257,22 @@ app.whenReady().then(() => {
       return await readFile(changelogPath, "utf8");
     } catch {
       return null;
+    }
+  });
+  ipcMain.handle("app:fetch-queryeer-releases", async () => {
+    try {
+      const response = await fetch(queryeerReleasesUrl, {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "User-Agent": `Queryeer/${app.getVersion()}`
+        }
+      });
+      if (!response.ok) {
+        return { ok: false, releases: [] };
+      }
+      return { ok: true, releases: await response.json() };
+    } catch {
+      return { ok: false, releases: [] };
     }
   });
   ipcMain.handle("shell:open-external", async (_event, { url }: { url: string }) => {

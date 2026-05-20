@@ -81,6 +81,7 @@ type AppShellApi = {
     arch: string;
   }>;
   getDesktopChangelog: () => Promise<string | null>;
+  fetchQueryeerReleases: () => Promise<{ ok: boolean; releases: unknown }>;
   fetchBackendPluginChangelogs: () => Promise<{ plugins: Array<{ pluginId: string; pluginName: string; version: string; changelog: string }> }>;
   getExternalFrontendPlugins: () => Promise<ExternalFrontendPluginManifest[]>;
   executeBackendQuery: (params: QueryExecuteParams) => Promise<QueryExecuteResult>;
@@ -236,6 +237,9 @@ const appShellApi: AppShellApi = {
   },
   getDesktopChangelog: async () => {
     return ipcRenderer.invoke("app:get-desktop-changelog");
+  },
+  fetchQueryeerReleases: async () => {
+    return ipcRenderer.invoke("app:fetch-queryeer-releases");
   },
   fetchBackendPluginChangelogs: async () => {
     return ipcRenderer.invoke("backend:fetch-plugin-changelogs");

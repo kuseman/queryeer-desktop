@@ -33,6 +33,7 @@ export interface ShellApi {
   getMemoryUsage: () => Promise<{ heapUsed: number; heapTotal: number; rss: number }>;
   getAboutMetadata: () => Promise<{ appVersion: string; electronVersion: string; chromiumVersion: string; nodeVersion: string; platform: string; arch: string }>;
   getDesktopChangelog: () => Promise<string | null>;
+  fetchQueryeerReleases: () => Promise<{ ok: boolean; releases: unknown }>;
   fetchBackendPluginChangelogs: () => Promise<{ plugins: Array<{ pluginId: string; pluginName: string; version: string; changelog: string }> }>;
   getExternalFrontendPlugins: () => Promise<ExternalFrontendPluginManifest[]>;
   executeBackendQuery: (params: {
