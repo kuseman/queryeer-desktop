@@ -158,7 +158,7 @@ export class SecurityService {
     return { secretRef };
   }
 
-  private async resolveSecret(secretRef: string): Promise<{ found: boolean; plaintext?: string }> {
+  public async resolveSecret(secretRef: string): Promise<{ found: boolean; plaintext?: string }> {
     const key = this.requireUnlockedKey();
     const vault = await this.requireVault();
     const entry = vault.entries[secretRef];
