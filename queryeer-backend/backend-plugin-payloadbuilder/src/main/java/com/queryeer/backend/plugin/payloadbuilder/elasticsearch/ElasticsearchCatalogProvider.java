@@ -2,8 +2,10 @@ package com.queryeer.backend.plugin.payloadbuilder.elasticsearch;
 
 import static com.queryeer.backend.api.PayloadUtils.stringValue;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import com.queryeer.backend.api.ConfigService;
@@ -12,6 +14,7 @@ import com.queryeer.backend.api.SettingsModule;
 import com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderCatalogProvider;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
+import se.kuseman.payloadbuilder.api.execution.ValueVector;
 import se.kuseman.payloadbuilder.catalog.es.ESCatalog;
 import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
@@ -98,6 +101,52 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
     public Catalog createCatalog()
     {
         return CATALOG;
+    }
+
+    @Override
+    public Map<String, Object> buildCatalogPatch(QuerySession session, String alias, Map<String, Object> inputProperties)
+    {
+        Map<String, Object> changed = new LinkedHashMap<>(PayloadbuilderCatalogProvider.compareInputProperties(session, alias, inputProperties));
+
+        // If the connectionId resolved to a native endpoint that the session changed during execution,
+        // find which connectionId now matches the session's endpoint and report that instead.
+        String inputConnectionId = stringValue(inputProperties, KEY_CONNECTION_ID);
+        if (inputConnectionId != null)
+        {
+            ValueVector endpointVec = session.getCatalogProperty(alias, ESCatalog.ENDPOINT_KEY);
+            String sessionEndpoint = endpointVec == null
+                    || endpointVec.size() == 0 ? null
+                            : endpointVec.valueAsString(0);
+            if (sessionEndpoint != null)
+            {
+                String matchingConnectionId = findConnectionIdByEndpoint(sessionEndpoint);
+                if (!Objects.equals(inputConnectionId, matchingConnectionId))
+                {
+                    changed.put(KEY_CONNECTION_ID, matchingConnectionId);
+                }
+            }
+        }
+
+        return changed;
+    }
+
+    private String findConnectionIdByEndpoint(String endpoint)
+    {
+        SettingsModule module = configService.getModule(ES_MODULE_ID);
+        if (module == null)
+        {
+            return null;
+        }
+        List<ElasticsearchConnection> connections = payloadMapper.convertToList(module.values()
+                .get(ES_CONNECTIONS_SETTING_ID), ElasticsearchConnection.class);
+        for (ElasticsearchConnection con : connections)
+        {
+            if (endpoint.equals(con.endpoint()))
+            {
+                return con.connectionId();
+            }
+        }
+        return null;
     }
 
     @Override

@@ -42,6 +42,14 @@ public final class JdbcCatalogProvider implements PayloadbuilderCatalogProvider
     }
 
     @Override
+    public Map<String, Object> buildCatalogPatch(QuerySession session, String alias, Map<String, Object> inputProperties)
+    {
+        // Generic input-property comparison covers database (USE database) etc.
+        // The URL/driver/credentials are connection-config-derived and don't change during execution.
+        return PayloadbuilderCatalogProvider.compareInputProperties(session, alias, inputProperties);
+    }
+
+    @Override
     public void injectProperties(QuerySession querySession, String alias, Map<String, Object> properties)
     {
         String connectionId = stringValue(properties, KEY_CONNECTION_ID);
