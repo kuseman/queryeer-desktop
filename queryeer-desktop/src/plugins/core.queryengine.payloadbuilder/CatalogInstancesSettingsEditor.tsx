@@ -78,11 +78,6 @@ export function CatalogInstancesSettingsEditor({ value, readonly, setValue }: Pr
   }, []);
 
   useEffect(() => {
-    const incoming = parseCatalogAliasDefinitions(value);
-    setRows((previous) => mergeRows(previous, incoming));
-  }, [value]);
-
-  useEffect(() => {
     if (rows.length === 0) {
       setSelectedRowId(undefined);
       return;
@@ -301,23 +296,6 @@ function buildCloneAlias(alias: string, rows: Row[]): string {
   }
   return `${normalized}${index}`;
 }
-
-function mergeRows(previous: Row[], definitions: PayloadbuilderCatalogAliasDefinition[]): Row[] {
-  const byAlias = new Map(previous.map((row) => [row.alias.trim(), row]));
-  return definitions.map((definition, index) => {
-    const fromIndex = previous[index];
-    const fromAlias = byAlias.get(definition.alias);
-    const id = fromIndex?.id ?? fromAlias?.id ?? crypto.randomUUID();
-    return {
-      id,
-      alias: definition.alias,
-      catalogId: definition.catalogId,
-      title: definition.title ?? "",
-      enabled: definition.enabled
-    };
-  });
-}
-
 function buildRowErrors(rows: Row[]): Record<string, { alias?: string; catalogId?: string }> {
   const aliasCounts = new Map<string, number>();
   for (const row of rows) {

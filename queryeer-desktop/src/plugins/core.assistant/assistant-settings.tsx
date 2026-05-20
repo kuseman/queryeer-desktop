@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { SecretRefValue } from "../../contracts/security/Security";
 import { CollectionSettingsListEditor } from "../core.settings/CollectionSettingsListEditor";
 import { PasswordFieldInput } from "../core.settings/PasswordFieldInput";
@@ -18,12 +18,6 @@ type Props = {
 export function AssistantConnectionsSettingsEditor({ value, setValue, readonly }: Props): JSX.Element {
   const [connections, setConnections] = useState<AssistantConnectionDraft[]>(() => sanitizeAssistantConnections(value));
   const [selectedId, setSelectedId] = useState<string | undefined>(() => connections[0]?.id);
-
-  useEffect(() => {
-    const next = sanitizeAssistantConnections(value);
-    setConnections(next);
-    setSelectedId((previous) => previous && next.some((item) => item.id === previous) ? previous : next[0]?.id);
-  }, [value]);
 
   const items = useMemo(() => connections.map((connection) => ({
     id: connection.id,

@@ -84,8 +84,18 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
     }
   }
 
+  function normalizeUntitledUri(uri: string): string {
+    if (!uri.startsWith("untitled:")) {
+      return uri;
+    }
+    const name = uri.slice(9);
+    const encoded = name.replace(/[^\w\-._~!$&'()*+,;=:@%]/g, encodeURIComponent);
+    return `untitled:${encoded}`;
+  }
+
   return {
-    async openFile(uri, hint) {
+    async openFile(rawUri, hint) {
+      const uri = normalizeUntitledUri(rawUri);
       const existing = filesRegistry
         .listFiles()
         .find((file) => file.uri === uri);
@@ -186,7 +196,7 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
       const fileName = createOptions?.title
         ? `${createOptions.title}.${extension}`
         : `Untitled${nextUntitledCounter()}.${extension}`;
-      const uri = `untitled:${fileName}`;
+      const uri = `untitled:${encodeURIComponent(fileName)}`;
       const mimeType =
         createOptions?.mimeType ??
         cloneFromFile?.mimeType ??
@@ -245,7 +255,7 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
         const ext = extensionFromMimeType(file.mimeType);
         const dialogResult = await showSaveDialog({
           title: "Save Query",
-          defaultPath: file.uri.replace(/^untitled:/, "") || undefined,
+          defaultPath: decodeURIComponent(file.uri.replace(/^untitled:/, "")) || undefined,
           filters: [{ name: "File", extensions: [ext] }]
         });
         if (dialogResult.canceled || !dialogResult.filePath) {

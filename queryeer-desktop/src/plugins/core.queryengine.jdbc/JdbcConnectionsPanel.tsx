@@ -133,7 +133,7 @@ function resolveFileTitle(file: FileEntity): string {
     return file.uri.split("/").pop() ?? file.uri;
   }
   if (file.uri.startsWith("untitled:")) {
-    return file.uri.slice(8);
+    return decodeURIComponent(file.uri.slice(8));
   }
   return file.uri;
 }

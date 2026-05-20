@@ -1,6 +1,6 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MessageDialogHost } from "./MessageDialogHost";
 import {
   getActiveMessageDialogRequest,
@@ -31,7 +31,7 @@ describe("MessageDialogHost", () => {
     rootElement.remove();
   });
 
-  it("submits the primary action when Enter is pressed", async () => {
+  it("submits the primary action when OK is clicked", async () => {
     const previousFocus = document.createElement("button");
     document.body.appendChild(previousFocus);
     previousFocus.focus();
@@ -50,21 +50,80 @@ describe("MessageDialogHost", () => {
       await Promise.resolve();
     });
 
-    const overlay = rootElement.querySelector(".dialog-message-overlay");
-    expect(overlay).toBeTruthy();
-
-    const globalKeydownSpy = vi.fn();
-    document.addEventListener("keydown", globalKeydownSpy);
+    const okButton = rootElement.querySelector(".dialog-message-button.primary") as HTMLButtonElement;
+    expect(okButton).toBeTruthy();
 
     await act(async () => {
-      overlay?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      okButton.click();
       await Promise.resolve();
     });
 
     await expect(dialogPromise!).resolves.toEqual({ action: "ok" });
     expect(document.activeElement).toBe(previousFocus);
-    expect(globalKeydownSpy).not.toHaveBeenCalled();
-    document.removeEventListener("keydown", globalKeydownSpy);
+    previousFocus.remove();
+  });
+
+  it("dismisses with OK action when Escape is pressed on an OK-only dialog", async () => {
+    const previousFocus = document.createElement("button");
+    document.body.appendChild(previousFocus);
+    previousFocus.focus();
+
+    await act(async () => {
+      root.render(<MessageDialogHost />);
+    });
+
+    let dialogPromise: Promise<{ action: string }>;
+    await act(async () => {
+      dialogPromise = requestMessageDialog({
+        title: "Info",
+        message: "Something happened",
+        options: [{ label: "OK", value: "ok" }]
+      });
+      await Promise.resolve();
+    });
+
+    const overlay = rootElement.querySelector(".dialog-message-overlay") as HTMLDivElement;
+    expect(overlay).toBeTruthy();
+
+    await act(async () => {
+      overlay.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await Promise.resolve();
+    });
+
+    await expect(dialogPromise!).resolves.toEqual({ action: "ok" });
+    expect(document.activeElement).toBe(previousFocus);
+    previousFocus.remove();
+  });
+
+  it("dismisses with Cancel action when Escape is pressed on a dialog with Cancel", async () => {
+    const previousFocus = document.createElement("button");
+    document.body.appendChild(previousFocus);
+    previousFocus.focus();
+
+    await act(async () => {
+      root.render(<MessageDialogHost />);
+    });
+
+    let dialogPromise: Promise<{ action: string }>;
+    await act(async () => {
+      dialogPromise = requestMessageDialog({
+        title: "Confirm",
+        message: "Are you sure?",
+        options: [{ label: "OK", value: "ok" }, { label: "Cancel", value: "cancel" }]
+      });
+      await Promise.resolve();
+    });
+
+    const overlay = rootElement.querySelector(".dialog-message-overlay") as HTMLDivElement;
+    expect(overlay).toBeTruthy();
+
+    await act(async () => {
+      overlay.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await Promise.resolve();
+    });
+
+    await expect(dialogPromise!).resolves.toEqual({ action: "cancel" });
+    expect(document.activeElement).toBe(previousFocus);
     previousFocus.remove();
   });
 });

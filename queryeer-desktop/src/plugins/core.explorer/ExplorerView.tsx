@@ -37,7 +37,7 @@ type HoveredWorkspaceRow = {
 function getFileName(uri: string): string {
   // Strip URI scheme prefix from non-file URIs (e.g. "untitled:Query1.sql" → "Query1.sql")
   if (uri.startsWith("untitled:")) {
-    return uri.slice(9);
+    return decodeURIComponent(uri.slice(9));
   }
   const normalized = uri.replace(/\\/g, "/");
   return normalized.split("/").pop() ?? uri;

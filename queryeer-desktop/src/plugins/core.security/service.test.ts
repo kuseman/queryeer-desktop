@@ -43,40 +43,40 @@ const createService = (options?: {
 };
 
 describe("CoreSecurityService", () => {
-  it("shows warning dialog when unlock succeeds with reason", async () => {
-    const { service, dialog } = createService({
+  it("calls bridge unlock and returns accepted true", async () => {
+    const { service, bridge } = createService({
       response: {
         accepted: true,
         reason: "safeStorage unavailable"
       }
     });
 
-    await service.unlock("master");
+    const result = await service.unlock("master");
 
-    expect(dialog.showMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        severity: "warning",
-        message: "safeStorage unavailable"
-      })
-    );
+    expect(result.accepted).toBe(true);
+    expect(bridge.unlock).toHaveBeenCalledWith({
+      masterPassword: "master",
+      masterPasswordStorage: "ask"
+    });
+    expect(result.reason).toBe("safeStorage unavailable");
   });
 
-  it("shows error dialog when unlock fails with reason", async () => {
-    const { service, dialog } = createService({
+  it("calls bridge unlock and returns accepted false", async () => {
+    const { service, bridge } = createService({
       response: {
         accepted: false,
         reason: "invalid password"
       }
     });
 
-    await service.unlock("master");
+    const result = await service.unlock("master");
 
-    expect(dialog.showMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        severity: "error",
-        message: "invalid password"
-      })
-    );
+    expect(result.accepted).toBe(false);
+    expect(bridge.unlock).toHaveBeenCalledWith({
+      masterPassword: "master",
+      masterPasswordStorage: "ask"
+    });
+    expect(result.reason).toBe("invalid password");
   });
 
   it("does not auto-unlock on first secret store when vault is locked", async () => {
