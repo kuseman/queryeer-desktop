@@ -63,6 +63,7 @@ export class QueryEngineService {
   private readonly globalEventListeners = new Set<GlobalQueryEventListener>();
   private readonly executeRequestListeners = new Set<SimpleListener>();
   private readonly cancelRequestListeners = new Set<SimpleListener>();
+  private readonly toggleOutputPanelRequestListeners = new Set<SimpleListener>();
   private readonly executionContextProviders = new Set<ExecutionContextProvider>();
   private readonly engineResolvers: EngineResolverEntry[] = [];
   private readonly executionContextById = new Map<string, ExecuteParams>();
@@ -287,6 +288,19 @@ export class QueryEngineService {
     this.cancelRequestListeners.add(listener);
     return () => {
       this.cancelRequestListeners.delete(listener);
+    };
+  }
+
+  requestToggleOutputPanel(): void {
+    for (const listener of this.toggleOutputPanelRequestListeners) {
+      listener();
+    }
+  }
+
+  onToggleOutputPanelRequest(listener: SimpleListener): () => void {
+    this.toggleOutputPanelRequestListeners.add(listener);
+    return () => {
+      this.toggleOutputPanelRequestListeners.delete(listener);
     };
   }
 
