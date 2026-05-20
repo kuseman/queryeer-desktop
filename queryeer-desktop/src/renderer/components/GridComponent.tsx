@@ -857,6 +857,7 @@ export function GridComponent({
         fillHandle={false}
         getCellsForSelection={true}
         onPaste={false}
+        maxColumnWidth={5000}
         theme={theme}
       />
       {isSorting && (
