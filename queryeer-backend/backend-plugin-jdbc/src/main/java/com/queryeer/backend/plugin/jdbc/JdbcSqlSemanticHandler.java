@@ -119,16 +119,24 @@ final class JdbcSqlSemanticHandler
 
         if (context == SqlParseContext.TABLE_REFERENCE)
         {
-            List<String> tableNames = schemaNavigator.tableNamesForCompletion(connectionId, selectedDatabase);
-            return tableNames.stream()
-                    .filter(name -> prefix.isBlank()
-                            || name.toLowerCase()
+            List<JdbcSchemaNavigator.TableInfo> tableInfos = schemaNavigator.tableNamesForCompletion(connectionId, selectedDatabase);
+            Set<String> seen = new HashSet<>();
+            return tableInfos.stream()
+                    .filter(info -> prefix.isBlank()
+                            || info.name()
+                                    .toLowerCase()
                                     .startsWith(prefix.toLowerCase()))
-                    .distinct()
-                    .sorted(String.CASE_INSENSITIVE_ORDER)
+                    .filter(info -> seen.add(info.name()
+                            .toLowerCase()))
+                    .sorted((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(a.name(), b.name()))
                     .limit(maxItems)
-                    .map(name -> Map.<String, Object>of("label", name, "kind", "table", "detail", "JDBC table", "insertText", name, "insertTextFormat", "plain", "source", "jdbc.schema",
-                            "replaceRange", Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column())))
+                    .map(info ->
+                    {
+                        String detail = "table".equals(info.kind()) ? "JDBC table"
+                                : "JDBC view";
+                        return Map.<String, Object>of("label", info.name(), "kind", info.kind(), "detail", detail, "insertText", info.name(), "insertTextFormat", "plain", "source", "jdbc.schema",
+                                "replaceRange", Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column()));
+                    })
                     .toList();
         }
 

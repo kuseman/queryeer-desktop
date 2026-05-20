@@ -34,7 +34,7 @@ class JdbcSchemaCrawlerTest
 
         doThrow(new RuntimeException("Some SQL error")).when(dialect)
                 .openSessionConnection(anyMap());
-        when(dialect.branchResolvers()).thenReturn(Map.of("tables_folder", resolver));
+        when(dialect.branchResolvers()).thenReturn(Map.of("tables_folder", resolver, "views_folder", resolver));
         when(store.latestSnapshot("jdbc-1", JdbcSchemaCrawlScope.DEEP)).thenReturn(List.of());
         when(resolver.resolveSchema(eq(connection), anyMap()))
                 .thenReturn(List.of(new JdbcSchemaObject("AdventureWorks2022.Person.Address", "Address", "table", List.of(), Map.of("catalog", "AdventureWorks2022", "schema", "Person")),

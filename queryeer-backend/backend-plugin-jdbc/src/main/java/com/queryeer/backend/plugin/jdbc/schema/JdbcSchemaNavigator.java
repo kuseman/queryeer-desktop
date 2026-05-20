@@ -13,6 +13,10 @@ import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 
 public final class JdbcSchemaNavigator
 {
+    public record TableInfo(String name, String kind)
+    {
+    }
+
     private final DefaultJdbcConnections connections;
     private final JdbcSchemaStore schemaStore;
     private final JdbcSchemaRouter router;
@@ -26,13 +30,13 @@ public final class JdbcSchemaNavigator
         this.connectionHealth = connectionHealth;
     }
 
-    public List<String> tableNamesForCompletion(String connectionId, String selectedDatabase)
+    public List<TableInfo> tableNamesForCompletion(String connectionId, String selectedDatabase)
     {
         String normalizedSelectedDatabase = normalizeIdentifier(selectedDatabase);
         List<JdbcSchemaObject> snapshot = loadSnapshotForLookup(connectionId, selectedDatabase, normalizedSelectedDatabase);
-        List<String> tableNames = new ArrayList<>();
-        collectTableNames(snapshot, new NodePath(null, null), normalizedSelectedDatabase, tableNames);
-        return tableNames;
+        List<TableInfo> tableInfos = new ArrayList<>();
+        collectTableNames(snapshot, new NodePath(null, null), normalizedSelectedDatabase, tableInfos);
+        return tableInfos;
     }
 
     /**
@@ -191,8 +195,14 @@ public final class JdbcSchemaNavigator
         {
             JdbcConnection resolved = connections.resolve(connectionId);
             // Pass null target — target.matches rejects rows when schema is null
-            List<JdbcSchemaObject> liveSnapshot = router.resolve(resolved, "tables_folder", null);
-            return findSymbolInSchema(liveSnapshot, rawToken, normalizedDatabase);
+            List<JdbcSchemaObject> liveTables = router.resolve(resolved, "tables_folder", null);
+            Map<String, Object> liveResult = findSymbolInSchema(liveTables, rawToken, normalizedDatabase);
+            if (liveResult != null)
+            {
+                return liveResult;
+            }
+            List<JdbcSchemaObject> liveViews = router.resolve(resolved, "views_folder", null);
+            return findSymbolInSchema(liveViews, rawToken, normalizedDatabase);
         }
         catch (RuntimeException e)
         {
@@ -324,7 +334,7 @@ public final class JdbcSchemaNavigator
         return null;
     }
 
-    private static void collectTableNames(List<JdbcSchemaObject> nodes, NodePath path, String normalizedSelectedDatabase, List<String> target)
+    private static void collectTableNames(List<JdbcSchemaObject> nodes, NodePath path, String normalizedSelectedDatabase, List<TableInfo> target)
     {
         for (JdbcSchemaObject node : nodes)
         {
@@ -359,8 +369,9 @@ public final class JdbcSchemaNavigator
                 if (name != null)
                 {
                     String effectiveSchema = effectiveSchema(nextPath.schema(), node);
-                    target.add(effectiveSchema == null ? name
-                            : effectiveSchema + "." + name);
+                    String displayName = effectiveSchema == null ? name
+                            : effectiveSchema + "." + name;
+                    target.add(new TableInfo(displayName, kind.toLowerCase()));
                 }
             }
 
