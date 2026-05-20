@@ -109,6 +109,12 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
       return;
     }
 
+    // Don't intercept Escape — let Monaco handle it natively for
+    // suggest widget dismissal, find widget close, etc.
+    if (normalized === "escape") {
+      return;
+    }
+
     event.preventDefault();
     if (isInEditor()) {
       event.stopPropagation();

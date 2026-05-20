@@ -38,11 +38,16 @@ public final class JdbcSchemaCrawler
             }
             // Always pass the database to the router. When schema is null we use
             // targetMatches() fallback that filters by database only (not schema).
-            List<JdbcSchemaObject> fetched = router.resolve(connection, "tables_folder", new JdbcSchemaTarget(target.database(), target.schema()));
-            // Expand each table to include column children in the snapshot
-            List<JdbcSchemaObject> expanded = expandTableColumns(connection, fetched);
+            JdbcSchemaTarget crawlTarget = new JdbcSchemaTarget(target.database(), target.schema());
+            List<JdbcSchemaObject> tables = router.resolve(connection, "tables_folder", crawlTarget);
+            List<JdbcSchemaObject> views = router.resolve(connection, "views_folder", crawlTarget);
+            List<JdbcSchemaObject> expandedTables = expandTableColumns(connection, tables);
+            List<JdbcSchemaObject> expandedViews = expandTableColumns(connection, views);
+            List<JdbcSchemaObject> allFetched = new ArrayList<>(expandedTables.size() + expandedViews.size());
+            allFetched.addAll(expandedTables);
+            allFetched.addAll(expandedViews);
             List<JdbcSchemaObject> current = new ArrayList<>(store.latestSnapshot(connection.connectionId(), JdbcSchemaCrawlScope.DEEP));
-            mergeTablesScope(current, target.database(), target.schema(), expanded);
+            mergeTablesScope(current, target.database(), target.schema(), allFetched);
             store.persistSnapshot(connection.connectionId(), JdbcSchemaCrawlScope.DEEP, current);
             return;
         }
