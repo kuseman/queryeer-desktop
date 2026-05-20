@@ -41,7 +41,7 @@ export function SymbolActionsSettingsEditor({ value, readonly, setValue }: Props
   const [actions, setActions] = useState<SymbolAction[]>(() => parseActions(value));
   const [templates, setTemplates] = useState<SymbolActionTemplateContribution[]>(() => listSymbolActionTemplates());
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("__empty__");
-  const [selectedId, setSelectedId] = useState<string | undefined>(() => parseActions(value)[0]?.id);
+  const [selectedId, setSelectedId] = useState<string | undefined>(() => actions[0]?.id);
 
   useEffect(() => subscribeSymbolActionTemplates(() => setTemplates(listSymbolActionTemplates())), []);
 
@@ -54,15 +54,6 @@ export function SymbolActionsSettingsEditor({ value, readonly, setValue }: Props
       setSelectedTemplateId(templates[0].id);
     }
   }, [templates, selectedTemplateId]);
-
-  useEffect(() => {
-    const parsed = parseActions(value);
-    setActions((prev) => {
-      const prevIds = prev.map((a) => a.id).join(",");
-      const nextIds = parsed.map((a) => a.id).join(",");
-      return prevIds === nextIds ? prev : parsed;
-    });
-  }, [value]);
 
   useEffect(() => {
     if (actions.length === 0) {

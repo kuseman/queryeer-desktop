@@ -120,15 +120,10 @@
   display: none;
 }
 
-.queryengine-tab-state-failed::after {
-  content: "";
-  position: absolute;
+.queryengine-tab-indicator-failed {
+  top: auto;
   bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
   background: #e55;
-  z-index: 2;
 }
 
 .queryengine-tab-indicator-running {

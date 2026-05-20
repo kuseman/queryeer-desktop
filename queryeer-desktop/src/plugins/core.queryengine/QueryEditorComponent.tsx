@@ -67,6 +67,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
   const handleCancelRef = useRef<() => void>(() => {});
   const splitContainerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
+  const executingRef = useRef(false);
   const fileIdRef = useRef(file?.fileId);
   fileIdRef.current = file?.fileId;
 
@@ -167,6 +168,11 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
   }, []);
 
   const handleExecute = useCallback((retryExecuteOptions?: ExecuteRequestOptions | null) => {
+    if (executingRef.current) {
+      return;
+    }
+    executingRef.current = true;
+
     const run = async () => {
       const targetFileId = file?.fileId;
       if (!targetFileId) return;
@@ -604,7 +610,9 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       }
     };
 
-    void run();
+    run().finally(() => {
+      executingRef.current = false;
+    });
   }, [file?.fileId, setExecutionPrimaryOverride, updateOutputContextForFile]);
 
   const handleCancel = useCallback(() => {

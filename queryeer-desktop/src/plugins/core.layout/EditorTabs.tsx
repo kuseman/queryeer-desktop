@@ -288,7 +288,7 @@ function resolveBaseTabTitle(file: FileEntity, editor: LayoutEditorContribution 
     return file.uri.split("/").pop() ?? file.uri;
   }
   if (file.uri.startsWith("untitled:")) {
-    return file.uri.slice(8);
+    return decodeURIComponent(file.uri.slice(8));
   }
   return editor?.title ?? file.uri;
 }

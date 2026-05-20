@@ -140,7 +140,7 @@ export const coreQueryEnginePlugin: Plugin = {
         }
         if (tabState === "failed") {
           return {
-            className: "queryengine-tab-state-failed"
+            indicatorClassName: "queryengine-tab-indicator-failed"
           };
         }
         return null;

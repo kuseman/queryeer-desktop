@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import type { SettingDefinition } from "../../../contracts/extensions/SettingsExtension";
 import { getOutputRegistry } from "../output/OutputRegistry";
 import type { QueryShortcut, QueryShortcutsConfig, ShortcutRule } from "./shortcut-types";
@@ -194,30 +194,18 @@ type Props = {
 };
 
 export function ShortcutsSettingsRenderer({ value, setValue, readonly }: Props): JSX.Element {
-  const [config, setConfig] = useState<QueryShortcutsConfig>(() => parseConfig(value));
+  const config = useMemo<QueryShortcutsConfig>(() => parseConfig(value), [value]);
   const [selectedSlot, setSelectedSlot] = useState<number>(0);
 
-  useEffect(() => {
-    setConfig(parseConfig(value));
-  }, [value]);
-
   const handleShortcutChange = useCallback((updated: QueryShortcut) => {
-    setConfig((prev) => {
-      const next = upsertShortcut(prev, updated);
-      setValue(next);
-      return next;
-    });
-  }, [setValue]);
+    setValue(upsertShortcut(config, updated));
+  }, [config, setValue]);
 
   const handleLabelChange = useCallback((slot: number, label: string) => {
-    setConfig((prev) => {
-      const shortcut = getOrCreateShortcut(prev, slot);
-      const updated = { ...shortcut, label: label || undefined };
-      const next = upsertShortcut(prev, updated);
-      setValue(next);
-      return next;
-    });
-  }, [setValue]);
+    const shortcut = getOrCreateShortcut(config, slot);
+    const updated = { ...shortcut, label: label || undefined };
+    setValue(upsertShortcut(config, updated));
+  }, [config, setValue]);
 
   const selectedShortcut = getOrCreateShortcut(config, selectedSlot);
 

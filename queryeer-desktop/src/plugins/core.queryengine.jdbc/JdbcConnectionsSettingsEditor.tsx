@@ -74,11 +74,6 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
   }, []);
 
   useEffect(() => {
-    const incoming = parseJdbcConnectionDefinitions(value);
-    setRows((previous) => mergeRows(previous, incoming));
-  }, [value]);
-
-  useEffect(() => {
     if (rows.length === 0) {
       setSelectedRowId(undefined);
       return;
@@ -282,6 +277,16 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
               });
             }, updateRow)}
 
+            <label className="jdbc-settings-enabled">
+              <input
+                type="checkbox"
+                checked={row.enabled}
+                disabled={readonly}
+                onChange={(event) => updateRow(row.id, { enabled: event.target.checked })}
+              />
+              <span>{row.enabled ? "Enabled" : "Disabled"}</span>
+            </label>
+
             <div className="jdbc-settings-cell">
               <button
                 type="button"
@@ -422,30 +427,6 @@ function toRows(definitions: JdbcConnectionDefinition[]): Row[] {
     color: definition.color
   }));
 }
-
-function mergeRows(previous: Row[], definitions: JdbcConnectionDefinition[]): Row[] {
-  const byConnectionId = new Map(previous.map((row) => [row.connectionId.trim(), row]));
-  return definitions.map((definition, index) => {
-    const fromIndex = previous[index];
-    const fromConnectionId = byConnectionId.get(definition.connectionId);
-    return {
-      id: fromIndex?.id ?? fromConnectionId?.id ?? crypto.randomUUID(),
-      connectionId: definition.connectionId,
-      title: definition.title ?? "",
-      dialectId: definition.dialectId,
-      url: definition.url ?? "",
-      username: definition.username ?? "",
-      password:
-        definition.password && typeof definition.password === "object"
-          ? definition.password
-          : undefined,
-      properties: definition.properties,
-      enabled: definition.enabled,
-      color: definition.color
-    };
-  });
-}
-
 function buildRowErrors(rows: Row[]): Record<string, { url?: string; host?: string }> {
   const errors: Record<string, { url?: string; host?: string }> = {};
   for (const row of rows) {

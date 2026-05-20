@@ -49,6 +49,8 @@ export function MessageDialogHost(): JSX.Element | null {
   }
 
   const options = request.options.options ?? [{ label: "OK", value: "" }];
+  const cancelOption = options.find((o) => o.label === "Cancel")
+    ?? (options.length > 1 ? options[options.length - 1] : options[0]);
 
   return (
     <div
@@ -57,12 +59,12 @@ export function MessageDialogHost(): JSX.Element | null {
       aria-modal="true"
       aria-label={request.options.title}
       onKeyDown={(event) => {
-        if (event.key !== "Enter") {
+        if (event.key !== "Escape") {
           return;
         }
         event.preventDefault();
         event.stopPropagation();
-        resolveActiveMessageDialog({ action: options[0]?.value ?? "" });
+        resolveActiveMessageDialog({ action: cancelOption.value });
       }}
     >
       <div className="dialog-message-modal">

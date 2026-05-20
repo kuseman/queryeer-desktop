@@ -33,11 +33,6 @@ export function ElasticsearchConnectionsSettingsEditor({ value, readonly, setVal
   const [selectedRowId, setSelectedRowId] = useState<string | undefined>(() => rows[0]?.id);
 
   useEffect(() => {
-    const incoming = parseElasticsearchConnectionDefinitions(value);
-    setRows((previous) => mergeRows(previous, incoming));
-  }, [value]);
-
-  useEffect(() => {
     if (rows.length === 0) {
       setSelectedRowId(undefined);
       return;
@@ -256,29 +251,6 @@ function toRows(definitions: ElasticsearchConnectionDefinition[]): Row[] {
     enabled: definition.enabled
   }));
 }
-
-function mergeRows(previous: Row[], definitions: ElasticsearchConnectionDefinition[]): Row[] {
-  const byConnectionId = new Map(previous.map((row) => [row.connectionId.trim(), row]));
-  return definitions.map((definition, index) => {
-    const fromIndex = previous[index];
-    const fromConnectionId = byConnectionId.get(definition.connectionId);
-    const id = fromIndex?.id ?? fromConnectionId?.id ?? crypto.randomUUID();
-    return {
-      id,
-      connectionId: definition.connectionId,
-      title: definition.title ?? "",
-      endpoint: definition.endpoint,
-      authType: definition.authType,
-      authUsername: definition.authUsername ?? "",
-      authPassword:
-        definition.authPassword && typeof definition.authPassword === "object"
-          ? definition.authPassword
-          : undefined,
-      enabled: definition.enabled
-    };
-  });
-}
-
 function buildRowErrors(rows: Row[]): Record<string, { endpoint?: string }> {
   const errors: Record<string, { endpoint?: string }> = {};
   for (const row of rows) {

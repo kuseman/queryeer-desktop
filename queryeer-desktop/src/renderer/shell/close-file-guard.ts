@@ -13,7 +13,7 @@ export function fileDisplayName(uri: string): string {
     return uri.split("/").pop() ?? uri;
   }
   if (uri.startsWith("untitled:")) {
-    return uri.slice(9);
+    return decodeURIComponent(uri.slice(9));
   }
   return uri;
 }

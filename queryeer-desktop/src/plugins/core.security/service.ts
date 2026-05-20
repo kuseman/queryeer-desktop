@@ -77,8 +77,6 @@ export class CoreSecurityService {
       masterPasswordStorage: this.getMasterPasswordStorage()
     });
     this.unlockedHint = response.accepted;
-    void this.getStatus();
-    await this.showNoticeIfNeeded("Security Unlock", response);
     return response;
   }
 
@@ -197,6 +195,7 @@ export class CoreSecurityService {
       }
       const response = await this.unlock(masterPassword);
       this.unlockedHint = response.accepted;
+      void this.showNoticeIfNeeded("Security Unlock", response);
       return response.accepted;
     }
 
