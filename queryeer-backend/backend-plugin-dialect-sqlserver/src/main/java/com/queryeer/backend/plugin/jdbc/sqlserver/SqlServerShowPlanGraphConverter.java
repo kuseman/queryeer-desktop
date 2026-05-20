@@ -110,7 +110,7 @@ final class SqlServerShowPlanGraphConverter
         }
         if (!warnings.isEmpty())
         {
-            overlays.add(new GraphVertexOverlay("warnings", "warning", "Warnings", String.join("; ", warnings), null));
+            overlays.add(new GraphVertexOverlay("warnings", "warning", "Warnings", null, null));
         }
 
         vertices.add(new GraphVertex(id, physicalOp.isBlank() ? "RelOp"
@@ -522,8 +522,8 @@ final class SqlServerShowPlanGraphConverter
             Element group = (Element) groups.item(i);
             Element index = firstDirectOrDescendant(group, "MissingIndex");
             String prefix = "missingIndex-" + (i + 1);
-            addStringProperty(properties, prefix + "-summary", "Recommendation " + (i + 1), missingIndexSummary(group, index), null, true);
-            addNumberProperty(properties, prefix + "-impact", "Impact " + (i + 1), numberAttr(group, "Impact"), "%", true);
+            addStringProperty(properties, prefix + "-summary", "Recommendation " + (i + 1), missingIndexSummary(group, index), null, false);
+            addNumberProperty(properties, prefix + "-impact", "Impact " + (i + 1), numberAttr(group, "Impact"), "%", false);
             if (index != null)
             {
                 addStringProperty(properties, prefix + "-database", "Database " + (i + 1), trimBrackets(attr(index, "Database")), null, false);
@@ -532,9 +532,76 @@ final class SqlServerShowPlanGraphConverter
                 addStringProperties(properties, prefix + "-equality", "Equality column " + (i + 1), columnGroupColumns(index, "EQUALITY"), true);
                 addStringProperties(properties, prefix + "-inequality", "Inequality column " + (i + 1), columnGroupColumns(index, "INEQUALITY"), false);
                 addStringProperties(properties, prefix + "-include", "Include column " + (i + 1), columnGroupColumns(index, "INCLUDE"), false);
+                addStringProperty(properties, prefix + "-createIndex", "Create index " + (i + 1), createIndexStatement(index), null, false);
             }
         }
         return properties;
+    }
+
+    private static String createIndexStatement(Element missingIndex)
+    {
+        String table = tableReference(missingIndex);
+        List<String> keyColumns = new ArrayList<>();
+        keyColumns.addAll(columnGroupColumns(missingIndex, "EQUALITY"));
+        keyColumns.addAll(columnGroupColumns(missingIndex, "INEQUALITY"));
+        if (table.isBlank()
+                || keyColumns.isEmpty())
+        {
+            return "";
+        }
+
+        String indexName = "IX_" + sanitizeIndexName(trimBrackets(attr(missingIndex, "Table"))) + "_" + sanitizeIndexName(String.join("_", keyColumns));
+        StringBuilder builder = new StringBuilder("CREATE NONCLUSTERED INDEX ").append(bracketIdentifier(indexName))
+                .append(" ON ")
+                .append(table)
+                .append(" (")
+                .append(bracketedList(keyColumns))
+                .append(")");
+        List<String> includeColumns = columnGroupColumns(missingIndex, "INCLUDE");
+        if (!includeColumns.isEmpty())
+        {
+            builder.append(" INCLUDE (")
+                    .append(bracketedList(includeColumns))
+                    .append(")");
+        }
+        return builder.append(';')
+                .toString();
+    }
+
+    private static String tableReference(Element missingIndex)
+    {
+        List<String> parts = new ArrayList<>();
+        for (String attribute : List.of("Database", "Schema", "Table"))
+        {
+            String value = trimBrackets(attr(missingIndex, attribute));
+            if (!value.isBlank())
+            {
+                parts.add(bracketIdentifier(value));
+            }
+        }
+        return String.join(".", parts);
+    }
+
+    private static String bracketedList(List<String> identifiers)
+    {
+        return identifiers.stream()
+                .map(SqlServerShowPlanGraphConverter::bracketIdentifier)
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("");
+    }
+
+    private static String bracketIdentifier(String identifier)
+    {
+        return "[" + trimBrackets(identifier).replace("]", "]]") + "]";
+    }
+
+    private static String sanitizeIndexName(String value)
+    {
+        String sanitized = trimBrackets(value).replaceAll("[^A-Za-z0-9_]+", "_")
+                .replaceAll("_+", "_")
+                .replaceAll("^_|_$", "");
+        return sanitized.isBlank() ? "MissingIndex"
+                : sanitized;
     }
 
     private static String missingIndexSummary(Element group, Element index)

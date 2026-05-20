@@ -152,32 +152,7 @@ final class SqlServerQueryExecutor extends AbstractJdbcQueryExecutor implements 
                 {
                     try (ResultSet resultSet = statement.getResultSet())
                     {
-                        ResultSetRows rows = readResultSet(resultSet);
-                        boolean planXml = rows.rows.stream()
-                                .flatMap(List::stream)
-                                .filter(String.class::isInstance)
-                                .map(String.class::cast)
-                                .anyMatch(SqlServerShowPlanGraphConverter::isShowPlanXml);
-                        if (planXml)
-                        {
-                            rows.rows.stream()
-                                    .flatMap(List::stream)
-                                    .filter(String.class::isInstance)
-                                    .map(String.class::cast)
-                                    .filter(SqlServerShowPlanGraphConverter::isShowPlanXml)
-                                    .forEach(planXmlDocuments::add);
-                            if (includeRawXml)
-                            {
-                                eventListener.onResultSetStart(rows.columns);
-                                eventListener.onRows(rows.rows);
-                            }
-                        }
-                        else
-                        {
-                            eventListener.onResultSetStart(rows.columns);
-                            eventListener.onRows(rows.rows);
-                            rowCount += rows.rows.size();
-                        }
+                        rowCount += publishPlanAwareResultSet(resultSet, eventListener, planXmlDocuments, includeRawXml);
                     }
                 }
                 else
@@ -212,26 +187,67 @@ final class SqlServerQueryExecutor extends AbstractJdbcQueryExecutor implements 
         return rowCount;
     }
 
-    private ResultSetRows readResultSet(ResultSet resultSet) throws SQLException
+    private long publishPlanAwareResultSet(ResultSet resultSet, JdbcQueryEventListener eventListener, List<String> planXmlDocuments, boolean includeRawXml) throws SQLException
     {
         ResultSetMetaData metadata = resultSet.getMetaData();
         int columnCount = metadata.getColumnCount();
         List<JdbcResultColumn> columns = new ArrayList<>(columnCount);
+        String[] typeNames = new String[columnCount + 1];
         for (int i = 1; i <= columnCount; i++)
         {
-            columns.add(new JdbcResultColumn(metadata.getColumnLabel(i), metadata.getColumnTypeName(i)));
+            String typeName = metadata.getColumnTypeName(i);
+            typeNames[i] = typeName == null ? "unknown"
+                    : typeName.toLowerCase();
+            columns.add(new JdbcResultColumn(metadata.getColumnLabel(i), typeNames[i]));
         }
-        List<List<Object>> rows = new ArrayList<>();
+
+        if (!resultSet.next())
+        {
+            eventListener.onResultSetStart(columns);
+            return 0L;
+        }
+
+        List<Object> firstRow = readRow(resultSet, columnCount, typeNames);
+        if (containsShowPlanXml(firstRow))
+        {
+            collectShowPlanXml(firstRow, planXmlDocuments);
+            if (includeRawXml)
+            {
+                eventListener.onResultSetStart(columns);
+                eventListener.onRows(List.of(firstRow));
+            }
+            while (resultSet.next())
+            {
+                List<Object> row = readRow(resultSet, columnCount, typeNames);
+                collectShowPlanXml(row, planXmlDocuments);
+                if (includeRawXml)
+                {
+                    eventListener.onRows(List.of(row));
+                }
+            }
+            return 0L;
+        }
+
+        eventListener.onResultSetStart(columns);
+        long rowCount = 0L;
+        List<List<Object>> batch = new ArrayList<>(rowChunkSize);
+        batch.add(firstRow);
         while (resultSet.next())
         {
-            List<Object> row = new ArrayList<>(columnCount);
-            for (int i = 1; i <= columnCount; i++)
+            batch.add(readRow(resultSet, columnCount, typeNames));
+            if (batch.size() == rowChunkSize)
             {
-                row.add(resultSet.getObject(i));
+                eventListener.onRows(batch);
+                rowCount += batch.size();
+                batch = new ArrayList<>(rowChunkSize);
             }
-            rows.add(row);
         }
-        return new ResultSetRows(columns, rows);
+        if (!batch.isEmpty())
+        {
+            eventListener.onRows(batch);
+            rowCount += batch.size();
+        }
+        return rowCount;
     }
 
     private void forwardWarnings(SQLWarning warning, JdbcQueryEventListener eventListener)
@@ -243,8 +259,31 @@ final class SqlServerQueryExecutor extends AbstractJdbcQueryExecutor implements 
         }
     }
 
-    private record ResultSetRows(List<JdbcResultColumn> columns, List<List<Object>> rows)
+    private List<Object> readRow(ResultSet resultSet, int columnCount, String[] typeNames) throws SQLException
     {
+        List<Object> row = new ArrayList<>(columnCount);
+        for (int i = 1; i <= columnCount; i++)
+        {
+            row.add(mapColumnValue(resultSet.getObject(i), typeNames[i]));
+        }
+        return row;
+    }
+
+    private static boolean containsShowPlanXml(List<Object> row)
+    {
+        return row.stream()
+                .filter(String.class::isInstance)
+                .map(String.class::cast)
+                .anyMatch(SqlServerShowPlanGraphConverter::isShowPlanXml);
+    }
+
+    private static void collectShowPlanXml(List<Object> row, List<String> planXmlDocuments)
+    {
+        row.stream()
+                .filter(String.class::isInstance)
+                .map(String.class::cast)
+                .filter(SqlServerShowPlanGraphConverter::isShowPlanXml)
+                .forEach(planXmlDocuments::add);
     }
 
 }

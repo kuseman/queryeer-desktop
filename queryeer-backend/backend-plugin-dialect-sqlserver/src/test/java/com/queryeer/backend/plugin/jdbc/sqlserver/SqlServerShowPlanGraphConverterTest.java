@@ -231,6 +231,16 @@ class SqlServerShowPlanGraphConverterTest
         Assertions.assertEquals("warning", child.overlays()
                 .getFirst()
                 .kind());
+        Assertions.assertNull(child.overlays()
+                .getFirst()
+                .title());
+        Assertions.assertTrue(child.properties()
+                .stream()
+                .filter(group -> "warnings".equals(group.id()))
+                .flatMap(group -> group.properties()
+                        .stream())
+                .anyMatch(property -> "warning-0".equals(property.id())
+                        && "NoJoinPredicate".equals(property.value())));
     }
 
     @Test
@@ -284,6 +294,10 @@ class SqlServerShowPlanGraphConverterTest
                 .stream()
                 .anyMatch(property -> "missingIndex-1-include-1".equals(property.id())
                         && "Name".equals(property.value())));
+        Assertions.assertTrue(missingIndexGroup.properties()
+                .stream()
+                .anyMatch(property -> "missingIndex-1-createIndex".equals(property.id())
+                        && "CREATE NONCLUSTERED INDEX [IX_Users_Email] ON [db].[dbo].[Users] ([Email]) INCLUDE ([Name]);".equals(property.value())));
     }
 
     @Test
