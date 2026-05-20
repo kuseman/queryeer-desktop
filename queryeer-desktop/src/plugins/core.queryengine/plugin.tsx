@@ -196,6 +196,16 @@ export const coreQueryEnginePlugin: Plugin = {
       }
     });
 
+    context.commands.registerCommand({
+      id: "core.queryengine.toggleOutputPanel",
+      title: "Toggle Output Panel",
+      category: "Query",
+      enablement: "hasActiveQueryExecutableFile",
+      handler: async () => {
+        queryEngineService.requestToggleOutputPanel();
+      }
+    });
+
     context.layout.registerToolbarAction({
       id: "core.queryengine.toolbar.execute",
       title: "Execute",
@@ -214,10 +224,22 @@ export const coreQueryEnginePlugin: Plugin = {
     });
 
     context.layout.registerToolbarAction({
+      id: "core.queryengine.toolbar.toggleOutputPanel",
+      order: 42,
+      commandId: "core.queryengine.toggleOutputPanel",
+      icon: "panel",
+      when: "hasActiveQueryExecutableFile",
+      pressed: () => {
+        const file = getActiveQueryFile();
+        return file ? getQueryViewStateStore().read(file.fileId).outputPanelCollapsed === false : true;
+      }
+    });
+
+    context.layout.registerToolbarAction({
       id: "core.queryengine.toolbar.output.select",
       type: "select",
       title: "Output",
-      order: 42,
+      order: 43,
       alignment: "west",
       when: "hasActiveQueryExecutableFile",
       getOptions: () => getSelectableOutputs().map((output) => ({ value: output.id, label: output.title })),
@@ -242,7 +264,7 @@ export const coreQueryEnginePlugin: Plugin = {
       id: "core.queryengine.toolbar.output.text.format",
       type: "select",
       title: "Format",
-      order: 43,
+      order: 44,
       alignment: "west",
       when: "hasActiveQueryExecutableFile",
       getOptions: () => getQueryOutputFormatRegistry().getFormatters().map((f) => ({ value: f.id, label: f.label })),

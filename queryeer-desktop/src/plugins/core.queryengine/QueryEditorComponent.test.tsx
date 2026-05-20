@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => {
   const subscribeByExecutionId = new Map<string, (event: { method: string; params?: unknown }) => void>();
   const executeRequestListeners = new Set<() => void>();
   const cancelRequestListeners = new Set<() => void>();
+  const toggleOutputPanelRequestListeners = new Set<() => void>();
   const selectedPrimaryRef = { value: "core.queryengine.output.table" as string | null };
   return {
     executeMock: vi.fn(async () => "exec-1"),
@@ -45,6 +46,10 @@ const mocks = vi.hoisted(() => {
       cancelRequestListeners.add(listener);
       return () => cancelRequestListeners.delete(listener);
     }),
+    onToggleOutputPanelRequestMock: vi.fn((listener: () => void) => {
+      toggleOutputPanelRequestListeners.add(listener);
+      return () => toggleOutputPanelRequestListeners.delete(listener);
+    }),
     getActiveEditorMock: vi.fn<() => ActiveEditorMock>(() => ({
       getSelectedText: () => "",
       getContent: () => "select 1",
@@ -54,6 +59,7 @@ const mocks = vi.hoisted(() => {
     subscribeByExecutionId,
     executeRequestListeners,
     cancelRequestListeners,
+    toggleOutputPanelRequestListeners,
   };
 });
 
@@ -95,6 +101,7 @@ vi.mock("./QueryEngineService", () => ({
     subscribe: mocks.subscribeMock,
     onExecuteRequest: mocks.onExecuteRequestMock,
     onCancelRequest: mocks.onCancelRequestMock,
+    onToggleOutputPanelRequest: mocks.onToggleOutputPanelRequestMock,
     consumeExecuteOptions: mocks.consumeExecuteOptionsMock
   })
 }));
@@ -199,6 +206,7 @@ describe("QueryEditorComponent execution state across tab switches", () => {
     mocks.subscribeByExecutionId.clear();
     mocks.executeRequestListeners.clear();
     mocks.cancelRequestListeners.clear();
+    mocks.toggleOutputPanelRequestListeners.clear();
     mocks.selectedPrimaryRef.value = "core.queryengine.output.table";
     queryFilesById.clear();
     getQueryViewStateStore().evict("file-1");

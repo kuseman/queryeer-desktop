@@ -52,6 +52,7 @@ const TABLE_OUTPUT_PRIMARY_ID = "core.queryengine.output.table";
 export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry }: Props): JSX.Element {
   const [outputContext, setOutputContext] = useState<OutputContext>(IDLE_OUTPUT_CONTEXT);
   const [splitPercent, setSplitPercent] = useState(60);
+  const [outputCollapsed, setOutputCollapsed] = useState(false);
   const [selectedPrimaryId, setSelectedPrimaryId] = useState<string | null>(null);
 
   const activeExecutionByFileIdRef = useRef(new Map<string, ActiveExecution>());
@@ -103,6 +104,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       ?? defaultRowsTargetPrimaryId
       ?? null
     );
+    setOutputCollapsed(queryViewState.outputPanelCollapsed ?? false);
   }, [file?.fileId]);
 
   useEffect(() => {
@@ -130,6 +132,9 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
         setSelectedPrimaryId(state.panelActiveOutputId);
       } else if (override !== undefined) {
         setSelectedPrimaryId(override);
+      }
+      if (state.outputPanelCollapsed !== undefined) {
+        setOutputCollapsed(state.outputPanelCollapsed);
       }
     });
   }, [file?.fileId]);
@@ -637,9 +642,16 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     const service = getQueryEngineService();
     const unsubExec = service.onExecuteRequest(() => handleExecuteRef.current());
     const unsubCancel = service.onCancelRequest(() => handleCancelRef.current());
+    const unsubToggle = service.onToggleOutputPanelRequest(() => {
+      const targetFileId = fileIdRef.current;
+      if (!targetFileId) return;
+      const current = getQueryViewStateStore().read(targetFileId).outputPanelCollapsed ?? false;
+      getQueryViewStateStore().setOutputPanelCollapsed(targetFileId, !current);
+    });
     return () => {
       unsubExec();
       unsubCancel();
+      unsubToggle();
     };
   }, []);
 
@@ -678,9 +690,9 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
   }, []);
 
   return (
-    <div className="query-editor">
+    <div className={`query-editor${outputCollapsed ? " output-collapsed" : ""}`}>
       <div className="query-editor-split" ref={splitContainerRef}>
-        <div className="query-editor-text-pane" style={{ flexBasis: `${splitPercent}%` }}>
+        <div className="query-editor-text-pane" style={{ flexBasis: outputCollapsed ? "100%" : `${splitPercent}%` }}>
           <TextEditorComponent
             file={file}
             registry={queryTextRegistry}

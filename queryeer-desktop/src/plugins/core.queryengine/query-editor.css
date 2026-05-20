@@ -115,6 +115,11 @@
   overflow: hidden;
 }
 
+.query-editor.output-collapsed .query-editor-divider,
+.query-editor.output-collapsed .query-editor-output-pane {
+  display: none;
+}
+
 .queryengine-tab-state-failed::after {
   content: "";
   position: absolute;

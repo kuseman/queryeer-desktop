@@ -11,6 +11,7 @@ export type QueryViewState = {
   panelSelectedOutputId?: string;
   textOutputFormat?: string;
   includeActualPlan?: boolean;
+  outputPanelCollapsed?: boolean;
 };
 
 type Listener = (state: QueryViewState) => void;
@@ -55,6 +56,10 @@ class QueryViewStateStore {
 
   setIncludeActualPlan(fileId: string, includeActualPlan: boolean): void {
     this.patch(fileId, { includeActualPlan });
+  }
+
+  setOutputPanelCollapsed(fileId: string, outputPanelCollapsed: boolean): void {
+    this.patch(fileId, { outputPanelCollapsed });
   }
 
   subscribe(fileId: string, listener: Listener): () => void {
@@ -136,7 +141,8 @@ function readStateFromFile(file: FileEntity | undefined): QueryViewState {
     selectedOutputId: executionTargetOutputId,
     panelSelectedOutputId: panelActiveOutputId,
     textOutputFormat: typeof value.textOutputFormat === "string" ? value.textOutputFormat : undefined,
-    includeActualPlan: value.includeActualPlan === true
+    includeActualPlan: value.includeActualPlan === true,
+    outputPanelCollapsed: value.outputPanelCollapsed === true
   };
 }
 
