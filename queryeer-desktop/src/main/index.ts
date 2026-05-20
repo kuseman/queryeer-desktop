@@ -82,13 +82,16 @@ const dockIcon = nativeImage.createFromPath(dockIconPath);
 const windowIcon = nativeImage.createFromPath(windowIconPath);
 
 function createMainWindow(): void {
+  const isDarwin = process.platform === "darwin";
+
   const window = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 1024,
     minHeight: 640,
     show: false,
-    frame: false,
+    frame: isDarwin,
+    ...(isDarwin ? { titleBarStyle: "hiddenInset" as const } : {}),
     icon: windowIcon.isEmpty() ? undefined : windowIcon,
     webPreferences: {
       preload: join(__dirname, "../preload/index.cjs"),

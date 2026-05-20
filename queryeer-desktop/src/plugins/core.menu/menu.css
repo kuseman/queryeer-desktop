@@ -229,3 +229,9 @@
   width: 8px;
   text-align: right;
 }
+
+.shell-titlebar--darwin {
+  padding-left: 76px;
+  -webkit-app-region: drag;
+  height: 38px;
+}

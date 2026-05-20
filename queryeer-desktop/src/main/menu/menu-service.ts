@@ -22,6 +22,9 @@ export class MenuService {
       try {
         this.menuItems = items as MenuItemContribution[];
         this.commands = commands as CommandInfo[];
+        if (process.platform !== "darwin") {
+          return { success: true, skipped: true };
+        }
         const menu = this.buildMenu();
         Menu.setApplicationMenu(menu);
         return { success: true };
@@ -32,6 +35,9 @@ export class MenuService {
     });
     ipcMain.handle("menu:rebuild", async () => {
       try {
+        if (process.platform !== "darwin") {
+          return { success: true, skipped: true };
+        }
         const menu = this.buildMenu();
         Menu.setApplicationMenu(menu);
         return { success: true };

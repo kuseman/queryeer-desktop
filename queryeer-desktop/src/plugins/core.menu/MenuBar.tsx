@@ -37,6 +37,20 @@ export function CoreMenuBar({
   const [focusPath, setFocusPath] = useState<string[]>([]);
   const [menuBarFocused, setMenuBarFocused] = useState(false);
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
+  const platform = window.appShell.platform;
+
+  if (platform === "darwin") {
+    return (
+      <header className="shell-titlebar shell-titlebar--darwin">
+        <div className="shell-titlebar-brand" aria-hidden="true">
+          <img className="shell-titlebar-logo" src={queryeerLogoUrl} alt="" />
+        </div>
+        <div className="shell-titlebar-drag" />
+        <QuickCommandButton />
+        <div className="shell-titlebar-drag" />
+      </header>
+    );
+  }
 
   const sortedItems = useMemo(
     () => [...menuItems].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
