@@ -4,6 +4,7 @@ import static com.queryeer.backend.api.PayloadUtils.isBlank;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import org.treesitter.TSNode;
@@ -62,8 +63,9 @@ final class SqlRelationExtractor
                         if (tableName != null)
                         {
                             String alias = aliasForRelation(text, relNode);
-                            aliases.putIfAbsent(alias != null ? alias
-                                    : tableName, tableName);
+                            String key = alias != null ? alias.toLowerCase(Locale.ROOT)
+                                    : tableName.toLowerCase(Locale.ROOT);
+                            aliases.putIfAbsent(key, tableName);
                         }
                     }
                 }
@@ -125,8 +127,10 @@ final class SqlRelationExtractor
                 alias = unquote(tokens.get(aliasIndex)
                         .text());
             }
-            aliases.putIfAbsent(alias != null ? alias
-                    : tableName.name(), tableName.name());
+            aliases.putIfAbsent(alias != null ? alias.toLowerCase(Locale.ROOT)
+                    : tableName.name()
+                            .toLowerCase(Locale.ROOT),
+                    tableName.name());
         }
         return aliases;
     }
@@ -149,7 +153,8 @@ final class SqlRelationExtractor
         {
             return Map.of();
         }
-        return Map.of(tableName.name(), tableName.name());
+        return Map.of(tableName.name()
+                .toLowerCase(Locale.ROOT), tableName.name());
     }
 
     private static boolean isInsideColumnList(List<SqlToken> tokens, int index)
