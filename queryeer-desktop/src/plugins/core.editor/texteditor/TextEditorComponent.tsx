@@ -336,7 +336,10 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
       editorRegistryHost.setActiveEditor(handle);
     }
 
-    api.onDidChangeModelContent(() => {
+    api.onDidChangeModelContent((event) => {
+      if (event.isFlush) {
+        return;
+      }
       const currentFile = registry.getActiveFile();
       if (currentFile?.fileId) {
         registry.markDirty(currentFile.fileId);

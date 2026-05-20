@@ -36,7 +36,15 @@ export async function bootstrapShell() {
   chain.register({ id: "backend", priority: ContextPriority.WORKBENCH, context: {} });
   await commandContext.initialize();
   chain.update("backend", commandContext.snapshot());
-  commandContext.onDidChange(() => chain.update("backend", commandContext.snapshot()));
+  let previousBackendHealthy = commandContext.snapshot().backendHealthy === true;
+  commandContext.onDidChange(() => {
+    const snapshot = commandContext.snapshot();
+    chain.update("backend", snapshot);
+    if (!previousBackendHealthy && snapshot.backendHealthy) {
+      void syncOpenBackendFiles();
+    }
+    previousBackendHealthy = snapshot.backendHealthy === true;
+  });
 
   // Active-file context scope — updated reactively whenever the active file or its metadata changes.
   chain.register({ id: "activeFile", priority: ContextPriority.ACTIVE_FILE, context: {} });
@@ -68,19 +76,27 @@ export async function bootstrapShell() {
       if (!file.engineBinding) {
         return;
       }
-      await window.appShell.openBackendFile({
-        fileId: file.fileId,
-        uri: file.uri,
-        mimeType: file.mimeType,
-        engineBinding: file.engineBinding,
-        initialText
-      });
+      await openBackendFileIfReady(file, initialText);
     },
     closeFile: async (file) => {
+      if (!backendOpenedFileIds.has(file.fileId) || !isBackendHealthy()) {
+        backendOpenedFileIds.delete(file.fileId);
+        return;
+      }
       await window.appShell.closeBackendFile({ fileId: file.fileId });
+      backendOpenedFileIds.delete(file.fileId);
     },
     changeFile: async (file, text) => {
       const engineBinding = resolveEffectiveEngineBinding(file);
+      if (!engineBinding || !isBackendHealthy()) {
+        return;
+      }
+      if (!backendOpenedFileIds.has(file.fileId)) {
+        const opened = await openBackendFileIfReady({ ...file, engineBinding }, text);
+        if (!opened) {
+          return;
+        }
+      }
       await window.appShell.notifyBackendFileChange({
         fileId: file.fileId,
         version: file.version,
@@ -108,6 +124,45 @@ export async function bootstrapShell() {
   let fileMediator: FileMediator | null = null;
   const pendingBackendFileChangeTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const backendFileChangeDebounceMs = 175;
+  const backendOpenedFileIds = new Set<string>();
+
+  function isBackendHealthy(): boolean {
+    return commandContext.snapshot().backendHealthy === true;
+  }
+
+  async function openBackendFileIfReady(file: FileEntity, initialText?: string): Promise<boolean> {
+    if (!file.engineBinding || !isBackendHealthy()) {
+      return false;
+    }
+    try {
+      await window.appShell.openBackendFile({
+        fileId: file.fileId,
+        uri: file.uri,
+        mimeType: file.mimeType,
+        engineBinding: file.engineBinding,
+        initialText
+      });
+      backendOpenedFileIds.add(file.fileId);
+      return true;
+    } catch {
+      backendOpenedFileIds.delete(file.fileId);
+      return false;
+    }
+  }
+
+  async function syncOpenBackendFiles(): Promise<void> {
+    if (!filesRegistry || !isBackendHealthy()) {
+      return;
+    }
+    for (const file of filesRegistry.listFiles()) {
+      const engineBinding = resolveEffectiveEngineBinding(file);
+      if (!engineBinding) {
+        continue;
+      }
+      const initialText = resolveFileContent(file.fileId, file.uri);
+      await openBackendFileIfReady({ ...file, engineBinding }, initialText);
+    }
+  }
 
   const onFileChanged = (file: FileEntity, text: string): void => {
     getEditorRegistryHost().broadcastContentUpdate(file.uri, text);

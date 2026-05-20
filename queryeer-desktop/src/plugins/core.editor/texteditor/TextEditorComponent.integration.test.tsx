@@ -22,7 +22,7 @@ type FakeEditor = {
   onDidFocusEditorWidget: (listener: () => void) => { dispose: () => void };
   onDidChangeModelContent: (listener: (event: unknown) => void) => { dispose: () => void };
   onDidChangeCursorSelection: (listener: (event: unknown) => void) => { dispose: () => void };
-  triggerModelContentChange: () => void;
+  triggerModelContentChange: (event?: { isFlush?: boolean }) => void;
   getValue: ReturnType<typeof vi.fn>;
   dispose: () => void;
 };
@@ -77,7 +77,7 @@ vi.mock("monaco-editor", () => {
         contentChangeListeners.push(listener);
         return { dispose: () => {} };
       },
-      triggerModelContentChange: () => {
+      triggerModelContentChange: (event) => {
         for (const listener of contentChangeListeners) {
           listener({
             changes: [
@@ -93,7 +93,7 @@ vi.mock("monaco-editor", () => {
               }
             ],
             eol: 1,
-            isFlush: false,
+            isFlush: event?.isFlush ?? false,
             versionId: 2
           });
         }
@@ -316,5 +316,25 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
     const model = registry.getModelForFile(file.fileId);
     expect(markDirtySpy).toHaveBeenCalledWith(file.fileId);
     expect(model?.getContent()).toBe("edited from monaco");
+  });
+
+  it("does not mark dirty on monaco flush events", async () => {
+    const file = makeFile({ fileId: "file-flush", uri: "file:///flush.sql" });
+    filesById.set(file.fileId, file);
+
+    await act(async () => {
+      root.render(<TextEditorComponent file={file} registry={registry} />);
+      await flush();
+    });
+
+    const editor = editors[0];
+    expect(editor).toBeTruthy();
+
+    await act(async () => {
+      editor.triggerModelContentChange({ isFlush: true });
+      await flush();
+    });
+
+    expect(markDirtySpy).not.toHaveBeenCalled();
   });
 });

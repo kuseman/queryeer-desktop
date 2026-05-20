@@ -20,6 +20,7 @@ import {
 import { getFileStateRegistry } from "./FileStateRegistryImpl";
 import { getJdbcTreeContextMenuRegistry } from "../../plugins/core.queryengine.jdbc/jdbc-tree-context-menu-registry";
 import { registerChangelog } from "../../plugins/core.about/about-service.js";
+import { getNotificationService } from "../../plugins/core.notification/notification-service";
 
 export type PluginHostState = {
   startedAt: string;
@@ -120,7 +121,8 @@ export class PluginHost {
       contextMenu: this.extensionRegistry.createContextMenuRegistry(),
       tableOutputContextMenu: this.extensionRegistry.createTableOutputContextMenuRegistry(),
       jdbcTreeContextMenu: getJdbcTreeContextMenuRegistry(),
-      about: { registerChangelog }
+      about: { registerChangelog },
+      notifications: getNotificationService()
     };
 
     for (const plugin of orderedPlugins) {
