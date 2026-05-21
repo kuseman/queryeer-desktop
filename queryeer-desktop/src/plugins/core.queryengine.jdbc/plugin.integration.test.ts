@@ -182,7 +182,18 @@ function createContext(): PluginContext {
       onActiveEditorChanged: vi.fn(() => ({ dispose: vi.fn() }))
     },
     about: { registerChangelog: vi.fn() },
-    notifications: createNotificationMock()
+    notifications: createNotificationMock(),
+    assistant: createAssistantRegistryMock()
+  };
+}
+
+function createAssistantRegistryMock() {
+  return {
+    registerContextContribution: vi.fn(() => () => {}),
+    registerToolContribution: vi.fn(() => () => {}),
+    collectContext: vi.fn(async () => []),
+    listTools: vi.fn(() => []),
+    invokeTool: vi.fn(async () => ({ ok: false }))
   };
 }
 

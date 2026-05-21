@@ -69,3 +69,13 @@ export function appendAssistantMessages(
     messages: [...state.messages, ...messages]
   }));
 }
+
+export function clearAssistantMessages(
+  registry: FileStateRegistry,
+  fileId: string
+): AssistantChatViewState {
+  return updateAssistantChatState(registry, fileId, (state) => ({
+    ...state,
+    messages: []
+  }));
+}

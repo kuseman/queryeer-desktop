@@ -122,7 +122,8 @@ export class PluginHost {
       tableOutputContextMenu: this.extensionRegistry.createTableOutputContextMenuRegistry(),
       jdbcTreeContextMenu: getJdbcTreeContextMenuRegistry(),
       about: { registerChangelog },
-      notifications: getNotificationService()
+      notifications: getNotificationService(),
+      assistant: this.extensionRegistry.createAssistantRegistry()
     };
 
     for (const plugin of orderedPlugins) {

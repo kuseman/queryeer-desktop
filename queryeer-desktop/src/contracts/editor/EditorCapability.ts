@@ -1,5 +1,5 @@
 import type { OutlineSymbol } from "../extensions/OutlineExtension.js";
-import type { Disposable } from "./EditorApi.js";
+import type { Disposable, TextRange } from "./EditorApi.js";
 
 export type OutlineCapability = {
   getSymbols(): OutlineSymbol[] | Promise<OutlineSymbol[]>;
@@ -23,12 +23,25 @@ export type FocusCapability = {
 export type SelectionCapability = {
   getSelectedText(): string | null;
   getContent(): string;
+  getContentFromRange?(range: TextRange): string | undefined;
   getSelection(): {
     selectionStartLineNumber: number;
     selectionStartColumn: number;
     positionLineNumber: number;
     positionColumn: number;
   } | null;
+};
+
+export type VersionedTextEditResult =
+  | { ok: true; version: number }
+  | { ok: false; reason: "versionMismatch"; expectedVersion: number; actualVersion: number }
+  | { ok: false; reason: "invalidRange"; message: string; actualVersion: number }
+  | { ok: false; reason: "editFailed"; actualVersion: number };
+
+export type VersionedTextEditCapability = {
+  getVersionId(): number;
+  replaceRange(expectedVersion: number, range: TextRange, text: string): VersionedTextEditResult;
+  onDidChangeVersion(callback: (version: number) => void): Disposable;
 };
 
 export type EditorHandle = {
@@ -39,6 +52,7 @@ export type EditorHandle = {
   content?: ContentCapability;
   focus?: FocusCapability;
   selection?: SelectionCapability;
+  versionedTextEdit?: VersionedTextEditCapability;
 };
 
 export type EditorRegistry = {

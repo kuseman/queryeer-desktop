@@ -211,7 +211,7 @@ export class CoreSecurityService {
     } catch (error) {
       if (
         error instanceof Error &&
-        error.message.includes("SECURITY_SESSION_CLOSED")
+        (error.message.includes("SECURITY_SESSION_CLOSED") || error.message.includes("Security vault is locked"))
       ) {
         const accepted = await this.ensureUnlockedForSecretAccess({
           interactive: options?.interactive ?? true

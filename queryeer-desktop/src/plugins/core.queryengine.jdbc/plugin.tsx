@@ -27,6 +27,7 @@ import { TreeActionsSettingsEditor } from "./tree-action-settings";
 import { createTreeActionProvider } from "./tree-action-provider";
 import { onCoreSettingsServiceInitialized } from "../core.settings/service";
 import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegistry";
+import { createJdbcAssistantTools } from "./jdbc-assistant-tools";
 
 const JDBC_SESSION_ID_METADATA_KEY = "core.queryengine.jdbc.sessionId";
 const JDBC_SESSION_CONNECTION_TITLE_KEY = "core.queryengine.jdbc.sessionConnection";
@@ -67,6 +68,10 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       mimeType: "application/sql",
       icon: DatabaseIcon
     });
+
+    for (const tool of createJdbcAssistantTools(context)) {
+      context.assistant.registerToolContribution(tool);
+    }
 
     context.layout.registerTabHeaderStyle({
       id: "core.queryengine.jdbc.tabHeaderStyle.connectionColor",
