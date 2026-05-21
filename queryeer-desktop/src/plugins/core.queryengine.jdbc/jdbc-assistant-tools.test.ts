@@ -74,7 +74,13 @@ describe("jdbc assistant tools", () => {
       { id: "col:order_id", name: "order_id", kind: "column", attributes: { type: "int", foreignKey: true, referencesTable: "Order", referencesColumn: "id" } },
       { id: "pk:orderline", name: "PK_OrderLine", kind: "primary_key", attributes: { column: "id" } },
       { id: "fk:orderline_order", name: "FK_OrderLine_Order", kind: "foreign_key", attributes: { column: "order_id", referencesTable: "Order", referencesColumn: "id" } },
-      { id: "idx:orderline_order", name: "IX_OrderLine_Order", kind: "index", attributes: { column: "order_id" } }
+      {
+        id: "idx:orderline_order",
+        name: "IX_OrderLine_Order",
+        kind: "index",
+        attributes: { unique: false },
+        children: [{ id: "idxcol:orderline_order:order_id", name: "order_id", kind: "index_column", attributes: { ordinal: 1, sortOrder: "DESC" } }]
+      }
     ];
 
     const detail = toObjectDetail({
@@ -95,8 +101,63 @@ describe("jdbc assistant tools", () => {
       { column: "order_id", referencesTable: "Order", referencesColumn: "id", attributes: { type: "int", foreignKey: true, referencesTable: "Order", referencesColumn: "id" } }
     ]);
     expect(detail.indices).toEqual([
-      { name: "IX_OrderLine_Order", attributes: { column: "order_id" } }
+      {
+        name: "IX_OrderLine_Order",
+        columns: [{ name: "order_id", ordinal: 1, sortOrder: "DESC", attributes: { ordinal: 1, sortOrder: "DESC" } }],
+        attributes: { unique: false }
+      }
     ]);
+  });
+
+  it("surfaces columns and indexes nested under metadata folders", () => {
+    const table: JdbcSchemaObject = {
+      id: "SalesDb.dbo.OrderLine",
+      name: "OrderLine",
+      kind: "table",
+      fullName: "dbo.OrderLine",
+      attributes: { catalog: "SalesDb", schema: "dbo" },
+      children: []
+    };
+    const children: JdbcSchemaObject[] = [
+      {
+        id: "columns_folder:SalesDb:dbo:OrderLine",
+        name: "Columns",
+        kind: "columns_folder",
+        attributes: { catalog: "SalesDb", schema: "dbo", table: "OrderLine" },
+        children: [{ id: "col:id", name: "id", kind: "column", attributes: { type: "int", primaryKey: true } }]
+      },
+      {
+        id: "indexes_folder:SalesDb:dbo:OrderLine",
+        name: "Indexes",
+        kind: "indexes_folder",
+        attributes: { catalog: "SalesDb", schema: "dbo", table: "OrderLine" },
+        children: [{
+          id: "idx:orderline_id",
+          name: "IX_OrderLine_Id",
+          kind: "index",
+          attributes: {},
+          children: [{ id: "idxcol:orderline_id:id", name: "id", kind: "index_column", attributes: { ordinal: 1, sortOrder: "ASC" } }]
+        }]
+      }
+    ];
+
+    const detail = toObjectDetail({
+      name: table.name,
+      kind: table.kind,
+      fullName: table.fullName,
+      database: "SalesDb",
+      schema: "dbo",
+      object: table
+    }, children);
+
+    expect(detail.columns).toEqual([{ name: "id", type: "int", nullable: undefined, attributes: { type: "int", primaryKey: true } }]);
+    expect(detail.primaryKeys).toEqual([{ column: "id", attributes: { type: "int", primaryKey: true } }]);
+    expect(detail.indices).toEqual([{
+      name: "IX_OrderLine_Id",
+      columns: [{ name: "id", ordinal: 1, sortOrder: "ASC", attributes: { ordinal: 1, sortOrder: "ASC" } }],
+      attributes: {}
+    }]);
+    expect(detail.properties).toEqual([]);
   });
 
   it("does not use database name as searchable object text", () => {

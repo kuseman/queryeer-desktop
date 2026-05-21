@@ -33,6 +33,15 @@ public final class JdbcSchemaNavigator
 
     public List<TableInfo> tableNamesForCompletion(String connectionId, String selectedDatabase)
     {
+        List<TableInfo> cached = schemaStore.tableNamesForCompletion(connectionId, selectedDatabase)
+                .stream()
+                .map(entry -> new TableInfo(entry.name(), entry.kind()))
+                .toList();
+        if (!cached.isEmpty())
+        {
+            return cached;
+        }
+
         String normalizedSelectedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
         List<JdbcSchemaObject> snapshot = loadSnapshotForLookup(connectionId, selectedDatabase, normalizedSelectedDatabase);
         List<TableInfo> tableInfos = new ArrayList<>();
@@ -59,6 +68,16 @@ public final class JdbcSchemaNavigator
         {
             return result;
         }
+        result.putAll(schemaStore.columnNamesForTables(connectionId, tableNames, selectedDatabase));
+        if (result.values()
+                .stream()
+                .anyMatch(columns -> columns != null
+                        && !columns.isEmpty()))
+        {
+            return result;
+        }
+        result.clear();
+
         String normalizedSelectedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
         List<JdbcSchemaObject> snapshot = loadSnapshotForLookup(connectionId, selectedDatabase, normalizedSelectedDatabase);
         for (String tableName : tableNames)
@@ -201,8 +220,9 @@ public final class JdbcSchemaNavigator
         }
         String normalizedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
         // Try DEEP cache first
-        List<JdbcSchemaObject> snapshot = loadCachedSnapshot(connectionId);
-        Map<String, Object> result = findSymbolInSchema(snapshot, rawToken, normalizedDatabase);
+        JdbcSchemaStore.SymbolLookupEntry cached = schemaStore.findSymbol(connectionId, rawToken, selectedDatabase);
+        Map<String, Object> result = cached != null ? Map.of("kind", cached.kind(), "name", cached.name(), "detail", cached.detail())
+                : findSymbolInSchema(loadCachedSnapshot(connectionId), rawToken, normalizedDatabase);
         if (result != null)
         {
             return result;
