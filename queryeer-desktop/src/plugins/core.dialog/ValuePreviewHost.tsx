@@ -146,6 +146,21 @@ function ValuePreviewWindow({ windowState }: { windowState: ValuePreviewWindowSt
     void navigator.clipboard.writeText(windowState.value);
   }, [windowState.value]);
 
+  const handleCopySelection = React.useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      void navigator.clipboard.writeText(windowState.value);
+      return;
+    }
+    const selection = editor.getSelection();
+    if (!selection || selection.isEmpty()) {
+      void navigator.clipboard.writeText(windowState.value);
+      return;
+    }
+    const selectedText = editor.getModel()?.getValueInRange(selection);
+    void navigator.clipboard.writeText(selectedText ?? windowState.value);
+  }, [windowState.value]);
+
   const handleSelectAll = React.useCallback(() => {
     editorRef.current?.focus();
     const model = editorRef.current?.getModel();
@@ -215,7 +230,7 @@ function ValuePreviewWindow({ windowState }: { windowState: ValuePreviewWindowSt
       }
       if (isMod && event.key === "c") {
         event.preventDefault();
-        handleCopyAll();
+        handleCopySelection();
         return;
       }
     };
@@ -223,7 +238,7 @@ function ValuePreviewWindow({ windowState }: { windowState: ValuePreviewWindowSt
     return () => {
       document.removeEventListener("keydown", onKeyDown, true);
     };
-  }, [handleFind, handleSelectAll, handleCopyAll]);
+  }, [handleFind, handleSelectAll, handleCopySelection]);
 
   return (
     <div

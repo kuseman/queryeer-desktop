@@ -546,10 +546,10 @@ export function ShellApp({
 
       const rect = layout.getBoundingClientRect();
       if (target === "primary") {
-        const nextWidth = Math.max(180, Math.min(520, event.clientX - rect.left));
+        const nextWidth = event.clientX - rect.left;
         setPrimarySidebarWidth(nextWidth);
       } else {
-        const nextWidth = Math.max(180, Math.min(520, rect.right - event.clientX));
+        const nextWidth = rect.right - event.clientX;
         setSecondarySidebarWidth(nextWidth);
       }
     };

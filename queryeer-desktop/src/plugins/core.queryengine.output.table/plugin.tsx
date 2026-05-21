@@ -709,21 +709,35 @@ export function createCopyAsCsvTableContextMenuProvider(): TableOutputContextMen
           label: "Copy as CSV",
           order: 100,
           run: async () => {
-            const lines: string[] = [];
             const cellsByRow = new Map<number, TableOutputSelectionSnapshot["selectedCells"]>();
             for (const cell of context.selection.selectedCells) {
               const row = cellsByRow.get(cell.rowIndex) ?? [];
               row.push(cell);
               cellsByRow.set(cell.rowIndex, row);
             }
-            for (const [, cells] of [...cellsByRow.entries()].sort(([a], [b]) => a - b)) {
-              lines.push(cells
-                .slice()
-                .sort((a, b) => a.columnIndex - b.columnIndex)
-                .map((cell) => toCsvScalar(cell.value))
-                .join(","));
+            const sortedColumnIndexes = [...new Set(context.selection.selectedCells.map((c) => c.columnIndex))].sort((a, b) => a - b);
+            const isSingleColumn = sortedColumnIndexes.length === 1;
+            let output: string;
+            if (isSingleColumn) {
+              const values = [...cellsByRow.entries()]
+                .sort(([a], [b]) => a - b)
+                .flatMap(([, cells]) => cells
+                  .slice()
+                  .sort((a, b) => a.columnIndex - b.columnIndex)
+                  .map((cell) => toCsvScalar(cell.value)));
+              output = values.join(",");
+            } else {
+              const lines: string[] = [];
+              for (const [, cells] of [...cellsByRow.entries()].sort(([a], [b]) => a - b)) {
+                lines.push(cells
+                  .slice()
+                  .sort((a, b) => a.columnIndex - b.columnIndex)
+                  .map((cell) => toCsvScalar(cell.value))
+                  .join(","));
+              }
+              output = lines.join("\n");
             }
-            await navigator.clipboard.writeText(lines.join("\n"));
+            await navigator.clipboard.writeText(output);
           }
         }
       ];
