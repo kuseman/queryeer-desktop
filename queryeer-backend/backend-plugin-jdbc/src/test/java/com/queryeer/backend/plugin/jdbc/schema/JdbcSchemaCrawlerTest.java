@@ -36,10 +36,10 @@ class JdbcSchemaCrawlerTest
         doThrow(new RuntimeException("Some SQL error")).when(dialect)
                 .openSessionConnection(anyMap());
         when(dialect.branchResolvers()).thenReturn(Map.of("tables_folder", resolver, "views_folder", resolver, "columns_folder", resolver, "indexes_folder", resolver));
-        when(store.latestSnapshot("jdbc-1", JdbcSchemaCrawlScope.DEEP)).thenReturn(List.of());
-        when(resolver.resolveSchema(eq(connection), anyMap()))
+        when(resolver.resolveSchema(eq(connection), argThat((Map<String, Object> args) -> "tables_folder".equals(args.get("parentKind")))))
                 .thenReturn(List.of(new JdbcSchemaObject("AdventureWorks2022.Person.Address", "Address", "table", List.of(), Map.of("catalog", "AdventureWorks2022", "schema", "Person")),
                         new JdbcSchemaObject("AdventureWorks2022.HumanResources.Employee", "Employee", "table", List.of(), Map.of("catalog", "AdventureWorks2022", "schema", "HumanResources"))));
+        when(resolver.resolveSchema(eq(connection), argThat((Map<String, Object> args) -> "views_folder".equals(args.get("parentKind"))))).thenReturn(List.of());
 
         JdbcSchemaRouter router = new JdbcSchemaRouter(new DefaultJdbcSchemaResolver());
         JdbcSchemaCrawler crawler = new JdbcSchemaCrawler(store, router);
@@ -47,31 +47,20 @@ class JdbcSchemaCrawlerTest
         crawler.crawl(connection, JdbcSchemaCrawlScope.DEEP, new JdbcSchemaTarget("AdventureWorks2022", null, null));
 
         @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<JdbcSchemaObject>> snapshotCaptor = ArgumentCaptor.forClass(List.class);
-        verify(store).persistSnapshot(eq("jdbc-1"), eq(JdbcSchemaCrawlScope.DEEP), snapshotCaptor.capture());
+        ArgumentCaptor<List<JdbcSchemaObject>> fetchedCaptor = ArgumentCaptor.forClass(List.class);
+        verify(store).persistDeepSnapshotTarget(eq("jdbc-1"), eq("AdventureWorks2022"), eq(null), fetchedCaptor.capture());
 
-        List<JdbcSchemaObject> roots = snapshotCaptor.getValue();
-        assertEquals(1, roots.size());
-        JdbcSchemaObject database = roots.get(0);
-        assertEquals("database", database.kind());
-        assertEquals("AdventureWorks2022", database.name());
-        assertEquals(2, database.children()
-                .size());
-        assertEquals("Person", database.children()
-                .get(0)
+        List<JdbcSchemaObject> fetched = fetchedCaptor.getValue();
+        assertEquals(2, fetched.size());
+        assertEquals("Person", fetched.get(0)
+                .attributes()
+                .get("schema"));
+        assertEquals("Address", fetched.get(0)
                 .name());
-        assertEquals("Address", database.children()
-                .get(0)
-                .children()
-                .get(0)
-                .name());
-        assertEquals("HumanResources", database.children()
-                .get(1)
-                .name());
-        assertEquals("Employee", database.children()
-                .get(1)
-                .children()
-                .get(0)
+        assertEquals("HumanResources", fetched.get(1)
+                .attributes()
+                .get("schema"));
+        assertEquals("Employee", fetched.get(1)
                 .name());
     }
 
@@ -86,8 +75,6 @@ class JdbcSchemaCrawlerTest
         doThrow(new RuntimeException("Some SQL error")).when(dialect)
                 .openSessionConnection(anyMap());
         when(dialect.branchResolvers()).thenReturn(Map.of("tables_folder", resolver, "views_folder", resolver, "columns_folder", resolver, "indexes_folder", resolver));
-        when(store.latestSnapshot("jdbc-1", JdbcSchemaCrawlScope.DEEP)).thenReturn(List.of());
-
         JdbcSchemaObject column = new JdbcSchemaObject("column:db:dbo:users:id", "id", "column", List.of(), Map.of("type", "int", "primaryKey", true));
         JdbcSchemaObject index = new JdbcSchemaObject("index:db:dbo:users:idx_name", "idx_name", "index", List.of(), Map.of("columns", "name", "unique", false));
 
@@ -102,20 +89,12 @@ class JdbcSchemaCrawlerTest
         crawler.crawl(connection, JdbcSchemaCrawlScope.DEEP, new JdbcSchemaTarget("db", null, null));
 
         @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<JdbcSchemaObject>> snapshotCaptor = ArgumentCaptor.forClass(List.class);
-        verify(store).persistSnapshot(eq("jdbc-1"), eq(JdbcSchemaCrawlScope.DEEP), snapshotCaptor.capture());
+        ArgumentCaptor<List<JdbcSchemaObject>> fetchedCaptor = ArgumentCaptor.forClass(List.class);
+        verify(store).persistDeepSnapshotTarget(eq("jdbc-1"), eq("db"), eq(null), fetchedCaptor.capture());
 
-        List<JdbcSchemaObject> roots = snapshotCaptor.getValue();
-        assertEquals(1, roots.size());
-        JdbcSchemaObject database = roots.get(0);
-        assertEquals("database", database.kind());
-
-        JdbcSchemaObject schemaNode = database.children()
-                .get(0);
-        assertEquals("dbo", schemaNode.name());
-
-        JdbcSchemaObject tableNode = schemaNode.children()
-                .get(0);
+        List<JdbcSchemaObject> fetched = fetchedCaptor.getValue();
+        assertEquals(1, fetched.size());
+        JdbcSchemaObject tableNode = fetched.get(0);
         assertEquals("users", tableNode.name());
         assertEquals(2, tableNode.children()
                 .size());

@@ -42,6 +42,20 @@ class SqlContextDetectorTest
         assertContext("SELECT * FROM (SELECT * FROM t1)", 1, 30, TABLE_REFERENCE);
     }
 
+    @Test
+    void detectsNestedExistsFromClause()
+    {
+        assertContext("""
+                SELECT *
+                FROM db1.dbo.users u
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM db2.dbo.users du
+                    WHERE du.email = u.name
+                )
+                """, 5, 20, TABLE_REFERENCE);
+    }
+
     // -- COLUMN_REFERENCE tests --
 
     @Test

@@ -244,13 +244,16 @@ public final class JdbcSchemaActionHandler
             }
 
             JdbcConnection resolved = connections.resolve(connectionId);
-            List<JdbcSchemaObject> fetched = router.resolve(resolved, "tables_folder", target);
+            List<JdbcSchemaObject> fetchedTables = router.resolve(resolved, "tables_folder", target);
+            List<JdbcSchemaObject> fetchedViews = router.resolve(resolved, "views_folder", target);
             // Expand each table to include column children in the snapshot
-            List<JdbcSchemaObject> expanded = expandTableColumns(resolved, fetched);
-            List<JdbcSchemaObject> current = new ArrayList<>(schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP));
-            mergeTablesScope(current, target.database(), target.schema(), expanded);
-            schemaStore.persistSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP, current);
-            return current;
+            List<JdbcSchemaObject> expandedTables = expandTableColumns(resolved, fetchedTables);
+            List<JdbcSchemaObject> expandedViews = expandTableColumns(resolved, fetchedViews);
+            List<JdbcSchemaObject> expanded = new ArrayList<>(expandedTables.size() + expandedViews.size());
+            expanded.addAll(expandedTables);
+            expanded.addAll(expandedViews);
+            schemaStore.persistDeepSnapshotTarget(connectionId, target.database(), target.schema(), expanded);
+            return schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP);
         }
 
         if (dueMode)

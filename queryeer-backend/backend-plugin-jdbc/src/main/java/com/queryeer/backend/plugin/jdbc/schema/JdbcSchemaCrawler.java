@@ -46,9 +46,7 @@ public final class JdbcSchemaCrawler
             List<JdbcSchemaObject> allFetched = new ArrayList<>(expandedTables.size() + expandedViews.size());
             allFetched.addAll(expandedTables);
             allFetched.addAll(expandedViews);
-            List<JdbcSchemaObject> current = new ArrayList<>(store.latestSnapshot(connection.connectionId(), JdbcSchemaCrawlScope.DEEP));
-            mergeTablesScope(current, target.database(), target.schema(), allFetched);
-            store.persistSnapshot(connection.connectionId(), JdbcSchemaCrawlScope.DEEP, current);
+            store.persistDeepSnapshotTarget(connection.connectionId(), target.database(), target.schema(), allFetched);
             return;
         }
 

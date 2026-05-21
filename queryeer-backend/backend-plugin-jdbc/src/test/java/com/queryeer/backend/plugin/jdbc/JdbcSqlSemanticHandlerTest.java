@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
+import com.queryeer.backend.core.JacksonPayloadMapper;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaNavigator;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 import com.queryeer.backend.queryengine.sql.parser.SqlHoverSupport;
@@ -44,7 +45,7 @@ class JdbcSqlSemanticHandlerTest
         assertNotNull(result);
         String markdown = extractMarkdown(result);
         assertNotNull(markdown);
-        assertContains(markdown, "Table: users");
+        assertContains(markdown, "Table: db1.dbo.users");
         assertContains(markdown, "PK"); // only db1's users has PK
 
         // When db2 is selected, should find db2.users (no PK, has email)
@@ -52,7 +53,7 @@ class JdbcSqlSemanticHandlerTest
         assertNotNull(result);
         markdown = extractMarkdown(result);
         assertNotNull(markdown);
-        assertContains(markdown, "Table: users");
+        assertContains(markdown, "Table: db2.dbo.Users");
         assertContains(markdown, "email"); // only db2's users has email
     }
 
@@ -72,8 +73,20 @@ class JdbcSqlSemanticHandlerTest
         assertNotNull(result);
         String markdown = extractMarkdown(result);
         assertNotNull(markdown);
-        assertContains(markdown, "Table: users");
+        assertContains(markdown, "Table: db1.dbo.users");
         assertContains(markdown, "PK"); // first match is db1's users
+    }
+
+    @Test
+    void tableHover_honorsExplicitDatabaseQualifier()
+    {
+        Map<String, Object> result = invokeTableHover(CONN_ID, "db1", "db2.dbo.users");
+
+        assertNotNull(result);
+        String markdown = extractMarkdown(result);
+        assertNotNull(markdown);
+        assertContains(markdown, "Table: db2.dbo.Users");
+        assertContains(markdown, "email");
     }
 
     @Test
@@ -85,7 +98,7 @@ class JdbcSqlSemanticHandlerTest
         assertNotNull(result);
         String markdown = extractMarkdown(result);
         assertNotNull(markdown);
-        assertContains(markdown, "Column: users.id");
+        assertContains(markdown, "Column: db1.dbo.users.id");
         assertContains(markdown, "Primary Key: Yes"); // only db1's id is PK
 
         // When db2 selected, should find db2.users.id (no PK)
@@ -93,7 +106,7 @@ class JdbcSqlSemanticHandlerTest
         assertNotNull(result);
         String markdown2 = extractMarkdown(result);
         assertNotNull(markdown2);
-        assertContains(markdown2, "Column: users.id");
+        assertContains(markdown2, "Column: db2.dbo.Users.id");
     }
 
     @Test
@@ -102,6 +115,135 @@ class JdbcSqlSemanticHandlerTest
         // email only exists in db2.users
         Map<String, Object> result = invokeColumnHover(CONN_ID, "db1", "email");
         assertNull(result);
+    }
+
+    @Test
+    void columnHover_honorsExplicitDatabaseQualifier()
+    {
+        Map<String, Object> result = invokeColumnHover(CONN_ID, "db1", "db2.dbo.users.email");
+
+        assertNotNull(result);
+        String markdown = extractMarkdown(result);
+        assertNotNull(markdown);
+        assertContains(markdown, "Column: db2.dbo.Users.email");
+        assertContains(markdown, "VARCHAR");
+    }
+
+    @Test
+    void hoverSupport_doesNotResolveUnqualifiedColumnFromUnresolvedTable()
+    {
+        String sql = """
+                select *
+                from table_that_not_exists
+                where externalId = '1234'
+                """;
+        SqlHoverSupport.SqlHoverPayload payload = new SqlHoverSupport.SqlHoverPayload("file1", sql, new SqlHoverSupport.SqlHoverCursor(3, 9), CONN_ID, "db1");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) SqlHoverSupport.hover(new JacksonPayloadMapper(), mock(IncrementalParseSessionService.class), "test-engine", "file1", payload,
+                handler::semanticHover);
+
+        assertNull(result);
+    }
+
+    @Test
+    void hoverSupport_resolvesAliasInsideExistsSubquery()
+    {
+        String sql = """
+                SELECT *
+                FROM db1.dbo.users u
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM db2.dbo.users du
+                    WHERE du.email = u.name
+                )
+                """;
+        SqlHoverSupport.SqlHoverPayload payload = new SqlHoverSupport.SqlHoverPayload("file1", sql, new SqlHoverSupport.SqlHoverCursor(6, 17), CONN_ID, "db1");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) SqlHoverSupport.hover(new JacksonPayloadMapper(), mock(IncrementalParseSessionService.class), "test-engine", "file1", payload,
+                handler::semanticHover);
+
+        assertNotNull(result);
+        String markdown = extractMarkdown(result);
+        assertNotNull(markdown);
+        assertContains(markdown, "Column: db2.dbo.Users.email");
+        assertContains(markdown, "VARCHAR");
+    }
+
+    @Test
+    void hoverSupport_resolvesOuterAliasInsideExistsSubquery()
+    {
+        String sql = """
+                SELECT *
+                FROM db1.dbo.users u
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM db2.dbo.users du
+                    WHERE du.email = u.name
+                )
+                """;
+        SqlHoverSupport.SqlHoverPayload payload = new SqlHoverSupport.SqlHoverPayload("file1", sql, new SqlHoverSupport.SqlHoverCursor(6, 27), CONN_ID, "db1");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) SqlHoverSupport.hover(new JacksonPayloadMapper(), mock(IncrementalParseSessionService.class), "test-engine", "file1", payload,
+                handler::semanticHover);
+
+        assertNotNull(result);
+        String markdown = extractMarkdown(result);
+        assertNotNull(markdown);
+        assertContains(markdown, "Column: db1.dbo.users.name");
+        assertContains(markdown, "VARCHAR");
+    }
+
+    @Test
+    void hoverSupport_resolvesTableInsideExistsSubquery()
+    {
+        String sql = """
+                SELECT *
+                FROM db1.dbo.users u
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM db2.dbo.users du
+                    WHERE du.email = u.name
+                )
+                """;
+        SqlHoverSupport.SqlHoverPayload payload = new SqlHoverSupport.SqlHoverPayload("file1", sql, new SqlHoverSupport.SqlHoverCursor(5, 20), CONN_ID, "db1");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) SqlHoverSupport.hover(new JacksonPayloadMapper(), mock(IncrementalParseSessionService.class), "test-engine", "file1", payload,
+                handler::semanticHover);
+
+        assertNotNull(result);
+        String markdown = extractMarkdown(result);
+        assertNotNull(markdown);
+        assertContains(markdown, "Table: db2.dbo.Users");
+        assertContains(markdown, "email");
+    }
+
+    @Test
+    void hoverSupport_resolvesTableAliasInsideExistsSubquery()
+    {
+        String sql = """
+                SELECT *
+                FROM db1.dbo.users u
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM db2.dbo.users du
+                    WHERE du.email = u.name
+                )
+                """;
+        SqlHoverSupport.SqlHoverPayload payload = new SqlHoverSupport.SqlHoverPayload("file1", sql, new SqlHoverSupport.SqlHoverCursor(5, 26), CONN_ID, "db1");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) SqlHoverSupport.hover(new JacksonPayloadMapper(), mock(IncrementalParseSessionService.class), "test-engine", "file1", payload,
+                handler::semanticHover);
+
+        assertNotNull(result);
+        String markdown = extractMarkdown(result);
+        assertNotNull(markdown);
+        assertContains(markdown, "Table: db2.dbo.Users");
+        assertContains(markdown, "email");
     }
 
     // -- Helpers --
@@ -154,11 +296,13 @@ class JdbcSqlSemanticHandlerTest
 
         JdbcSchemaObject usersIdDb2 = new JdbcSchemaObject("col:id2", "id", "column", null, Map.of("type", "INTEGER", "nullable", false));
         JdbcSchemaObject usersEmail = new JdbcSchemaObject("col:email", "email", "column", null, Map.of("type", "VARCHAR", "nullable", true));
-        JdbcSchemaObject db2Users = new JdbcSchemaObject("table:users_db2", "users", "table", List.of(usersIdDb2, usersEmail), Map.of());
+        JdbcSchemaObject db2UsersColumns = new JdbcSchemaObject("columns_folder:users_db2", "Columns", "columns_folder", List.of(usersIdDb2, usersEmail), Map.of());
+        JdbcSchemaObject db2Users = new JdbcSchemaObject("table:users_db2", "Users", "table", List.of(db2UsersColumns), Map.of());
 
         JdbcSchemaObject ordersId = new JdbcSchemaObject("col:oid", "id", "column", null, Map.of("type", "INTEGER", "nullable", false));
         JdbcSchemaObject ordersTotal = new JdbcSchemaObject("col:total", "total", "column", null, Map.of("type", "DECIMAL", "nullable", true));
-        JdbcSchemaObject db1Orders = new JdbcSchemaObject("table:orders", "orders", "table", List.of(ordersId, ordersTotal), Map.of());
+        JdbcSchemaObject ordersExternalId = new JdbcSchemaObject("col:externalId", "externalId", "column", null, Map.of("type", "VARCHAR", "nullable", true));
+        JdbcSchemaObject db1Orders = new JdbcSchemaObject("table:orders", "orders", "table", List.of(ordersId, ordersTotal, ordersExternalId), Map.of());
 
         JdbcSchemaObject db1Schema = new JdbcSchemaObject("schema:dbo_db1", "dbo", "schema", List.of(db1Users), null);
         JdbcSchemaObject db1 = new JdbcSchemaObject("db:db1", "db1", "database", List.of(db1Schema), null);

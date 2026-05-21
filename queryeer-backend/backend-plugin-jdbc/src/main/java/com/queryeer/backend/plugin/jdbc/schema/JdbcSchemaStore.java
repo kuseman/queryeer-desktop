@@ -70,6 +70,50 @@ public final class JdbcSchemaStore
         compactIfNeeded(connectionId, scope);
     }
 
+    void persistDeepSnapshotTarget(String connectionId, String database, String schema, List<JdbcSchemaObject> fetched)
+    {
+        String db = normalizeTargetDatabase(database, fetched);
+        if (db == null)
+        {
+            throw new IllegalArgumentException("database is required for targeted deep schema persistence");
+        }
+
+        try (Connection connection = open(connectionId, JdbcSchemaCrawlScope.DEEP))
+        {
+            connection.setAutoCommit(false);
+            long runId = insertRun(connection);
+            long[] ordinal = new long[] { maxOrdinal(connection) };
+            long[] edgeOrdinal = new long[] { maxReferenceOrdinal(connection) };
+
+            String databaseObjectId = findDatabaseObjectId(connection, db);
+            if (schema == null
+                    || schema.isBlank())
+            {
+                markTargetSubtreeDeleted(connection, databaseObjectId);
+                upsertObject(connection, runId, null, databaseNode(db, fetched), ordinal, edgeOrdinal);
+            }
+            else
+            {
+                JdbcSchemaObject dbNode = new JdbcSchemaObject("database:" + db, db, "database", List.of(), Map.of());
+                upsertObject(connection, runId, null, dbNode, ordinal, edgeOrdinal);
+                databaseObjectId = dbNode.id();
+                String schemaObjectId = findSchemaObjectId(connection, databaseObjectId, schema);
+                markTargetSubtreeDeleted(connection, schemaObjectId);
+                upsertObject(connection, runId, databaseObjectId, schemaNode(db, schema, fetched), ordinal, edgeOrdinal);
+            }
+
+            clearSemanticReferences(connection);
+            rebuildSemanticReferences(connection, edgeOrdinal);
+            finishRun(connection, runId, "SUCCESS", null);
+            connection.commit();
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException("Failed to persist targeted schema snapshot for connection " + connectionId, e);
+        }
+        compactIfNeeded(connectionId, JdbcSchemaCrawlScope.DEEP);
+    }
+
     public List<JdbcSchemaObject> latestSnapshot(String connectionId, JdbcSchemaCrawlScope scope)
     {
         try (Connection connection = open(connectionId, scope))
@@ -574,6 +618,127 @@ public final class JdbcSchemaStore
         }
     }
 
+    private static void clearSemanticReferences(Connection connection) throws SQLException
+    {
+        try (PreparedStatement statement = connection.prepareStatement("delete from object_reference where reference_kind <> 'child'"))
+        {
+            statement.executeUpdate();
+        }
+    }
+
+    private static long maxOrdinal(Connection connection) throws SQLException
+    {
+        try (PreparedStatement statement = connection.prepareStatement("select coalesce(max(ordinal), 0) from schema_object"); ResultSet resultSet = statement.executeQuery())
+        {
+            resultSet.next();
+            return resultSet.getLong(1);
+        }
+    }
+
+    private static long maxReferenceOrdinal(Connection connection) throws SQLException
+    {
+        try (PreparedStatement statement = connection.prepareStatement("select coalesce(max(ordinal), 0) from object_reference"); ResultSet resultSet = statement.executeQuery())
+        {
+            resultSet.next();
+            return resultSet.getLong(1);
+        }
+    }
+
+    private static String findDatabaseObjectId(Connection connection, String database) throws SQLException
+    {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                select object_id
+                from schema_object
+                where parent_object_id is null
+                and lower(kind) = 'database'
+                and lower(object_name) = lower(?)
+                and is_deleted = false
+                order by ordinal
+                limit 1
+                """))
+        {
+            statement.setString(1, database);
+            try (ResultSet resultSet = statement.executeQuery())
+            {
+                return resultSet.next() ? resultSet.getString(1)
+                        : null;
+            }
+        }
+    }
+
+    private static String findSchemaObjectId(Connection connection, String databaseObjectId, String schema) throws SQLException
+    {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                select object_id
+                from schema_object
+                where parent_object_id = ?
+                and lower(kind) = 'schema'
+                and lower(object_name) = lower(?)
+                and is_deleted = false
+                order by ordinal
+                limit 1
+                """))
+        {
+            statement.setString(1, databaseObjectId);
+            statement.setString(2, schema);
+            try (ResultSet resultSet = statement.executeQuery())
+            {
+                return resultSet.next() ? resultSet.getString(1)
+                        : null;
+            }
+        }
+    }
+
+    private static void markTargetSubtreeDeleted(Connection connection, String rootObjectId) throws SQLException
+    {
+        if (rootObjectId == null)
+        {
+            return;
+        }
+        try (Statement statement = connection.createStatement())
+        {
+            statement.execute("create local temporary table if not exists targeted_schema_object_id(object_id varchar(600) primary key) not persistent");
+            statement.execute("delete from targeted_schema_object_id");
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                insert into targeted_schema_object_id(object_id)
+                with recursive subtree(object_id) as
+                (
+                  select object_id
+                  from schema_object
+                  where object_id = ?
+
+                  union all
+
+                  select child.object_id
+                  from schema_object child
+                  join subtree s
+                    on child.parent_object_id = s.object_id
+                  where child.is_deleted = false
+                )
+                select object_id
+                from subtree
+                """))
+        {
+            statement.setString(1, rootObjectId);
+            statement.executeUpdate();
+        }
+        try (Statement statement = connection.createStatement())
+        {
+            statement.execute("""
+                    delete from object_reference
+                    where source_object_id in (select object_id from targeted_schema_object_id)
+                    or target_object_id in (select object_id from targeted_schema_object_id)
+                    """);
+            statement.execute("""
+                    update schema_object
+                    set is_deleted = true
+                    where object_id in (select object_id from targeted_schema_object_id)
+                    """);
+            statement.execute("delete from targeted_schema_object_id");
+        }
+    }
+
     private void upsertObject(Connection connection, long runId, String parentObjectId, JdbcSchemaObject object, long[] ordinal, long[] edgeOrdinal) throws Exception
     {
         String attributes = mapper.writeJson(object.attributes() == null ? Map.of()
@@ -782,12 +947,14 @@ public final class JdbcSchemaStore
             for (String tableName : tableNames)
             {
                 TableLookup lookup = parseTableLookup(tableName);
+                String normalizedDatabase = lookup.normalizedDatabase() != null ? lookup.normalizedDatabase()
+                        : normalizedSelectedDatabase;
                 String tableObjectId = null;
                 tableStatement.setString(1, lookup.normalizedName());
                 tableStatement.setString(2, lookup.normalizedSchema());
                 tableStatement.setString(3, lookup.normalizedSchema());
-                tableStatement.setString(4, normalizedSelectedDatabase);
-                tableStatement.setString(5, normalizedSelectedDatabase);
+                tableStatement.setString(4, normalizedDatabase);
+                tableStatement.setString(5, normalizedDatabase);
                 try (ResultSet resultSet = tableStatement.executeQuery())
                 {
                     if (resultSet.next())
@@ -835,6 +1002,8 @@ public final class JdbcSchemaStore
         }
 
         String normalizedSelectedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
+        String normalizedDatabase = lookup.normalizedDatabase() != null ? lookup.normalizedDatabase()
+                : normalizedSelectedDatabase;
         try (Connection connection = open(connectionId, JdbcSchemaCrawlScope.DEEP); PreparedStatement statement = connection.prepareStatement("""
                 with recursive object_path(object_id, object_name, kind, database_name, schema_name, ordinal) as
                 (
@@ -874,8 +1043,8 @@ public final class JdbcSchemaStore
             statement.setString(1, lookup.normalizedName());
             statement.setString(2, lookup.normalizedSchema());
             statement.setString(3, lookup.normalizedSchema());
-            statement.setString(4, normalizedSelectedDatabase);
-            statement.setString(5, normalizedSelectedDatabase);
+            statement.setString(4, normalizedDatabase);
+            statement.setString(5, normalizedDatabase);
             try (ResultSet resultSet = statement.executeQuery())
             {
                 if (!resultSet.next())
@@ -1188,7 +1357,7 @@ public final class JdbcSchemaStore
     {
     }
 
-    private record TableLookup(String normalizedSchema, String normalizedName)
+    private record TableLookup(String normalizedDatabase, String normalizedSchema, String normalizedName)
     {
     }
 
@@ -1222,19 +1391,73 @@ public final class JdbcSchemaStore
                 : databaseKey.trim();
     }
 
+    private static String normalizeTargetDatabase(String database, List<JdbcSchemaObject> fetched)
+    {
+        if (database != null
+                && !database.isBlank())
+        {
+            return database.trim();
+        }
+        for (JdbcSchemaObject object : fetched)
+        {
+            String catalog = stringValue(object.attributes() == null ? null
+                    : object.attributes()
+                            .get("catalog"));
+            if (catalog != null)
+            {
+                return catalog;
+            }
+        }
+        return null;
+    }
+
+    private static JdbcSchemaObject databaseNode(String database, List<JdbcSchemaObject> fetched)
+    {
+        Map<String, List<JdbcSchemaObject>> bySchema = new LinkedHashMap<>();
+        for (JdbcSchemaObject object : fetched)
+        {
+            bySchema.computeIfAbsent(schemaName(object), _ -> new ArrayList<>())
+                    .add(object);
+        }
+        List<JdbcSchemaObject> schemas = new ArrayList<>();
+        for (Map.Entry<String, List<JdbcSchemaObject>> entry : bySchema.entrySet())
+        {
+            schemas.add(schemaNode(database, entry.getKey(), entry.getValue()));
+        }
+        return new JdbcSchemaObject("database:" + database, database, "database", List.copyOf(schemas), Map.of());
+    }
+
+    private static JdbcSchemaObject schemaNode(String database, String schema, List<JdbcSchemaObject> children)
+    {
+        return new JdbcSchemaObject(database + "." + schema, schema, "schema", List.copyOf(children), Map.of("catalog", database));
+    }
+
+    private static String schemaName(JdbcSchemaObject object)
+    {
+        String schema = stringValue(object.attributes() == null ? null
+                : object.attributes()
+                        .get("schema"));
+        return schema != null ? schema
+                : "public";
+    }
+
     private static TableLookup parseTableLookup(String value)
     {
         String normalized = JdbcUtils.normalizeIdentifier(value);
         if (normalized == null)
         {
-            return new TableLookup(null, null);
+            return new TableLookup(null, null, null);
         }
-        String[] parts = normalized.split("\\.", 2);
+        String[] parts = normalized.split("\\.");
+        if (parts.length >= 3)
+        {
+            return new TableLookup(parts[parts.length - 3], parts[parts.length - 2], parts[parts.length - 1]);
+        }
         if (parts.length == 2)
         {
-            return new TableLookup(parts[0], parts[1]);
+            return new TableLookup(null, parts[0], parts[1]);
         }
-        return new TableLookup(null, parts[0]);
+        return new TableLookup(null, null, parts[0]);
     }
 
     private static String displayTableName(String schema, String name)

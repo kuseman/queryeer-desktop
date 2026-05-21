@@ -282,8 +282,14 @@ public final class SqlCompletionSupport
         {
             return null;
         }
-        return text.substring(start, end)
+        String identifier = text.substring(start, end)
                 .trim();
+        if (identifier.startsWith(".")
+                || identifier.endsWith("."))
+        {
+            return identifierTextAtCursor(text, line, column);
+        }
+        return identifier;
     }
 
     /**
