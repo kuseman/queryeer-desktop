@@ -101,6 +101,8 @@
   white-space: nowrap;
   font-size: 12px;
   color: var(--text, #ccc);
+  min-width: 100%;
+  box-sizing: border-box;
 }
 
 .jdbc-nav-node:hover {

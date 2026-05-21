@@ -177,7 +177,7 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
         catch (IllegalArgumentException e)
         {
             outputWriter.flushMessages(publisher);
-            publisher.failed("VALIDATION", e.getMessage());
+            publisher.failed("VALIDATION", ErrorMessages.buildFailureMessage(e));
         }
         catch (SecuritySessionClosedException e)
         {

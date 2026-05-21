@@ -835,6 +835,8 @@ JDBC startup preload behavior:
 - `jdbc.schema.refresh` supports `scope=top|deep` (`top` default). `scope=deep` requires `target.schema` (`target.database` optional).
 - Active connections are background-crawled on `top` scope (databases/schemas) while `deep` scope (tables/columns) is refreshed only on explicit triggers.
 - For JDBC schema trees, `column` nodes include normalized attributes from foundation mapping: `type` (lowercase fallback `unknown`), optional `nullable`, optional `ordinal`, and optional type qualifiers `size`, `precision`, `scale` when applicable for the dialect/type.
+- JDBC schema tree uses folder-based organization under tables/views: each table resolves to `columns_folder` and `indexes_folder` children. The DEEP crawl expands both folders inline so column and index data is available for completion without live JDBC queries.
+- Index nodes (`kind: "index"`) carry attributes: `columns` (comma-separated column list), `unique` (boolean), and `primaryKey` (boolean when the index backs a primary key constraint). SQL Server dialect uses native `sys.indexes`/`sys.index_columns` views; other dialects use `DatabaseMetaData.getIndexInfo()`.
 
 Current integration notes:
 

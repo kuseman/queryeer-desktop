@@ -490,6 +490,10 @@ public final class JdbcSchemaStore
                       primary key(state_id, database_key)
                     )
                     """);
+            statement.execute("create index if not exists idx_schema_object_deleted on schema_object(is_deleted)");
+            statement.execute("create index if not exists idx_schema_object_parent_deleted on schema_object(parent_object_id, is_deleted)");
+            statement.execute("create index if not exists idx_schema_object_kind_deleted_name on schema_object(kind, is_deleted, object_name)");
+            statement.execute("create index if not exists idx_crawl_run_status_run_id on crawl_run(status, run_id)");
         }
     }
 
@@ -839,11 +843,10 @@ public final class JdbcSchemaStore
             {
                 // Use recursive CTE to attribute each object to its root database
                 try (PreparedStatement statement = connection.prepareStatement("""
-                        with recursive db_tree(root_id, root_name, current_id) as
+                        with recursive db_tree(root_name, current_id) as
                         (
                           -- Anchor Member: Find all top-level databases
-                          select object_id   as root_id
-                          ,      object_name as root_name
+                          select object_name as root_name
                           ,      object_id   as current_id
                           from schema_object
                           where kind = 'database'
@@ -852,35 +855,27 @@ public final class JdbcSchemaStore
                           union all
 
                           -- Recursive Member: Walk down the tree to find all children/descendants
-                          select dt.root_id
-                          ,      dt.root_name
+                          select dt.root_name
                           ,      child.object_id as current_id
                           from schema_object child
                           join db_tree dt
                             on child.parent_object_id = dt.current_id
                           where child.is_deleted = false
                         )
-                        -- Final Selection: Now group by the root_id we tracked
-                        select root_id, count(*) as object_count
+                        -- Final Selection: Now group by the root database we tracked
+                        select root_name, count(*) as object_count
                         from db_tree
-                        group by root_id
+                        group by root_name
                         """); ResultSet resultSet = statement.executeQuery())
                 {
                     while (resultSet.next())
                     {
-                        String rootId = resultSet.getString(1);
+                        String databaseKey = resultSet.getString(1);
                         int count = resultSet.getInt(2);
-                        // Look up the database name from schema_object
-                        try (PreparedStatement nameStmt = connection.prepareStatement("select object_name from schema_object where object_id = ?"))
+                        if (databaseKey != null
+                                && !databaseKey.isBlank())
                         {
-                            nameStmt.setString(1, rootId);
-                            try (ResultSet nameRs = nameStmt.executeQuery())
-                            {
-                                if (nameRs.next())
-                                {
-                                    objectCountByDatabase.put(nameRs.getString(1), count);
-                                }
-                            }
+                            objectCountByDatabase.put(databaseKey, count);
                         }
                     }
                 }
