@@ -55,8 +55,8 @@ public final class SqlHoverSupport
             return null;
         }
 
-        Map<String, String> aliases = (tree != null
-                && context == SqlParseContext.COLUMN_REFERENCE) ? SqlCompletionSupport.extractAliases(tree, text, cursor.line(), cursor.column())
+        Map<String, String> aliases = tree != null
+                && context != SqlParseContext.OTHER ? SqlCompletionSupport.extractAliases(tree, text, cursor.line(), cursor.column())
                         : Map.of();
 
         Map<String, Object> result = semanticProvider.provide(params, fileId, cursor, token, context, aliases);

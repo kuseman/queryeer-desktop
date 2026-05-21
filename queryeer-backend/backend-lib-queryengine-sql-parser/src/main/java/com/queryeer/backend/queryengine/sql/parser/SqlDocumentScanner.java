@@ -137,34 +137,42 @@ final class SqlDocumentScanner
         List<SqlToken> tokens = scan(text);
         int start = 0;
         int end = text.length();
+        int depth = 0;
         for (SqlToken token : tokens)
         {
             if (token.startOffset() >= cursorOffset)
             {
                 break;
             }
-            if (token.type() == SqlTokenType.SEMICOLON)
+            if (token.type() == SqlTokenType.SEMICOLON
+                    && depth == 0)
             {
                 start = token.endOffset();
             }
-            else if (startsSoftStatement(token, text))
+            else if (depth == 0
+                    && startsSoftStatement(token, text))
             {
                 start = token.startOffset();
             }
+            depth = updateDepth(depth, token);
         }
+        depth = 0;
         for (SqlToken token : tokens)
         {
             if (token.startOffset() < cursorOffset)
             {
+                depth = updateDepth(depth, token);
                 continue;
             }
-            if (token.type() == SqlTokenType.SEMICOLON
-                    || token.startOffset() > cursorOffset
-                            && startsSoftStatement(token, text))
+            if (depth == 0
+                    && (token.type() == SqlTokenType.SEMICOLON
+                            || token.startOffset() > cursorOffset
+                                    && startsSoftStatement(token, text)))
             {
                 end = token.startOffset();
                 break;
             }
+            depth = updateDepth(depth, token);
         }
         return new SqlStatementRange(start, end, cursorOffset);
     }
@@ -182,6 +190,19 @@ final class SqlDocumentScanner
         return token.type() == SqlTokenType.WORD
                 && isStatementKeyword(token.text())
                 && isLineStartToken(token, text);
+    }
+
+    private static int updateDepth(int depth, SqlToken token)
+    {
+        if (token.type() == SqlTokenType.OPEN_PAREN)
+        {
+            return depth + 1;
+        }
+        if (token.type() == SqlTokenType.CLOSE_PAREN)
+        {
+            return Math.max(0, depth - 1);
+        }
+        return depth;
     }
 
     private static boolean isStatementKeyword(String value)

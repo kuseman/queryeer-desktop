@@ -211,6 +211,17 @@ class JdbcSchemaStoreTest
     }
 
     @Test
+    void columnNamesForTables_ExplicitDatabaseOverridesSelectedDatabase(@TempDir Path tempDir)
+    {
+        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
+        store.persistSnapshot("conn-1", JdbcSchemaCrawlScope.DEEP, lookupSnapshot());
+
+        Map<String, List<String>> columns = store.columnNamesForTables("conn-1", List.of("hr.hr.employees"), "sales");
+
+        Assertions.assertEquals(List.of("id", "name"), columns.get("hr.hr.employees"));
+    }
+
+    @Test
     void findSymbol_HonorsSchemaAndSelectedDatabase(@TempDir Path tempDir)
     {
         JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
@@ -223,6 +234,62 @@ class JdbcSchemaStoreTest
         Assertions.assertEquals("table", symbol.kind());
         Assertions.assertEquals("dbo.orders", symbol.name());
         Assertions.assertNull(filtered);
+    }
+
+    @Test
+    void findSymbol_ExplicitDatabaseOverridesSelectedDatabase(@TempDir Path tempDir)
+    {
+        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
+        store.persistSnapshot("conn-1", JdbcSchemaCrawlScope.DEEP, lookupSnapshot());
+
+        JdbcSchemaStore.SymbolLookupEntry symbol = store.findSymbol("conn-1", "hr.hr.employees", "sales");
+
+        Assertions.assertNotNull(symbol);
+        Assertions.assertEquals("hr.employees", symbol.name());
+    }
+
+    @Test
+    void persistDeepSnapshotTarget_ReplacesOnlyTargetSchema(@TempDir Path tempDir)
+    {
+        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
+        JdbcSchemaObject report = new JdbcSchemaObject("table:sales:reporting:daily_sales", "daily_sales", "table", List.of(), Map.of("schema", "reporting", "catalog", "sales"));
+        JdbcSchemaObject reporting = new JdbcSchemaObject("schema:sales:reporting", "reporting", "schema", List.of(report), Map.of("catalog", "sales"));
+        JdbcSchemaObject sales = new JdbcSchemaObject("database:sales", "sales", "database", List.of(lookupSnapshot().get(0)
+                .children()
+                .get(0), reporting), Map.of());
+        store.persistSnapshot("conn-1", JdbcSchemaCrawlScope.DEEP, List.of(sales, lookupSnapshot().get(1)));
+
+        JdbcSchemaObject refreshed = new JdbcSchemaObject("table:sales:dbo:orders", "orders", "table",
+                List.of(new JdbcSchemaObject("columns_folder:sales:dbo:orders", "Columns", "columns_folder",
+                        List.of(new JdbcSchemaObject("column:sales:dbo:orders:id", "id", "column", List.of(), Map.of("type", "int")),
+                                new JdbcSchemaObject("column:sales:dbo:orders:total", "total", "column", List.of(), Map.of("type", "decimal"))),
+                        Map.of())),
+                Map.of("schema", "dbo", "catalog", "sales"));
+
+        store.persistDeepSnapshotTarget("conn-1", "sales", "dbo", List.of(refreshed));
+
+        List<JdbcSchemaObject> loaded = store.latestSnapshot("conn-1", JdbcSchemaCrawlScope.DEEP);
+        Assertions.assertNotNull(findObject(loaded, "table:sales:reporting:daily_sales"));
+        Assertions.assertNotNull(findObject(loaded, "table:hr:hr:employees"));
+        Assertions.assertNull(findObject(loaded, "view:sales:dbo:order_summary"));
+        Assertions.assertNotNull(findObject(loaded, "column:sales:dbo:orders:total"));
+        Assertions.assertNull(findObject(loaded, "column:sales:dbo:orders:amount"));
+    }
+
+    @Test
+    void persistDeepSnapshotTarget_ReplacesOnlyTargetDatabase(@TempDir Path tempDir)
+    {
+        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
+        store.persistSnapshot("conn-1", JdbcSchemaCrawlScope.DEEP, lookupSnapshot());
+
+        JdbcSchemaObject product = new JdbcSchemaObject("table:sales:dbo:products", "products", "table", List.of(), Map.of("schema", "dbo", "catalog", "sales"));
+
+        store.persistDeepSnapshotTarget("conn-1", "sales", null, List.of(product));
+
+        List<JdbcSchemaObject> loaded = store.latestSnapshot("conn-1", JdbcSchemaCrawlScope.DEEP);
+        Assertions.assertNotNull(findObject(loaded, "table:sales:dbo:products"));
+        Assertions.assertNull(findObject(loaded, "table:sales:dbo:orders"));
+        Assertions.assertNotNull(findObject(loaded, "table:hr:hr:employees"));
     }
 
     @Test
@@ -371,5 +438,23 @@ class JdbcSchemaStoreTest
         JdbcSchemaObject hrSchema = new JdbcSchemaObject("schema:hr:hr", "hr", "schema", List.of(employees), Map.of("catalog", "hr"));
         JdbcSchemaObject hrDb = new JdbcSchemaObject("database:hr", "hr", "database", List.of(hrSchema), Map.of());
         return List.of(salesDb, hrDb);
+    }
+
+    private static JdbcSchemaObject findObject(List<JdbcSchemaObject> nodes, String objectId)
+    {
+        for (JdbcSchemaObject node : nodes)
+        {
+            if (objectId.equals(node.id()))
+            {
+                return node;
+            }
+            JdbcSchemaObject found = findObject(node.children() == null ? List.of()
+                    : node.children(), objectId);
+            if (found != null)
+            {
+                return found;
+            }
+        }
+        return null;
     }
 }

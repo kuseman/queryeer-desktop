@@ -103,6 +103,15 @@ class SqlCompletionSupportTest
     }
 
     @Test
+    void extractAliasesWithDatabaseQualifiedTable()
+    {
+        String sql = "SELECT * FROM ecomproductsellosprod.dbo.pdvariant v";
+        TSTree tree = parser.parseString(null, sql);
+        Map<String, String> aliases = SqlCompletionSupport.extractAliases(tree, sql, 1, 1);
+        assertEquals(Map.of("v", "ecomproductsellosprod.dbo.pdvariant"), aliases);
+    }
+
+    @Test
     void extractAliasesWithMixedExplicitAndImplicit()
     {
         TSTree tree = parser.parseString(null, "SELECT * FROM t1 a, t2");
@@ -184,6 +193,25 @@ class SqlCompletionSupportTest
     }
 
     @Test
+    void extractAliasesKeepsOuterAliasInsideExistsSubquery()
+    {
+        String sql = """
+                SELECT *
+                FROM db1.dbo.users u
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM db2.dbo.users du
+                    WHERE du.email = u.name
+                )
+                """;
+        TSTree tree = parser.parseString(null, sql);
+
+        Map<String, String> aliases = SqlCompletionSupport.extractAliases(tree, sql, 6, 27);
+
+        assertEquals(Map.of("u", "db1.dbo.users", "du", "db2.dbo.users"), aliases);
+    }
+
+    @Test
     void identifierAtPositionReturnsSimpleIdentifier()
     {
         // Cursor on 't1' (column 15)
@@ -197,6 +225,24 @@ class SqlCompletionSupportTest
         // Cursor on 't1' part of 'dbo.t1' (column 19 = 't' of t1)
         String result = SqlCompletionSupport.identifierAtPosition(new EmptyParseSessionService(), "jdbc", "file-1", "SELECT * FROM dbo.t1", 1, 19);
         assertEquals("dbo.t1", result);
+    }
+
+    @Test
+    void identifierAtPositionReturnsQualifiedNameInsideExistsSubquery()
+    {
+        String sql = """
+                SELECT *
+                FROM db1.dbo.users u
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM db2.dbo.users du
+                    WHERE du.email = u.name
+                )
+                """;
+
+        String result = SqlCompletionSupport.identifierAtPosition(new EmptyParseSessionService(), "jdbc", "file-1", sql, 5, 20);
+
+        assertEquals("db2.dbo.users", result);
     }
 
     @Test
