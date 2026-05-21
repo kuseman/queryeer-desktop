@@ -20,7 +20,7 @@ type JdbcObjectDetail = JdbcObjectMatch & {
   columns: Array<{ name: string; type?: unknown; nullable?: unknown; attributes: Record<string, unknown> }>;
   primaryKeys: Array<{ name?: string; column?: unknown; attributes: Record<string, unknown> }>;
   foreignKeys: Array<{ name?: string; column?: unknown; referencesTable?: unknown; referencesColumn?: unknown; attributes: Record<string, unknown> }>;
-  indices: Array<{ name: string; attributes: Record<string, unknown> }>;
+  indices: Array<{ name: string; columns: Array<{ name: string; ordinal?: unknown; sortOrder?: unknown; attributes: Record<string, unknown> }>; attributes: Record<string, unknown> }>;
   properties: Array<{ name: string; kind: string; attributes: Record<string, unknown> }>;
 };
 
@@ -203,30 +203,55 @@ function visitObjects(nodes: JdbcSchemaObject[], path: { database?: string; sche
 }
 
 export function toObjectDetail(match: JdbcObjectMatch & { object: JdbcSchemaObject }, children: JdbcSchemaObject[]): JdbcObjectDetail {
+  const detailChildren = detailMetadataChildren(children);
   return {
     name: match.name,
     fullName: match.fullName,
     kind: match.kind,
     database: match.database,
     schema: match.schema,
-    columns: children.filter((child) => child.kind === "column").map((child) => ({
+    columns: detailChildren.filter((child) => child.kind === "column").map((child) => ({
       name: child.name,
       type: child.attributes.type,
       nullable: child.attributes.nullable,
       attributes: child.attributes
     })),
-    primaryKeys: primaryKeysFromChildren(children),
-    foreignKeys: foreignKeysFromChildren(children),
-    indices: children.filter((child) => child.kind === "index").map((child) => ({
+    primaryKeys: primaryKeysFromChildren(detailChildren),
+    foreignKeys: foreignKeysFromChildren(detailChildren),
+    indices: detailChildren.filter((child) => child.kind === "index").map((child) => ({
       name: child.name,
+      columns: indexColumnsFromIndex(child),
       attributes: child.attributes
     })),
-    properties: children.filter((child) => child.kind !== "column" && child.kind !== "primary_key" && child.kind !== "foreign_key" && child.kind !== "index").map((child) => ({
+    properties: detailChildren.filter((child) => child.kind !== "column" && child.kind !== "primary_key" && child.kind !== "foreign_key" && child.kind !== "index").map((child) => ({
       name: child.name,
       kind: child.kind,
       attributes: child.attributes
     }))
   };
+}
+
+function detailMetadataChildren(children: JdbcSchemaObject[]): JdbcSchemaObject[] {
+  const result: JdbcSchemaObject[] = [];
+  for (const child of children) {
+    if ((child.kind === "columns_folder" || child.kind === "indexes_folder") && child.children?.length) {
+      result.push(...child.children);
+      continue;
+    }
+    result.push(child);
+  }
+  return result;
+}
+
+function indexColumnsFromIndex(index: JdbcSchemaObject): Array<{ name: string; ordinal?: unknown; sortOrder?: unknown; attributes: Record<string, unknown> }> {
+  return (index.children ?? [])
+    .filter((child) => child.kind === "index_column")
+    .map((child) => ({
+      name: child.name,
+      ordinal: child.attributes.ordinal,
+      sortOrder: child.attributes.sortOrder,
+      attributes: child.attributes
+    }));
 }
 
 function primaryKeysFromChildren(children: JdbcSchemaObject[]): Array<{ name?: string; column?: unknown; attributes: Record<string, unknown> }> {

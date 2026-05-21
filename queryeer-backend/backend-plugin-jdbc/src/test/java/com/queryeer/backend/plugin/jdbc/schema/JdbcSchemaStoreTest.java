@@ -183,6 +183,49 @@ class JdbcSchemaStoreTest
     }
 
     @Test
+    void tableNamesForCompletion_FiltersBySelectedDatabase(@TempDir Path tempDir)
+    {
+        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
+        store.persistSnapshot("conn-1", JdbcSchemaCrawlScope.DEEP, lookupSnapshot());
+
+        List<JdbcSchemaStore.TableLookupEntry> entries = store.tableNamesForCompletion("conn-1", "sales");
+
+        Assertions.assertEquals(List.of("dbo.orders", "dbo.order_summary"), entries.stream()
+                .map(JdbcSchemaStore.TableLookupEntry::name)
+                .toList());
+        Assertions.assertEquals(List.of("table", "view"), entries.stream()
+                .map(JdbcSchemaStore.TableLookupEntry::kind)
+                .toList());
+    }
+
+    @Test
+    void columnNamesForTables_ReturnsColumnsFromNestedColumnsFolder(@TempDir Path tempDir)
+    {
+        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
+        store.persistSnapshot("conn-1", JdbcSchemaCrawlScope.DEEP, lookupSnapshot());
+
+        Map<String, List<String>> columns = store.columnNamesForTables("conn-1", List.of("dbo.orders", "hr.employees"), null);
+
+        Assertions.assertEquals(List.of("id", "amount"), columns.get("dbo.orders"));
+        Assertions.assertEquals(List.of("id", "name"), columns.get("hr.employees"));
+    }
+
+    @Test
+    void findSymbol_HonorsSchemaAndSelectedDatabase(@TempDir Path tempDir)
+    {
+        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
+        store.persistSnapshot("conn-1", JdbcSchemaCrawlScope.DEEP, lookupSnapshot());
+
+        JdbcSchemaStore.SymbolLookupEntry symbol = store.findSymbol("conn-1", "dbo.orders", "sales");
+        JdbcSchemaStore.SymbolLookupEntry filtered = store.findSymbol("conn-1", "dbo.orders", "hr");
+
+        Assertions.assertNotNull(symbol);
+        Assertions.assertEquals("table", symbol.kind());
+        Assertions.assertEquals("dbo.orders", symbol.name());
+        Assertions.assertNull(filtered);
+    }
+
+    @Test
     void recoversFromCorruptedDatabase(@TempDir Path tempDir) throws Exception
     {
         Path cacheDir = tempDir.resolve("cache");
@@ -307,5 +350,26 @@ class JdbcSchemaStoreTest
         // Verify the database is still usable after the best-effort compact
         JdbcSchemaStore.CrawlState state = store.readState("conn-1", JdbcSchemaCrawlScope.TOP);
         Assertions.assertNotNull(state);
+    }
+
+    private static List<JdbcSchemaObject> lookupSnapshot()
+    {
+        JdbcSchemaObject orderColumns = new JdbcSchemaObject("columns_folder:sales:dbo:orders", "Columns", "columns_folder",
+                List.of(new JdbcSchemaObject("column:sales:dbo:orders:id", "id", "column", List.of(), Map.of("type", "int")),
+                        new JdbcSchemaObject("column:sales:dbo:orders:amount", "amount", "column", List.of(), Map.of("type", "decimal"))),
+                Map.of());
+        JdbcSchemaObject orders = new JdbcSchemaObject("table:sales:dbo:orders", "orders", "table", List.of(orderColumns), Map.of("schema", "dbo", "catalog", "sales"));
+        JdbcSchemaObject orderSummary = new JdbcSchemaObject("view:sales:dbo:order_summary", "order_summary", "view", List.of(), Map.of("schema", "dbo", "catalog", "sales"));
+        JdbcSchemaObject salesSchema = new JdbcSchemaObject("schema:sales:dbo", "dbo", "schema", List.of(orders, orderSummary), Map.of("catalog", "sales"));
+        JdbcSchemaObject salesDb = new JdbcSchemaObject("database:sales", "sales", "database", List.of(salesSchema), Map.of());
+
+        JdbcSchemaObject employeeColumns = new JdbcSchemaObject("columns_folder:hr:hr:employees", "Columns", "columns_folder",
+                List.of(new JdbcSchemaObject("column:hr:hr:employees:id", "id", "column", List.of(), Map.of("type", "int")),
+                        new JdbcSchemaObject("column:hr:hr:employees:name", "name", "column", List.of(), Map.of("type", "varchar"))),
+                Map.of());
+        JdbcSchemaObject employees = new JdbcSchemaObject("table:hr:hr:employees", "employees", "table", List.of(employeeColumns), Map.of("schema", "hr", "catalog", "hr"));
+        JdbcSchemaObject hrSchema = new JdbcSchemaObject("schema:hr:hr", "hr", "schema", List.of(employees), Map.of("catalog", "hr"));
+        JdbcSchemaObject hrDb = new JdbcSchemaObject("database:hr", "hr", "database", List.of(hrSchema), Map.of());
+        return List.of(salesDb, hrDb);
     }
 }

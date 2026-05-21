@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import com.queryeer.backend.api.PayloadMapper;
+import com.queryeer.backend.plugin.jdbc.JdbcUtils;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 
 public final class JdbcSchemaStore
@@ -491,6 +492,7 @@ public final class JdbcSchemaStore
                     )
                     """);
             statement.execute("create index if not exists idx_schema_object_deleted on schema_object(is_deleted)");
+            statement.execute("create index if not exists idx_schema_object_deleted_ordinal on schema_object(is_deleted, ordinal)");
             statement.execute("create index if not exists idx_schema_object_parent_deleted on schema_object(parent_object_id, is_deleted)");
             statement.execute("create index if not exists idx_schema_object_kind_deleted_name on schema_object(kind, is_deleted, object_name)");
             statement.execute("create index if not exists idx_crawl_run_status_run_id on crawl_run(status, run_id)");
@@ -643,6 +645,248 @@ public final class JdbcSchemaStore
                     result.add(resultSet.getString(1));
                 }
                 return result;
+            }
+        }
+        catch (SQLException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    List<TableLookupEntry> tableNamesForCompletion(String connectionId, String selectedDatabase)
+    {
+        String normalizedSelectedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
+        try (Connection connection = open(connectionId, JdbcSchemaCrawlScope.DEEP); PreparedStatement statement = connection.prepareStatement("""
+                with recursive object_path(object_id, object_name, kind, database_name, schema_name, ordinal) as
+                (
+                  select object_id
+                  ,      object_name
+                  ,      kind
+                  ,      case when lower(kind) = 'database' then object_name else null end as database_name
+                  ,      case when lower(kind) = 'schema' then object_name else null end as schema_name
+                  ,      ordinal
+                  from schema_object
+                  where parent_object_id is null
+                  and is_deleted = false
+
+                  union all
+
+                  select child.object_id
+                  ,      child.object_name
+                  ,      child.kind
+                  ,      case when lower(child.kind) = 'database' then child.object_name else op.database_name end as database_name
+                  ,      case when lower(child.kind) = 'schema' then child.object_name else op.schema_name end as schema_name
+                  ,      child.ordinal
+                  from schema_object child
+                  join object_path op
+                    on child.parent_object_id = op.object_id
+                  where child.is_deleted = false
+                )
+                select object_name, kind, schema_name, database_name
+                from object_path
+                where lower(kind) in ('table','view','base table')
+                order by ordinal
+                """); ResultSet resultSet = statement.executeQuery())
+        {
+            List<TableLookupEntry> result = new ArrayList<>();
+            while (resultSet.next())
+            {
+                String name = resultSet.getString(1);
+                String kind = normalizeTableKind(resultSet.getString(2));
+                String schema = resultSet.getString(3);
+                String database = resultSet.getString(4);
+                if (normalizedSelectedDatabase != null
+                        && database != null
+                        && !normalizedSelectedDatabase.equals(JdbcUtils.normalizeIdentifier(database)))
+                {
+                    continue;
+                }
+                result.add(new TableLookupEntry(displayTableName(schema, name), kind, database, schema));
+            }
+            return result;
+        }
+        catch (SQLException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    Map<String, List<String>> columnNamesForTables(String connectionId, List<String> tableNames, String selectedDatabase)
+    {
+        Map<String, List<String>> result = new LinkedHashMap<>();
+        if (tableNames == null
+                || tableNames.isEmpty())
+        {
+            return result;
+        }
+
+        String normalizedSelectedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
+        try (Connection connection = open(connectionId, JdbcSchemaCrawlScope.DEEP); PreparedStatement tableStatement = connection.prepareStatement("""
+                with recursive object_path(object_id, object_name, kind, parent_object_id, database_name, schema_name, ordinal) as
+                (
+                  select object_id
+                  ,      object_name
+                  ,      kind
+                  ,      parent_object_id
+                  ,      case when lower(kind) = 'database' then object_name else null end as database_name
+                  ,      case when lower(kind) = 'schema' then object_name else null end as schema_name
+                  ,      ordinal
+                  from schema_object
+                  where parent_object_id is null
+                  and is_deleted = false
+
+                  union all
+
+                  select child.object_id
+                  ,      child.object_name
+                  ,      child.kind
+                  ,      child.parent_object_id
+                  ,      case when lower(child.kind) = 'database' then child.object_name else op.database_name end as database_name
+                  ,      case when lower(child.kind) = 'schema' then child.object_name else op.schema_name end as schema_name
+                  ,      child.ordinal
+                  from schema_object child
+                  join object_path op
+                    on child.parent_object_id = op.object_id
+                  where child.is_deleted = false
+                )
+                select object_id
+                from object_path
+                where lower(kind) in ('table','view','base table')
+                and lower(object_name) = ?
+                and (? is null or lower(schema_name) = ?)
+                and (? is null or lower(database_name) = ?)
+                order by ordinal
+                limit 1
+                """); PreparedStatement columnsStatement = connection.prepareStatement("""
+                with recursive table_descendants(object_id, object_name, kind, ordinal) as
+                (
+                  select object_id, object_name, kind, ordinal
+                  from schema_object
+                  where object_id = ?
+                  and is_deleted = false
+
+                  union all
+
+                  select child.object_id, child.object_name, child.kind, child.ordinal
+                  from schema_object child
+                  join table_descendants td
+                    on child.parent_object_id = td.object_id
+                  where child.is_deleted = false
+                )
+                select object_name
+                from table_descendants
+                where lower(kind) = 'column'
+                order by ordinal
+                """))
+        {
+            for (String tableName : tableNames)
+            {
+                TableLookup lookup = parseTableLookup(tableName);
+                String tableObjectId = null;
+                tableStatement.setString(1, lookup.normalizedName());
+                tableStatement.setString(2, lookup.normalizedSchema());
+                tableStatement.setString(3, lookup.normalizedSchema());
+                tableStatement.setString(4, normalizedSelectedDatabase);
+                tableStatement.setString(5, normalizedSelectedDatabase);
+                try (ResultSet resultSet = tableStatement.executeQuery())
+                {
+                    if (resultSet.next())
+                    {
+                        tableObjectId = resultSet.getString(1);
+                    }
+                }
+
+                if (tableObjectId == null)
+                {
+                    result.put(tableName, List.of());
+                    continue;
+                }
+
+                columnsStatement.setString(1, tableObjectId);
+                try (ResultSet resultSet = columnsStatement.executeQuery())
+                {
+                    List<String> columns = new ArrayList<>();
+                    while (resultSet.next())
+                    {
+                        String columnName = resultSet.getString(1);
+                        if (columnName != null
+                                && !columnName.isBlank())
+                        {
+                            columns.add(columnName);
+                        }
+                    }
+                    result.put(tableName, columns);
+                }
+            }
+            return result;
+        }
+        catch (SQLException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    SymbolLookupEntry findSymbol(String connectionId, String rawToken, String selectedDatabase)
+    {
+        TableLookup lookup = parseTableLookup(rawToken);
+        if (lookup.normalizedName() == null)
+        {
+            return null;
+        }
+
+        String normalizedSelectedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
+        try (Connection connection = open(connectionId, JdbcSchemaCrawlScope.DEEP); PreparedStatement statement = connection.prepareStatement("""
+                with recursive object_path(object_id, object_name, kind, database_name, schema_name, ordinal) as
+                (
+                  select object_id
+                  ,      object_name
+                  ,      kind
+                  ,      case when lower(kind) = 'database' then object_name else null end as database_name
+                  ,      case when lower(kind) = 'schema' then object_name else null end as schema_name
+                  ,      ordinal
+                  from schema_object
+                  where parent_object_id is null
+                  and is_deleted = false
+
+                  union all
+
+                  select child.object_id
+                  ,      child.object_name
+                  ,      child.kind
+                  ,      case when lower(child.kind) = 'database' then child.object_name else op.database_name end as database_name
+                  ,      case when lower(child.kind) = 'schema' then child.object_name else op.schema_name end as schema_name
+                  ,      child.ordinal
+                  from schema_object child
+                  join object_path op
+                    on child.parent_object_id = op.object_id
+                  where child.is_deleted = false
+                )
+                select object_name, kind, schema_name, database_name
+                from object_path
+                where lower(kind) in ('table','view','base table')
+                and lower(object_name) = ?
+                and (? is null or lower(schema_name) = ?)
+                and (? is null or lower(database_name) = ?)
+                order by ordinal
+                limit 1
+                """))
+        {
+            statement.setString(1, lookup.normalizedName());
+            statement.setString(2, lookup.normalizedSchema());
+            statement.setString(3, lookup.normalizedSchema());
+            statement.setString(4, normalizedSelectedDatabase);
+            statement.setString(5, normalizedSelectedDatabase);
+            try (ResultSet resultSet = statement.executeQuery())
+            {
+                if (!resultSet.next())
+                {
+                    return null;
+                }
+                String name = resultSet.getString(1);
+                String kind = normalizeTableKind(resultSet.getString(2));
+                String schema = resultSet.getString(3);
+                String database = resultSet.getString(4);
+                return new SymbolLookupEntry(kind, displayTableName(schema, name), kind.toUpperCase(), database, schema);
             }
         }
         catch (SQLException e)
@@ -932,7 +1176,19 @@ public final class JdbcSchemaStore
     {
     }
 
+    record TableLookupEntry(String name, String kind, String database, String schema)
+    {
+    }
+
+    record SymbolLookupEntry(String kind, String name, String detail, String database, String schema)
+    {
+    }
+
     private record CrawlStateWithTimestamps(int consecutiveFailures, double usageScore, boolean enabled, Instant nextDueAt, Instant lastSuccessAt, Instant lastAttemptAt, Instant lastFailureAt)
+    {
+    }
+
+    private record TableLookup(String normalizedSchema, String normalizedName)
     {
     }
 
@@ -964,6 +1220,42 @@ public final class JdbcSchemaStore
     {
         return databaseKey == null ? ""
                 : databaseKey.trim();
+    }
+
+    private static TableLookup parseTableLookup(String value)
+    {
+        String normalized = JdbcUtils.normalizeIdentifier(value);
+        if (normalized == null)
+        {
+            return new TableLookup(null, null);
+        }
+        String[] parts = normalized.split("\\.", 2);
+        if (parts.length == 2)
+        {
+            return new TableLookup(parts[0], parts[1]);
+        }
+        return new TableLookup(null, parts[0]);
+    }
+
+    private static String displayTableName(String schema, String name)
+    {
+        if (name == null)
+        {
+            return null;
+        }
+        return schema == null
+                || schema.isBlank() ? name
+                        : schema + "." + name;
+    }
+
+    private static String normalizeTableKind(String kind)
+    {
+        if (kind == null)
+        {
+            return "table";
+        }
+        return "view".equalsIgnoreCase(kind) ? "view"
+                : "table";
     }
 
     private static double decay(double currentScore, Instant previousUse, Instant now)
