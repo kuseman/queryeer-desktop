@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ExtensionRegistry, getTableOutputContextMenuProviders } from "./ExtensionRegistry";
 
 describe("ExtensionRegistry settings registration", () => {
@@ -59,4 +59,79 @@ describe("ExtensionRegistry settings registration", () => {
     expect(getTableOutputContextMenuProviders().length).toBe(0);
     tableRegistry.unregisterProvider("missing");
   });
+
+  it("collects assistant context and lists tools in deterministic applicable order", async () => {
+    vi.stubGlobal("window", {
+      appShell: {
+        evaluateExpressionSync: (params: { expression: string; context: Record<string, unknown> }) => ({
+          ok: true,
+          result: params.expression === "activeFile.mimeType == 'application/sql'"
+            && (params.context.activeFile as { mimeType?: string } | undefined)?.mimeType === "application/sql"
+        })
+      }
+    });
+    const extensionRegistry = new ExtensionRegistry();
+    const assistant = extensionRegistry.createAssistantRegistry();
+
+    assistant.registerContextContribution({
+      id: "later",
+      title: "Later",
+      order: 20,
+      collect: () => [{ id: "later", label: "Later", kind: "test", value: "later" }]
+    });
+    assistant.registerContextContribution({
+      id: "first",
+      title: "First",
+      order: 10,
+      when: "hasActiveTextEditor",
+      collect: () => [{ id: "first", label: "First", kind: "test", value: "first" }]
+    });
+    assistant.registerToolContribution({
+      id: "tool-hidden",
+      title: "Hidden",
+      description: "Hidden",
+      inputSchema: {},
+      when: "missing",
+      invoke: () => ({ ok: true })
+    });
+    assistant.registerToolContribution({
+      id: "tool-visible",
+      title: "Visible",
+      description: "Visible",
+      inputSchema: {},
+      when: "hasActiveTextEditor",
+      invoke: () => ({ ok: true })
+    });
+    assistant.registerToolContribution({
+      id: "tool-sql",
+      title: "SQL",
+      description: "SQL",
+      inputSchema: {},
+      when: "activeFile.mimeType == 'application/sql'",
+      invoke: () => ({ ok: true })
+    });
+
+    const request = {
+      activeFileId: "file-1",
+      contextValues: { global: true, hasActiveTextEditor: true, activeFile: { mimeType: "application/sql" } }
+    };
+
+    await expect(assistant.collectContext(request)).resolves.toMatchObject([
+      { id: "first" },
+      { id: "later" }
+    ]);
+    expect(assistant.listTools(request).map((tool) => tool.id)).toEqual(["tool-sql", "tool-visible"]);
+  });
+
+  it("returns an assistant tool failure for unknown tool ids", async () => {
+    const assistant = new ExtensionRegistry().createAssistantRegistry();
+
+    await expect(assistant.invokeTool({
+      toolId: "missing",
+      input: {},
+      activeFileId: null,
+      contextValues: { global: true }
+    })).resolves.toMatchObject({ ok: false });
+  });
+
 });

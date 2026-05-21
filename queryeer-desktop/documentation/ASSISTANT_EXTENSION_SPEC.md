@@ -110,6 +110,23 @@ They should not handle:
 7. Add provider-specific tool-call translation for OpenAI-compatible APIs.
 8. Add JDBC and query-plan contributions after the base tool lifecycle is tested.
 
+## First Implementation Slice
+
+The initial implementation wires editor context and OpenAI-compatible provider tool calls while keeping execution owned by Queryeer contributions.
+
+- `PluginContext.assistant` exposes an assistant registry for context and tool contributions.
+- `core.editor` contributes `core.editor.getSelection` and `core.editor.getDocument` tools so the assistant can fetch fresh editor state on demand.
+- `core.editor` contributes `core.editor.replaceRange`, a small-range text replacement tool that requires `{ fileId, version, range, text }` input and should include `expectedText` when replacing existing text.
+- `core.editor` contributes `core.editor.replaceDocument` for full-document rewrites so providers do not need to calculate Monaco's final document range or echo the original document exactly; the Monaco version guards stale writes.
+- The edit tool owns editor-specific version checks internally and returns a normal failed tool message when the supplied version is stale, so generic assistant contracts do not model editor conflicts.
+- Editor edit tools normalize actual CRLF/CR line endings to LF before applying Monaco edits.
+- `core.queryengine.jdbc` contributes `core.queryengine.jdbc.searchObjects` for cached table/view glob search and `core.queryengine.jdbc.getObjectDetails` for cached columns, primary keys, foreign keys, indices, and object metadata. Assistant JDBC tools resolve connection and database from the active SQL file context, read existing deep schema snapshots only, and do not query live database metadata.
+- Tool contributions may provide approval preview metadata so feature owners can describe potentially destructive operations without hard-coding feature semantics in `core.assistant`.
+- The assistant sidepanel auto-collects non-editor context chips and lets users remove chips from the next chat request. Editor text is fetched through tools instead of eager selected-text context chips.
+- The assistant sidepanel distinguishes sent context from available tools; tools are shown in a collapsed disclosure because they are provided to the model for every request.
+- OpenAI-compatible chat requests receive selected Queryeer context as a synthetic system message.
+- OpenAI-compatible provider tool calls are now translated at the adapter boundary: registered Queryeer tools are sent as function tool schemas, requested tool calls are returned to the renderer, Queryeer asks for confirmation, invokes the owning contribution, and sends tool result messages back until the provider returns a final assistant response or the retry limit is reached.
+
 ## Constraints
 
 - Chat context remains active-file scoped unless explicitly expanded.

@@ -16,6 +16,7 @@ import type { TableOutputContextMenuRegistry } from "../extensions/TableOutputCo
 import type { JdbcTreeContextMenuRegistry } from "../extensions/JdbcTreeContextMenuExtension.js";
 import type { AboutExtension } from "../extensions/AboutExtension.js";
 import type { NotificationService } from "../extensions/NotificationExtension.js";
+import type { AssistantRegistry } from "../assistant/Assistant.js";
 import type { PluginManifest } from "./PluginManifest.js";
 
 export type Plugin = {
@@ -47,6 +48,7 @@ export type PluginContext = {
   jdbcTreeContextMenu: JdbcTreeContextMenuRegistry;
   about: AboutExtension;
   notifications: NotificationService;
+  assistant: AssistantRegistry;
 };
 
 export type CommandExecutionResult = {

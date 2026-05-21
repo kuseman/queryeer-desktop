@@ -36,6 +36,7 @@ export abstract class TextEditorApi {
   abstract getWordUntilPosition(position: Position, maxLength?: number): WordAtPosition | null;
 
   abstract getContent(): string;
+  abstract getVersionId(): number;
   abstract getLineContent(lineNumber: number): string;
   abstract getLineCount(): number;
   abstract getOffsetForPosition(lineNumber: number, column: number): number;

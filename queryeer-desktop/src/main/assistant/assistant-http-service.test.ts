@@ -132,4 +132,214 @@ describe("AssistantHttpService", () => {
       createdAt: "2026-01-02T03:04:05.000Z"
     });
   });
+
+  it("prepends selected Queryeer context items to chat completions", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "answer" } }]
+    }), { status: 200 }));
+    const service = new AssistantHttpService({
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      resolveSecret: async () => ({ found: true, plaintext: "key-1" })
+    });
+
+    await service.completeChat({
+      connection,
+      model: "gpt-test",
+      messages: [{ role: "user", content: "question" }],
+      contextItems: [{
+        id: "ctx-1",
+        label: "Selection v3",
+        kind: "editor.selection",
+        value: { fileId: "file-1", version: 3, text: "select 1" }
+      }]
+    });
+
+    const calls = fetchMock.mock.calls as unknown as Array<[unknown, RequestInit]>;
+    const body = JSON.parse(String(calls[0]?.[1]?.body));
+    expect(body.messages[0]).toMatchObject({
+      role: "system"
+    });
+    expect(body.messages[0].content).toContain("Selection v3");
+    expect(body.messages[1]).toEqual({ role: "user", content: "question" });
+  });
+
+  it("sends tool definitions and parses OpenAI-compatible tool calls", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{
+        message: {
+          role: "assistant",
+          content: null,
+          tool_calls: [{
+            id: "call-1",
+            type: "function",
+            function: {
+              name: "core.editor.replaceRange",
+              arguments: JSON.stringify({ fileId: "file-1", version: 3, text: "select 2" })
+            }
+          }]
+        }
+      }]
+    }), { status: 200 })) as unknown as typeof fetch;
+    const service = new AssistantHttpService({
+      fetchImpl,
+      resolveSecret: async () => ({ found: true, plaintext: "key-1" })
+    });
+
+    const result = await service.completeChat({
+      connection,
+      model: "gpt-test",
+      messages: [{ role: "user", content: "replace text" }],
+      tools: [{
+        id: "core.editor.replaceRange",
+        title: "Replace Text Range",
+        description: "Replace text",
+        inputSchema: { type: "object" }
+      }]
+    });
+
+    const calls = (fetchImpl as unknown as { mock: { calls: Array<[unknown, RequestInit]> } }).mock.calls;
+    const body = JSON.parse(String(calls[0]?.[1]?.body));
+    expect(body.tools).toEqual([{
+      type: "function",
+      function: {
+        name: "core_editor_replaceRange",
+        description: "Replace text",
+        parameters: { type: "object" }
+      }
+    }]);
+    expect(result.message.toolCalls).toEqual([{
+      id: "call-1",
+      toolId: "core.editor.replaceRange",
+      input: { fileId: "file-1", version: 3, text: "select 2" }
+    }]);
+  });
+
+  it("maps provider-safe tool names back to Queryeer tool ids", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{
+        message: {
+          role: "assistant",
+          tool_calls: [{
+            id: "call-1",
+            type: "function",
+            function: {
+              name: "core_editor_replaceRange",
+              arguments: "{}"
+            }
+          }]
+        }
+      }]
+    }), { status: 200 })) as unknown as typeof fetch;
+    const service = new AssistantHttpService({
+      fetchImpl,
+      resolveSecret: async () => ({ found: true, plaintext: "key-1" })
+    });
+
+    const result = await service.completeChat({
+      connection,
+      model: "gpt-test",
+      messages: [{ role: "user", content: "replace text" }],
+      tools: [{
+        id: "core.editor.replaceRange",
+        title: "Replace Text Range",
+        description: "Replace text",
+        inputSchema: { type: "object" }
+      }]
+    });
+
+    expect(result.message.toolCalls?.[0]?.toolId).toBe("core.editor.replaceRange");
+  });
+
+  it("serializes tool result messages for follow-up completions", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "done" } }]
+    }), { status: 200 }));
+    const service = new AssistantHttpService({
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      resolveSecret: async () => ({ found: true, plaintext: "key-1" })
+    });
+
+    await service.completeChat({
+      connection,
+      model: "gpt-test",
+      messages: [
+        {
+          role: "assistant",
+          content: "",
+          toolCalls: [{ id: "call-1", toolId: "core.editor.replaceRange", input: { text: "x" } }],
+          providerMetadata: { reasoning_content: "thinking" }
+        },
+        {
+          role: "tool",
+          content: JSON.stringify({ ok: true }),
+          toolCallId: "call-1",
+          toolName: "core.editor.replaceRange"
+        }
+      ]
+    });
+
+    const calls = fetchMock.mock.calls as unknown as Array<[unknown, RequestInit]>;
+    const body = JSON.parse(String(calls[0]?.[1]?.body));
+    expect(body.messages).toEqual([
+      {
+        role: "assistant",
+        content: null,
+        reasoning_content: "thinking",
+        tool_calls: [{
+          id: "call-1",
+          type: "function",
+          function: {
+            name: "core_editor_replaceRange",
+            arguments: JSON.stringify({ text: "x" })
+          }
+        }]
+      },
+      {
+        role: "tool",
+        content: JSON.stringify({ ok: true }),
+        tool_call_id: "call-1",
+        name: "core.editor.replaceRange"
+      }
+    ]);
+  });
+
+  it("preserves provider reasoning content on assistant tool-call responses", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{
+        message: {
+          role: "assistant",
+          content: null,
+          reasoning_content: "reasoning trace",
+          tool_calls: [{
+            id: "call-1",
+            type: "function",
+            function: {
+              name: "core_editor_replaceRange",
+              arguments: "{}"
+            }
+          }]
+        }
+      }]
+    }), { status: 200 })) as unknown as typeof fetch;
+    const service = new AssistantHttpService({
+      fetchImpl,
+      resolveSecret: async () => ({ found: true, plaintext: "key-1" })
+    });
+
+    const result = await service.completeChat({
+      connection,
+      model: "deepseek-reasoner",
+      messages: [{ role: "user", content: "replace text" }],
+      tools: [{
+        id: "core.editor.replaceRange",
+        title: "Replace Text Range",
+        description: "Replace text",
+        inputSchema: { type: "object" }
+      }]
+    });
+
+    expect(result.message.providerMetadata).toEqual({
+      reasoning_content: "reasoning trace"
+    });
+  });
 });

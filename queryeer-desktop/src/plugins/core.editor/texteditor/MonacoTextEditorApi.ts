@@ -245,6 +245,10 @@ export class MonacoTextEditorApi extends TextEditorApi {
     return this.editor?.getValue() ?? "";
   }
 
+  getVersionId(): number {
+    return this.editor?.getModel()?.getVersionId() ?? 0;
+  }
+
   getLineContent(lineNumber: number): string {
     const model = this.editor?.getModel();
     return model?.getLineContent(lineNumber) ?? "";

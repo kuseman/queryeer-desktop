@@ -193,6 +193,32 @@ describe("CoreSecurityService", () => {
     expect(bridge.unlock).toHaveBeenCalledTimes(1);
   });
 
+  it("retries after unlock when operation throws Security vault is locked", async () => {
+    const { service, bridge } = createService({
+      status: {
+        unlocked: false,
+        hasPersistedVault: true,
+        hasStoredMasterPassword: false
+      },
+      prompt: () => "master-pass",
+      response: { accepted: true }
+    });
+    let calls = 0;
+    const action = vi.fn(async () => {
+      calls++;
+      if (calls === 1) {
+        throw new Error("Security vault is locked");
+      }
+      return 42;
+    });
+
+    const result = await service.withVaultRetry(action);
+
+    expect(result).toBe(42);
+    expect(action).toHaveBeenCalledTimes(2);
+    expect(bridge.unlock).toHaveBeenCalledTimes(1);
+  });
+
   it("throws SecurityVaultLockedError when user cancels unlock retry", async () => {
     const { service } = createService({
       status: {

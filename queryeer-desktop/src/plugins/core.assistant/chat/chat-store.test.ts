@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { FileStateRegistry, StateKey } from "../../../contracts/files/FileStateRegistry";
 import {
   appendAssistantMessages,
+  clearAssistantMessages,
   getAssistantChatState,
   setAssistantChatSelection,
   setAssistantModels
@@ -60,6 +61,20 @@ describe("chat-store", () => {
 
     expect(getAssistantChatState(registry, "file-1").modelsByConnectionId).toEqual({
       "connection-1": [{ id: "gpt-4.1" }]
+    });
+  });
+
+  it("clears messages without resetting model selection", () => {
+    const registry = new InMemoryFileStateRegistry();
+
+    setAssistantChatSelection(registry, "file-1", { connectionId: "c1", modelId: "m1" });
+    appendAssistantMessages(registry, "file-1", [{ role: "user", content: "hello" }]);
+    clearAssistantMessages(registry, "file-1");
+
+    expect(getAssistantChatState(registry, "file-1")).toMatchObject({
+      selectedConnectionId: "c1",
+      selectedModelId: "m1",
+      messages: []
     });
   });
 });

@@ -148,6 +148,13 @@ function createContext(file?: FileEntity) {
       clear: vi.fn(),
       clearAll: vi.fn(),
       subscribe: vi.fn(() => () => {})
+    },
+    assistant: {
+      registerContextContribution: vi.fn(() => () => {}),
+      registerToolContribution: vi.fn(() => () => {}),
+      collectContext: vi.fn(async () => []),
+      listTools: vi.fn(() => []),
+      invokeTool: vi.fn(async () => ({ ok: false }))
     }
   } satisfies PluginContext;
 

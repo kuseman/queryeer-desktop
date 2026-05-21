@@ -51,7 +51,17 @@ import type {
 } from "../../contracts/extensions/TableOutputContextMenuExtension";
 import type { EditorHandle, EditorRegistry, EditorRegistryHost, EditorContentRepository } from "../../contracts/editor/EditorCapability";
 import type { Disposable } from "../../contracts/editor/EditorApi";
+import type {
+  AssistantContextContribution,
+  AssistantContextItem,
+  AssistantContextRequest,
+  AssistantRegistry,
+  AssistantToolContribution,
+  AssistantToolInvocation,
+  AssistantToolResult
+} from "../../contracts/assistant/Assistant";
 import type { ContextValues } from "../../plugins/core.commands/context-values";
+import { getExpressionRuntime } from "../../plugins/core.expressions/runtime";
 import { CommandBus } from "./CommandBus";
 import { FileRegistry } from "./FileRegistry";
 
@@ -201,6 +211,83 @@ class EditorRegistryHostImpl implements EditorRegistryHost {
   }
 }
 
+class AssistantRegistryImpl implements AssistantRegistry {
+  private readonly contextContributions = new Map<string, AssistantContextContribution>();
+  private readonly toolContributions = new Map<string, AssistantToolContribution>();
+
+  registerContextContribution(contribution: AssistantContextContribution): () => void {
+    this.contextContributions.set(contribution.id, contribution);
+    return () => {
+      this.contextContributions.delete(contribution.id);
+    };
+  }
+
+  registerToolContribution(contribution: AssistantToolContribution): () => void {
+    this.toolContributions.set(contribution.id, contribution);
+    return () => {
+      this.toolContributions.delete(contribution.id);
+    };
+  }
+
+  async collectContext(request: AssistantContextRequest): Promise<AssistantContextItem[]> {
+    const items: AssistantContextItem[] = [];
+    for (const contribution of this.sorted(this.contextContributions.values())) {
+      if (!isApplicable(contribution.when, request.contextValues)) {
+        continue;
+      }
+      const collected = await contribution.collect(request);
+      items.push(...collected);
+    }
+    return items;
+  }
+
+  listTools(request: AssistantContextRequest): AssistantToolContribution[] {
+    return this.sorted(this.toolContributions.values())
+      .filter((tool) => isApplicable(tool.when, request.contextValues));
+  }
+
+  async invokeTool(invocation: AssistantToolInvocation): Promise<AssistantToolResult> {
+    const tool = this.toolContributions.get(invocation.toolId);
+    if (!tool) {
+      return { ok: false, message: `Assistant tool '${invocation.toolId}' is not registered` };
+    }
+    if (!isApplicable(tool.when, invocation.contextValues)) {
+      return { ok: false, message: `Assistant tool '${invocation.toolId}' is not applicable` };
+    }
+    return tool.invoke(invocation);
+  }
+
+  private sorted<T extends { id: string; order?: number }>(values: Iterable<T>): T[] {
+    return [...values].sort((left, right) => {
+      const order = (left.order ?? 0) - (right.order ?? 0);
+      return order !== 0 ? order : left.id.localeCompare(right.id);
+    });
+  }
+}
+
+function isApplicable(when: string | undefined, contextValues: Record<string, unknown>): boolean {
+  const expression = when?.trim();
+  if (!expression || expression === "global") {
+    return true;
+  }
+  if (contextValues[expression] === true) {
+    return true;
+  }
+  if (/^[A-Za-z_$][\w$]*$/.test(expression)) {
+    return false;
+  }
+  try {
+    return getExpressionRuntime().evaluateBooleanSync(expression, contextValues, {
+      mode: "when",
+      source: `assistant:when:${expression}`,
+      timeoutMs: 50
+    });
+  } catch (error) {
+    console.error(`[ExpressionRuntime][assistant] when failed :: ${expression}`, error);
+    return false;
+  }
+}
+
 export class ExtensionRegistry {
   private readonly commandBus: CommandBus;
   private readonly commands = new Map<string, CommandExtension>();
@@ -230,6 +317,7 @@ export class ExtensionRegistry {
   private readonly outlineProviders = new Map<string, OutlineProviderRegistration>();
   private readonly supplementaryOutlineProviders = new Map<string, OutlineProviderRegistration[]>();
   private readonly editorRegistryHost = new EditorRegistryHostImpl();
+  private readonly assistantRegistry = new AssistantRegistryImpl();
   private contextMenuProviders: ContextMenuProvider[] = [];
   private tableOutputContextMenuProviders: TableOutputContextMenuProvider[] = [];
 
@@ -474,6 +562,10 @@ export class ExtensionRegistry {
 
   public createEditorRegistry(): EditorRegistry {
     return this.editorRegistryHost;
+  }
+
+  public createAssistantRegistry(): AssistantRegistry {
+    return this.assistantRegistry;
   }
 
   public createContextMenuRegistry(): ContextMenuRegistry {
