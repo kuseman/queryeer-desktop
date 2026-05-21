@@ -256,6 +256,22 @@ function formatNodeLabel(node: JdbcTreeNode): string {
   if (node.nodeType === "object" && node.fullName && node.fullName !== node.name) {
     return node.fullName;
   }
+  if (node.kind === "index") {
+    const icons: string[] = [];
+    if (node.attributes.unique) icons.push("U");
+    if (node.attributes.primaryKey) icons.push("PK");
+    const iconStr = icons.length > 0 ? ` [${icons.join(", ")}]` : "";
+    const columns = typeof node.attributes.columns === "string" ? node.attributes.columns : "";
+    return `${node.name}${iconStr}${columns ? ` (${columns})` : ""}`;
+  }
+  if (node.kind === "index_column") {
+    const ordinal = typeof node.attributes.ordinal === "number" ? node.attributes.ordinal : undefined;
+    const sortOrder = typeof node.attributes.sortOrder === "string" ? node.attributes.sortOrder : undefined;
+    const suffixes: string[] = [];
+    if (ordinal !== undefined) suffixes.push(`#${ordinal}`);
+    if (sortOrder) suffixes.push(sortOrder);
+    return suffixes.length > 0 ? `${node.name} ${suffixes.join(" ")}` : node.name;
+  }
   if (node.kind !== "column") {
     return node.name;
   }

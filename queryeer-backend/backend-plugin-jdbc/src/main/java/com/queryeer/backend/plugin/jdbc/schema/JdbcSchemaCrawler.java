@@ -58,8 +58,8 @@ public final class JdbcSchemaCrawler
     }
 
     /**
-     * For each table node in the fetched list, resolve its columns via the router and attach them as children. This ensures column data is persisted in the DEEP snapshot and available for completion
-     * without live JDBC queries.
+     * For each table node in the fetched list, resolve its columns and indexes via the router and attach them as folder children. This ensures column and index data is persisted in the DEEP snapshot
+     * and available for completion without live JDBC queries.
      */
     private List<JdbcSchemaObject> expandTableColumns(JdbcConnection connection, List<JdbcSchemaObject> tables)
     {
@@ -84,16 +84,45 @@ public final class JdbcSchemaCrawler
             List<JdbcSchemaObject> columns;
             try
             {
-                columns = router.resolve(connection, "table", tableTarget);
+                columns = router.resolve(connection, "columns_folder", tableTarget);
             }
             catch (RuntimeException e)
             {
                 System.err.println("[WARN] Failed to resolve columns for " + tableName + ": " + e.getMessage());
                 columns = List.of();
             }
-            result.add(new JdbcSchemaObject(table.id(), table.name(), table.kind(), table.nodeType(), table.fullName(), List.copyOf(columns), table.attributes()));
+            List<JdbcSchemaObject> indexes;
+            try
+            {
+                indexes = router.resolve(connection, "indexes_folder", tableTarget);
+            }
+            catch (RuntimeException e)
+            {
+                System.err.println("[WARN] Failed to resolve indexes for " + tableName + ": " + e.getMessage());
+                indexes = List.of();
+            }
+            Map<String, Object> folderAttrs = new java.util.LinkedHashMap<>(table.attributes());
+            folderAttrs.put("table", tableName);
+            List<JdbcSchemaObject> folderChildren = new ArrayList<>();
+            if (!columns.isEmpty())
+            {
+                folderChildren.add(new JdbcSchemaObject("columns_folder:" + key(catalog, schema) + ":" + tableName, "Columns", "columns_folder", List.copyOf(columns), Map.copyOf(folderAttrs)));
+            }
+            if (!indexes.isEmpty())
+            {
+                folderChildren.add(new JdbcSchemaObject("indexes_folder:" + key(catalog, schema) + ":" + tableName, "Indexes", "indexes_folder", List.copyOf(indexes), Map.copyOf(folderAttrs)));
+            }
+            result.add(new JdbcSchemaObject(table.id(), table.name(), table.kind(), table.nodeType(), table.fullName(), List.copyOf(folderChildren), table.attributes()));
         }
         return result;
+    }
+
+    private static String key(String... values)
+    {
+        return java.util.Arrays.stream(values)
+                .map(v -> v == null ? ""
+                        : v)
+                .collect(java.util.stream.Collectors.joining("|"));
     }
 
     private static void mergeTablesScope(List<JdbcSchemaObject> roots, String database, String schema, List<JdbcSchemaObject> fetched)

@@ -252,6 +252,7 @@ function inferNodeType(kind: string): NodeType {
     case "primary_key":
     case "foreign_key":
     case "index":
+    case "index_column":
       return "property";
     default:
       if (kind.endsWith("_container")) return "container";
@@ -275,6 +276,10 @@ function buildTarget(node: JdbcTreeNode): Record<string, string> | undefined {
 
   if (node.kind === "table" || node.kind === "view") {
     target.table = node.name;
+  }
+
+  if (node.kind === "columns_folder" || node.kind === "indexes_folder") {
+    if (node.attributes.table) target.table = node.attributes.table as string;
   }
 
   return Object.keys(target).length > 0 ? target : undefined;

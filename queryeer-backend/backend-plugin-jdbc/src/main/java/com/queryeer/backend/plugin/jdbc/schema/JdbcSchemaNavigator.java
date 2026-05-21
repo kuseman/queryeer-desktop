@@ -141,12 +141,31 @@ public final class JdbcSchemaNavigator
                             continue;
                         }
                     }
-                    // Found the table — collect columns
+                    // Found the table — collect columns from columns_folder or direct children
                     if (node.children() != null)
                     {
                         for (JdbcSchemaObject child : node.children())
                         {
-                            if ("column".equalsIgnoreCase(trimToNull(child.kind())))
+                            String childKind = trimToNull(child.kind());
+                            if ("columns_folder".equalsIgnoreCase(childKind))
+                            {
+                                List<JdbcSchemaObject> folderChildren = child.children();
+                                if (folderChildren != null)
+                                {
+                                    for (JdbcSchemaObject colNode : folderChildren)
+                                    {
+                                        if ("column".equalsIgnoreCase(trimToNull(colNode.kind())))
+                                        {
+                                            String colName = trimToNull(colNode.name());
+                                            if (colName != null)
+                                            {
+                                                target.add(colName);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            else if ("column".equalsIgnoreCase(childKind))
                             {
                                 String colName = trimToNull(child.name());
                                 if (colName != null)

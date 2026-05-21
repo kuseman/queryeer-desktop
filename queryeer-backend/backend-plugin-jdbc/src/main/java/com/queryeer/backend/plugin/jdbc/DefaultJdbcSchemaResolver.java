@@ -34,6 +34,7 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
     private static final String SCOPE_TABLES = "tables";
     private static final String SCOPE_COLUMNS = "columns";
     private static final String KEY_SCHEMA = "schema";
+    private static final String KEY_TABLE = "table";
     private static final String KEY_CATALOG = "catalog";
     private static final String KIND_SCHEMA = "schema";
     private static final String KIND_TABLE = "table";
@@ -44,6 +45,8 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
     private static final String KIND_TABLES_FOLDER = "tables_folder";
     private static final String KIND_VIEWS_FOLDER = "views_folder";
     private static final String KIND_PROCEDURES_FOLDER = "procedures_folder";
+    private static final String KIND_COLUMNS_FOLDER = "columns_folder";
+    private static final String KIND_INDEXES_FOLDER = "indexes_folder";
     private static final String KEY_TYPE = "type";
     private static final String DEFAULT_SCHEMA_NAME = "default";
     private static final String DEFAULT_CATALOG_NAME = "default";
@@ -89,7 +92,9 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
             case KIND_TABLES_FOLDER -> readTables(jdbc, target);
             case KIND_VIEWS_FOLDER -> readViews(jdbc, target);
             case KIND_PROCEDURES_FOLDER -> readProcedures(jdbc, target);
-            case KIND_TABLE, KIND_VIEW -> readTableDetail(jdbc, target);
+            case KIND_COLUMNS_FOLDER -> readColumns(jdbc, target);
+            case KIND_INDEXES_FOLDER -> readIndexes(jdbc, target);
+            case KIND_TABLE, KIND_VIEW -> readTableFolders(jdbc, target);
             default -> List.of();
         };
     }
@@ -285,7 +290,26 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
         return result;
     }
 
-    private List<JdbcSchemaObject> readTableDetail(Connection jdbc, JdbcSchemaTarget target) throws SQLException
+    private List<JdbcSchemaObject> readTableFolders(Connection jdbc, JdbcSchemaTarget target) throws SQLException
+    {
+        if (target == null
+                || target.table() == null
+                || PayloadUtils.isBlank(target.table()))
+        {
+            return List.of();
+        }
+        String tableCatalog = target.database();
+        String tableSchema = target.schema();
+        String schemaKey = key(tableCatalog, tableSchema);
+        Map<String, Object> folderAttrs = new LinkedHashMap<>();
+        folderAttrs.put(KEY_CATALOG, nullToEmpty(tableCatalog));
+        folderAttrs.put(KEY_SCHEMA, nullToEmpty(tableSchema));
+        folderAttrs.put(KEY_TABLE, target.table());
+        return List.of(new JdbcSchemaObject(KIND_COLUMNS_FOLDER + ":" + schemaKey + ":" + target.table(), "Columns", KIND_COLUMNS_FOLDER, null, folderAttrs),
+                new JdbcSchemaObject(KIND_INDEXES_FOLDER + ":" + schemaKey + ":" + target.table(), "Indexes", KIND_INDEXES_FOLDER, null, folderAttrs));
+    }
+
+    private List<JdbcSchemaObject> readColumns(Connection jdbc, JdbcSchemaTarget target) throws SQLException
     {
         if (target == null
                 || target.table() == null
@@ -299,7 +323,6 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
         String schemaKey = key(tableCatalog, tableSchema);
         DatabaseMetaData metadata = jdbc.getMetaData();
 
-        // Collect primary key columns and foreign key info
         Set<String> pkColumns = new HashSet<>();
         try (ResultSet rs = metadata.getPrimaryKeys(nullToEmpty(tableCatalog), nullToEmpty(tableSchema), tableName))
         {
@@ -379,6 +402,274 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
         }
 
         return children;
+    }
+
+    private List<JdbcSchemaObject> readIndexes(Connection jdbc, JdbcSchemaTarget target) throws SQLException
+    {
+        if (target == null
+                || target.table() == null
+                || PayloadUtils.isBlank(target.table()))
+        {
+            return List.of();
+        }
+        String tableName = target.table();
+        String tableSchema = target.schema();
+        String tableCatalog = target.database();
+        String schemaKey = key(tableCatalog, tableSchema);
+        DatabaseMetaData metadata = jdbc.getMetaData();
+
+        List<JdbcSchemaObject> indexes = new ArrayList<>();
+        Map<String, List<Map<String, Object>>> indexColumns = new LinkedHashMap<>();
+        try (ResultSet rs = metadata.getIndexInfo(nullToEmpty(tableCatalog), nullToEmpty(tableSchema), tableName, false, false))
+        {
+            while (rs.next())
+            {
+                String indexName = rs.getString("INDEX_NAME");
+                if (indexName == null
+                        || indexName.isBlank())
+                {
+                    continue;
+                }
+                String colName = rs.getString("COLUMN_NAME");
+                Boolean nonUnique = rs.getBoolean("NON_UNIQUE");
+                if (rs.wasNull())
+                {
+                    nonUnique = null;
+                }
+                short ordinal = rs.getShort("ORDINAL_POSITION");
+                String ascOrDesc = rs.getString("ASC_OR_DESC");
+                if (colName != null)
+                {
+                    Map<String, Object> colEntry = new LinkedHashMap<>();
+                    colEntry.put("column", colName);
+                    colEntry.put("ordinal", ordinal);
+                    if (ascOrDesc != null)
+                    {
+                        colEntry.put("sortOrder", "A".equalsIgnoreCase(ascOrDesc) ? "ASC"
+                                : "D".equalsIgnoreCase(ascOrDesc) ? "DESC"
+                                        : ascOrDesc);
+                    }
+                    indexColumns.computeIfAbsent(indexName, _ -> new ArrayList<>())
+                            .add(colEntry);
+                }
+                if (nonUnique != null
+                        && !indexColumns.containsKey(indexName))
+                {
+                    indexColumns.computeIfAbsent(indexName, _ -> new ArrayList<>())
+                            .add(Map.of("unique", !nonUnique));
+                }
+            }
+        }
+        catch (SQLException ignored)
+        {
+        }
+
+        for (Map.Entry<String, List<Map<String, Object>>> entry : indexColumns.entrySet())
+        {
+            String indexName = entry.getKey();
+            List<Map<String, Object>> colInfos = entry.getValue();
+            Map<String, Object> attrs = new LinkedHashMap<>();
+            List<String> columnNames = new ArrayList<>();
+            List<JdbcSchemaObject> indexColumnChildren = new ArrayList<>();
+            for (Map<String, Object> colInfo : colInfos)
+            {
+                if (colInfo.containsKey("column"))
+                {
+                    String colName = (String) colInfo.get("column");
+                    columnNames.add(colName);
+                    Short ord = (Short) colInfo.get("ordinal");
+                    String sortOrder = (String) colInfo.get("sortOrder");
+                    Map<String, Object> colAttrs = new LinkedHashMap<>();
+                    colAttrs.put("ordinal", ord != null ? ord
+                            : 0);
+                    if (sortOrder != null)
+                    {
+                        colAttrs.put("sortOrder", sortOrder);
+                    }
+                    indexColumnChildren.add(new JdbcSchemaObject("index_col:" + schemaKey + ":" + tableName + ":" + indexName + ":" + colName, colName, "index_column", null, Map.copyOf(colAttrs)));
+                }
+                if (colInfo.containsKey("unique"))
+                {
+                    attrs.put("unique", colInfo.get("unique"));
+                }
+            }
+            if (!columnNames.isEmpty())
+            {
+                attrs.put("columns", String.join(", ", columnNames));
+            }
+            indexes.add(new JdbcSchemaObject("index:" + schemaKey + ":" + tableName + ":" + indexName, indexName, "index", indexColumnChildren.isEmpty() ? null
+                    : List.copyOf(indexColumnChildren), Map.copyOf(attrs)));
+        }
+
+        return indexes;
+    }
+
+    private List<JdbcSchemaObject> readTableDetail(Connection jdbc, JdbcSchemaTarget target) throws SQLException
+    {
+        if (target == null
+                || target.table() == null
+                || PayloadUtils.isBlank(target.table()))
+        {
+            return List.of();
+        }
+        String tableName = target.table();
+        String tableSchema = target.schema();
+        String tableCatalog = target.database();
+        String schemaKey = key(tableCatalog, tableSchema);
+        DatabaseMetaData metadata = jdbc.getMetaData();
+
+        Set<String> pkColumns = new HashSet<>();
+        try (ResultSet rs = metadata.getPrimaryKeys(nullToEmpty(tableCatalog), nullToEmpty(tableSchema), tableName))
+        {
+            while (rs.next())
+            {
+                String col = rs.getString("COLUMN_NAME");
+                if (col != null)
+                {
+                    pkColumns.add(col);
+                }
+            }
+        }
+        catch (SQLException ignored)
+        {
+        }
+        Map<String, List<String>> fkMap = new HashMap<>();
+        try (ResultSet rs = metadata.getImportedKeys(nullToEmpty(tableCatalog), nullToEmpty(tableSchema), tableName))
+        {
+            while (rs.next())
+            {
+                String col = rs.getString("FKCOLUMN_NAME");
+                String refTable = rs.getString("PKTABLE_NAME");
+                String refColumn = rs.getString("PKCOLUMN_NAME");
+                if (col != null)
+                {
+                    fkMap.put(col, List.of(nullToEmpty(refTable), nullToEmpty(refColumn)));
+                }
+            }
+        }
+        catch (SQLException ignored)
+        {
+        }
+
+        String sql = """
+                select column_name, data_type, is_nullable, ordinal_position
+                from information_schema.columns
+                where table_name = ?
+                and (table_schema = ? or ? is null)
+                order by ordinal_position
+                """;
+        List<JdbcSchemaObject> columns = new ArrayList<>();
+        try (PreparedStatement statement = jdbc.prepareStatement(sql))
+        {
+            statement.setString(1, tableName);
+            statement.setString(2, tableSchema == null ? ""
+                    : tableSchema);
+            statement.setString(3, tableSchema);
+            try (ResultSet rs = statement.executeQuery())
+            {
+                while (rs.next())
+                {
+                    String dataType = rs.getString(2);
+                    String nullable = rs.getString(3);
+                    int ordinal = rs.getInt(4);
+                    Map<String, Object> attrs = new LinkedHashMap<>();
+                    attrs.put(KEY_TYPE, nullToEmpty(dataType).toLowerCase());
+                    if (nullable != null)
+                    {
+                        attrs.put("nullable", nullable);
+                    }
+                    attrs.put("ordinal", ordinal);
+                    String colName = rs.getString(1);
+                    if (pkColumns.contains(colName))
+                    {
+                        attrs.put("primaryKey", true);
+                    }
+                    List<String> fkInfo = fkMap.get(colName);
+                    if (fkInfo != null)
+                    {
+                        attrs.put("foreignKey", true);
+                        attrs.put("referencesTable", fkInfo.get(0));
+                        attrs.put("referencesColumn", fkInfo.get(1));
+                    }
+                    columns.add(new JdbcSchemaObject("column:" + schemaKey + ":" + tableName + ":" + colName, colName, "column", null, Map.copyOf(attrs)));
+                }
+            }
+        }
+
+        List<JdbcSchemaObject> indexes = new ArrayList<>();
+        try (ResultSet rs = metadata.getIndexInfo(nullToEmpty(tableCatalog), nullToEmpty(tableSchema), tableName, false, false))
+        {
+            Map<String, List<String>> indexColMap = new LinkedHashMap<>();
+            Map<String, Short> indexOrdinalMap = new LinkedHashMap<>();
+            Map<String, String> indexSortMap = new LinkedHashMap<>();
+            Map<String, Boolean> indexUniqueMap = new HashMap<>();
+            while (rs.next())
+            {
+                String indexName = rs.getString("INDEX_NAME");
+                if (indexName == null
+                        || indexName.isBlank())
+                {
+                    continue;
+                }
+                String colName = rs.getString("COLUMN_NAME");
+                short ordinal = rs.getShort("ORDINAL_POSITION");
+                String ascOrDesc = rs.getString("ASC_OR_DESC");
+                boolean nonUnique = rs.getBoolean("NON_UNIQUE");
+                if (colName != null)
+                {
+                    indexColMap.computeIfAbsent(indexName, _ -> new ArrayList<>())
+                            .add(colName);
+                    indexOrdinalMap.putIfAbsent(indexName + ":" + colName, ordinal);
+                    if (ascOrDesc != null)
+                    {
+                        String sortOrder = "A".equalsIgnoreCase(ascOrDesc) ? "ASC"
+                                : "D".equalsIgnoreCase(ascOrDesc) ? "DESC"
+                                        : ascOrDesc;
+                        indexSortMap.putIfAbsent(indexName + ":" + colName, sortOrder);
+                    }
+                }
+                indexUniqueMap.putIfAbsent(indexName, !nonUnique);
+            }
+            for (Map.Entry<String, List<String>> entry : indexColMap.entrySet())
+            {
+                String indexName = entry.getKey();
+                Map<String, Object> attrs = new LinkedHashMap<>();
+                attrs.put("columns", String.join(", ", entry.getValue()));
+                Boolean unique = indexUniqueMap.get(indexName);
+                if (unique != null)
+                {
+                    attrs.put("unique", unique);
+                }
+                List<JdbcSchemaObject> indexColumnChildren = new ArrayList<>();
+                int pos = 0;
+                for (String colName : entry.getValue())
+                {
+                    pos++;
+                    Short ord = indexOrdinalMap.get(indexName + ":" + colName);
+                    String sortOrder = indexSortMap.get(indexName + ":" + colName);
+                    Map<String, Object> colAttrs = new LinkedHashMap<>();
+                    colAttrs.put("ordinal", ord != null ? ord
+                            : pos);
+                    if (sortOrder != null)
+                    {
+                        colAttrs.put("sortOrder", sortOrder);
+                    }
+                    indexColumnChildren.add(new JdbcSchemaObject("index_col:" + schemaKey + ":" + tableName + ":" + indexName + ":" + colName, colName, "index_column", null, Map.copyOf(colAttrs)));
+                }
+                indexes.add(new JdbcSchemaObject("index:" + schemaKey + ":" + tableName + ":" + indexName, indexName, "index", indexColumnChildren.isEmpty() ? null
+                        : List.copyOf(indexColumnChildren), Map.copyOf(attrs)));
+            }
+        }
+        catch (SQLException ignored)
+        {
+        }
+
+        Map<String, Object> folderAttrs = new LinkedHashMap<>();
+        folderAttrs.put(KEY_CATALOG, nullToEmpty(tableCatalog));
+        folderAttrs.put(KEY_SCHEMA, nullToEmpty(tableSchema));
+        folderAttrs.put(KEY_TABLE, target.table());
+        return List.of(new JdbcSchemaObject(KIND_COLUMNS_FOLDER + ":" + schemaKey + ":" + tableName, "Columns", KIND_COLUMNS_FOLDER, columns, folderAttrs),
+                new JdbcSchemaObject(KIND_INDEXES_FOLDER + ":" + schemaKey + tableName, "Indexes", KIND_INDEXES_FOLDER, indexes, folderAttrs));
     }
 
     private static List<JdbcSchemaObject> readSchemaNodes(Connection jdbc) throws SQLException

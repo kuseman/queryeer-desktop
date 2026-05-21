@@ -71,20 +71,25 @@ class DefaultJdbcSchemaResolverTest
                         .isEmpty(),
                 "table object should have null/empty children (lazy-loaded)");
 
-        // Expand table → columns + constraints
-        // H2 stores unquoted identifiers as uppercase
-        List<JdbcSchemaObject> columns = resolver.resolveSchema(conn, Map.of("parentKind", "table", "target", Map.of("schema", "PUBLIC", "table", "PERSON")));
+        // Expand table → columns_folder + indexes_folder
+        List<JdbcSchemaObject> tableFolders = resolver.resolveSchema(conn, Map.of("parentKind", "table", "target", Map.of("schema", "PUBLIC", "table", "PERSON")));
+        Assertions.assertEquals(2, tableFolders.size());
+        Assertions.assertEquals("columns_folder", tableFolders.get(0)
+                .kind());
+        Assertions.assertEquals("indexes_folder", tableFolders.get(1)
+                .kind());
+
+        // Expand columns_folder → column objects
+        List<JdbcSchemaObject> columns = resolver.resolveSchema(conn, Map.of("parentKind", "columns_folder", "target", Map.of("schema", "PUBLIC", "table", "PERSON")));
         Assertions.assertTrue(columns.stream()
                 .anyMatch(c -> "id".equalsIgnoreCase(c.name())));
         Assertions.assertTrue(columns.stream()
                 .anyMatch(c -> "name".equalsIgnoreCase(c.name())));
 
-        List<JdbcSchemaObject> ordersColumns = resolver.resolveSchema(conn, Map.of("parentKind", "table", "target", Map.of("schema", "PUBLIC", "table", "ORDERS")));
-        // FK and Index info is now inlined on the column node via attributes
-        Assertions.assertTrue(ordersColumns.stream()
-                .anyMatch(c -> "person_id".equalsIgnoreCase(c.name())
-                        && Boolean.TRUE.equals(c.attributes()
-                                .get("foreignKey"))));
+        // Expand indexes_folder → index objects
+        List<JdbcSchemaObject> indexes = resolver.resolveSchema(conn, Map.of("parentKind", "indexes_folder", "target", Map.of("schema", "PUBLIC", "table", "ORDERS")));
+        Assertions.assertTrue(indexes.stream()
+                .anyMatch(i -> "idx_orders_person".equalsIgnoreCase(i.name())));
     }
 
     @Test

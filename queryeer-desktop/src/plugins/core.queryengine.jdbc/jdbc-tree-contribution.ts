@@ -19,13 +19,17 @@ const DEFAULT_ICONS: Record<string, string> = {
   tables_folder: "▤",
   views_folder: "◫",
   procedures_folder: "⚙",
+  columns_folder: "▤",
+  indexes_folder: "◈",
+  constraints_folder: "🔗",
   table: "▤",
   view: "◫",
   procedure: "⚙",
   column: "▸",
   primary_key: "🔑",
   foreign_key: "⇒",
-  index: "◈"
+  index: "◈",
+  index_column: "▸"
 };
 
 const contributors: JdbcTreeNodeContributor[] = [];

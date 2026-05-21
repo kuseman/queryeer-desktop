@@ -27,6 +27,35 @@ connection (STRUCTURAL)
 │   │   ├── schemas_container (CONTAINER)       ← only when RDBMS has schemas
 │   │   │   ├── schema "dbo" (STRUCTURAL)
 │   │   │   │   ├── tables_folder (FOLDER)       … table objects with fullName
+│   │   │   │   │   └── table "Customers" (OBJECT)
+│   │   │   │   │       ├── columns_folder (FOLDER)
+│   │   │   │   │       │   ├── column "CustomerID" (PROPERTY)
+│   │   │   │   │       │   └── column "CompanyName" (PROPERTY)
+│   │   │   │   │       └── indexes_folder (FOLDER)
+│   │   │   │   │           └── index "PK_Customers" (PROPERTY)
+│   │   │   │   ├── views_folder (FOLDER)        … view objects with fullName
+│   │   │   │   ├── procedures_folder (FOLDER)   … procedure objects with fullName
+│   │   │   │   └── sequences_folder (FOLDER)    ← dialect contribution
+│   │   │   │       … sequence objects
+│   │   │   └── schema "other" (STRUCTURAL)
+│   │   └── [schema-less DB: folders at database level]
+│   │       ├── tables_folder
+│   │       └── views_folder
+│   └── database "Northwind" (STRUCTURAL)
+│       …
+└── security_container (CONTAINER)               ← dialect top-level branch
+    ├── users_folder (FOLDER)
+    │   ├── user "sa" (OBJECT)
+    │   └── …
+    └── roles_folder (FOLDER)
+        └── …
+```
+connection (STRUCTURAL)
+├── databases_container (CONTAINER)
+│   ├── database "AdventureWorks" (STRUCTURAL)
+│   │   ├── schemas_container (CONTAINER)       ← only when RDBMS has schemas
+│   │   │   ├── schema "dbo" (STRUCTURAL)
+│   │   │   │   ├── tables_folder (FOLDER)       … table objects with fullName
 │   │   │   │   ├── views_folder (FOLDER)        … view objects with fullName
 │   │   │   │   ├── procedures_folder (FOLDER)   … procedure objects with fullName
 │   │   │   │   └── sequences_folder (FOLDER)    ← dialect contribution
@@ -101,7 +130,9 @@ The frontend sends the expanded node's `kind` as `parentKind`. The backend route
 | `tables_folder` | table names with `fullName = schema.table` |
 | `views_folder` | view names with `fullName = schema.view` |
 | `procedures_folder` | procedure names with `fullName = schema.procedure` |
-| `table` / `view` | columns + PKs + FKs + indexes |
+| `table` / `view` | `[columns_folder, indexes_folder]` |
+| `columns_folder` | column objects with type/nullable/PK/FK attributes |
+| `indexes_folder` | index objects with columns/unique/primaryKey attributes |
 | *dialect custom kinds* | dialect's resolver handles |
 
 ## Caching strategy
@@ -121,6 +152,7 @@ The crawl coordinator persists a flat index optimized for fast lookups:
 | `schema_index` | `connection_id, database_name, schema_name` | Completion scoping |
 | `object_index` | `connection_id, database_name, schema_name, object_name, kind` | Table/view completion |
 | `object_column` | `connection_id, database_name, schema_name, object_name, column_name, type, nullable, ordinal` | Column completion; future FK-driven join completion |
+| `object_index_detail` | `connection_id, database_name, schema_name, object_name, index_name, columns, unique` | Index completion and display |
 
 ### Crawl coordinator retains
 
@@ -151,10 +183,12 @@ The crawl coordinator persists a flat index optimized for fast lookups:
 | `table` | OBJECT | tables_folder | A table |
 | `view` | OBJECT | views_folder | A view |
 | `procedure` | OBJECT | procedures_folder | A procedure/function |
-| `column` | PROPERTY | table / view | A column |
+| `columns_folder` | FOLDER | table / view | Groups column objects |
+| `indexes_folder` | FOLDER | table / view | Groups index objects |
+| `column` | PROPERTY | columns_folder | A column |
 | `primary_key` | PROPERTY | table / view | Primary key constraint |
 | `foreign_key` | PROPERTY | table / view | Foreign key constraint |
-| `index` | PROPERTY | table / view | Index |
+| `index` | PROPERTY | indexes_folder | Index |
 
 Dialect-introduced kinds use `*_container` / `*_folder` / plain naming as appropriate.
 

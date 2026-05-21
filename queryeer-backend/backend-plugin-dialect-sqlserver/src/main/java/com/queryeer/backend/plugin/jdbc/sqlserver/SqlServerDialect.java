@@ -39,6 +39,7 @@ public final class SqlServerDialect implements JdbcDialect
 
     private static final String KEY_CATALOG = "catalog";
     private static final String KEY_SCHEMA = "schema";
+    private static final String KEY_TABLE = "table";
     private static final String KEY_DATABASE = "database";
     private static final String OPTION_TARGET = "target";
 
@@ -94,6 +95,24 @@ public final class SqlServerDialect implements JdbcDialect
             and o.is_ms_shipped = 0
             order by c.column_id
             """;
+    private static final String SQL_INDEXES = """
+            select i.name as index_name, c.name as column_name, i.is_unique, i.is_primary_key, ic.key_ordinal, ic.is_descending_key
+            from sys.indexes i
+            join sys.index_columns ic
+              on ic.object_id = i.object_id
+              and ic.index_id = i.index_id
+            join sys.columns c
+              on c.object_id = i.object_id
+              and c.column_id = ic.column_id
+            join sys.objects o
+              on o.object_id = i.object_id
+            join sys.schemas s
+              on s.schema_id = o.schema_id
+            where o.name = ?
+            and s.name = ?
+            and i.is_hypothetical = 0
+            order by i.name, ic.key_ordinal
+            """;
     private static final String SQL_USERS = """
             select name
             from sys.server_principals
@@ -126,8 +145,9 @@ public final class SqlServerDialect implements JdbcDialect
     {
         return Map.ofEntries(Map.entry("databases_container", this::resolveDatabasesContainer), Map.entry("database", this::resolveDatabaseChildren),
                 Map.entry("schemas_container", this::resolveSchemas), Map.entry("tables_folder", this::resolveTables), Map.entry("views_folder", this::resolveViews),
-                Map.entry("procedures_folder", this::resolveProcedures), Map.entry("table", this::resolveColumns), Map.entry("view", this::resolveColumns),
-                Map.entry("security_container", (_, _) -> createSecurityFolders()), Map.entry("users_folder", (c, _) -> resolveUsers(c)));
+                Map.entry("procedures_folder", this::resolveProcedures), Map.entry("table", this::resolveTableFolders), Map.entry("view", this::resolveTableFolders),
+                Map.entry("columns_folder", this::resolveColumnsFolder), Map.entry("indexes_folder", this::resolveIndexes), Map.entry("security_container", (_, _) -> createSecurityFolders()),
+                Map.entry("users_folder", (c, _) -> resolveUsers(c)));
     }
 
     @Override
@@ -238,7 +258,144 @@ public final class SqlServerDialect implements JdbcDialect
         return listObjects(connection, targetFrom(options.get(OPTION_TARGET)), SQL_PROCEDURES, "procedure");
     }
 
+    private List<JdbcSchemaObject> resolveTableFolders(JdbcConnection connection, Map<String, Object> options)
+    {
+        JdbcSchemaTarget target = targetFrom(options.get(OPTION_TARGET));
+        if (target == null
+                || target.table() == null)
+        {
+            return List.of();
+        }
+        String database = trimToNull(target.database());
+        String schema = trimToNull(target.schema());
+        String table = trimToNull(target.table());
+        Map<String, Object> folderAttrs = new LinkedHashMap<>();
+        if (database != null)
+        {
+            folderAttrs.put(KEY_CATALOG, database);
+        }
+        if (schema != null)
+        {
+            folderAttrs.put(KEY_SCHEMA, schema);
+        }
+        folderAttrs.put(KEY_TABLE, table);
+        String idPrefix = (database != null ? database + "."
+                : "")
+                + (schema != null ? schema + "."
+                        : "")
+                + table;
+        return List.of(new JdbcSchemaObject("columns_folder:" + idPrefix, "Columns", "columns_folder", null, Map.copyOf(folderAttrs)),
+                new JdbcSchemaObject("indexes_folder:" + idPrefix, "Indexes", "indexes_folder", null, Map.copyOf(folderAttrs)));
+    }
+
+    private List<JdbcSchemaObject> resolveColumnsFolder(JdbcConnection connection, Map<String, Object> options)
+    {
+        return resolveColumnsRaw(connection, options);
+    }
+
+    private List<JdbcSchemaObject> resolveIndexes(JdbcConnection connection, Map<String, Object> options)
+    {
+        JdbcSchemaTarget target = targetFrom(options.get(OPTION_TARGET));
+        if (target == null
+                || target.table() == null)
+        {
+            return List.of();
+        }
+        String database = trimToNull(target.database());
+        String schema = trimToNull(target.schema());
+        String table = trimToNull(target.table());
+        if (schema == null
+                || table == null)
+        {
+            return List.of();
+        }
+
+        List<JdbcSchemaObject> indexes = new ArrayList<>();
+        try (Connection conn = openForDatabase(connection, database))
+        {
+            try (PreparedStatement statement = conn.prepareStatement(SQL_INDEXES))
+            {
+                statement.setString(1, table);
+                statement.setString(2, schema);
+                try (ResultSet rs = statement.executeQuery())
+                {
+                    Map<String, List<String>> indexColumns = new LinkedHashMap<>();
+                    Map<String, Short> indexOrdinalMap = new LinkedHashMap<>();
+                    Map<String, String> indexSortMap = new LinkedHashMap<>();
+                    Map<String, Boolean> indexUnique = new LinkedHashMap<>();
+                    Map<String, Boolean> indexPrimaryKey = new LinkedHashMap<>();
+                    while (rs.next())
+                    {
+                        String indexName = rs.getString("index_name");
+                        String colName = rs.getString("column_name");
+                        boolean isUnique = rs.getBoolean("is_unique");
+                        boolean isPrimaryKey = rs.getBoolean("is_primary_key");
+                        short keyOrdinal = rs.getShort("key_ordinal");
+                        boolean isDescending = rs.getBoolean("is_descending_key");
+                        if (indexName != null
+                                && colName != null)
+                        {
+                            indexColumns.computeIfAbsent(indexName, _ -> new ArrayList<>())
+                                    .add(colName);
+                            indexOrdinalMap.putIfAbsent(indexName + ":" + colName, keyOrdinal);
+                            indexSortMap.putIfAbsent(indexName + ":" + colName, isDescending ? "DESC"
+                                    : "ASC");
+                            indexUnique.putIfAbsent(indexName, isUnique);
+                            indexPrimaryKey.putIfAbsent(indexName, isPrimaryKey);
+                        }
+                    }
+                    String idPrefix = (database != null ? database + "."
+                            : "") + schema + "." + table;
+                    for (Map.Entry<String, List<String>> entry : indexColumns.entrySet())
+                    {
+                        Map<String, Object> attrs = new LinkedHashMap<>();
+                        attrs.put("columns", String.join(", ", entry.getValue()));
+                        Boolean unique = indexUnique.get(entry.getKey());
+                        if (unique != null)
+                        {
+                            attrs.put("unique", unique);
+                        }
+                        Boolean pk = indexPrimaryKey.get(entry.getKey());
+                        if (pk != null
+                                && pk)
+                        {
+                            attrs.put("primaryKey", true);
+                        }
+                        List<JdbcSchemaObject> indexColumnChildren = new ArrayList<>();
+                        int pos = 0;
+                        for (String colName : entry.getValue())
+                        {
+                            pos++;
+                            Short ord = indexOrdinalMap.get(entry.getKey() + ":" + colName);
+                            String sortOrder = indexSortMap.get(entry.getKey() + ":" + colName);
+                            Map<String, Object> colAttrs = new LinkedHashMap<>();
+                            colAttrs.put("ordinal", ord != null ? ord
+                                    : pos);
+                            if (sortOrder != null)
+                            {
+                                colAttrs.put("sortOrder", sortOrder);
+                            }
+                            indexColumnChildren.add(new JdbcSchemaObject("index_col:" + idPrefix + ":" + entry.getKey() + ":" + colName, colName, "index_column", null, Map.copyOf(colAttrs)));
+                        }
+                        indexes.add(new JdbcSchemaObject("index:" + idPrefix + ":" + entry.getKey(), entry.getKey(), "index", indexColumnChildren.isEmpty() ? null
+                                : List.copyOf(indexColumnChildren), Map.copyOf(attrs)));
+                    }
+                }
+            }
+        }
+        catch (SQLException e)
+        {
+            throw new RuntimeException("Failed to read indexes for " + schema + "." + table, e);
+        }
+        return indexes;
+    }
+
     private List<JdbcSchemaObject> resolveColumns(JdbcConnection connection, Map<String, Object> options)
+    {
+        return resolveColumnsRaw(connection, options);
+    }
+
+    private List<JdbcSchemaObject> resolveColumnsRaw(JdbcConnection connection, Map<String, Object> options)
     {
         JdbcSchemaTarget target = targetFrom(options.get(OPTION_TARGET));
         if (target == null
