@@ -15,6 +15,7 @@ import { getQueryViewStateStore, TEXT_OUTPUT_PRIMARY_ID } from "./QueryViewState
 import { getCoreSecurityService } from "../core.security/service";
 import type { EditorRegistryHost } from "../../contracts/editor/EditorCapability";
 import type { OutlineRegistry } from "../../contracts/extensions/OutlineExtension";
+import { QUERY_PLAN_OUTPUT_ID as PLAN_OUTPUT_ID } from "./query-plan/constants";
 
 type Props = {
   file?: FileEntity;
@@ -45,7 +46,6 @@ function toAbsoluteLocation(anchor: ExecutionAnchor, line?: number, column?: num
 }
 
 const OUTPUT_CONTEXT_KEY = defineStateKey<OutputContext>("core.queryengine.outputContext");
-const PLAN_OUTPUT_ID = "core.graph.queryPlanOutput";
 const FILE_OUTPUT_PRIMARY_ID = "core.queryengine.output.file";
 const TABLE_OUTPUT_PRIMARY_ID = "core.queryengine.output.table";
 

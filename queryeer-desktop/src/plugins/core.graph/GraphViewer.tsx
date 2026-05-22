@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import {
   Background,
   Controls,
@@ -17,13 +17,33 @@ import type { GraphActionInvocation, GraphDocument, GraphEntity, GraphLayoutDire
 import { ContextMenuSurface } from "../../renderer/components/ContextMenuSurface";
 import { dagreGraphLayoutProvider, type GraphLayoutProvider } from "./graph-layout";
 import { formatGraphPropertyValue, getGraphEntityActions, getGraphEntityProperties, getImportantProperties, resolveGraphEntity, validateGraphDocument } from "./graph-utils";
-import { resolveQueryPlanOperatorIcon } from "./query-plan-icons";
 import "@xyflow/react/dist/style.css";
 import "./graph.css";
+
+type GraphInteractionStoreLike = {
+  get: (graphId: string) => {
+    selection: { type: "vertex" | "edge"; entityId: string } | null;
+    highlightedVertexIds: string[];
+    highlightedEdgeIds: string[];
+  };
+  select: (graphId: string, selection: { type: "vertex" | "edge"; entityId: string }) => void;
+  clearSelection: (graphId: string) => void;
+  subscribe: (listener: () => void) => () => void;
+};
+
+type GraphInteractionSnapshot = ReturnType<GraphInteractionStoreLike["get"]>;
+
+const EMPTY_INTERACTION_STATE: GraphInteractionSnapshot = {
+  selection: null,
+  highlightedVertexIds: [],
+  highlightedEdgeIds: []
+};
 
 type GraphViewerProps = {
   graph: GraphDocument;
   layoutProvider?: GraphLayoutProvider;
+  iconResolver?: (label?: string, kind?: string) => string | undefined;
+  interactionStore?: GraphInteractionStoreLike;
   onEntityAction?: (invocation: GraphActionInvocation) => void;
   onSelectionChanged?: (entity: GraphEntity | null) => void;
 };
@@ -31,6 +51,8 @@ type GraphViewerProps = {
 type GraphVertexNodeData = {
   vertex: GraphVertex;
   layoutDirection: GraphLayoutDirection;
+  resolvedIconUrl?: string;
+  highlighted: boolean;
 };
 
 type ContextMenuState = {
@@ -59,15 +81,38 @@ const layoutDirectionOptions: Array<{ value: GraphLayoutDirection; label: string
 export function GraphViewer({
   graph,
   layoutProvider = dagreGraphLayoutProvider,
+  iconResolver,
+  interactionStore,
   onEntityAction,
   onSelectionChanged
 }: GraphViewerProps): JSX.Element {
   const validation = useMemo(() => validateGraphDocument(graph), [graph]);
-  const [selectedEntity, setSelectedEntity] = useState<GraphEntity | null>(null);
+  const externalInteraction = useInteractionState(graph.id, interactionStore);
+  const [localSelection, setLocalSelection] = useState<GraphInteractionSnapshot["selection"]>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [layoutDirectionOverride, setLayoutDirectionOverride] = useState<GraphLayoutDirection | "auto">("auto");
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const interaction = interactionStore
+    ? externalInteraction
+    : {
+      ...EMPTY_INTERACTION_STATE,
+      selection: localSelection
+    };
+  const highlightedVertexIds = useMemo(
+    () => new Set(interaction.highlightedVertexIds),
+    [interaction.highlightedVertexIds]
+  );
+  const highlightedEdgeIds = useMemo(
+    () => new Set(interaction.highlightedEdgeIds),
+    [interaction.highlightedEdgeIds]
+  );
+  const selectedEntity = useMemo(() => {
+    if (!interaction.selection) {
+      return null;
+    }
+    return resolveGraphEntity(graph, interaction.selection.type, interaction.selection.entityId);
+  }, [graph, interaction.selection]);
   const effectiveLayoutDirection = layoutDirectionOverride === "auto"
     ? graph.layout?.direction ?? "top-bottom"
     : layoutDirectionOverride;
@@ -92,41 +137,93 @@ export function GraphViewer({
     type: "graphVertex",
     position: vertex.position,
     selected: selectedEntity?.type === "vertex" && selectedEntity.entity.id === vertex.id,
-    data: { vertex, layoutDirection: effectiveLayoutDirection },
+    data: {
+      vertex,
+      layoutDirection: effectiveLayoutDirection,
+      resolvedIconUrl: iconResolver?.(vertex.label, vertex.kind),
+      highlighted: highlightedVertexIds.has(vertex.id)
+    },
     style: {
       width: vertex.style?.width ?? 180,
       height: vertex.style?.height ?? 72
     }
-  })), [effectiveLayoutDirection, positionedGraph, selectedEntity]);
+  })), [effectiveLayoutDirection, highlightedVertexIds, iconResolver, positionedGraph, selectedEntity]);
 
-  const edges = useMemo<FlowEdge[]>(() => graph.edges.map((edge) => ({
-    id: edge.id,
-    source: edge.sourceVertexId,
-    target: edge.targetVertexId,
-    label: edge.label,
-    type: edge.style?.shape === "bezier" ? "default" : edge.style?.shape,
-    selected: selectedEntity?.type === "edge" && selectedEntity.entity.id === edge.id,
-    className: selectedEntity?.type === "edge" && selectedEntity.entity.id === edge.id ? "is-selected" : undefined,
-    markerEnd: edge.style?.markerEnd === "none" ? undefined : {
-      type: MarkerType.ArrowClosed,
-      color: selectedEntity?.type === "edge" && selectedEntity.entity.id === edge.id
-        ? "var(--accent-muted)"
-        : edge.style?.color
-    },
-    style: {
-      stroke: selectedEntity?.type === "edge" && selectedEntity.entity.id === edge.id
-        ? "var(--accent-muted)"
-        : edge.style?.color,
-      strokeWidth: selectedEntity?.type === "edge" && selectedEntity.entity.id === edge.id
-        ? Math.max((edge.style?.width ?? 2) + 1, 3)
-        : edge.style?.width,
-      strokeDasharray: edge.style?.dash ? "6 4" : undefined
+  const edges = useMemo<FlowEdge[]>(() => graph.edges.map((edge) => {
+    const selected = selectedEntity?.type === "edge" && selectedEntity.entity.id === edge.id;
+    const highlighted = highlightedEdgeIds.has(edge.id);
+    const className = [
+      selected ? "is-selected" : "",
+      highlighted ? "is-highlighted" : ""
+    ].filter(Boolean).join(" ");
+    const edgeColor = selected
+      ? "var(--accent-muted)"
+      : highlighted
+        ? "var(--accent)"
+        : edge.style?.color;
+    return {
+      id: edge.id,
+      source: edge.sourceVertexId,
+      target: edge.targetVertexId,
+      label: edge.label,
+      type: edge.style?.shape === "bezier" ? "default" : edge.style?.shape,
+      selected,
+      className: className.length > 0 ? className : undefined,
+      markerEnd: edge.style?.markerEnd === "none" ? undefined : {
+        type: MarkerType.ArrowClosed,
+        color: edgeColor
+      },
+      style: {
+        stroke: edgeColor,
+        strokeWidth: selected
+          ? Math.max((edge.style?.width ?? 2) + 1, 3)
+          : highlighted
+            ? Math.max(edge.style?.width ?? 2, 3)
+            : edge.style?.width,
+        strokeDasharray: edge.style?.dash ? "6 4" : undefined
+      }
+    };
+  }), [graph.edges, highlightedEdgeIds, selectedEntity]);
+
+  useEffect(() => {
+    onSelectionChanged?.(selectedEntity);
+  }, [onSelectionChanged, selectedEntity]);
+
+  useEffect(() => {
+    if (interaction.selection && !selectedEntity) {
+      if (interactionStore) {
+        interactionStore.clearSelection(graph.id);
+      } else {
+        setLocalSelection(null);
+      }
     }
-  })), [graph.edges, selectedEntity]);
+  }, [graph.id, interaction.selection, interactionStore, selectedEntity]);
+
+  useEffect(() => {
+    if (interactionStore) {
+      return;
+    }
+    setLocalSelection(null);
+  }, [graph.id, interactionStore]);
 
   const selectEntity = (entity: GraphEntity | null): void => {
-    setSelectedEntity(entity);
-    onSelectionChanged?.(entity);
+    if (!interactionStore) {
+      setLocalSelection(entity
+        ? {
+          type: entity.type,
+          entityId: entity.entity.id
+        }
+        : null);
+      return;
+    }
+    if (!entity) {
+      interactionStore.clearSelection(graph.id);
+      return;
+    }
+    interactionStore.select(graph.id, {
+      type: entity.type,
+      entityId: entity.entity.id
+    });
   };
 
   if (!validation.valid) {
@@ -141,7 +238,7 @@ export function GraphViewer({
   }
 
   return (
-    <div className="graph-viewer" data-output-focus-target="true" tabIndex={-1}>
+    <div className={`graph-viewer${interactionStore ? " has-interaction-store" : ""}`} data-output-focus-target="true" tabIndex={-1}>
       <div className="graph-canvas" ref={canvasRef}>
         <GraphLayoutToolbar
           direction={layoutDirectionOverride}
@@ -290,10 +387,11 @@ function GraphVertexNode({ data, selected }: { data: GraphVertexNodeData; select
   const vertex = data.vertex;
   const style = vertex.style ?? {};
   const handles = getHandlePositions(data.layoutDirection);
-  const iconUrl = style.iconUrl ?? style.imageUrl ?? resolveQueryPlanOperatorIcon(vertex.label, vertex.kind);
+  const iconUrl = style.iconUrl ?? style.imageUrl ?? data.resolvedIconUrl;
   const className = [
     "graph-node",
     `graph-node-${style.shape ?? "rounded"}`,
+    data.highlighted ? "is-highlighted" : "",
     selected ? "is-selected" : ""
   ].filter(Boolean).join(" ");
 
@@ -308,7 +406,7 @@ function GraphVertexNode({ data, selected }: { data: GraphVertexNodeData; select
     >
       <Handle type="target" position={handles.target} className="graph-node-handle" />
       <Handle type="source" position={handles.source} className="graph-node-handle" />
-      <img src={iconUrl} alt="" className="graph-node-icon" aria-hidden="true" />
+      {iconUrl && <img src={iconUrl} alt="" className="graph-node-icon" aria-hidden="true" />}
       {vertex.overlays && vertex.overlays.length > 0 && (
         <div className="graph-node-overlays" aria-hidden="true">
           {vertex.overlays.map((overlay) => (
@@ -334,6 +432,17 @@ function GraphVertexNode({ data, selected }: { data: GraphVertexNodeData; select
         {vertex.description && <div className="graph-node-description">{vertex.description}</div>}
       </div>
     </div>
+  );
+}
+
+function useInteractionState(
+  graphId: string,
+  interactionStore: GraphInteractionStoreLike | undefined
+): GraphInteractionSnapshot {
+  return useSyncExternalStore(
+    (listener) => interactionStore?.subscribe(listener) ?? (() => {}),
+    () => interactionStore?.get(graphId) ?? EMPTY_INTERACTION_STATE,
+    () => interactionStore?.get(graphId) ?? EMPTY_INTERACTION_STATE
   );
 }
 

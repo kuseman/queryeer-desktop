@@ -1,0 +1,50 @@
+.graph-plan-output {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.graph-plan-list {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-2);
+}
+
+.graph-plan-list-label {
+  flex-shrink: 0;
+  color: var(--text-1);
+  font-size: var(--ui-font-size-xs);
+}
+
+.graph-plan-list-item {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-1);
+  color: var(--text-1);
+  cursor: pointer;
+  font-size: var(--ui-font-size-xs);
+  padding: 2px 8px;
+}
+
+.graph-plan-list-item:hover,
+.graph-plan-list-item.is-selected {
+  border-color: var(--accent-muted);
+  color: var(--text-0);
+}
+
+.graph-plan-list-item.is-selected {
+  background: rgba(17, 119, 187, 0.18);
+}
+
+.graph-plan-view {
+  flex: 1;
+  min-height: 0;
+}

@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { QueryOutputArtifact } from "../../contracts/backend/Types";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { PluginContext } from "../../contracts/plugin/Plugin";
+import { getQueryPlanArtifactStore } from "./query-plan/artifact-store";
+
+const registerQueryPlanOutputMock = vi.hoisted(() => vi.fn());
 
 const mocks = vi.hoisted(() => ({
   initializeMock: vi.fn(),
@@ -67,7 +71,25 @@ vi.mock("../core.settings/service", () => ({
   onCoreSettingsServiceInitialized: vi.fn()
 }));
 
+vi.mock("./query-plan/output", () => ({
+  registerQueryPlanOutput: registerQueryPlanOutputMock
+}));
+
 import { coreQueryEnginePlugin } from "./plugin";
+
+function createArtifact(id: string, capability: string, graphId: string): QueryOutputArtifact {
+  return {
+    id,
+    capability,
+    kind: "graph",
+    title: `${capability}-${id}`,
+    graph: {
+      id: graphId,
+      vertices: [{ id: "v1", label: "Node" }],
+      edges: []
+    }
+  };
+}
 
 function makeFile(overrides: Partial<FileEntity> = {}): FileEntity {
   return {
@@ -237,6 +259,8 @@ function createNotificationMock() {
 
 describe("core.queryengine plugin", () => {
   beforeEach(() => {
+    getQueryPlanArtifactStore().clear();
+    registerQueryPlanOutputMock.mockReset();
     mocks.initializeMock.mockReset();
     mocks.onQueryEventMock.mockReset();
     mocks.registerEngineResolverMock.mockReset();
@@ -249,6 +273,8 @@ describe("core.queryengine plugin", () => {
     const context = createContext(makeFile());
 
     coreQueryEnginePlugin.activate(context);
+
+    expect(registerQueryPlanOutputMock).toHaveBeenCalledWith(context);
 
     expect(mocks.registerEngineResolverMock).toHaveBeenCalledTimes(1);
 
@@ -408,5 +434,45 @@ describe("core.queryengine plugin", () => {
         when: "hasActiveQueryExecutableFile"
       })
     );
+  });
+
+  it("stores plan artifacts on completion and prunes stale files", () => {
+    const context = createContext(makeFile());
+    coreQueryEnginePlugin.activate(context);
+
+    const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+      | ((event: { method: string; params?: { queryExecutionId?: string; artifacts?: unknown[] } }, executeContext?: { fileId?: string }) => void)
+      | undefined;
+    expect(listener).toBeTypeOf("function");
+
+    listener?.(
+      { method: "query.started", params: { queryExecutionId: "q-plan-1" } },
+      { fileId: "file-1" }
+    );
+    listener?.({
+      method: "queryengine.completed",
+      params: {
+        queryExecutionId: "q-plan-1",
+        artifacts: [
+          createArtifact("rows-1", "rows", "rows-graph"),
+          createArtifact("plan-1", "plan", "plan-graph")
+        ]
+      }
+    }, {});
+
+    const store = getQueryPlanArtifactStore();
+    expect(store.list("file-1").map((artifact) => artifact.id)).toEqual(["plan-1"]);
+
+    store.rememberArtifacts("file-zombie", [createArtifact("plan-z", "plan", "graph-z")]);
+    expect(store.list("file-zombie").map((artifact) => artifact.id)).toEqual(["plan-z"]);
+
+    const filesSubscription = (context.files.subscribe as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as
+      | ((files: FileEntity[]) => void)
+      | undefined;
+    expect(filesSubscription).toBeTypeOf("function");
+    filesSubscription?.([makeFile({ fileId: "file-1" })]);
+
+    expect(store.list("file-zombie")).toEqual([]);
+    expect(store.list("file-1").map((artifact) => artifact.id)).toEqual(["plan-1"]);
   });
 });

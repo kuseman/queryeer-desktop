@@ -2,12 +2,14 @@ import React from "react";
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import { getQueryEngineService } from "./QueryEngineService";
+import { getQueryPlanArtifactStore, queryCompletedArtifacts } from "./query-plan/artifact-store";
 import { queryTextRegistry } from "./QueryTextEditorRegistry";
 import { QueryEditorComponent } from "./QueryEditorComponent";
 import { QueryRunIcon, QueryStopIcon } from "./query-toolbar-icons";
 import { getOutputRegistry } from "./output/OutputRegistry";
 import { getQueryOutputFormatRegistry } from "./QueryOutputFormatRegistry";
 import { getQueryViewStateStore, TEXT_OUTPUT_PRIMARY_ID } from "./QueryViewStateStore";
+import { registerQueryPlanOutput } from "./query-plan/output";
 import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegistry";
 import { getOutlineRegistry } from "../../core/plugin-runtime/ExtensionRegistry";
 import { registerShortcuts } from "./shortcuts";
@@ -67,6 +69,7 @@ export const coreQueryEnginePlugin: Plugin = {
   },
   activate: (context) => {
     const queryEngineService = getQueryEngineService();
+    const queryPlanStore = getQueryPlanArtifactStore();
     queryEngineService.initialize();
     void setupSqlCompletionLanguage();
     void setupSqlHoverLanguage();
@@ -74,6 +77,7 @@ export const coreQueryEnginePlugin: Plugin = {
     setFilesRegistry(context.files);
     getEditorRegistryHost().registerContentRepository(queryTextRegistry);
     getQueryViewStateStore().initialize(context.files);
+    registerQueryPlanOutput(context);
 
     const getActiveQueryFile = () => {
       const fileId = context.fileMediator.getActiveFileId();
@@ -168,12 +172,20 @@ export const coreQueryEnginePlugin: Plugin = {
       }
 
       if (event.method === "queryengine.completed") {
+        const artifacts = queryCompletedArtifacts(event.params);
+        if (artifacts.length > 0) {
+          queryPlanStore.rememberArtifacts(fileId, artifacts);
+        }
         fileIdByExecutionId.delete(params.queryExecutionId);
         writeQueryTabState(context, fileId, undefined);
       } else if (event.method === "queryengine.failed") {
         fileIdByExecutionId.delete(params.queryExecutionId);
         writeQueryTabState(context, fileId, "failed");
       }
+    });
+
+    context.files.subscribe((files) => {
+      queryPlanStore.pruneToFileIds(files.map((file) => file.fileId));
     });
 
     context.commands.registerCommand({

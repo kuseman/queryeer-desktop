@@ -1,5 +1,6 @@
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
+import { QUERY_PLAN_ARTIFACT_REQUEST, QUERY_PLAN_OUTPUT_ID as PLAN_OUTPUT_ID } from "../core.queryengine/query-plan/constants";
 import { getQueryViewStateStore } from "../core.queryengine/QueryViewStateStore";
 import { getCoreSettingsService } from "../core.settings/service";
 import { registerJdbcDialect } from "../core.queryengine.jdbc/jdbc-dialect-registry";
@@ -8,9 +9,11 @@ import { registerSymbolActionTemplate } from "../core.queryengine/symbol-action-
 import { registerTreeActionTemplate } from "../core.queryengine.jdbc/tree-action-template-registry";
 import { SqlServerConnectionForm } from "./SqlServerConnectionForm";
 
+const SQLSERVER_DIALECT_ID = "sqlserver";
 const SQLSERVER_PLAN_OUTPUT_SETTING_ID = "core.queryengine.jdbc.sqlserver.planXmlOutput";
-const PLAN_OUTPUT_ID = "core.graph.queryPlanOutput";
-const SQLSERVER_WHEN = "hasActiveQueryExecutableFile && activeFile?.metadata?.core?.queryengine?.jdbc?.dialectId == 'sqlserver'";
+const SQLSERVER_FILE_DIALECT_WHEN = `activeFile.metadata.core.queryengine.jdbc?.dialectId == '${SQLSERVER_DIALECT_ID}'`;
+const SQLSERVER_NODE_DIALECT_WHEN = `node.dialectId == '${SQLSERVER_DIALECT_ID}'`;
+const SQLSERVER_WHEN = `hasActiveQueryExecutableFile && hasActiveQueryPlanDialect && activeFile?.metadata?.core?.queryengine?.jdbc?.dialectId == '${SQLSERVER_DIALECT_ID}'`;
 
 export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
   manifest: {
@@ -26,7 +29,8 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
   activate: (context) => {
     // Register connection form for the JDBC settings editor
     registerJdbcDialect({
-      dialectId: "sqlserver",
+      dialectId: SQLSERVER_DIALECT_ID,
+      supportsQueryPlan: true,
       ConnectionForm: SqlServerConnectionForm
     });
 
@@ -34,7 +38,7 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
       {
         name: "SQLServer Database",
         description: "Match SQL files using SQL Server against a specific selected database",
-        when: "activeFile.mimeType == 'application/sql' && activeFile.metadata.core.queryengine.jdbc?.dialectId == 'sqlserver' && activeFile.metadata.core.queryengine.jdbc?.database == 'OrderService'"
+        when: `activeFile.mimeType == 'application/sql' && ${SQLSERVER_FILE_DIALECT_WHEN} && activeFile.metadata.core.queryengine.jdbc?.database == 'OrderService'`
       }
     ]);
 
@@ -45,7 +49,7 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
       order: 10,
       action: {
         label: "Describe",
-        when: "activeFile.mimeType == 'application/sql' && activeFile.metadata.core.queryengine.jdbc?.dialectId == 'sqlserver' && (symbol.kind == 'table' || symbol.kind == 'view')",
+        when: `activeFile.mimeType == 'application/sql' && ${SQLSERVER_FILE_DIALECT_WHEN} && (symbol.kind == 'table' || symbol.kind == 'view')`,
         query: "exec sp_help '${symbol.name}'"
       }
     });
@@ -57,7 +61,7 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
       order: 10,
       action: {
         label: "Definition to Text",
-        when: "node.dialectId == 'sqlserver' && node.kind == 'procedure'",
+        when: `${SQLSERVER_NODE_DIALECT_WHEN} && node.kind == 'procedure'`,
         query: "exec sp_helptext '${node.fullName}'",
         mode: "execute",
         outputTarget: "output",
@@ -72,7 +76,7 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
       order: 11,
       action: {
         label: "Definition to New Query",
-        when: "node.dialectId == 'sqlserver' && node.kind == 'procedure'",
+        when: `${SQLSERVER_NODE_DIALECT_WHEN} && node.kind == 'procedure'`,
         query: "exec sp_helptext '${node.fullName}'",
         mode: "execute",
         outputTarget: "newQuery"
@@ -86,7 +90,7 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
       order: 12,
       action: {
         label: "Help",
-        when: "node.dialectId == 'sqlserver' && (node.kind == 'table' || node.kind == 'view' || node.kind == 'procedure')",
+        when: `${SQLSERVER_NODE_DIALECT_WHEN} && (node.kind == 'table' || node.kind == 'view' || node.kind == 'procedure')`,
         query: "exec sp_help '${node.fullName}'",
         mode: "execute",
         outputTarget: "output"
@@ -100,7 +104,7 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
       order: 13,
       action: {
         label: "Select Top 100 Rows",
-        when: "node.dialectId == 'sqlserver' && (node.kind == 'table' || node.kind == 'view')",
+        when: `${SQLSERVER_NODE_DIALECT_WHEN} && (node.kind == 'table' || node.kind == 'view')`,
         query: "select top 100 * from ${node.fullName}",
         mode: "execute",
         outputTarget: "output"
@@ -123,7 +127,7 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
           outputIdOverride: PLAN_OUTPUT_ID,
           optionsOverride: {
             intent: "plan.estimated",
-            requestedArtifacts: [{ capability: "plan", kind: "graph" }]
+            requestedArtifacts: QUERY_PLAN_ARTIFACT_REQUEST
           }
         });
       }
@@ -202,7 +206,7 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
       }
 
       const file = context.files.getFile(params.fileId);
-      const isSqlServer = file?.metadata?.["core.queryengine.jdbc.dialectId"] === "sqlserver";
+      const isSqlServer = file?.metadata?.["core.queryengine.jdbc.dialectId"] === SQLSERVER_DIALECT_ID;
       if (!isSqlServer) {
         return undefined;
       }

@@ -1,10 +1,12 @@
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import { getConfiguredJdbcConnections } from "./jdbc-settings";
 import { JDBC_NAV_DB_KEY } from "./jdbc-navigation-types";
+import { supportsQueryPlanForJdbcDialect } from "../core.queryengine/query-plan/supported-dialects";
 
 export const JDBC_CTX_DATABASE = "core.queryengine.jdbc.database";
 export const JDBC_CTX_CONNECTION_TITLE = "core.queryengine.jdbc.connectionTitle";
 export const JDBC_CTX_DIALECT_ID = "core.queryengine.jdbc.dialectId";
+export const JDBC_CTX_SUPPORTS_QUERY_PLAN = "core.queryengine.jdbc.supportsQueryPlan";
 
 export function writeJdbcContextMetadata(
   fileId: string,
@@ -19,11 +21,14 @@ export function writeJdbcContextMetadata(
 
   if (connectionId) {
     const conn = getConfiguredJdbcConnections().find((c) => c.connectionId === connectionId);
+    const dialectId = conn?.dialectId ?? "jdbc";
     metadata[JDBC_CTX_CONNECTION_TITLE] = conn?.title?.trim() || connectionId;
-    metadata[JDBC_CTX_DIALECT_ID] = conn?.dialectId ?? "jdbc";
+    metadata[JDBC_CTX_DIALECT_ID] = dialectId;
+    metadata[JDBC_CTX_SUPPORTS_QUERY_PLAN] = supportsQueryPlanForJdbcDialect(dialectId);
   } else {
     delete metadata[JDBC_CTX_CONNECTION_TITLE];
     delete metadata[JDBC_CTX_DIALECT_ID];
+    delete metadata[JDBC_CTX_SUPPORTS_QUERY_PLAN];
   }
 
   if (database) {

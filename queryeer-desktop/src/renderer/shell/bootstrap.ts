@@ -27,6 +27,7 @@ import { setCommandContextChain } from "../../plugins/core.commands/command-cont
 import { setKeybindingsRuntimeState } from "../../plugins/core.commands/keybindings-runtime-accessor";
 import { requestMessageDialog } from "../../plugins/core.dialog/message-dialog-service";
 import { getRegisteredQueryExecutableEngines } from "../../plugins/core.queryengine/engine-registration";
+import { hasActiveQueryPlanDialect } from "../../plugins/core.queryengine/query-plan/supported-dialects";
 
 export async function bootstrapShell() {
   const chain = createContextChain();
@@ -205,6 +206,7 @@ export async function bootstrapShell() {
           }
         : null,
       hasActiveQueryExecutableFile: isQueryExecutable,
+      hasActiveQueryPlanDialect: hasActiveQueryPlanDialect(activeFile),
     });
   };
   fileMediator.onActiveFileChanged(() => updateActiveFileScope());

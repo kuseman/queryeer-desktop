@@ -3,7 +3,7 @@ import type { GraphDocument } from "../../contracts/graph";
 export function createSampleGraphDocument(): GraphDocument {
   return {
     id: "core.graph.sample",
-    title: "Sample Query Plan Graph",
+    title: "Sample Graph Document",
     description: "A fake graph document used to verify the core.graph renderer and contract.",
     layout: {
       direction: "right-left",

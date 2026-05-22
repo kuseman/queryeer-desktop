@@ -1,17 +1,8 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { OutputContext, OutputContributor } from "../../contracts/extensions/OutputExtension";
 import type { PluginContext } from "../../contracts/plugin/Plugin";
 import { GRAPH_DOCUMENT_EDITOR_ID, GRAPH_DOCUMENT_EXTENSION, GRAPH_DOCUMENT_MIME_TYPE } from "./constants";
-
-const outputRegistryMock = vi.hoisted(() => ({
-  register: vi.fn()
-}));
-
-vi.mock("../core.queryengine/output/OutputRegistry", () => ({
-  getOutputRegistry: () => outputRegistryMock
-}));
 
 vi.mock("./GraphViewer", () => ({
   GraphViewer: ({ graph }: { graph: { id: string } }) => <div data-testid="mock-graph-viewer">{graph.id}</div>
@@ -20,22 +11,6 @@ vi.mock("./GraphViewer", () => ({
 import { coreGraphPlugin, handleGraphDocumentAction } from "./plugin";
 
 void React;
-
-const baseOutputContext: OutputContext = {
-  state: "completed",
-  resultSets: [],
-  output: [],
-  features: ["rows", "plan"],
-  artifacts: [],
-  metrics: null,
-  error: null,
-  progress: null,
-  fetchedRowCount: 0,
-  executionStartedAtMs: null,
-  textOutputFormat: "plain",
-  rowsTargetPrimaryId: null,
-  fileId: "file-1"
-};
 
 function makePluginContext(): PluginContext {
   const commands = new Map<string, () => Promise<void> | void>();
@@ -67,6 +42,13 @@ function makePluginContext(): PluginContext {
       })
     },
     menu: { registerMenuItem: vi.fn() },
+    assistant: {
+      registerContextContribution: vi.fn(() => () => {}),
+      registerToolContribution: vi.fn(() => () => {}),
+      collectContext: vi.fn(async () => []),
+      listTools: vi.fn(() => []),
+      invokeTool: vi.fn(async () => ({ ok: false }))
+    },
     fileMediator: {
       createUntitledFile: vi.fn(async () => createdFile)
     },
@@ -80,7 +62,6 @@ describe("core.graph plugin", () => {
 
   beforeEach(() => {
     (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-    outputRegistryMock.register.mockClear();
     rootElement = document.createElement("div");
     document.body.appendChild(rootElement);
     root = createRoot(rootElement);
@@ -124,7 +105,6 @@ describe("core.graph plugin", () => {
       id: GRAPH_DOCUMENT_EDITOR_ID,
       supportedMimeTypes: [GRAPH_DOCUMENT_MIME_TYPE]
     }));
-    expect(outputRegistryMock.register).toHaveBeenCalledWith(expect.objectContaining({ capability: "plan" }));
 
     await commands.get("core.graph.openSample")?.();
 
@@ -142,47 +122,5 @@ describe("core.graph plugin", () => {
         })
       })
     );
-  });
-
-  it("shows a compact selector for multiple plan artifacts", async () => {
-    const context = makePluginContext();
-    await coreGraphPlugin.activate(context);
-
-    const contributor = outputRegistryMock.register.mock.calls
-      .map((call) => call[0] as OutputContributor)
-      .find((candidate) => candidate.id === "core.graph.queryPlanOutput");
-    expect(contributor).toBeDefined();
-
-    await act(async () => {
-      root.render(<>{contributor!.render({
-        ...baseOutputContext,
-        artifacts: [
-          {
-            id: "plan-1",
-            capability: "plan",
-            kind: "graph",
-            title: "Actual Query Plan",
-            graph: { id: "graph-1", vertices: [{ id: "a", label: "A" }], edges: [] }
-          },
-          {
-            id: "plan-2",
-            capability: "plan",
-            kind: "graph",
-            title: "Actual Query Plan",
-            graph: { id: "graph-2", vertices: [{ id: "b", label: "B" }], edges: [] }
-          }
-        ]
-      })}</>);
-    });
-
-    expect(rootElement.textContent).toContain("Plans");
-    expect(rootElement.textContent).toContain("Statement 1");
-    expect(rootElement.textContent).toContain("graph-1");
-
-    await act(async () => {
-      (rootElement.querySelectorAll(".graph-plan-list-item")[1] as HTMLButtonElement).click();
-    });
-
-    expect(rootElement.textContent).toContain("graph-2");
   });
 });

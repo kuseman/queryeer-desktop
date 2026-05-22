@@ -1,8 +1,18 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  registerJdbcQueryPlanDialectSupportMock: vi.fn()
+}));
+
+vi.mock("../core.queryengine/query-plan/supported-dialects", () => ({
+  registerJdbcQueryPlanDialectSupport: mocks.registerJdbcQueryPlanDialectSupportMock
+}));
+
 import { registerJdbcDialect, getJdbcDialect } from "./jdbc-dialect-registry";
 
 describe("jdbc-dialect-registry", () => {
   beforeEach(() => {
+    mocks.registerJdbcQueryPlanDialectSupportMock.mockReset();
     // Clear the registry before each test by unregistering
     // (module-level Map, so we re-register per test)
   });
@@ -31,5 +41,17 @@ describe("jdbc-dialect-registry", () => {
     registerJdbcDialect(b);
     expect(getJdbcDialect("dialect-a")).toBe(a);
     expect(getJdbcDialect("dialect-b")).toBe(b);
+  });
+
+  it("registers query-plan capability when dialect opts in", () => {
+    registerJdbcDialect({ dialectId: "plan-dialect", supportsQueryPlan: true });
+
+    expect(mocks.registerJdbcQueryPlanDialectSupportMock).toHaveBeenCalledWith("plan-dialect");
+  });
+
+  it("does not register query-plan capability when dialect does not opt in", () => {
+    registerJdbcDialect({ dialectId: "non-plan-dialect" });
+
+    expect(mocks.registerJdbcQueryPlanDialectSupportMock).not.toHaveBeenCalled();
   });
 });

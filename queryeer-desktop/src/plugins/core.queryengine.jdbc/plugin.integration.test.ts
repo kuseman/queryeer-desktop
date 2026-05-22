@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginContext } from "../../contracts/plugin/Plugin";
+import { registerJdbcQueryPlanDialectSupport } from "../core.queryengine/query-plan/supported-dialects";
 
 const mocks = vi.hoisted(() => ({
   registerExecutionContextProviderMock: vi.fn(),
@@ -570,5 +571,32 @@ describe("core.queryengine.jdbc plugin integration", () => {
       hasCapability: () => true
     });
     expect(result).toBeNull();
+  });
+
+  it("refreshes supportsQueryPlan metadata when dialect support is registered later", () => {
+    const context = createContext();
+    const dynamicDialectId = "dynamic-plan-dialect";
+
+    const file = context.files.getFile("file-1");
+    if (file) {
+      file.engineBinding = { engineId: "jdbc", connectionId: "conn-a" };
+    }
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([
+      { connectionId: "conn-a", dialectId: dynamicDialectId, url: "jdbc:any://localhost/db", enabled: true }
+    ]);
+
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const fileSubscriber = (context.files.subscribe as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as
+      | ((files: FileEntity[]) => void)
+      | undefined;
+    expect(fileSubscriber).toBeTypeOf("function");
+    fileSubscriber?.(context.files.listFiles());
+
+    expect(context.files.getFile("file-1")?.metadata?.["core.queryengine.jdbc.supportsQueryPlan"]).toBe(false);
+
+    registerJdbcQueryPlanDialectSupport(dynamicDialectId);
+
+    expect(context.files.getFile("file-1")?.metadata?.["core.queryengine.jdbc.supportsQueryPlan"]).toBe(true);
   });
 });
