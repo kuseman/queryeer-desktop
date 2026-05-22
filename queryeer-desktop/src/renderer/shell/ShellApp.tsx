@@ -30,6 +30,7 @@ import { getOutlineRegistry } from "../../core/plugin-runtime/ExtensionRegistry"
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../../plugins/core.settings/service";
 import { getKeybindingLabel } from "../../plugins/core.commands/keybinding-label-accessor";
 import { subscribeKeybindingsRuntime } from "../../plugins/core.commands/keybindings-runtime-accessor";
+import { hasActiveQueryPlanDialect } from "../../plugins/core.queryengine/query-plan/supported-dialects";
 import {
   recordTabActivation,
   resolveActiveFileAfterRegistryUpdate,
@@ -229,6 +230,7 @@ export function ShellApp({
         : null,
       activeFileEditorId: activeFileForViewContext?.editorId,
       hasActiveQueryExecutableFile,
+      hasActiveQueryPlanDialect: hasActiveQueryPlanDialect(activeFileForViewContext),
       outlineSupported
     };
   }, [openFileIds.length, activeFileId, files, filesRegistry]);

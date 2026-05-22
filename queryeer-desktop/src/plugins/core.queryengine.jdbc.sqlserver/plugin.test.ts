@@ -156,6 +156,7 @@ describe("coreQueryEngineJdbcSqlServerPlugin", () => {
 
     expect(mocks.registerJdbcDialectMock).toHaveBeenCalledWith({
       dialectId: "sqlserver",
+      supportsQueryPlan: true,
       ConnectionForm: expect.any(Function)
     });
   });
@@ -191,7 +192,8 @@ describe("coreQueryEngineJdbcSqlServerPlugin", () => {
       expect.objectContaining({
         id: "core.queryengine.jdbc.sqlserver.showEstimatedPlan",
         title: "Show Estimated Query Plan",
-        category: "Query"
+        category: "Query",
+        enablement: expect.stringContaining("hasActiveQueryPlanDialect")
       })
     );
   });
@@ -204,7 +206,8 @@ describe("coreQueryEngineJdbcSqlServerPlugin", () => {
       expect.objectContaining({
         id: "core.queryengine.jdbc.sqlserver.toggleActualPlan",
         title: "Include Actual Query Plan",
-        category: "Query"
+        category: "Query",
+        enablement: expect.stringContaining("hasActiveQueryPlanDialect")
       })
     );
   });
@@ -215,12 +218,14 @@ describe("coreQueryEngineJdbcSqlServerPlugin", () => {
 
     expect(mocks.registerToolbarActionMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: "core.queryengine.jdbc.toolbar.sqlserver.showEstimatedPlan"
+        id: "core.queryengine.jdbc.toolbar.sqlserver.showEstimatedPlan",
+        when: expect.stringContaining("hasActiveQueryPlanDialect")
       })
     );
     expect(mocks.registerToolbarActionMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: "core.queryengine.jdbc.toolbar.sqlserver.includeActualPlan"
+        id: "core.queryengine.jdbc.toolbar.sqlserver.includeActualPlan",
+        when: expect.stringContaining("hasActiveQueryPlanDialect")
       })
     );
   });

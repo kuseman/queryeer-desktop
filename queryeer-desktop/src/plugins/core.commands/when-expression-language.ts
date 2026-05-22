@@ -35,6 +35,7 @@ export const CONTEXT_VARIABLES: CtxVar[] = [
   { name: "hasActiveTextEditor", type: "boolean", description: "True when a text editor is active" },
   { name: "editorTextFocus", type: "boolean", description: "True when the editor text area has keyboard focus" },
   { name: "hasActiveQueryExecutableFile", type: "boolean", description: "True when the active file can be executed as a query" },
+  { name: "hasActiveQueryPlanDialect", type: "boolean", description: "True when the active query file uses a dialect that supports query plans" },
   { name: "backendHealthy", type: "boolean", description: "True when the backend service is running and healthy" },
 ];
 

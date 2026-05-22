@@ -1,4 +1,4 @@
-import type { GraphDocument, GraphEdge, GraphEntity, GraphProperty, GraphPropertyGroup, GraphVertex } from "../../contracts/graph";
+import type { GraphDocument, GraphEdge, GraphEntity, GraphEntityType, GraphProperty, GraphPropertyGroup, GraphVertex } from "../../contracts/graph";
 
 export type GraphValidationResult = {
   valid: boolean;
@@ -16,6 +16,7 @@ export function formatGraphPropertyValue(property: GraphProperty): string {
 
 export function resolveGraphEntity(graph: GraphDocument, type: "vertex", id: string): GraphEntity | null;
 export function resolveGraphEntity(graph: GraphDocument, type: "edge", id: string): GraphEntity | null;
+export function resolveGraphEntity(graph: GraphDocument, type: GraphEntityType, id: string): GraphEntity | null;
 export function resolveGraphEntity(graph: GraphDocument, type: "vertex" | "edge", id: string): GraphEntity | null {
   if (type === "vertex") {
     const entity = graph.vertices.find((vertex) => vertex.id === id);

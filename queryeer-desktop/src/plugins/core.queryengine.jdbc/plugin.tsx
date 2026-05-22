@@ -28,6 +28,7 @@ import { createTreeActionProvider } from "./tree-action-provider";
 import { onCoreSettingsServiceInitialized } from "../core.settings/service";
 import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegistry";
 import { createJdbcAssistantTools } from "./jdbc-assistant-tools";
+import { subscribeJdbcQueryPlanDialectSupport } from "../core.queryengine/query-plan/supported-dialects";
 
 const JDBC_SESSION_ID_METADATA_KEY = "core.queryengine.jdbc.sessionId";
 const JDBC_SESSION_CONNECTION_TITLE_KEY = "core.queryengine.jdbc.sessionConnection";
@@ -51,6 +52,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       { name: "activeFile.metadata.core.queryengine.jdbc.database", type: "string", description: "Selected JDBC database name" },
       { name: "activeFile.metadata.core.queryengine.jdbc.connectionTitle", type: "string", description: "Human-readable title of the active JDBC connection" },
       { name: "activeFile.metadata.core.queryengine.jdbc.dialectId", type: "string", description: "SQL dialect of the active JDBC connection (e.g. 'sqlserver', 'postgresql')" },
+      { name: "activeFile.metadata.core.queryengine.jdbc.supportsQueryPlan", type: "boolean", description: "True when the active JDBC dialect supports query plan generation" },
       { name: "activeFile.metadata.core.queryengine.jdbc.sessionConnection", type: "string", description: "Title of the JDBC connection that owns the active session" },
       { name: "activeFile.metadata.core.queryengine.jdbc.sessionState", type: "string", description: "State of the JDBC session: 'alive', 'dead', or 'none'" },
     ]);
@@ -401,20 +403,38 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
     // Write metadata for any JDBC file the first time it appears in the registry
     // (covers workspace restore before JdbcConnectionSelector has mounted).
     const syncedFileIds = new Set<string>();
+    const syncJdbcFileMetadata = (fileId: string): void => {
+      const file = context.files.getFile(fileId);
+      if (!file || file.engineBinding?.engineId !== "jdbc") {
+        return;
+      }
+
+      const connectionId = file.engineBinding.connectionId;
+      const persisted = context.files.getEditorState(file.fileId, JDBC_NAV_DB_KEY) as { database?: string } | null;
+      writeJdbcContextMetadata(
+        file.fileId,
+        connectionId || undefined,
+        persisted?.database || undefined,
+        context.files
+      );
+    };
+
     context.files.subscribe((files) => {
       for (const file of files) {
         if (file.engineBinding?.engineId !== "jdbc" || syncedFileIds.has(file.fileId)) {
           continue;
         }
         syncedFileIds.add(file.fileId);
-        const connectionId = file.engineBinding.connectionId;
-        const persisted = context.files.getEditorState(file.fileId, JDBC_NAV_DB_KEY) as { database?: string } | null;
-        writeJdbcContextMetadata(
-          file.fileId,
-          connectionId || undefined,
-          persisted?.database || undefined,
-          context.files
-        );
+        syncJdbcFileMetadata(file.fileId);
+      }
+    });
+
+    subscribeJdbcQueryPlanDialectSupport(() => {
+      for (const file of context.files.listFiles()) {
+        if (file.engineBinding?.engineId !== "jdbc") {
+          continue;
+        }
+        syncJdbcFileMetadata(file.fileId);
       }
     });
 
