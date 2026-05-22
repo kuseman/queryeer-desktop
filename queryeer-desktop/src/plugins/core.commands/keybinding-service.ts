@@ -27,6 +27,10 @@ export type KeybindingServiceOptions = {
   contextChain?: ContextChain;
 };
 
+// Keep this default editor Escape action native so Monaco can close transient widgets
+// (find/suggest/etc.) without our global keybinding handler interfering.
+const DEFAULT_EDITOR_CLOSE_FIND_WIDGET_COMMAND_ID = "core.editor.text.closeFindWidget";
+
 function isFunctionKeybinding(key: string): boolean {
   return /(^|\+)(F([1-9]|1[0-9]|2[0-4]))$/i.test(key);
 }
@@ -41,10 +45,22 @@ function isInEditor(): boolean {
   return active.closest("[data-context='editor'], .shell-editor-pane, .shell-editor-content") !== null;
 }
 
-function shouldSkipForInput(when: string | undefined, contextInputFocus: boolean, key: string): boolean {
+function shouldSkipForInput(
+  when: string | undefined,
+  contextInputFocus: boolean,
+  contextEditorFocus: boolean,
+  key: string
+): boolean {
   if (!contextInputFocus) {
     return false;
   }
+
+  // Editor text inputs set inputFocus=true; Escape still needs to be evaluated
+  // so user bindings like Cancel Query can run from editor context.
+  if (normalizeKeybindingKey(key) === "escape" && contextEditorFocus) {
+    return false;
+  }
+
   if (isFunctionKeybinding(key)) {
     return false;
   }
@@ -79,6 +95,7 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
       editorFocus: Boolean(rawContextSnapshot.editorFocus || rawContextSnapshot.editorTextFocus)
     };
     const inputFocus = Boolean(rawContextSnapshot.inputFocus);
+    const editorFocus = Boolean(contextSnapshot.editorFocus);
 
     const matched = [...resolved]
       .sort((a, b) => (b.order ?? 0) - (a.order ?? 0))
@@ -86,7 +103,7 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
         if (normalizeKeybindingKey(binding.key) !== normalized) {
           return false;
         }
-        if (shouldSkipForInput(binding.when, inputFocus, binding.key)) {
+        if (shouldSkipForInput(binding.when, inputFocus, editorFocus, binding.key)) {
           return false;
         }
         const expression = binding.when;
@@ -109,9 +126,11 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
       return;
     }
 
-    // Don't intercept Escape — let Monaco handle it natively for
-    // suggest widget dismissal, find widget close, etc.
-    if (normalized === "escape") {
+    const preserveNativeEscape = normalized === "escape"
+      && matched.source === "default"
+      && matched.commandId === DEFAULT_EDITOR_CLOSE_FIND_WIDGET_COMMAND_ID;
+
+    if (preserveNativeEscape) {
       return;
     }
 
@@ -119,6 +138,7 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
     if (isInEditor()) {
       event.stopPropagation();
     }
+
     void options.executeCommand(matched.commandId);
   };
 

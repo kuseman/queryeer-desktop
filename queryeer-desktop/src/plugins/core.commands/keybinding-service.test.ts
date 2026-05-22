@@ -229,4 +229,77 @@ describe("createKeybindingService", () => {
     expect(executeCommand).toHaveBeenCalledWith("core.files.save");
     service.dispose();
   });
+
+  it("executes Escape user keybinding in editor context", async () => {
+    const executeCommand = vi.fn(async () => ({ commandId: "core.queryengine.cancel", executed: true }));
+    const chain = createContextChain();
+    chain.register({
+      id: "active-file",
+      priority: 20,
+      context: { hasActiveQueryExecutableFile: true }
+    });
+    chain.register({
+      id: "editor-instance",
+      priority: 40,
+      context: { editorTextFocus: true, editorFocus: false, inputFocus: true }
+    });
+    const service = createKeybindingService({
+      executeCommand,
+      getUserKeybindings: async () => ({
+        version: KEYBINDINGS_SCHEMA_VERSION,
+        bindings: [{ commandId: "core.queryengine.cancel", key: "Escape", when: "hasActiveQueryExecutableFile", scope: "global" }],
+        unbound: []
+      }),
+      contextChain: chain
+    });
+
+    const extensions = makeExtensions();
+    extensions.commands.push({ id: "core.queryengine.cancel", title: "Cancel Query", handler: () => {} });
+
+    await service.initialize(extensions);
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+
+    expect(executeCommand).toHaveBeenCalledWith("core.queryengine.cancel");
+    expect(event.defaultPrevented).toBe(true);
+    service.dispose();
+  });
+
+  it("does not intercept default Escape find-widget keybinding", async () => {
+    const executeCommand = vi.fn(async () => ({ commandId: "core.editor.text.closeFindWidget", executed: true }));
+    const chain = createContextChain();
+    chain.register({
+      id: "editor-instance",
+      priority: 40,
+      context: { editorTextFocus: true, editorFocus: false, inputFocus: true }
+    });
+    const service = createKeybindingService({
+      executeCommand,
+      getUserKeybindings: async () => ({
+        version: KEYBINDINGS_SCHEMA_VERSION,
+        bindings: [],
+        unbound: []
+      }),
+      contextChain: chain
+    });
+
+    const extensions = makeExtensions();
+    extensions.commands.push({ id: "core.editor.text.closeFindWidget", title: "Close Find", handler: () => {} });
+    extensions.keybindings.push({
+      id: "k.closeFindWidget",
+      commandId: "core.editor.text.closeFindWidget",
+      key: "Escape",
+      when: "editorFocus",
+      scope: "editor",
+      order: 33
+    });
+
+    await service.initialize(extensions);
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+
+    expect(executeCommand).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+    service.dispose();
+  });
 });
