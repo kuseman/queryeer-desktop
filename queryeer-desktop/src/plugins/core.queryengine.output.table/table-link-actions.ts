@@ -105,6 +105,9 @@ function prettyPrintXml(xml: string): string {
 
 function createJsonAction(value: unknown): TableLinkAction | null {
   const text = valueToString(value).trim();
+  if (!text.startsWith("{") && !text.startsWith("[")) {
+    return null;
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);

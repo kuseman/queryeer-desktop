@@ -55,6 +55,9 @@ export function createContextChain(): ContextChain {
       if (!scope) {
         return;
       }
+      if (shallowEquals(scope.context, context)) {
+        return;
+      }
       scope.context = context;
       notify();
     },
@@ -83,4 +86,21 @@ export function createContextChain(): ContextChain {
       return () => listeners.delete(listener);
     },
   };
+}
+
+function shallowEquals(left: ContextValues, right: ContextValues): boolean {
+  if (left === right) {
+    return true;
+  }
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+  for (const key of leftKeys) {
+    if (!Object.prototype.hasOwnProperty.call(right, key) || left[key] !== right[key]) {
+      return false;
+    }
+  }
+  return true;
 }

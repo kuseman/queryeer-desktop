@@ -28,6 +28,13 @@ describe("table link actions", () => {
     expect(resolveTableLinkAction({ value: "null", columnType: "string" })).toBeNull();
   });
 
+  it("detects and resolves json array previews", () => {
+    const action = resolveTableLinkAction({ value: '[{"a":1}]', columnType: "string" });
+    expect(action).toBeTruthy();
+    expect(action?.kind).toBe("preview");
+    expect(action?.mimeType).toBe("application/json");
+  });
+
   it("detects and resolves xml previews", () => {
     const action = resolveTableLinkAction({ value: "<root><x>1</x></root>", columnType: "string" });
     expect(action).toBeTruthy();

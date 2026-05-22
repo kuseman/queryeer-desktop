@@ -23,12 +23,12 @@ export function EditorCursorPositionIndicator() {
         if (editor) {
           const pos = editor.getPosition();
           if (pos) {
-            setPosition({ lineNumber: pos.lineNumber, column: pos.column });
+            setPosition((previous) => updatePosition(previous, pos));
           } else {
             setPosition(null);
           }
           disposableRef.current = editor.onDidChangeCursorPosition((event) => {
-            setPosition({ lineNumber: event.position.lineNumber, column: event.position.column });
+            setPosition((previous) => updatePosition(previous, event.position));
           });
         } else {
           setPosition(null);
@@ -49,4 +49,11 @@ export function EditorCursorPositionIndicator() {
   }
 
   return <span>Ln {position.lineNumber}, Col {position.column}</span>;
+}
+
+function updatePosition(previous: Position | null, next: Position): Position {
+  if (previous?.lineNumber === next.lineNumber && previous.column === next.column) {
+    return previous;
+  }
+  return { lineNumber: next.lineNumber, column: next.column };
 }
