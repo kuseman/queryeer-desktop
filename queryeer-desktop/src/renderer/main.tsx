@@ -28,6 +28,15 @@ function App({
   return <ShellApp {...shellProps} extensions={extensions} />;
 }
 
+// Monaco Editor internally throws Canceled promise rejections when async
+// operations (WordHighlighter, Delayer, etc.) are cancelled during editor
+// disposal or model swaps. These are harmless by design — suppress them.
+window.addEventListener("unhandledrejection", (event) => {
+  if (event.reason?.message === "Canceled" || event.reason?.name === "Canceled") {
+    event.preventDefault();
+  }
+});
+
 async function startApp(): Promise<void> {
   const bootstrap = await bootstrapShell();
 
