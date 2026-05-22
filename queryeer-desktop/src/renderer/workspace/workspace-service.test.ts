@@ -747,14 +747,15 @@ describe("RendererWorkspaceService autosave", () => {
     vi.useRealTimers();
   });
 
-  it.skip("fires a backup after the edit-debounce window", async () => {
-    const { service, mediator, backupMock } = makeHarness(
+  it("fires a backup after the edit-debounce window", async () => {
+    const { service, mediator, backupMock, filesRegistry } = makeHarness(
       undefined,
       { backupDebounceMs: 100, backupMaxIntervalMs: 5_000 }
     );
     await service.hydrate();
     const file = await mediator.openFile("file:///a.txt", { mimeType: "text/plain" });
 
+    filesRegistry.updateFile(file.fileId, { dirtyVsDisk: true });
     service.handleFileChanged(file, "edited");
     await vi.advanceTimersByTimeAsync(150);
 
@@ -763,13 +764,18 @@ describe("RendererWorkspaceService autosave", () => {
     expect(backupMock.mock.calls[0]?.[1]).toBe("edited");
   });
 
-  it.skip("coalesces rapid edits inside the debounce window into one backup", async () => {
-    const { service, mediator, backupMock } = makeHarness(
+  it("coalesces rapid edits inside the debounce window into one backup", async () => {
+    const { service, mediator, backupMock, filesRegistry } = makeHarness(
       undefined,
       { backupDebounceMs: 100, backupMaxIntervalMs: 5_000 }
     );
     await service.hydrate();
     const file = await mediator.openFile("file:///a.txt", { mimeType: "text/plain" });
+
+    // Establish autosave state first so subsequent edits use the debounce timer
+    service.handleFileChanged(file, "");
+    filesRegistry.updateFile(file.fileId, { dirtyVsDisk: true });
+    await vi.advanceTimersByTimeAsync(1);
 
     service.handleFileChanged(file, "v1");
     await vi.advanceTimersByTimeAsync(50);
@@ -783,13 +789,18 @@ describe("RendererWorkspaceService autosave", () => {
     expect(backupMock.mock.calls[0]?.[1]).toBe("v3");
   });
 
-  it.skip("fires a backup on the max-interval even when edits keep resetting the debounce", async () => {
-    const { service, mediator, backupMock } = makeHarness(
+  it("fires a backup on the max-interval even when edits keep resetting the debounce", async () => {
+    const { service, mediator, backupMock, filesRegistry } = makeHarness(
       undefined,
       { backupDebounceMs: 500, backupMaxIntervalMs: 200 }
     );
     await service.hydrate();
     const file = await mediator.openFile("file:///a.txt", { mimeType: "text/plain" });
+
+    // Establish autosave state first so subsequent edits use the debounce timer
+    service.handleFileChanged(file, "");
+    filesRegistry.updateFile(file.fileId, { dirtyVsDisk: true });
+    await vi.advanceTimersByTimeAsync(1);
 
     for (let i = 0; i < 5; i++) {
       service.handleFileChanged(file, `v${i}`);
@@ -834,7 +845,7 @@ describe("RendererWorkspaceService autosave", () => {
     expect(purgeMock).toHaveBeenCalledWith(stableBackupIdForUri(file.uri));
   });
 
-  it.skip("updates FileEntity.backupUri after a backup write", async () => {
+  it("updates FileEntity.backupUri after a backup write", async () => {
     const { service, mediator, filesRegistry } = makeHarness(
       undefined,
       { backupDebounceMs: 50, backupMaxIntervalMs: 5_000 }
@@ -842,17 +853,16 @@ describe("RendererWorkspaceService autosave", () => {
     await service.hydrate();
     const file = await mediator.openFile("file:///a.txt", { mimeType: "text/plain" });
 
+    filesRegistry.updateFile(file.fileId, { dirtyVsDisk: true });
     service.handleFileChanged(file, "edited");
     await vi.advanceTimersByTimeAsync(100);
-    await Promise.resolve();
-    await Promise.resolve();
 
     expect(filesRegistry.getFile(file.fileId)?.backupUri).toBe("file:///backup.bak");
   });
 });
 
 describe("RendererWorkspaceService crash recovery", () => {
-  it.skip("persists backupFileId in the snapshot when a backup is written", async () => {
+  it("persists backupFileId in the snapshot when a backup is written", async () => {
     vi.useFakeTimers();
     try {
       const { service, mediator, saveMock } = makeHarness(
@@ -1030,7 +1040,7 @@ describe("RendererWorkspaceService crash recovery", () => {
     expect(applyRecoveredContentMock).toHaveBeenCalledWith(entity.fileId, "untitled content here");
   });
 
-  it.skip("uses a stable backup id for file-backed editors across restart", async () => {
+  it("uses a stable backup id for file-backed editors across restart", async () => {
     vi.useFakeTimers();
     try {
       const initialSnapshot: WorkspaceSnapshot = {
@@ -1047,10 +1057,9 @@ describe("RendererWorkspaceService crash recovery", () => {
       const opened = await first.mediator.openFile("file:///persisted.sql", {
         mimeType: "application/sql"
       });
+      first.filesRegistry.updateFile(opened.fileId, { dirtyVsDisk: true });
       first.service.handleFileChanged(opened, "v1");
       await vi.advanceTimersByTimeAsync(100);
-      await Promise.resolve();
-      await Promise.resolve();
       await first.service.flush();
       const persisted = first.saveMock.mock.calls.at(-1)?.[0] as WorkspaceSnapshot;
       const persistedBackupId = persisted.files[0]!.backupFileId;
@@ -1064,9 +1073,9 @@ describe("RendererWorkspaceService crash recovery", () => {
       const reopened = await second.mediator.openFile("file:///persisted.sql", {
         mimeType: "application/sql"
       });
+      second.filesRegistry.updateFile(reopened.fileId, { dirtyVsDisk: true });
       second.service.handleFileChanged(reopened, "v2");
       await vi.advanceTimersByTimeAsync(100);
-      await Promise.resolve();
 
       expect(second.backupMock).toHaveBeenCalled();
       const calledBackupId = second.backupMock.mock.calls.at(-1)?.[0];

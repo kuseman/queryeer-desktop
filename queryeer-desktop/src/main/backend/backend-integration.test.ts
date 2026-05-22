@@ -80,7 +80,7 @@ describe("Backend E2E Integration", () => {
     });
   }, 10_000);
 
-  it.skip("cancels a never-started query", async () => {
+  it("cancels a never-started query", async () => {
     const cancelResult = await gateway.cancelQuery({
       queryExecutionId: "e2e-test-cancel-never-started",
     } satisfies QueryCancelParams);
@@ -104,7 +104,7 @@ describe("Backend E2E Integration", () => {
     expect(gatewayStatus.activeExecutionIds).toContain("e2e-test-exec-1");
   }, 30_000);
 
-  it.skip("cancels a running query after execution completes", async () => {
+  it("cancels a running query after execution completes", async () => {
     const execResult = await gateway.executeQuery({
       queryExecutionId: "e2e-test-cancel-target",
       engineId: "payloadbuilder",
@@ -120,6 +120,16 @@ describe("Backend E2E Integration", () => {
     } satisfies QueryCancelParams);
 
     expect(cancelResult.accepted).toBe(true);
+
+    // Wait for the backend to process completion/cancellation and send the notification
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      const status = gateway.getStatus();
+      if (!status.activeExecutionIds.includes("e2e-test-cancel-target")) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
 
     const status = gateway.getStatus();
     expect(status.activeExecutionIds).not.toContain("e2e-test-cancel-target");
