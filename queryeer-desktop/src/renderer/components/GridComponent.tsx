@@ -89,6 +89,12 @@ export type GridComponentProps = {
   onContextMenuSelection: (event: GridComponentContextMenuEvent, snapshot: GridComponentSelectionSnapshot) => void;
   isDarkTheme: boolean;
   isStreaming?: boolean;
+  searchText?: string;
+  searchCaseSensitive?: boolean;
+  searchRegex?: boolean;
+  searchWholeWord?: boolean;
+  searchActiveMatch?: { row: number; col: number } | null;
+  onSearchMatchesUpdate?: (matches: Array<{ row: number; col: number }>) => void;
 };
 
 type VisibleRowsCache = {
@@ -110,6 +116,37 @@ function getCellValue(rowData: GridComponentRow | undefined, columnIndex: number
     return null;
   }
   return rowData.__values[columnIndex] ?? null;
+}
+
+function matchesSearch(
+  cellValue: string,
+  searchText: string,
+  caseSensitive?: boolean,
+  useRegex?: boolean,
+  wholeWord?: boolean
+): boolean {
+  if (!searchText) return false;
+  let text = cellValue;
+  let pattern = searchText;
+  if (!caseSensitive) {
+    text = text.toLowerCase();
+    pattern = pattern.toLowerCase();
+  }
+  if (useRegex) {
+    try {
+      const flags = caseSensitive ? "g" : "gi";
+      const re = wholeWord ? new RegExp(`\\b${pattern}\\b`, flags) : new RegExp(pattern, flags);
+      return re.test(text);
+    } catch {
+      return false;
+    }
+  }
+  if (wholeWord) {
+    const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`(?:^|\\W)${escaped}(?:$|\\W)`, caseSensitive ? "g" : "gi");
+    return re.test(text);
+  }
+  return text.includes(pattern);
 }
 
 export function compareValues(a: unknown, b: unknown): number {
@@ -319,6 +356,12 @@ export function GridComponent({
   onContextMenuSelection,
   isDarkTheme,
   isStreaming = false,
+  searchText,
+  searchCaseSensitive,
+  searchRegex,
+  searchWholeWord,
+  searchActiveMatch,
+  onSearchMatchesUpdate,
 }: GridComponentProps): JSX.Element {
   const gridRef = useRef<DataEditorRef | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -351,6 +394,18 @@ export function GridComponent({
   const sortTimeoutRef = useRef<number | null>(null);
   selectionRef.current = selection;
   rowCountRef.current = rowCount;
+
+  const onSearchMatchesUpdateRef = useRef(onSearchMatchesUpdate);
+  onSearchMatchesUpdateRef.current = onSearchMatchesUpdate;
+  const resolveCellDisplayValueRef = useRef(resolveCellDisplayValue);
+  resolveCellDisplayValueRef.current = resolveCellDisplayValue;
+  const columnsRef = useRef(columns);
+  columnsRef.current = columns;
+
+  const [internalSearchMatches, setInternalSearchMatches] = useState<Array<{ row: number; col: number }>>([]);
+  const internalSearchMatchSet = useMemo(() => {
+    return new Set(internalSearchMatches.map(m => `${m.row}:${m.col}`));
+  }, [internalSearchMatches]);
 
   const getDataIndex = useCallback((visualColIndex: number): number => {
     if (!columnOrder || visualColIndex < 0 || visualColIndex >= columnOrder.length) return visualColIndex;
@@ -522,8 +577,15 @@ export function GridComponent({
     const displayValue = resolveCellDisplayValue(column.type, value);
     const link = resolveCellLink({ value, columnType: column.type });
     const selected = selectionRef.current != null && isCellSelected(selectionRef.current, rowIndex, dataIndex);
+    const cellKey = `${rowIndex}:${dataIndex}`;
+    const isSearchMatch = internalSearchMatchSet.has(cellKey);
+    const isActiveSearchMatch = searchActiveMatch?.row === rowIndex && searchActiveMatch?.col === dataIndex;
     let themeOverride: Record<string, string> | undefined;
-    if (selected) {
+    if (isActiveSearchMatch) {
+      themeOverride = { bgCell: "rgba(255, 180, 0, 0.45)" };
+    } else if (isSearchMatch) {
+      themeOverride = { bgCell: "rgba(255, 200, 0, 0.25)" };
+    } else if (selected) {
       themeOverride = { bgCell: "rgba(100, 160, 255, 0.22)" };
     } else if (isNull) {
       themeOverride = { bgCell: isDarkTheme ? "rgba(128, 100, 0, 0.35)" : "rgba(255, 255, 200, 0.55)" };
@@ -549,7 +611,7 @@ export function GridComponent({
       };
     }
     return { ...base, kind: GridCellKind.Text };
-  }, [columns, getDataIndex, getRowData, resolveCellDisplayValue, resolveCellLink, isDarkTheme, theme.linkColor]);
+  }, [columns, getDataIndex, getRowData, resolveCellDisplayValue, resolveCellLink, isDarkTheme, theme.linkColor, internalSearchMatchSet, searchActiveMatch]);
 
   const collectSelectionSnapshot = useCallback((model: SelectionModel): GridComponentSelectionSnapshot | null => {
     const box = getBoundingBox(model, columns.length);
@@ -805,6 +867,39 @@ export function GridComponent({
       el.removeEventListener("keydown", handler, true);
     };
   }, [collectSelectionSnapshot, onCopySelection]);
+
+  useEffect(() => {
+    if (!searchActiveMatch || !gridRef.current) return;
+    const visualCol = getVisualIndex(searchActiveMatch.col);
+    gridRef.current.scrollTo(visualCol, searchActiveMatch.row);
+  }, [searchActiveMatch, getVisualIndex]);
+
+  useEffect(() => {
+    if (!searchText) {
+      setInternalSearchMatches([]);
+      onSearchMatchesUpdateRef.current?.([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      const count = getRowCount();
+      const currentColumns = columnsRef.current;
+      const resolveFn = resolveCellDisplayValueRef.current;
+      const newMatches: Array<{ row: number; col: number }> = [];
+      for (let row = 0; row < count; row++) {
+        const rowData = getRowData(row);
+        if (!rowData || !Array.isArray(rowData.__values)) continue;
+        for (let col = 0; col < currentColumns.length; col++) {
+          const value = resolveFn(currentColumns[col].type, rowData.__values[col] ?? null);
+          if (matchesSearch(value, searchText, searchCaseSensitive, searchRegex, searchWholeWord)) {
+            newMatches.push({ row, col });
+          }
+        }
+      }
+      setInternalSearchMatches(newMatches);
+      onSearchMatchesUpdateRef.current?.(newMatches);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [searchText, searchCaseSensitive, searchRegex, searchWholeWord, getRowCount, getRowData]);
 
   return (
     <div ref={containerRef} style={{ height: "100%", width: "100%", position: "relative" }}>

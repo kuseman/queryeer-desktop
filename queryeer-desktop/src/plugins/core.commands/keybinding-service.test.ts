@@ -265,7 +265,7 @@ describe("createKeybindingService", () => {
     service.dispose();
   });
 
-  it("does not intercept default Escape find-widget keybinding", async () => {
+  it("does not intercept Escape when Monaco has an open suggest widget", async () => {
     const executeCommand = vi.fn(async () => ({ commandId: "core.editor.text.closeFindWidget", executed: true }));
     const chain = createContextChain();
     chain.register({
@@ -295,11 +295,108 @@ describe("createKeybindingService", () => {
     });
 
     await service.initialize(extensions);
+
+    // Simulate an open Monaco suggest widget in the DOM
+    const editorRoot = document.createElement("div");
+    editorRoot.className = "monaco-editor";
+    const suggestWidget = document.createElement("div");
+    suggestWidget.className = "suggest-widget visible";
+    editorRoot.appendChild(suggestWidget);
+    document.body.appendChild(editorRoot);
+
     const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
     document.dispatchEvent(event);
 
     expect(executeCommand).not.toHaveBeenCalled();
     expect(event.defaultPrevented).toBe(false);
+
+    document.body.removeChild(editorRoot);
+    service.dispose();
+  });
+
+  it("executes user Escape binding when inside editor DOM but Monaco declined", async () => {
+    const executeCommand = vi.fn(async () => ({ commandId: "core.queryengine.cancel", executed: true }));
+    const chain = createContextChain();
+    chain.register({
+      id: "active-file",
+      priority: 20,
+      context: { hasActiveQueryExecutableFile: true }
+    });
+    chain.register({
+      id: "editor-instance",
+      priority: 40,
+      context: { editorTextFocus: true, editorFocus: false, inputFocus: true }
+    });
+    const service = createKeybindingService({
+      executeCommand,
+      getUserKeybindings: async () => ({
+        version: KEYBINDINGS_SCHEMA_VERSION,
+        bindings: [{ commandId: "core.queryengine.cancel", key: "Escape", when: "hasActiveQueryExecutableFile", scope: "global" }],
+        unbound: []
+      }),
+      contextChain: chain
+    });
+
+    const extensions = makeExtensions();
+    extensions.commands.push({ id: "core.queryengine.cancel", title: "Cancel Query", handler: () => {} });
+    // Also register the default closeFindWidget binding
+    extensions.commands.push({ id: "core.editor.text.closeFindWidget", title: "Close Find", handler: () => {} });
+    extensions.keybindings.push({
+      id: "k.closeFindWidget",
+      commandId: "core.editor.text.closeFindWidget",
+      key: "Escape",
+      when: "editorFocus",
+      scope: "editor",
+      order: 33
+    });
+
+    await service.initialize(extensions);
+
+    // Create editor DOM and focus inside it so isInEditor() returns true
+    const editorRoot = document.createElement("div");
+    editorRoot.setAttribute("data-context", "editor");
+    const input = document.createElement("textarea");
+    editorRoot.appendChild(input);
+    document.body.appendChild(editorRoot);
+    input.focus();
+
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+
+    expect(executeCommand).toHaveBeenCalledWith("core.queryengine.cancel");
+    expect(event.defaultPrevented).toBe(true);
+
+    document.body.removeChild(editorRoot);
+    service.dispose();
+  });
+
+  it("executes Escape user keybinding when NOT inside editor DOM", async () => {
+    const executeCommand = vi.fn(async () => ({ commandId: "core.queryengine.cancel", executed: true }));
+    const chain = createContextChain();
+    chain.register({
+      id: "active-file",
+      priority: 20,
+      context: { hasActiveQueryExecutableFile: true }
+    });
+    const service = createKeybindingService({
+      executeCommand,
+      getUserKeybindings: async () => ({
+        version: KEYBINDINGS_SCHEMA_VERSION,
+        bindings: [{ commandId: "core.queryengine.cancel", key: "Escape", when: "hasActiveQueryExecutableFile", scope: "global" }],
+        unbound: []
+      }),
+      contextChain: chain
+    });
+
+    const extensions = makeExtensions();
+    extensions.commands.push({ id: "core.queryengine.cancel", title: "Cancel Query", handler: () => {} });
+
+    await service.initialize(extensions);
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+
+    expect(executeCommand).toHaveBeenCalledWith("core.queryengine.cancel");
+    expect(event.defaultPrevented).toBe(true);
     service.dispose();
   });
 });

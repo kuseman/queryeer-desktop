@@ -3,6 +3,28 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  position: relative;
+}
+
+.table-output-findbar {
+  position: absolute;
+  top: 36px;
+  right: 10px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.table-output-findbar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .table-output-result-tabs {
