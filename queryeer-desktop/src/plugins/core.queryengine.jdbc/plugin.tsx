@@ -205,7 +205,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
           commandId: "core.queryengine.jdbc.navigation.refresh"
         }
       ],
-      when: "activeFile.mimeType == 'application/sql'",
+      when: "activeFile?.mimeType == 'application/sql'",
       render: () => <JdbcNavigationView context={context} />
     });
 
