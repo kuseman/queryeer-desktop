@@ -671,6 +671,19 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
     return allMatches[currentMatchIndex];
   }, [allMatches, currentMatchIndex]);
 
+  // Memoized searchActiveMatch per result set to avoid new object references on every render
+  const searchActiveMatchByResultSet = useMemo(() => {
+    const map = new Map<number, { row: number; col: number } | null>();
+    for (const rs of context.resultSets) {
+      map.set(rs.resultSetIndex,
+        activeMatch?.resultSetIndex === rs.resultSetIndex
+          ? { row: activeMatch.row, col: activeMatch.col }
+          : null
+      );
+    }
+    return map;
+  }, [activeMatch, context.resultSets]);
+
   // Advance to first match when search results arrive fresh
   useEffect(() => {
     if (allMatches.length > 0 && currentMatchIndex === -1) {
@@ -834,7 +847,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
                         searchCaseSensitive={searchCaseSensitive}
                         searchRegex={searchRegex}
                         searchWholeWord={searchWholeWord}
-                        searchActiveMatch={activeMatch?.resultSetIndex === resultSet.resultSetIndex ? { row: activeMatch.row, col: activeMatch.col } : null}
+                        searchActiveMatch={searchActiveMatchByResultSet.get(resultSet.resultSetIndex) ?? null}
                         onSearchMatchesUpdate={(matches) => onGridSearchMatchesUpdate(resultSet.resultSetIndex, matches)}
                       />
                     </div>
@@ -880,7 +893,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
                   searchCaseSensitive={searchCaseSensitive}
                   searchRegex={searchRegex}
                   searchWholeWord={searchWholeWord}
-                  searchActiveMatch={activeMatch?.resultSetIndex === activeSet.resultSetIndex ? { row: activeMatch.row, col: activeMatch.col } : null}
+                  searchActiveMatch={searchActiveMatchByResultSet.get(activeSet.resultSetIndex) ?? null}
                   onSearchMatchesUpdate={(matches) => onGridSearchMatchesUpdate(activeSet.resultSetIndex, matches)}
                 />
               </div>
