@@ -97,6 +97,7 @@ describe("GridComponent", () => {
     rootElement = document.createElement("div");
     document.body.appendChild(rootElement);
     root = createRoot(rootElement);
+
   });
 
   afterEach(async () => {
