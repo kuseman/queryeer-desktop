@@ -11,10 +11,16 @@ type GridColumnLike = {
   width?: number;
 };
 
+type GlideCell = {
+  displayData?: string;
+  data?: string;
+  themeOverride?: Record<string, string>;
+};
+
 type DataEditorProps = {
   rows: number;
   columns: readonly GridColumnLike[];
-  getCellContent: (cell: readonly [number, number]) => { displayData?: string; data?: string };
+  getCellContent: (cell: readonly [number, number]) => GlideCell;
   onVisibleRegionChanged: (range: { x: number; y: number; width: number; height: number }, tx: number, ty: number) => void;
   onCellClicked: (cell: readonly [number, number], event: CellEvent) => void;
   onCellActivated: (cell: readonly [number, number]) => void;
@@ -1366,6 +1372,291 @@ describe("GridComponent", () => {
     expect(snapshot.rowsByIndex).toBeDefined();
     expect(snapshot.rowsByIndex[0]).toBeDefined();
     expect(snapshot.rowsByIndex[0]?.__values).toEqual([1, "hello"]);
+  });
+
+  describe("search / find", () => {
+    it("reports matching cells via onSearchMatchesUpdate after debounce", async () => {
+      vi.useFakeTimers();
+      const onSearchMatchesUpdate = vi.fn();
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            columns={[
+              { key: "name", title: "Name", type: "string" },
+              { key: "age", title: "Age", type: "int" },
+            ]}
+            getRowCount={() => 3}
+            getRowsRange={(start, end) => [["Alice", 30], ["Bob", 25], ["Charlie", 35]].slice(start, end)}
+            getRow={(index) => [["Alice", 30], ["Bob", 25], ["Charlie", 35]][index]}
+            subscribeRowsChanged={() => () => undefined}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText="Alice"
+            onSearchMatchesUpdate={onSearchMatchesUpdate}
+          />
+        );
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+
+      expect(onSearchMatchesUpdate).toHaveBeenCalledWith([{ row: 0, col: 0 }]);
+    });
+
+    it("highlights matching cells in getCellContent", async () => {
+      vi.useFakeTimers();
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            columns={[{ key: "name", title: "Name", type: "string" }, { key: "age", title: "Age", type: "int" }]}
+            getRowCount={() => 2}
+            getRowsRange={(start, end) => [["Alice", 30], ["Bob", 25]].slice(start, end)}
+            getRow={(index) => [["Alice", 30], ["Bob", 25]][index]}
+            subscribeRowsChanged={() => () => undefined}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText="Alice"
+          />
+        );
+      });
+
+      act(() => {
+        latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 2, height: 2 }, 0, 0);
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+
+      const matchCell = latestDataEditorProps?.getCellContent([0, 0]);
+      expect(matchCell?.themeOverride).toEqual({ bgCell: "rgba(255, 200, 0, 0.25)" });
+
+      const nonMatchCell = latestDataEditorProps?.getCellContent([1, 1]);
+      expect(nonMatchCell?.themeOverride).toBeUndefined();
+    });
+
+    it("clears search matches when searchText is removed", async () => {
+      vi.useFakeTimers();
+      const onSearchMatchesUpdate = vi.fn();
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            columns={[{ key: "name", title: "Name", type: "string" }]}
+            getRowCount={() => 2}
+            getRowsRange={(start, end) => [["Alice"], ["Bob"]].slice(start, end)}
+            getRow={(index) => [["Alice"], ["Bob"]][index]}
+            subscribeRowsChanged={() => () => undefined}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText="Alice"
+            onSearchMatchesUpdate={onSearchMatchesUpdate}
+          />
+        );
+      });
+
+      act(() => {
+        latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 1, height: 2 }, 0, 0);
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+
+      expect(onSearchMatchesUpdate).toHaveBeenCalledWith([{ row: 0, col: 0 }]);
+      onSearchMatchesUpdate.mockClear();
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            columns={[{ key: "name", title: "Name", type: "string" }]}
+            getRowCount={() => 2}
+            getRowsRange={(start, end) => [["Alice"], ["Bob"]].slice(start, end)}
+            getRow={(index) => [["Alice"], ["Bob"]][index]}
+            subscribeRowsChanged={() => () => undefined}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText=""
+            onSearchMatchesUpdate={onSearchMatchesUpdate}
+          />
+        );
+      });
+
+      expect(onSearchMatchesUpdate).toHaveBeenCalledWith([]);
+
+      const cell = latestDataEditorProps?.getCellContent([0, 0]);
+      expect(cell?.themeOverride).toBeUndefined();
+    });
+
+    it("respects caseSensitive search flag", async () => {
+      vi.useFakeTimers();
+      const onSearchMatchesUpdate = vi.fn();
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            columns={[{ key: "name", title: "Name", type: "string" }]}
+            getRowCount={() => 3}
+            getRowsRange={(start, end) => [["Alice"], ["alice"], ["ALICE"]].slice(start, end)}
+            getRow={(index) => [["Alice"], ["alice"], ["ALICE"]][index]}
+            subscribeRowsChanged={() => () => undefined}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText="Alice"
+            searchCaseSensitive={true}
+            onSearchMatchesUpdate={onSearchMatchesUpdate}
+          />
+        );
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+
+      expect(onSearchMatchesUpdate).toHaveBeenCalledWith([{ row: 0, col: 0 }]);
+    });
+
+    it("respects regex search flag", async () => {
+      vi.useFakeTimers();
+      const onSearchMatchesUpdate = vi.fn();
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            columns={[{ key: "name", title: "Name", type: "string" }]}
+            getRowCount={() => 3}
+            getRowsRange={(start, end) => [["Alice"], ["Bob"], ["Charlie"]].slice(start, end)}
+            getRow={(index) => [["Alice"], ["Bob"], ["Charlie"]][index]}
+            subscribeRowsChanged={() => () => undefined}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText="^A"
+            searchRegex={true}
+            onSearchMatchesUpdate={onSearchMatchesUpdate}
+          />
+        );
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+
+      expect(onSearchMatchesUpdate).toHaveBeenCalledWith([{ row: 0, col: 0 }]);
+    });
+
+    it("respects wholeWord search flag", async () => {
+      vi.useFakeTimers();
+      const onSearchMatchesUpdate = vi.fn();
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            columns={[{ key: "name", title: "Name", type: "string" }]}
+            getRowCount={() => 3}
+            getRowsRange={(start, end) => [["Alice"], ["AliceSmith"], ["Alice Smith"]].slice(start, end)}
+            getRow={(index) => [["Alice"], ["AliceSmith"], ["Alice Smith"]][index]}
+            subscribeRowsChanged={() => () => undefined}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText="Alice"
+            searchWholeWord={true}
+            onSearchMatchesUpdate={onSearchMatchesUpdate}
+          />
+        );
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+
+      expect(onSearchMatchesUpdate).toHaveBeenCalledWith([
+        { row: 0, col: 0 },
+        { row: 2, col: 0 },
+      ]);
+    });
+
+    it("re-runs search when streaming rows arrive", async () => {
+      vi.useFakeTimers();
+      const onSearchMatchesUpdate = vi.fn();
+      let rowCount = 1;
+      let listener: (() => void) | null = null;
+      const allData: string[][] = [["Alice"]];
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            columns={[{ key: "name", title: "Name", type: "string" }]}
+            getRowCount={() => rowCount}
+            getRowsRange={(start, end) => allData.slice(start, end)}
+            getRow={(index) => allData[index]}
+            subscribeRowsChanged={(nextListener) => {
+              listener = nextListener;
+              return () => undefined;
+            }}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText="Bob"
+            onSearchMatchesUpdate={onSearchMatchesUpdate}
+          />
+        );
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+
+      expect(onSearchMatchesUpdate).toHaveBeenCalledWith([]);
+      onSearchMatchesUpdate.mockClear();
+
+      allData.push(["Bob"]);
+      rowCount = 2;
+
+      await act(async () => {
+        listener?.();
+        vi.advanceTimersByTime(150);
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+
+      expect(onSearchMatchesUpdate).toHaveBeenCalledWith([{ row: 1, col: 0 }]);
+    });
   });
 });
 

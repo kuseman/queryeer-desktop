@@ -300,8 +300,8 @@ type TableGridProps = {
 };
 
 function TableGrid({ resultSetIndex, schema, fileId, onPreviewValue, isStreaming, searchText, searchCaseSensitive, searchRegex, searchWholeWord, searchActiveMatch, onSearchMatchesUpdate }: TableGridProps): JSX.Element {
-  const storeKey = { fileId, resultSetIndex };
-  const gridColumns = toGridColumns(schema.columns);
+  const storeKey = useMemo(() => ({ fileId, resultSetIndex }), [fileId, resultSetIndex]);
+  const gridColumns = useMemo(() => toGridColumns(schema.columns), [schema.columns]);
   const [isDarkTheme, setIsDarkTheme] = useState<boolean>(() => (getThemeService()?.getActiveThemeMode() ?? "dark") === "dark");
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; sections: TableOutputContextMenuItem[][]; loading?: boolean } | null>(null);
 
@@ -318,28 +318,37 @@ function TableGrid({ resultSetIndex, schema, fileId, onPreviewValue, isStreaming
 
   const getRowsBySelection = useCallback((snapshot: GridComponentSelectionSnapshot): Array<GridRowData | undefined> => snapshot.rowsByIndex, []);
 
+  const handleGetRowCount = useCallback(() => getTableResultStore().getRowCount(storeKey), [storeKey]);
+  const handleGetRowsRange = useCallback((start: number, end: number) => getTableResultStore().getRowsRange(storeKey, start, end), [storeKey]);
+  const handleGetRow = useCallback((index: number) => getTableResultStore().getRow(storeKey, index), [storeKey]);
+  const handleSubscribeRowsChanged = useCallback((listener: () => void) => getTableResultStore().subscribe(storeKey, listener), [storeKey]);
+  const handleGetInitialSelection = useCallback(() => fileId ? (getFileStateRegistry().get(fileId, SELECTION_KEY)?.[resultSetIndex] ?? { selection: null, anchor: null }) : { selection: null, anchor: null }, [fileId, resultSetIndex]);
+  const handleOnSelectionChange = useCallback((selection: SelectionModel | null, anchor: SelectionAnchor | null) => {
+    if (!fileId) return;
+    const map = getFileStateRegistry().get(fileId, SELECTION_KEY) ?? {};
+    getFileStateRegistry().set(fileId, SELECTION_KEY, { ...map, [resultSetIndex]: { selection, anchor } });
+  }, [fileId, resultSetIndex]);
+  const handleGetInitialGridState = useCallback(() => fileId ? getFileStateRegistry().get(fileId, GRID_STATE_KEY)?.[resultSetIndex] : undefined, [fileId, resultSetIndex]);
+  const handleOnGridStateChange = useCallback((state: GridComponentState) => {
+    if (!fileId) return;
+    const map = getFileStateRegistry().get(fileId, GRID_STATE_KEY) ?? {};
+    getFileStateRegistry().set(fileId, GRID_STATE_KEY, { ...map, [resultSetIndex]: state });
+  }, [fileId, resultSetIndex]);
+
   return (
     <>
       <GridComponent
         key={`${fileId ?? ""}:${resultSetIndex}`}
         columns={gridColumns}
         rowNumberWidth={ROW_NUMBER_COL_WIDTH_PX}
-        getRowCount={() => getTableResultStore().getRowCount(storeKey)}
-        getRowsRange={(start, end) => getTableResultStore().getRowsRange(storeKey, start, end)}
-        getRow={(index) => getTableResultStore().getRow(storeKey, index)}
-        subscribeRowsChanged={(listener) => getTableResultStore().subscribe(storeKey, listener)}
-        getInitialSelection={() => fileId ? (getFileStateRegistry().get(fileId, SELECTION_KEY)?.[resultSetIndex] ?? { selection: null, anchor: null }) : { selection: null, anchor: null }}
-        onSelectionChange={(selection, anchor) => {
-          if (!fileId) return;
-          const map = getFileStateRegistry().get(fileId, SELECTION_KEY) ?? {};
-          getFileStateRegistry().set(fileId, SELECTION_KEY, { ...map, [resultSetIndex]: { selection, anchor } });
-        }}
-        getInitialGridState={() => fileId ? getFileStateRegistry().get(fileId, GRID_STATE_KEY)?.[resultSetIndex] : undefined}
-        onGridStateChange={(state) => {
-          if (!fileId) return;
-          const map = getFileStateRegistry().get(fileId, GRID_STATE_KEY) ?? {};
-          getFileStateRegistry().set(fileId, GRID_STATE_KEY, { ...map, [resultSetIndex]: state });
-        }}
+        getRowCount={handleGetRowCount}
+        getRowsRange={handleGetRowsRange}
+        getRow={handleGetRow}
+        subscribeRowsChanged={handleSubscribeRowsChanged}
+        getInitialSelection={handleGetInitialSelection}
+        onSelectionChange={handleOnSelectionChange}
+        getInitialGridState={handleGetInitialGridState}
+        onGridStateChange={handleOnGridStateChange}
         resolveCellDisplayValue={resolveCellDisplayValue}
         resolveCellLink={({ value, columnType }) => resolveTableLinkAction({ value, columnType: columnType as Column["type"] })}
         onCellPrimaryAction={({ value, columnType }) => {

@@ -401,6 +401,9 @@ export function GridComponent({
   resolveCellDisplayValueRef.current = resolveCellDisplayValue;
   const columnsRef = useRef(columns);
   columnsRef.current = columns;
+  const getRowDataRef = useRef<(rowIndex: number) => GridComponentRow | undefined>(undefined as never);
+  const getRowCountRef = useRef(getRowCount);
+  getRowCountRef.current = getRowCount;
 
   const [internalSearchMatches, setInternalSearchMatches] = useState<Array<{ row: number; col: number }>>([]);
   const internalSearchMatchSet = useMemo(() => {
@@ -548,6 +551,7 @@ export function GridComponent({
     }
     return mapStoredRow(getRowsRange(rowIndex, rowIndex + 1)[0] ?? getRow(rowIndex));
   }, [getRow, getRowsRange]);
+  getRowDataRef.current = getRowData;
 
   const runCellPrimaryAction = useCallback((colIndex: number, rowIndex: number): boolean => {
     const dataIndex = getDataIndex(colIndex);
@@ -888,12 +892,12 @@ export function GridComponent({
       return;
     }
     const timer = setTimeout(() => {
-      const count = getRowCount();
+      const count = getRowCountRef.current();
       const currentColumns = columnsRef.current;
       const resolveFn = resolveCellDisplayValueRef.current;
       const newMatches: Array<{ row: number; col: number }> = [];
       for (let row = 0; row < count; row++) {
-        const rowData = getRowData(row);
+        const rowData = getRowDataRef.current(row);
         if (!rowData || !Array.isArray(rowData.__values)) continue;
         for (let col = 0; col < currentColumns.length; col++) {
           const value = resolveFn(currentColumns[col].type, rowData.__values[col] ?? null);
@@ -906,7 +910,7 @@ export function GridComponent({
       onSearchMatchesUpdateRef.current?.(newMatches);
     }, 150);
     return () => clearTimeout(timer);
-  }, [searchText, searchCaseSensitive, searchRegex, searchWholeWord, getRowCount, getRowData]);
+  }, [searchText, searchCaseSensitive, searchRegex, searchWholeWord, rowCount]);
 
   return (
     <div ref={containerRef} style={{ height: "100%", width: "100%", position: "relative" }}>
