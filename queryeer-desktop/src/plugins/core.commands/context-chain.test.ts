@@ -61,6 +61,16 @@ describe("createContextChain", () => {
       expect(chain.getEffectiveContext().x).toBe(true);
     });
 
+    it("does not notify when scope context is unchanged", () => {
+      const listener = vi.fn();
+      chain.register({ id: "a", priority: ContextPriority.ZONE, context: { x: true, y: "same" } });
+      chain.onDidChange(listener);
+
+      chain.update("a", { x: true, y: "same" });
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+
     it("is a no-op for unregistered id", () => {
       const listener = vi.fn();
       chain.onDidChange(listener);

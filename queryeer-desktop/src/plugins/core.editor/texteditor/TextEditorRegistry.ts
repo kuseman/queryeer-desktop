@@ -123,9 +123,14 @@ export class TextEditorRegistry {
     };
 
     const onSelectionChange = (): void => {
-      const selected = api.getSelectedText() ?? "";
+      const selection = api.getSelection();
+      const hasSelection = selection ? !isEmptySelection(selection) : false;
+      const selected = hasSelection ? (api.getSelectedText() ?? "") : "";
+      if (scopeCtx.selectedText === selected && scopeCtx.hasSelection === hasSelection) {
+        return;
+      }
       scopeCtx.selectedText = selected;
-      scopeCtx.hasSelection = selected.length > 0;
+      scopeCtx.hasSelection = hasSelection;
       publish();
     };
 
@@ -509,4 +514,14 @@ export class TextEditorRegistry {
       listener();
     }
   }
+}
+
+function isEmptySelection(selection: {
+  selectionStartLineNumber: number;
+  selectionStartColumn: number;
+  positionLineNumber: number;
+  positionColumn: number;
+}): boolean {
+  return selection.selectionStartLineNumber === selection.positionLineNumber
+    && selection.selectionStartColumn === selection.positionColumn;
 }

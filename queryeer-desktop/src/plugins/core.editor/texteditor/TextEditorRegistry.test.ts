@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { FileEntity } from "../../../contracts/files/FileEntity";
 import type { TextEditorApi } from "./TextEditorApi";
 import type { TextDocument } from "./types";
-import { TextEditorRegistry } from "./TextEditorRegistry";
+import { setTextEditorContextChain, TextEditorRegistry } from "./TextEditorRegistry";
+import { createContextChain } from "../../core.commands/context-chain";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 const STATE_KEY = "monaco.editor";
@@ -739,5 +740,42 @@ describe("TextEditorRegistry view state", () => {
       );
       expect(registry["runtimeViewState"].has(file1.fileId)).toBe(true);
     });
+  });
+});
+
+describe("TextEditorRegistry editor focus context", () => {
+  it("does not publish context changes for collapsed cursor movement", () => {
+    const registry = new TextEditorRegistry();
+    const chain = createContextChain();
+    const listener = vi.fn();
+    let selectionListener: (() => void) | undefined;
+    const api = {
+      getModel: vi.fn(() => ({ languageId: "sql" })),
+      getSelection: vi.fn(() => ({
+        selectionStartLineNumber: 1,
+        selectionStartColumn: 1,
+        positionLineNumber: 1,
+        positionColumn: 1
+      })),
+      getSelectedText: vi.fn(() => ""),
+      onDidFocusEditorText: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidBlurEditorText: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidFocusEditorWidget: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidBlurEditorWidget: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidChangeCursorSelection: vi.fn((callback: () => void) => {
+        selectionListener = callback;
+        return { dispose: vi.fn() };
+      })
+    } as unknown as TextEditorApi;
+
+    setTextEditorContextChain(chain);
+    registry.onEditorReady(api);
+    chain.onDidChange(listener);
+
+    selectionListener?.();
+    selectionListener?.();
+
+    expect(api.getSelectedText).not.toHaveBeenCalled();
+    expect(listener).not.toHaveBeenCalled();
   });
 });
