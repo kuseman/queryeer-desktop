@@ -138,6 +138,7 @@ describe("JdbcNavigationTree", () => {
     mocks.invokeMock.mockReset();
     mocks.backendStatusListeners.clear();
     mocks.getConfiguredJdbcConnectionsMock.mockReset();
+    Element.prototype.scrollIntoView = vi.fn();
   });
 
   afterEach(() => {

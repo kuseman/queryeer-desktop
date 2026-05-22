@@ -51,15 +51,17 @@ describe("AboutDialogHost", () => {
   });
 
   it("renders dialog when opened", async () => {
-    setAppMetadata({
-      appVersion: "1.0.0",
-      electronVersion: "30.0.0",
-      chromiumVersion: "124.0.0",
-      nodeVersion: "20.0.0",
-      platform: "win32",
-      arch: "x64"
+    await act(async () => {
+      setAppMetadata({
+        appVersion: "1.0.0",
+        electronVersion: "30.0.0",
+        chromiumVersion: "124.0.0",
+        nodeVersion: "20.0.0",
+        platform: "win32",
+        arch: "x64"
+      });
+      openAboutDialog();
     });
-    openAboutDialog();
     await act(async () => {
       root.render(<AboutDialogHost />);
     });
@@ -69,15 +71,17 @@ describe("AboutDialogHost", () => {
   });
 
   it("shows version info in About tab", async () => {
-    setAppMetadata({
-      appVersion: "1.0.0",
-      electronVersion: "30.0.0",
-      chromiumVersion: "124.0.0",
-      nodeVersion: "20.0.0",
-      platform: "win32",
-      arch: "x64"
+    await act(async () => {
+      setAppMetadata({
+        appVersion: "1.0.0",
+        electronVersion: "30.0.0",
+        chromiumVersion: "124.0.0",
+        nodeVersion: "20.0.0",
+        platform: "win32",
+        arch: "x64"
+      });
+      openAboutDialog();
     });
-    openAboutDialog();
     await act(async () => {
       root.render(<AboutDialogHost />);
     });
@@ -85,16 +89,18 @@ describe("AboutDialogHost", () => {
   });
 
   it("shows Queryeer tab when desktop changelog is present", async () => {
-    setAppMetadata({
-      appVersion: "1.0.0",
-      electronVersion: "30.0.0",
-      chromiumVersion: "124.0.0",
-      nodeVersion: "20.0.0",
-      platform: "win32",
-      arch: "x64"
+    await act(async () => {
+      setAppMetadata({
+        appVersion: "1.0.0",
+        electronVersion: "30.0.0",
+        chromiumVersion: "124.0.0",
+        nodeVersion: "20.0.0",
+        platform: "win32",
+        arch: "x64"
+      });
+      setDesktopChangelog("# Queryeer\n\n## 1.0.0");
+      openAboutDialog();
     });
-    setDesktopChangelog("# Queryeer\n\n## 1.0.0");
-    openAboutDialog();
     await act(async () => {
       root.render(<AboutDialogHost />);
     });
@@ -104,18 +110,20 @@ describe("AboutDialogHost", () => {
   });
 
   it("shows plugin changelog tabs", async () => {
-    setAppMetadata({
-      appVersion: "1.0.0",
-      electronVersion: "30.0.0",
-      chromiumVersion: "124.0.0",
-      nodeVersion: "20.0.0",
-      platform: "win32",
-      arch: "x64"
+    await act(async () => {
+      setAppMetadata({
+        appVersion: "1.0.0",
+        electronVersion: "30.0.0",
+        chromiumVersion: "124.0.0",
+        nodeVersion: "20.0.0",
+        platform: "win32",
+        arch: "x64"
+      });
+      setBackendChangelogs([
+        { pluginId: "pb", pluginName: "PayloadBuilder", version: "2.0.0", changelog: "# PB\n\n## 2.0.0" }
+      ]);
+      openAboutDialog();
     });
-    setBackendChangelogs([
-      { pluginId: "pb", pluginName: "PayloadBuilder", version: "2.0.0", changelog: "# PB\n\n## 2.0.0" }
-    ]);
-    openAboutDialog();
     await act(async () => {
       root.render(<AboutDialogHost />);
     });
@@ -124,15 +132,17 @@ describe("AboutDialogHost", () => {
   });
 
   it("closes on Escape key", async () => {
-    setAppMetadata({
-      appVersion: "1.0.0",
-      electronVersion: "30.0.0",
-      chromiumVersion: "124.0.0",
-      nodeVersion: "20.0.0",
-      platform: "win32",
-      arch: "x64"
+    await act(async () => {
+      setAppMetadata({
+        appVersion: "1.0.0",
+        electronVersion: "30.0.0",
+        chromiumVersion: "124.0.0",
+        nodeVersion: "20.0.0",
+        platform: "win32",
+        arch: "x64"
+      });
+      openAboutDialog();
     });
-    openAboutDialog();
     await act(async () => {
       root.render(<AboutDialogHost />);
     });
@@ -143,15 +153,17 @@ describe("AboutDialogHost", () => {
   });
 
   it("closes when close button is clicked", async () => {
-    setAppMetadata({
-      appVersion: "1.0.0",
-      electronVersion: "30.0.0",
-      chromiumVersion: "124.0.0",
-      nodeVersion: "20.0.0",
-      platform: "win32",
-      arch: "x64"
+    await act(async () => {
+      setAppMetadata({
+        appVersion: "1.0.0",
+        electronVersion: "30.0.0",
+        chromiumVersion: "124.0.0",
+        nodeVersion: "20.0.0",
+        platform: "win32",
+        arch: "x64"
+      });
+      openAboutDialog();
     });
-    openAboutDialog();
     await act(async () => {
       root.render(<AboutDialogHost />);
     });

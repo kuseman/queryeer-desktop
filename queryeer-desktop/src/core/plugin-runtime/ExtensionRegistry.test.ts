@@ -39,6 +39,7 @@ describe("ExtensionRegistry settings registration", () => {
   });
 
   it("registers and unregisters table output context menu providers", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
     const extensionRegistry = new ExtensionRegistry();
     const tableRegistry = extensionRegistry.createTableOutputContextMenuRegistry();
 

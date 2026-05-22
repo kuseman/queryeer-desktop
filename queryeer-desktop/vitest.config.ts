@@ -21,7 +21,8 @@ export default defineConfig({
         test: {
           name: "renderer",
           include: ["src/renderer/**/*.test.ts", "src/renderer/**/*.test.tsx"],
-          environment: "jsdom"
+          environment: "jsdom",
+          setupFiles: ["src/vitest.setup.ts"]
         }
       },
       {
@@ -40,7 +41,8 @@ export default defineConfig({
         test: {
           name: "plugins",
           include: ["src/plugins/**/*.test.ts", "src/plugins/**/*.test.tsx"],
-          environment: "jsdom"
+          environment: "jsdom",
+          setupFiles: ["src/vitest.setup.ts"]
         }
       }
     ],
