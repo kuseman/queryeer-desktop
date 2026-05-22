@@ -868,8 +868,15 @@ export function GridComponent({
     };
   }, [collectSelectionSnapshot, onCopySelection]);
 
+  const prevActiveMatchRef = useRef<{ row: number; col: number } | null>(null);
   useEffect(() => {
-    if (!searchActiveMatch || !gridRef.current) return;
+    if (!searchActiveMatch || !gridRef.current) {
+      prevActiveMatchRef.current = null;
+      return;
+    }
+    const prev = prevActiveMatchRef.current;
+    if (prev && prev.row === searchActiveMatch.row && prev.col === searchActiveMatch.col) return;
+    prevActiveMatchRef.current = { row: searchActiveMatch.row, col: searchActiveMatch.col };
     const visualCol = getVisualIndex(searchActiveMatch.col);
     gridRef.current.scrollTo(visualCol, searchActiveMatch.row);
   }, [searchActiveMatch, getVisualIndex]);
