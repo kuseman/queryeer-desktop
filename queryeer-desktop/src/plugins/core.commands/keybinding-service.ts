@@ -27,10 +27,6 @@ export type KeybindingServiceOptions = {
   contextChain?: ContextChain;
 };
 
-// Keep this default editor Escape action native so Monaco can close transient widgets
-// (find/suggest/etc.) without our global keybinding handler interfering.
-const DEFAULT_EDITOR_CLOSE_FIND_WIDGET_COMMAND_ID = "core.editor.text.closeFindWidget";
-
 function isFunctionKeybinding(key: string): boolean {
   return /(^|\+)(F([1-9]|1[0-9]|2[0-4]))$/i.test(key);
 }
@@ -43,6 +39,14 @@ function isInEditor(): boolean {
   const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   if (!active) return false;
   return active.closest("[data-context='editor'], .shell-editor-pane, .shell-editor-content") !== null;
+}
+
+/** True when Monaco has an open transient widget (suggest, find, parameter hints)
+ *  that should receive Escape natively instead of our keybinding handler. */
+function monacoHasOpenWidget(): boolean {
+  return document.querySelector('.monaco-editor .suggest-widget.visible') !== null
+    || document.querySelector('.monaco-editor .find-widget.visible') !== null
+    || document.querySelector('.monaco-editor .context-view.visible') !== null;
 }
 
 function shouldSkipForInput(
@@ -83,19 +87,14 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
     duplicateBindings: []
   };
 
-  const onKeyDown = (event: KeyboardEvent): void => {
-    const normalized = eventToNormalizedKey(event);
-    if (!normalized) {
-      return;
-    }
-
+  function findBinding(normalized: string): { matched: ResolvedKeybinding | undefined; contextSnapshot: Record<string, unknown> } {
     const rawContextSnapshot = options.contextChain?.getEffectiveContext() ?? contextKeys!.snapshot();
     const contextSnapshot = {
       ...rawContextSnapshot,
       editorFocus: Boolean(rawContextSnapshot.editorFocus || rawContextSnapshot.editorTextFocus)
-    };
+    } as Record<string, unknown>;
     const inputFocus = Boolean(rawContextSnapshot.inputFocus);
-    const editorFocus = Boolean(contextSnapshot.editorFocus);
+    const editorFocus = Boolean(rawContextSnapshot.editorFocus || rawContextSnapshot.editorTextFocus);
 
     const matched = [...resolved]
       .sort((a, b) => (b.order ?? 0) - (a.order ?? 0))
@@ -111,7 +110,7 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
           return true;
         }
         try {
-          return runtime.evaluateBooleanSync(expression, contextSnapshot as Record<string, unknown>, {
+          return runtime.evaluateBooleanSync(expression, contextSnapshot, {
             mode: "when",
             source: `keybinding:${binding.id}`,
             timeoutMs: 50,
@@ -122,24 +121,36 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
         }
       });
 
-    if (!matched) {
-      return;
-    }
+    return { matched, contextSnapshot };
+  }
 
-    const preserveNativeEscape = normalized === "escape"
-      && matched.source === "default"
-      && matched.commandId === DEFAULT_EDITOR_CLOSE_FIND_WIDGET_COMMAND_ID;
-
-    if (preserveNativeEscape) {
-      return;
-    }
-
+  function executeBinding(matched: ResolvedKeybinding, event: KeyboardEvent): void {
     event.preventDefault();
     if (isInEditor()) {
       event.stopPropagation();
     }
-
     void options.executeCommand(matched.commandId);
+  }
+
+  const onKeyDown = (event: KeyboardEvent): void => {
+    const normalized = eventToNormalizedKey(event);
+    if (!normalized) {
+      return;
+    }
+
+    // When Monaco has a transient widget (suggest, find, parameter hints) open,
+    // let Escape pass through natively so Monaco can close it. No keybinding mismatch,
+    // no `stopPropagation` interference — Monaco gets the event directly.
+    if (normalized === "escape" && monacoHasOpenWidget()) {
+      return;
+    }
+
+    const { matched } = findBinding(normalized);
+    if (!matched) {
+      return;
+    }
+
+    executeBinding(matched, event);
   };
 
   document.addEventListener("keydown", onKeyDown, true);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { OutputContext, Column } from "../../contracts/extensions/OutputExtension";
 import { getOutputRegistry } from "../core.queryengine/output/OutputRegistry";
@@ -291,9 +291,15 @@ type TableGridProps = {
   fileId?: string;
   onPreviewValue: (options: { title: string; value: string; mimeType?: string }) => void;
   isStreaming?: boolean;
+  searchText?: string;
+  searchCaseSensitive?: boolean;
+  searchRegex?: boolean;
+  searchWholeWord?: boolean;
+  searchActiveMatch?: { row: number; col: number } | null;
+  onSearchMatchesUpdate?: (matches: Array<{ row: number; col: number }>) => void;
 };
 
-function TableGrid({ resultSetIndex, schema, fileId, onPreviewValue, isStreaming }: TableGridProps): JSX.Element {
+function TableGrid({ resultSetIndex, schema, fileId, onPreviewValue, isStreaming, searchText, searchCaseSensitive, searchRegex, searchWholeWord, searchActiveMatch, onSearchMatchesUpdate }: TableGridProps): JSX.Element {
   const storeKey = { fileId, resultSetIndex };
   const gridColumns = toGridColumns(schema.columns);
   const [isDarkTheme, setIsDarkTheme] = useState<boolean>(() => (getThemeService()?.getActiveThemeMode() ?? "dark") === "dark");
@@ -393,6 +399,12 @@ function TableGrid({ resultSetIndex, schema, fileId, onPreviewValue, isStreaming
         }}
         isDarkTheme={isDarkTheme}
         isStreaming={isStreaming}
+        searchText={searchText}
+        searchCaseSensitive={searchCaseSensitive}
+        searchRegex={searchRegex}
+        searchWholeWord={searchWholeWord}
+        searchActiveMatch={searchActiveMatch}
+        onSearchMatchesUpdate={onSearchMatchesUpdate}
       />
       {contextMenu && (
         <ContextMenuSurface
@@ -430,6 +442,16 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
   const [activeStackedResultSetIndex, setActiveStackedResultSetIndex] = useState<number | null>(null);
   const [stackedGridHeightsByResultSet, setStackedGridHeightsByResultSet] = useState<Record<number, number>>({});
   const stackedContainerRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const prevSearchOpenRef = useRef(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
+  const [searchRegex, setSearchRegex] = useState(false);
+  const [searchWholeWord, setSearchWholeWord] = useState(false);
+  const [matchesByResultSet, setMatchesByResultSet] = useState<Record<number, Array<{ row: number; col: number }>>>({});
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(-1);
 
   // Restore per-file active tab when the active file changes
   useEffect(() => {
@@ -546,6 +568,143 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
     window.addEventListener("mouseup", onMouseUp);
   }, []);
 
+  // Reset find state on file change
+  useEffect(() => {
+    setSearchOpen(false);
+    setSearchText("");
+    setMatchesByResultSet({});
+    setCurrentMatchIndex(-1);
+  }, [context.fileId]);
+
+  const handleCloseFind = useCallback(() => {
+    setSearchOpen(false);
+    setSearchText("");
+    setMatchesByResultSet({});
+    setCurrentMatchIndex(-1);
+    containerRef.current?.focus();
+  }, []);
+
+  // Keyboard handler for find (Ctrl+F / Cmd+F)
+  // Window-level capture fires before any document-level listeners (GlideDataGrid etc.)
+  // Listener is registered immediately (not dependent on ref) so it's always active
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const el = containerRef.current;
+      if (!el || !el.contains(e.target as Node)) return;
+      const primaryModifier = e.ctrlKey || e.metaKey;
+      if (primaryModifier && (e.key.toLowerCase() === "f" || e.key.toLowerCase() === "x")) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (searchOpen) {
+          searchInputRef.current?.focus();
+          searchInputRef.current?.select();
+          return;
+        }
+        setSearchOpen(true);
+        return;
+      }
+      if (e.key === "Escape" && searchOpen) {
+        e.stopPropagation();
+        handleCloseFind();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [searchOpen, handleCloseFind]);
+
+  // Focus find input when opened
+  useEffect(() => {
+    if (!searchOpen) return;
+    const timer = setTimeout(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [searchOpen]);
+
+  // Return focus to container when find closed
+  useEffect(() => {
+    const wasOpen = prevSearchOpenRef.current;
+    prevSearchOpenRef.current = searchOpen;
+    if (searchOpen || !wasOpen) return;
+    const timer = setTimeout(() => {
+      containerRef.current?.focus();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [searchOpen]);
+
+  // Grid callback for match updates
+  const onGridSearchMatchesUpdate = useCallback((rsIdx: number, matches: Array<{ row: number; col: number }>) => {
+    setMatchesByResultSet(prev => {
+      if (prev[rsIdx] === matches) return prev;
+      return { ...prev, [rsIdx]: matches };
+    });
+  }, []);
+
+  // Reset currentMatchIndex when search text changes or when first matches arrive
+  const prevSearchTextRef = useRef(searchText);
+  useEffect(() => {
+    prevSearchTextRef.current = searchText;
+    if (!searchText) {
+      setMatchesByResultSet({});
+      setCurrentMatchIndex(-1);
+    } else {
+      setCurrentMatchIndex(-1);
+    }
+  }, [searchText]);
+
+  // Derived: aggregated matches for cross-table navigation
+  const allMatches = useMemo(() => {
+    const result: Array<{ resultSetIndex: number; row: number; col: number }> = [];
+    for (const [rsIdxStr, matches] of Object.entries(matchesByResultSet)) {
+      const rsIdx = Number(rsIdxStr);
+      for (const match of matches) {
+        result.push({ resultSetIndex: rsIdx, row: match.row, col: match.col });
+      }
+    }
+    return result;
+  }, [matchesByResultSet]);
+
+  // Derived: active match
+  const activeMatch = useMemo(() => {
+    if (currentMatchIndex < 0 || currentMatchIndex >= allMatches.length) return null;
+    return allMatches[currentMatchIndex];
+  }, [allMatches, currentMatchIndex]);
+
+  // Advance to first match when search results arrive fresh
+  useEffect(() => {
+    if (allMatches.length > 0 && currentMatchIndex === -1) {
+      setCurrentMatchIndex(0);
+    }
+  }, [allMatches, currentMatchIndex]);
+
+  // Navigation handlers
+  const handleFindNext = useCallback(() => {
+    if (allMatches.length === 0) return;
+    const nextIndex = (currentMatchIndex + 1) % allMatches.length;
+    const match = allMatches[nextIndex];
+    setCurrentMatchIndex(nextIndex);
+    const targetIndex = context.resultSets.findIndex(rs => rs.resultSetIndex === match.resultSetIndex);
+    if (isStacked) {
+      scrollToStackedResultSet(match.resultSetIndex);
+    } else if (targetIndex !== -1 && targetIndex !== clampedIndex) {
+      handleSetActive(targetIndex);
+    }
+  }, [allMatches, currentMatchIndex, context.resultSets, isStacked, clampedIndex, handleSetActive, scrollToStackedResultSet]);
+
+  const handleFindPrev = useCallback(() => {
+    if (allMatches.length === 0) return;
+    const prevIndex = (currentMatchIndex - 1 + allMatches.length) % allMatches.length;
+    const match = allMatches[prevIndex];
+    setCurrentMatchIndex(prevIndex);
+    const targetIndex = context.resultSets.findIndex(rs => rs.resultSetIndex === match.resultSetIndex);
+    if (isStacked) {
+      scrollToStackedResultSet(match.resultSetIndex);
+    } else if (targetIndex !== -1 && targetIndex !== clampedIndex) {
+      handleSetActive(targetIndex);
+    }
+  }, [allMatches, currentMatchIndex, context.resultSets, isStacked, clampedIndex, handleSetActive, scrollToStackedResultSet]);
+
   if (context.resultSets.length === 0) {
     if (context.state === "failed") {
       return <div />;
@@ -570,7 +729,47 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
   const activeSet = context.resultSets[clampedIndex];
 
   return (
-    <div className="table-output-container" tabIndex={-1} data-output-focus-target="true">
+    <div
+      className="table-output-container"
+      tabIndex={-1}
+      data-output-focus-target="true"
+      ref={containerRef}
+    >
+      {searchOpen && (
+        <div className="table-output-findbar">
+          <input
+            ref={searchInputRef}
+            value={searchText}
+            placeholder="Find"
+            onChange={(e) => setSearchText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (e.shiftKey) {
+                  handleFindPrev();
+                } else {
+                  handleFindNext();
+                }
+              }
+            }}
+          />
+          <button type="button" onClick={handleFindPrev} disabled={!searchText}>Prev</button>
+          <button type="button" onClick={handleFindNext} disabled={!searchText}>Next</button>
+          <label>
+            <input type="checkbox" checked={searchCaseSensitive} onChange={(e) => setSearchCaseSensitive(e.target.checked)} />
+            Aa
+          </label>
+          <label>
+            <input type="checkbox" checked={searchRegex} onChange={(e) => setSearchRegex(e.target.checked)} />
+            .*
+          </label>
+          <label>
+            <input type="checkbox" checked={searchWholeWord} onChange={(e) => setSearchWholeWord(e.target.checked)} />
+            W
+          </label>
+          <button type="button" onClick={handleCloseFind}>Close</button>
+        </div>
+      )}
       {!isStacked && context.resultSets.length > 1 && (
         <div className="table-output-result-tabs">
           {context.resultSets.map((rs, i) => (
@@ -631,6 +830,12 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
                         fileId={context.fileId}
                         onPreviewValue={onPreviewValue}
                         isStreaming={context.state === "running"}
+                        searchText={searchText}
+                        searchCaseSensitive={searchCaseSensitive}
+                        searchRegex={searchRegex}
+                        searchWholeWord={searchWholeWord}
+                        searchActiveMatch={activeMatch?.resultSetIndex === resultSet.resultSetIndex ? { row: activeMatch.row, col: activeMatch.col } : null}
+                        onSearchMatchesUpdate={(matches) => onGridSearchMatchesUpdate(resultSet.resultSetIndex, matches)}
                       />
                     </div>
                       );
@@ -671,6 +876,12 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
                   fileId={context.fileId}
                   onPreviewValue={onPreviewValue}
                   isStreaming={context.state === "running"}
+                  searchText={searchText}
+                  searchCaseSensitive={searchCaseSensitive}
+                  searchRegex={searchRegex}
+                  searchWholeWord={searchWholeWord}
+                  searchActiveMatch={activeMatch?.resultSetIndex === activeSet.resultSetIndex ? { row: activeMatch.row, col: activeMatch.col } : null}
+                  onSearchMatchesUpdate={(matches) => onGridSearchMatchesUpdate(activeSet.resultSetIndex, matches)}
                 />
               </div>
 
