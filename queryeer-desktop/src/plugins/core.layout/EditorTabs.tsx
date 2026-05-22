@@ -68,6 +68,25 @@ export function EditorTabs({
     return () => document.removeEventListener("click", handleClickOutside);
   }, [contextMenu, closeContextMenu]);
 
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent, file: FileEntity) => {
+      e.preventDefault();
+      setContextMenu({ x: e.clientX, y: e.clientY, file });
+      onTabContextMenuOpen?.(file);
+    },
+    [onTabContextMenuOpen]
+  );
+
+  const handleActionClick = useCallback(
+    (action: TabContextMenuAction) => {
+      if (contextMenu && onTabContextMenuAction) {
+        onTabContextMenuAction(action.id, contextMenu.file);
+      }
+      setContextMenu(null);
+    },
+    [contextMenu, onTabContextMenuAction]
+  );
+
   if (openFiles.length === 0) {
     return null;
   }
@@ -90,25 +109,6 @@ export function EditorTabs({
 
   const orderedTabTitleContributions = [...tabTitleContributions].sort(
     (a, b) => (a.order ?? 0) - (b.order ?? 0)
-  );
-
-  const handleContextMenu = useCallback(
-    (e: React.MouseEvent, file: FileEntity) => {
-      e.preventDefault();
-      setContextMenu({ x: e.clientX, y: e.clientY, file });
-      onTabContextMenuOpen?.(file);
-    },
-    [onTabContextMenuOpen]
-  );
-
-  const handleActionClick = useCallback(
-    (action: TabContextMenuAction) => {
-      if (contextMenu && onTabContextMenuAction) {
-        onTabContextMenuAction(action.id, contextMenu.file);
-      }
-      setContextMenu(null);
-    },
-    [contextMenu, onTabContextMenuAction]
   );
 
   return (

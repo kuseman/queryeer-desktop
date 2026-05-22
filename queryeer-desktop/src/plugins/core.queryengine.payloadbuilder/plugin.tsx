@@ -225,7 +225,7 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
           commandId: "core.queryengine.payloadbuilder.catalogs.openSettings"
         }
       ],
-      when: "activeFile.mimeType == 'application/plbsql'",
+      when: "activeFile?.mimeType == 'application/plbsql'",
       render: () => <PayloadbuilderCatalogSidebar editorRegistryHost={getEditorRegistryHost()} />
     });
 
