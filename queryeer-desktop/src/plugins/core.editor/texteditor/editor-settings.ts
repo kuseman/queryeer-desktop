@@ -8,6 +8,7 @@ type WordWrapMode = "off" | "on" | "wordWrapColumn";
 type LineNumbersMode = "off" | "on" | "relative";
 type RenderWhitespaceMode = "none" | "boundary" | "selection" | "all";
 type CursorBlinkingMode = "blink" | "smooth" | "phase" | "solid";
+type AcceptSuggestionOnEnterMode = "on" | "off" | "smart";
 
 function readBoolean(reader: SettingsReader | null, settingId: string, fallback: boolean): boolean {
   const value = reader?.getValue(settingId);
@@ -56,6 +57,7 @@ export type ResolvedEditorSettings = {
   renderWhitespace: RenderWhitespaceMode;
   cursorBlinking: CursorBlinkingMode;
   formatOnSave: boolean;
+  acceptSuggestionOnEnter: AcceptSuggestionOnEnterMode;
 };
 
 export function resolveEditorSettings(reader: SettingsReader | null): ResolvedEditorSettings {
@@ -79,7 +81,12 @@ export function resolveEditorSettings(reader: SettingsReader | null): ResolvedEd
       "phase",
       "solid"
     ]),
-    formatOnSave: readBoolean(reader, "core.editor.texteditor.formatOnSave", false)
+    formatOnSave: readBoolean(reader, "core.editor.texteditor.formatOnSave", false),
+    acceptSuggestionOnEnter: readEnum(reader, "core.editor.texteditor.acceptSuggestionOnEnter", "off", [
+      "on",
+      "off",
+      "smart"
+    ])
   };
 }
 
@@ -109,6 +116,7 @@ export function buildMonacoCreateOptions(
     model: null,
     quickSuggestions: { other: true, comments: false, strings: false },
     suggestOnTriggerCharacters: true,
+    acceptSuggestionOnEnter: settings.acceptSuggestionOnEnter,
     acceptSuggestionOnCommitCharacter: true,
     suggest: {
       showStatusBar: false,
@@ -130,7 +138,8 @@ export function buildMonacoUpdateOptions(
     lineNumbers: settings.lineNumbers,
     wordWrap: settings.wordWrap,
     renderWhitespace: settings.renderWhitespace,
-    cursorBlinking: settings.cursorBlinking
+    cursorBlinking: settings.cursorBlinking,
+    acceptSuggestionOnEnter: settings.acceptSuggestionOnEnter
   };
 }
 

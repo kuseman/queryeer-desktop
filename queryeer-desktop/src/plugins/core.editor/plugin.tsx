@@ -138,6 +138,21 @@ export const coreEditorPlugin: Plugin = {
             { value: "phase", label: "Phase" },
             { value: "solid", label: "Solid" }
           ]
+        },
+        {
+          id: "core.editor.texteditor.acceptSuggestionOnEnter",
+          moduleId: "core.editor.texteditor",
+          title: "Accept Suggestion on Enter",
+          description: "Controls whether pressing Enter accepts a completion suggestion. 'off' means Enter always inserts a new line (use Tab to accept suggestions).",
+          sectionPath: ["Editor", "Suggestions"],
+          tags: ["suggest", "completion", "enter", "accept"],
+          type: "enum",
+          defaultValue: "off",
+          options: [
+            { value: "on", label: "On" },
+            { value: "off", label: "Off" },
+            { value: "smart", label: "Smart" }
+          ]
         }
       ]
     });
