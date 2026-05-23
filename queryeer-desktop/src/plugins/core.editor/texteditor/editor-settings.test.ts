@@ -20,6 +20,7 @@ describe("editor settings mapping", () => {
     expect(resolved.wordWrap).toBe("off");
     expect(resolved.minimapEnabled).toBe(true);
     expect(resolved.formatOnSave).toBe(false);
+    expect(resolved.acceptSuggestionOnEnter).toBe("off");
   });
 
   it("maps valid configured settings", () => {
@@ -34,7 +35,8 @@ describe("editor settings mapping", () => {
         "core.editor.texteditor.minimap.enabled": false,
         "core.editor.texteditor.renderWhitespace": "all",
         "core.editor.texteditor.cursorBlinking": "smooth",
-        "core.editor.texteditor.formatOnSave": true
+        "core.editor.texteditor.formatOnSave": true,
+        "core.editor.texteditor.acceptSuggestionOnEnter": "smart"
       })
     );
 
@@ -48,7 +50,8 @@ describe("editor settings mapping", () => {
       minimapEnabled: false,
       renderWhitespace: "all",
       cursorBlinking: "smooth",
-      formatOnSave: true
+      formatOnSave: true,
+      acceptSuggestionOnEnter: "smart"
     });
   });
 
@@ -59,7 +62,8 @@ describe("editor settings mapping", () => {
         "core.editor.texteditor.wordWrap": "invalid",
         "core.editor.texteditor.lineNumbers": "everywhere",
         "core.editor.texteditor.renderWhitespace": "random",
-        "core.editor.texteditor.cursorBlinking": "beep"
+        "core.editor.texteditor.cursorBlinking": "beep",
+        "core.editor.texteditor.acceptSuggestionOnEnter": "maybe"
       })
     );
 
@@ -68,6 +72,7 @@ describe("editor settings mapping", () => {
     expect(resolved.lineNumbers).toBe("on");
     expect(resolved.renderWhitespace).toBe("selection");
     expect(resolved.cursorBlinking).toBe("blink");
+    expect(resolved.acceptSuggestionOnEnter).toBe("off");
   });
 
   it("builds monaco options for create and update", () => {
@@ -85,8 +90,10 @@ describe("editor settings mapping", () => {
     expect(createOptions.minimap).toEqual({ enabled: false });
     expect(createOptions.tabSize).toBe(8);
     expect(createOptions.fixedOverflowWidgets).toBe(true);
+    expect(createOptions.acceptSuggestionOnEnter).toBe("off");
     expect(updateOptions.wordWrap).toBe("wordWrapColumn");
     expect(updateOptions.minimap).toEqual({ enabled: false });
+    expect(updateOptions.acceptSuggestionOnEnter).toBe("off");
     expect(modelUpdateOptions.tabSize).toBe(8);
   });
 });
