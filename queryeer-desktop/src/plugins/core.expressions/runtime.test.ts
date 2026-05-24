@@ -57,4 +57,36 @@ describe("ExpressionRuntimeService", () => {
     const query = await runtime.renderTemplate("SELECT * WHERE id = ${id}", { id: 5 });
     expect(query).toBe("SELECT * WHERE id = 5");
   });
+
+  it("renders nested template literals inside template expressions", async () => {
+    const runtime = new ExpressionRuntimeService({ backend: createTestBackend() });
+    const rendered = await runtime.renderTemplate(
+      "${[1,2,3].map(x => `select * from table${x}`).join(' union all ')}",
+      {}
+    );
+    expect(rendered).toBe(
+      "select * from table1 union all select * from table2 union all select * from table3"
+    );
+  });
+
+  it("renders expressions containing nested object braces", async () => {
+    const runtime = new ExpressionRuntimeService({ backend: createTestBackend() });
+    const rendered = await runtime.renderTemplate("${({ a: { b: 2 } }).a.b}", {});
+    expect(rendered).toBe("2");
+  });
+
+  it("renders expressions containing closing braces in strings", async () => {
+    const runtime = new ExpressionRuntimeService({ backend: createTestBackend() });
+    const rendered = await runtime.renderTemplate("${'value with } brace'}", {});
+    expect(rendered).toBe("value with } brace");
+  });
+
+  it("renders expressions containing brace-like comment text", async () => {
+    const runtime = new ExpressionRuntimeService({ backend: createTestBackend() });
+    const rendered = await runtime.renderTemplate(
+      "${(() => { /* } */ return 7; })()}",
+      {}
+    );
+    expect(rendered).toBe("7");
+  });
 });
