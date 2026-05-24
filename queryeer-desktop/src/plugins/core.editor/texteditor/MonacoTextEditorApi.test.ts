@@ -175,4 +175,72 @@ describe("MonacoTextEditorApi edit actions", () => {
       api.outdentLines();
     }).not.toThrow();
   });
+
+  it("sets and clears line decorations per owner", () => {
+    const api = new MonacoTextEditorApi();
+    const deltaDecorations = vi
+      .fn()
+      .mockReturnValueOnce(["dec-1"])
+      .mockReturnValueOnce([]);
+    const editor = {
+      getModel: () => ({
+        getLineCount: () => 10,
+        getLineMaxColumn: () => 20
+      }),
+      deltaDecorations
+    };
+
+    (api as unknown as { editor: unknown }).editor = editor;
+    (api as unknown as { monaco: () => unknown }).monaco = () => ({
+      Range: class {
+        constructor(
+          public startLineNumber: number,
+          public startColumn: number,
+          public endLineNumber: number,
+          public endColumn: number
+        ) {}
+      }
+    });
+
+    api.setLineDecorations("owner-a", [{
+      lineNumber: 2,
+      className: "marker"
+    }]);
+
+    expect(deltaDecorations).toHaveBeenNthCalledWith(1, [], expect.any(Array));
+
+    api.clearLineDecorations("owner-a");
+    expect(deltaDecorations).toHaveBeenNthCalledWith(2, ["dec-1"], []);
+  });
+
+  it("sets and clears view zones by owner", () => {
+    const api = new MonacoTextEditorApi();
+    const removeZone = vi.fn();
+    const addZone = vi.fn(() => "zone-1");
+    const changeViewZones = vi.fn((callback: (accessor: { addZone: typeof addZone; removeZone: typeof removeZone }) => void) => {
+      callback({ addZone, removeZone });
+    });
+
+    const editor = {
+      getModel: () => ({
+        getLineCount: () => 15
+      }),
+      changeViewZones
+    };
+
+    (api as unknown as { editor: unknown }).editor = editor;
+
+    const node = document.createElement("div");
+    api.setLineViewZone("owner-a", 8, node, 3);
+    expect(addZone).toHaveBeenCalledTimes(1);
+    expect(addZone).toHaveBeenCalledWith(expect.objectContaining({
+      suppressMouseDown: false,
+      domNode: node
+    }));
+    expect(node.style.pointerEvents).toBe("auto");
+    expect(node.style.zIndex).toBe("2");
+
+    api.clearLineViewZone("owner-a");
+    expect(removeZone).toHaveBeenCalledWith("zone-1");
+  });
 });

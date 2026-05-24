@@ -38,6 +38,9 @@ function getMonacoFast(): typeof monacoType | null {
 
 export class MonacoTextEditorApi extends TextEditorApi {
   private editor: monacoType.editor.IStandaloneCodeEditor | null = null;
+  private readonly decorationIdsByOwner = new Map<string, string[]>();
+  private readonly viewZoneIdByOwner = new Map<string, string>();
+  private readonly hiddenAreasByOwner = new Map<string, TextRange[]>();
 
   private sanitizeViewState(state: unknown): unknown {
     if (!state || typeof state !== "object") {
@@ -605,6 +608,19 @@ export class MonacoTextEditorApi extends TextEditorApi {
     }
   }
 
+  setClassName(className: string): void {
+    if (!this.editor) {
+      return;
+    }
+
+    const editorElement = this.editor.getDomNode();
+    if (!editorElement) {
+      return;
+    }
+
+    editorElement.className = className;
+  }
+
   getCursorState() {
     const pos = this.getPosition();
     const sel = this.getSelection();
@@ -836,7 +852,186 @@ export class MonacoTextEditorApi extends TextEditorApi {
     return this.editor?.hasWidgetFocus() ?? false;
   }
 
+  setLineDecorations(
+    ownerId: string,
+    decorations: Array<{
+      lineNumber: number;
+      className?: string;
+      lineClassName?: string;
+      glyphMarginClassName?: string;
+      hoverMessage?: string;
+    }>
+  ): void {
+    if (!this.editor) {
+      return;
+    }
+
+    const model = this.editor.getModel();
+    if (!model) {
+      return;
+    }
+
+    const monaco = this.monaco();
+    const previousDecorationIds = this.decorationIdsByOwner.get(ownerId) ?? [];
+    const nextDecorationIds = this.editor.deltaDecorations(
+      previousDecorationIds,
+      decorations.map((decoration) => {
+        const lineNumber = Math.max(1, Math.min(model.getLineCount(), decoration.lineNumber));
+        const maxColumn = model.getLineMaxColumn(lineNumber);
+        return {
+          range: new monaco.Range(lineNumber, 1, lineNumber, maxColumn),
+          options: {
+            isWholeLine: true,
+            ...(decoration.className
+              ? {
+                  linesDecorationsClassName: decoration.className
+                }
+              : {}),
+            ...(decoration.lineClassName
+              ? {
+                  className: decoration.lineClassName
+                }
+              : {}),
+            ...(decoration.glyphMarginClassName
+              ? {
+                  glyphMarginClassName: decoration.glyphMarginClassName
+                }
+              : {}),
+            ...(decoration.hoverMessage
+              ? {
+                  hoverMessage: {
+                    value: decoration.hoverMessage
+                  }
+                }
+              : {})
+          }
+        };
+      })
+    );
+
+    this.decorationIdsByOwner.set(ownerId, nextDecorationIds);
+  }
+
+  clearLineDecorations(ownerId: string): void {
+    if (!this.editor) {
+      return;
+    }
+
+    const previousDecorationIds = this.decorationIdsByOwner.get(ownerId) ?? [];
+    if (previousDecorationIds.length > 0) {
+      const nextDecorationIds = this.editor.deltaDecorations(previousDecorationIds, []);
+      this.decorationIdsByOwner.set(ownerId, nextDecorationIds);
+    }
+
+    this.decorationIdsByOwner.delete(ownerId);
+  }
+
+  setLineViewZone(
+    ownerId: string,
+    lineNumber: number,
+    domNode: HTMLElement,
+    heightInLines = 3
+  ): void {
+    if (!this.editor) {
+      return;
+    }
+
+    const model = this.editor.getModel();
+    if (!model) {
+      return;
+    }
+
+    const afterLineNumber = Math.max(0, Math.min(model.getLineCount(), lineNumber));
+    if (!domNode.style.pointerEvents) {
+      domNode.style.pointerEvents = "auto";
+    }
+    if (!domNode.style.zIndex) {
+      domNode.style.zIndex = "2";
+    }
+
+    let addedZoneId = "";
+    this.editor.changeViewZones((accessor) => {
+      const previousZoneId = this.viewZoneIdByOwner.get(ownerId);
+      if (previousZoneId) {
+        accessor.removeZone(previousZoneId);
+      }
+
+      addedZoneId = accessor.addZone({
+        afterLineNumber,
+        heightInLines,
+        domNode,
+        suppressMouseDown: false
+      });
+    });
+
+    if (addedZoneId) {
+      this.viewZoneIdByOwner.set(ownerId, addedZoneId);
+    } else {
+      this.viewZoneIdByOwner.delete(ownerId);
+    }
+  }
+
+  clearLineViewZone(ownerId: string): void {
+    if (!this.editor) {
+      return;
+    }
+
+    const zoneId = this.viewZoneIdByOwner.get(ownerId);
+    if (!zoneId) {
+      return;
+    }
+
+    this.editor.changeViewZones((accessor) => {
+      accessor.removeZone(zoneId);
+    });
+
+    this.viewZoneIdByOwner.delete(ownerId);
+  }
+
+  setHiddenAreas(ownerId: string, ranges: TextRange[]): void {
+    this.hiddenAreasByOwner.set(ownerId, ranges);
+    this.applyHiddenAreas();
+  }
+
+  clearHiddenAreas(ownerId: string): void {
+    this.hiddenAreasByOwner.delete(ownerId);
+    this.applyHiddenAreas();
+  }
+
+  supportsHiddenAreas(): boolean {
+    return Boolean((this.editor as unknown as { setHiddenAreas?: unknown } | null)?.setHiddenAreas);
+  }
+
+  private applyHiddenAreas(): void {
+    if (!this.editor) {
+      return;
+    }
+    const model = this.editor.getModel();
+    if (!model) {
+      return;
+    }
+    const monaco = this.monaco();
+    const ranges = [...this.hiddenAreasByOwner.values()].flat().map((range) => new monaco.Range(
+      Math.max(1, Math.min(model.getLineCount(), range.startLineNumber)),
+      range.startColumn,
+      Math.max(1, Math.min(model.getLineCount(), range.endLineNumber)),
+      range.endColumn
+    ));
+    (this.editor as unknown as { setHiddenAreas?: (ranges: monacoType.Range[]) => void })
+      .setHiddenAreas?.(ranges);
+  }
+
   dispose(): void {
+    for (const ownerId of this.decorationIdsByOwner.keys()) {
+      this.clearLineDecorations(ownerId);
+    }
+    for (const ownerId of this.viewZoneIdByOwner.keys()) {
+      this.clearLineViewZone(ownerId);
+    }
+
+    this.decorationIdsByOwner.clear();
+    this.viewZoneIdByOwner.clear();
+    this.hiddenAreasByOwner.clear();
     this.editor = null;
   }
 }

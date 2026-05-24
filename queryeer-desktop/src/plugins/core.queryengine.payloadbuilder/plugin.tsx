@@ -26,6 +26,7 @@ import {
   subscribePayloadbuilderCatalogContributions
 } from "./catalog-contributions";
 import { LetterPIcon } from "./LetterPIcon";
+import { registerPayloadbuilderFlowNodeContribution } from "./flow-node-contribution";
 
 export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
   manifest: {
@@ -34,7 +35,7 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
     version: "0.1.0",
     kind: "core",
     description: "Payloadbuilder engine state and catalog sidebar contributions",
-    dependencies: ["core.queryengine", "core.layout", "core.files", "core.editor", "core.settings"],
+    dependencies: ["core.queryengine", "core.layout", "core.files", "core.editor", "core.settings", "core.flow"],
     requiredCapabilities: ["query.engine"],
     providesCapabilities: ["query.engine.payloadbuilder"]
   },
@@ -84,6 +85,8 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
       engineId: "payloadbuilder",
       mimeTypes: ["application/plbsql"]
     });
+
+    registerPayloadbuilderFlowNodeContribution();
 
     context.files.capabilities.registerLabel?.("application/plbsql", "Payloadbuilder");
     context.files.capabilities.registerPreferredNewFileMimeType?.("application/plbsql", 20);
@@ -255,6 +258,10 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
       if (executeContext?.engineId !== "payloadbuilder" || !executeContext.fileId) {
         return;
       }
+      const file = context.files.getFile(executeContext.fileId);
+      if (!file || file.mimeType !== "application/plbsql") {
+        return;
+      }
       const params = event.params as { engineState?: unknown };
       if (!params.engineState) {
         return;
@@ -304,7 +311,7 @@ function syncPayloadbuilderMetadata(
   const metadata = { ...(file.metadata ?? {}) };
 
   // If the catalog store has no data for this file (all fields empty/default),
-  // preserve existing metadata — e.g. from a cloned file — instead of clearing it.
+  // preserve existing metadata, e.g. from a cloned file, instead of clearing it.
   const hasCatalogData = meta.enabledAliases.length > 0 || !!meta.selectedEnvironmentId || !!meta.defaultCatalogAlias;
 
   if (hasCatalogData) {

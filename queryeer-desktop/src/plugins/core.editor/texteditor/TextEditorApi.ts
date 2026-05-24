@@ -117,6 +117,8 @@ export abstract class TextEditorApi {
   abstract getViewState(): unknown;
   abstract setViewState(state: unknown): void;
 
+  abstract setClassName(className: string): void;
+
   abstract getCursorState(): { position: Position; selection: Selection } | undefined;
 
   getSelectedText(): string | null {
@@ -151,5 +153,32 @@ export abstract class TextEditorApi {
   abstract focus(): void;
   abstract hasTextFocus(): boolean;
   abstract hasWidgetFocus(): boolean;
+
+  abstract setLineDecorations(
+    ownerId: string,
+    decorations: Array<{
+      lineNumber: number;
+      className?: string;
+      lineClassName?: string;
+      glyphMarginClassName?: string;
+      hoverMessage?: string;
+    }>
+  ): void;
+
+  abstract clearLineDecorations(ownerId: string): void;
+
+  abstract setLineViewZone(
+    ownerId: string,
+    lineNumber: number,
+    domNode: HTMLElement,
+    heightInLines?: number
+  ): void;
+
+  abstract clearLineViewZone(ownerId: string): void;
+
+  abstract setHiddenAreas(ownerId: string, ranges: TextRange[]): void;
+  abstract clearHiddenAreas(ownerId: string): void;
+  abstract supportsHiddenAreas(): boolean;
+
   abstract dispose(): void;
 }

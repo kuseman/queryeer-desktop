@@ -259,6 +259,218 @@ describe("QueryEngineService backend readiness", () => {
     expect(failedParams.error?.message).toContain("Security vault is locked");
   });
 
+  it("retries executeAndCollect after vault unlock on SECURITY_SESSION_CLOSED", async () => {
+    const queryListeners = new Set<(event: { method: string; params: unknown }) => void>();
+    const onQueryEvent = vi.fn((listener: (event: { method: string; params: unknown }) => void) => {
+      queryListeners.add(listener);
+      return () => {
+        queryListeners.delete(listener);
+      };
+    });
+    const executeBackendQuery = vi.fn(async (params: { queryExecutionId: string }) => ({
+      accepted: true,
+      queryExecutionId: params.queryExecutionId
+    }));
+    window.appShell = {
+      ...originalAppShell,
+      getBackendStatus: async () => ({
+        mode: "mock-stdio",
+        state: "healthy",
+        supportedCapabilities: [],
+        activeExecutionIds: [],
+        recentExecutions: [],
+        backendLogs: []
+      }),
+      executeBackendQuery,
+      onQueryEvent
+    };
+
+    const ensureUnlockedForSecretAccess = vi.fn(async () => true);
+    const withVaultRetry = vi.fn(async (operation: () => Promise<unknown>) => operation());
+    securityMocks.getCoreSecurityServiceMock.mockReturnValue({
+      ensureUnlockedForSecretAccess,
+      withVaultRetry
+    } as unknown as ReturnType<typeof securityMocks.getCoreSecurityServiceMock>);
+
+    const service = new QueryEngineService();
+    service.initialize();
+
+    const collected = service.executeAndCollect({
+      engineId: "jdbc",
+      fileId: "flow-1",
+      text: "select 1"
+    });
+
+    await vi.waitFor(() => {
+      expect(executeBackendQuery).toHaveBeenCalledTimes(1);
+    });
+    const firstExecutionId = (
+      executeBackendQuery.mock.calls[0]?.[0] as { queryExecutionId: string }
+    ).queryExecutionId;
+    const listener = [...queryListeners][0];
+    expect(listener).toBeTruthy();
+
+    listener?.({
+      method: "queryengine.failed",
+      params: {
+        queryExecutionId: firstExecutionId,
+        error: {
+          code: "SECURITY_SESSION_CLOSED",
+          message: "Security session is not open"
+        }
+      }
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(ensureUnlockedForSecretAccess).toHaveBeenCalledWith({ interactive: true });
+    await vi.waitFor(() => {
+      expect(executeBackendQuery).toHaveBeenCalledTimes(2);
+    });
+
+    const secondExecutionId = (
+      executeBackendQuery.mock.calls[1]?.[0] as { queryExecutionId: string }
+    ).queryExecutionId;
+
+    listener?.({
+      method: "queryengine.chunkStart",
+      params: {
+        queryExecutionId: secondExecutionId,
+        resultSetIndex: 0,
+        schema: {
+          columns: [{ name: "id", type: "int" }]
+        }
+      }
+    });
+    listener?.({
+      method: "queryengine.chunkRows",
+      params: {
+        queryExecutionId: secondExecutionId,
+        resultSetIndex: 0,
+        rows: [[1]]
+      }
+    });
+    listener?.({
+      method: "queryengine.completed",
+      params: {
+        queryExecutionId: secondExecutionId
+      }
+    });
+
+    await expect(collected).resolves.toEqual({
+      resultSets: [
+        {
+          schema: {
+            columns: [{ name: "id", type: "int" }]
+          },
+          rows: [[1]]
+        }
+      ]
+    });
+  });
+
+  it("fails executeAndCollect when unlock is cancelled after SECURITY_SESSION_CLOSED", async () => {
+    const queryListeners = new Set<(event: { method: string; params: unknown }) => void>();
+    const onQueryEvent = vi.fn((listener: (event: { method: string; params: unknown }) => void) => {
+      queryListeners.add(listener);
+      return () => {
+        queryListeners.delete(listener);
+      };
+    });
+    const executeBackendQuery = vi.fn(async (params: { queryExecutionId: string }) => ({
+      accepted: true,
+      queryExecutionId: params.queryExecutionId
+    }));
+    window.appShell = {
+      ...originalAppShell,
+      getBackendStatus: async () => ({
+        mode: "mock-stdio",
+        state: "healthy",
+        supportedCapabilities: [],
+        activeExecutionIds: [],
+        recentExecutions: [],
+        backendLogs: []
+      }),
+      executeBackendQuery,
+      onQueryEvent
+    };
+
+    const ensureUnlockedForSecretAccess = vi.fn(async () => false);
+    const withVaultRetry = vi.fn(async (operation: () => Promise<unknown>) => operation());
+    securityMocks.getCoreSecurityServiceMock.mockReturnValue({
+      ensureUnlockedForSecretAccess,
+      withVaultRetry
+    } as unknown as ReturnType<typeof securityMocks.getCoreSecurityServiceMock>);
+
+    const service = new QueryEngineService();
+    service.initialize();
+
+    const collected = service.executeAndCollect({
+      engineId: "jdbc",
+      fileId: "flow-1",
+      text: "select 1"
+    });
+
+    await vi.waitFor(() => {
+      expect(executeBackendQuery).toHaveBeenCalledTimes(1);
+    });
+    const executionId = (
+      executeBackendQuery.mock.calls[0]?.[0] as { queryExecutionId: string }
+    ).queryExecutionId;
+    const listener = [...queryListeners][0];
+    expect(listener).toBeTruthy();
+
+    listener?.({
+      method: "queryengine.failed",
+      params: {
+        queryExecutionId: executionId,
+        error: {
+          code: "SECURITY_SESSION_CLOSED",
+          message: "Security session is not open"
+        }
+      }
+    });
+
+    await expect(collected).rejects.toThrow("Security vault is locked");
+    expect(ensureUnlockedForSecretAccess).toHaveBeenCalledWith({ interactive: true });
+    expect(executeBackendQuery).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not overwrite explicit engineState with execution context provider state", async () => {
+    const executeBackendQuery = vi.fn(async () => ({ accepted: true, queryExecutionId: "q-backend" }));
+    window.appShell = {
+      ...originalAppShell,
+      getBackendStatus: async () => ({
+        mode: "mock-stdio",
+        state: "healthy",
+        supportedCapabilities: [],
+        activeExecutionIds: [],
+        recentExecutions: [],
+        backendLogs: []
+      }),
+      executeBackendQuery
+    };
+
+    const service = new QueryEngineService();
+    service.registerExecutionContextProvider(() => ({
+      engineState: { connectionId: "from-provider" },
+      options: { timeoutMs: 5000 }
+    }));
+
+    await service.execute({
+      engineId: "jdbc",
+      fileId: "flow-1",
+      text: "select 1",
+      engineState: { refs: { connection: "orders-main" } }
+    });
+
+    expect(executeBackendQuery).toHaveBeenCalledWith(expect.objectContaining({
+      engineState: { refs: { connection: "orders-main" } },
+      options: { timeoutMs: 5000 }
+    }));
+  });
+
   it("emits a terminal cancelled event immediately after cancel", async () => {
     const executeBackendQuery = vi.fn(async () => ({ accepted: true, queryExecutionId: "exec-1" }));
     const cancelBackendQuery = vi.fn(async () => ({ accepted: true, queryExecutionId: "exec-1" }));

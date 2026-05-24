@@ -29,6 +29,7 @@ import { onCoreSettingsServiceInitialized } from "../core.settings/service";
 import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegistry";
 import { createJdbcAssistantTools } from "./jdbc-assistant-tools";
 import { subscribeJdbcQueryPlanDialectSupport } from "../core.queryengine/query-plan/supported-dialects";
+import { registerJdbcFlowNodeContribution } from "./flow-node-contribution";
 
 const JDBC_SESSION_ID_METADATA_KEY = "core.queryengine.jdbc.sessionId";
 const JDBC_SESSION_CONNECTION_TITLE_KEY = "core.queryengine.jdbc.sessionConnection";
@@ -43,7 +44,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
     version: "0.1.0",
     kind: "core",
     description: "JDBC connection setup and execution context wiring",
-    dependencies: ["core.queryengine", "core.settings", "core.security", "core.files"],
+    dependencies: ["core.queryengine", "core.settings", "core.security", "core.files", "core.flow"],
     requiredCapabilities: ["query.engine"],
     providesCapabilities: ["query.engine.jdbc"]
   },
@@ -61,6 +62,8 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       engineId: "jdbc",
       mimeTypes: ["application/sql"]
     });
+
+    registerJdbcFlowNodeContribution();
 
     context.files.capabilities.registerLabel?.("application/sql", "Jdbc");
     context.files.capabilities.registerPreferredNewFileMimeType?.("application/sql", 10);
@@ -288,6 +291,10 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       if (executeContext?.engineId !== "jdbc" || !executeContext.fileId) {
         return;
       }
+      const file = context.files.getFile(executeContext.fileId);
+      if (!file || file.mimeType !== "application/sql") {
+        return;
+      }
       const params = event.params as { engineState?: unknown };
       const es = params.engineState;
       if (es !== null && typeof es === "object" && !Array.isArray(es)) {
@@ -295,32 +302,28 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
         const database = record.database;
         const sessionId = record.sessionId;
         if (typeof sessionId === "string") {
-          const file = context.files.getFile(executeContext.fileId);
-          if (file) {
-            const metadata = { ...(file.metadata ?? {}) };
-            const connectionId = file.engineBinding?.connectionId;
-            if (sessionId.length > 0) {
-              metadata[JDBC_SESSION_ID_METADATA_KEY] = sessionId;
-              metadata[JDBC_SESSION_STATE_METADATA_KEY] = "alive";
-              if (typeof connectionId === "string" && connectionId.length > 0) {
-                sessionConnectionUuidMap.set(executeContext.fileId, connectionId);
-                const connTitle = getConfiguredJdbcConnections().find((c) => c.connectionId === connectionId)?.title;
-                if (connTitle) {
-                  metadata[JDBC_SESSION_CONNECTION_TITLE_KEY] = connTitle;
-                }
+          const metadata = { ...(file.metadata ?? {}) };
+          const connectionId = file.engineBinding?.connectionId;
+          if (sessionId.length > 0) {
+            metadata[JDBC_SESSION_ID_METADATA_KEY] = sessionId;
+            metadata[JDBC_SESSION_STATE_METADATA_KEY] = "alive";
+            if (typeof connectionId === "string" && connectionId.length > 0) {
+              sessionConnectionUuidMap.set(executeContext.fileId, connectionId);
+              const connTitle = getConfiguredJdbcConnections().find((c) => c.connectionId === connectionId)?.title;
+              if (connTitle) {
+                metadata[JDBC_SESSION_CONNECTION_TITLE_KEY] = connTitle;
               }
-            } else {
-              delete metadata[JDBC_SESSION_ID_METADATA_KEY];
-              delete metadata[JDBC_SESSION_CONNECTION_TITLE_KEY];
-              sessionConnectionUuidMap.delete(executeContext.fileId);
-              metadata[JDBC_SESSION_STATE_METADATA_KEY] = "dead";
             }
-            context.files.updateFile(executeContext.fileId, { metadata });
+          } else {
+            delete metadata[JDBC_SESSION_ID_METADATA_KEY];
+            delete metadata[JDBC_SESSION_CONNECTION_TITLE_KEY];
+            sessionConnectionUuidMap.delete(executeContext.fileId);
+            metadata[JDBC_SESSION_STATE_METADATA_KEY] = "dead";
           }
+          context.files.updateFile(executeContext.fileId, { metadata });
         }
         if (typeof database === "string") {
-          const file = context.files.getFile(executeContext.fileId);
-          const connectionId = file?.engineBinding?.connectionId;
+          const connectionId = file.engineBinding?.connectionId;
           if (connectionId) {
             context.files.setEditorState(executeContext.fileId, JDBC_NAV_DB_KEY, {
               connectionId,

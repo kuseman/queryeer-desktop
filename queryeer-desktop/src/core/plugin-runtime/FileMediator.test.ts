@@ -197,6 +197,18 @@ describe("FileMediator.createUntitledFile", () => {
     expect(created.uri).toBe("untitled:Untitled13.plbsql");
     expect(mediator.getUntitledCounter()).toBe(13);
   });
+
+  it("uses preferred extension registered for mime type", async () => {
+    const { mediator, registry } = setupHarness();
+    registry.createFilesRegistry().capabilities.registerPreferredExtension?.(
+      "application/x-flow",
+      "qflow"
+    );
+
+    const created = await mediator.createUntitledFile({ mimeType: "application/x-flow" });
+
+    expect(created.uri).toBe("untitled:Untitled1.qflow");
+  });
 });
 
 describe("FileMediator.closeFile", () => {

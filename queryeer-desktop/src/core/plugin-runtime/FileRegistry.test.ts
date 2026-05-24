@@ -254,4 +254,11 @@ describe("FileRegistry dirtyVsDisk initialization", () => {
     expect(editable).toContain("application/aaa");
     expect(editable.indexOf("application/zzz")).toBeLessThan(editable.indexOf("application/aaa"));
   });
+
+  it("stores and resolves preferred extension for mime type", () => {
+    const registry = new FileRegistry().createFilesRegistry();
+    registry.capabilities.registerPreferredExtension?.("application/x-custom", ".cust");
+
+    expect(registry.capabilities.getPreferredExtension?.("application/x-custom")).toBe("cust");
+  });
 });

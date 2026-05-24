@@ -62,6 +62,10 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
     if (!mimeType) {
       return "txt";
     }
+    const preferredExtension = filesRegistry.capabilities.getPreferredExtension?.(mimeType);
+    if (preferredExtension) {
+      return preferredExtension;
+    }
     const mapping: Record<string, string> = {
       "application/plbsql": "plbsql",
       "application/sql": "sql",

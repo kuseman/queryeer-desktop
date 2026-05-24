@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { FilesRegistry } from "../../../contracts/files/FilesRegistry";
 import {
   registerTextEditorMimeTypes,
+  registerMonacoLanguageIdForMimeType,
   resolveMonacoLanguageId,
   resolveTextEditorMimeType
 } from "./mime-types";
@@ -16,6 +17,10 @@ describe("text editor mime type registrations", () => {
   it("resolves monaco language ids from mime types", () => {
     expect(resolveMonacoLanguageId("application/sql")).toBe("sql");
     expect(resolveMonacoLanguageId("text/markdown")).toBe("markdown");
+
+    registerMonacoLanguageIdForMimeType("application/x-test-flow", "qflow");
+    expect(resolveMonacoLanguageId("application/x-test-flow")).toBe("qflow");
+
     expect(resolveMonacoLanguageId("image/png")).toBe("plaintext");
   });
 

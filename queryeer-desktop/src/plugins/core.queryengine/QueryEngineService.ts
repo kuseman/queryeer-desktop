@@ -49,6 +49,12 @@ type EngineInvokeParams = {
   payload?: unknown;
 };
 
+class SecuritySessionClosedError extends Error {
+  public constructor(message: string) {
+    super(message);
+  }
+}
+
 let serviceInstance: QueryEngineService | undefined;
 
 export function getQueryEngineService(): QueryEngineService {
@@ -198,10 +204,37 @@ export class QueryEngineService {
    * rather than streaming to an output panel.
    */
   async executeAndCollect(params: ExecuteParams): Promise<CollectedResults> {
+    try {
+      return await this.executeAndCollectOnce(params);
+    } catch (error) {
+      if (!(error instanceof SecuritySessionClosedError)) {
+        throw error;
+      }
+
+      const security = getCoreSecurityService();
+      const accepted = security
+        ? await security.ensureUnlockedForSecretAccess({ interactive: true })
+        : false;
+      if (!accepted) {
+        throw new Error("Security vault is locked");
+      }
+
+      try {
+        return await this.executeAndCollectOnce(params);
+      } catch (retryError) {
+        if (retryError instanceof SecuritySessionClosedError) {
+          throw new Error(retryError.message);
+        }
+        throw retryError;
+      }
+    }
+  }
+
+  private async executeAndCollectOnce(params: ExecuteParams): Promise<CollectedResults> {
     const collector = new Map<number, CollectedResultSet>();
 
     return new Promise<CollectedResults>((resolve, reject) => {
-      let resolved = false;
+      let settled = false;
 
       this.execute(params)
         .then((executionId) => {
@@ -209,34 +242,47 @@ export class QueryEngineService {
             if (event.method === "queryengine.chunkStart") {
               const p = event.params as { resultSetIndex: number; schema: { columns: Column[] } };
               collector.set(p.resultSetIndex, { schema: p.schema, rows: [] });
-            } else if (event.method === "queryengine.chunkRows") {
+              return;
+            }
+
+            if (event.method === "queryengine.chunkRows") {
               const p = event.params as { resultSetIndex: number; rows: unknown[][] };
               const rs = collector.get(p.resultSetIndex);
               if (rs) {
                 rs.rows.push(...p.rows);
               }
-            } else if (event.method === "queryengine.completed") {
+              return;
+            }
+
+            if (event.method === "queryengine.completed") {
               unsubscribe();
-              if (!resolved) {
-                resolved = true;
+              if (!settled) {
+                settled = true;
                 const resultSets = Array.from(collector.entries())
                   .sort(([a], [b]) => a - b)
                   .map(([, rs]) => rs);
                 resolve({ resultSets });
               }
-            } else if (event.method === "queryengine.failed") {
+              return;
+            }
+
+            if (event.method === "queryengine.failed") {
               unsubscribe();
-              const p = event.params as { error?: { message: string } };
-              if (!resolved) {
-                resolved = true;
+              const p = event.params as { error?: { code?: string; message?: string } };
+              if (!settled) {
+                settled = true;
+                if (p.error?.code === "SECURITY_SESSION_CLOSED") {
+                  reject(new SecuritySessionClosedError(p.error.message ?? "Security session is not open"));
+                  return;
+                }
                 reject(new Error(p.error?.message ?? "Query execution failed"));
               }
             }
           });
         })
         .catch((error) => {
-          if (!resolved) {
-            resolved = true;
+          if (!settled) {
+            settled = true;
             reject(error);
           }
         });
@@ -350,9 +396,13 @@ export class QueryEngineService {
     for (const provider of this.executionContextProviders) {
       const patch = provider(next);
       if (patch) {
+        const nextPatch = { ...patch };
+        if (params.engineState !== undefined && nextPatch.engineState !== undefined) {
+          delete nextPatch.engineState;
+        }
         next = {
           ...next,
-          ...patch
+          ...nextPatch
         };
       }
     }

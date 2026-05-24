@@ -54,6 +54,43 @@ type FunctionPathNode = {
   description?: string;
 };
 
+const modelScopedContextVariables = new Map<string, CtxVar[]>();
+
+function dedupeContextVariables(vars: CtxVar[]): CtxVar[] {
+  const seen = new Set<string>();
+  const result: CtxVar[] = [];
+
+  for (const variable of vars) {
+    const name = variable.name.trim();
+    if (name.length === 0 || seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    result.push({
+      ...variable,
+      name
+    });
+  }
+
+  return result;
+}
+
+function getContextVariablesForModel(modelUri: string): CtxVar[] {
+  return dedupeContextVariables([
+    ...CONTEXT_VARIABLES,
+    ...getRegisteredWhenExpressionVariables(),
+    ...(modelScopedContextVariables.get(modelUri) ?? [])
+  ]);
+}
+
+export function setWhenExpressionModelVariables(modelUri: string, vars: CtxVar[]): void {
+  modelScopedContextVariables.set(modelUri, dedupeContextVariables(vars));
+}
+
+export function clearWhenExpressionModelVariables(modelUri: string): void {
+  modelScopedContextVariables.delete(modelUri);
+}
+
 function buildPathIndex(vars: CtxVar[]): Map<string, PathNode> {
   const index = new Map<string, PathNode>();
 
@@ -137,7 +174,7 @@ function buildFunctionPathIndex(): Map<string, FunctionPathNode> {
 
 /** Returns base variables plus any registered by plugins. */
 export function getAllContextVariables(): CtxVar[] {
-  return [...CONTEXT_VARIABLES, ...getRegisteredWhenExpressionVariables()];
+  return dedupeContextVariables([...CONTEXT_VARIABLES, ...getRegisteredWhenExpressionVariables()]);
 }
 
 let whenLanguageSetup = false;
@@ -179,7 +216,7 @@ export async function setupWhenExpressionLanguage(): Promise<void> {
 
       const lineContent = model.getLineContent(position.lineNumber);
       const qualifier = getQualifierBeforeDot(lineContent, position.column);
-      const allVariables = getAllContextVariables();
+      const allVariables = getContextVariablesForModel(model.uri.toString());
       const pathIndex = buildPathIndex(allVariables);
       const functionPathIndex = buildFunctionPathIndex();
 

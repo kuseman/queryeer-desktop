@@ -1,11 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginContext } from "../../contracts/plugin/Plugin";
+import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { PayloadbuilderCatalogContribution } from "./catalog-contributions";
+import {
+  clearFlowNodeTypeContributionsForTests,
+  getFlowNodeTypeContribution
+} from "../core.flow/flow-node-type-contributions";
 
 const mocks = vi.hoisted(() => ({
   registerExecutionContextProviderMock: vi.fn(),
   registerEngineResolverMock: vi.fn(),
   onQueryEventMock: vi.fn(),
+  executeQueryForFlowMock: vi.fn(),
   buildEngineStateMock: vi.fn(),
   applyEngineStatePatchMock: vi.fn(),
   initializeStoreMock: vi.fn(),
@@ -21,6 +27,10 @@ vi.mock("../core.queryengine/QueryEngineService", () => ({
     registerEngineResolver: mocks.registerEngineResolverMock,
     onQueryEvent: mocks.onQueryEventMock
   })
+}));
+
+vi.mock("../core.queryengine/flow-query-execution", () => ({
+  executeQueryForFlow: mocks.executeQueryForFlowMock
 }));
 
 vi.mock("./catalog-store", () => ({
@@ -49,6 +59,37 @@ vi.mock("../core.settings/service", () => ({
 import { coreQueryEnginePayloadbuilderPlugin } from "./plugin";
 
 function createContext(): PluginContext {
+  const filesById = new Map<string, FileEntity>([
+    [
+      "file-1",
+      {
+        fileId: "file-1",
+        version: 1,
+        uri: "file:///file-1.plbsql",
+        mimeType: "application/plbsql",
+        dirtyVsBackend: false,
+        dirtyVsDisk: false,
+        diskState: "inSync",
+        openedAt: new Date().toISOString(),
+        metadata: {}
+      }
+    ],
+    [
+      "file-sql",
+      {
+        fileId: "file-sql",
+        version: 1,
+        uri: "file:///file-sql.sql",
+        mimeType: "application/sql",
+        dirtyVsBackend: false,
+        dirtyVsDisk: false,
+        diskState: "inSync",
+        openedAt: new Date().toISOString(),
+        metadata: {}
+      }
+    ]
+  ]);
+
   return {
     commands: {
       registerCommand: vi.fn(),
@@ -76,9 +117,15 @@ function createContext(): PluginContext {
       },
       openFile: vi.fn(),
       closeFile: vi.fn(),
-      getFile: vi.fn(),
-      listFiles: vi.fn(() => []),
-      updateFile: vi.fn(),
+      getFile: vi.fn((fileId: string) => filesById.get(fileId)),
+      listFiles: vi.fn(() => [...filesById.values()]),
+      updateFile: vi.fn((fileId: string, update: Partial<FileEntity>) => {
+        const existing = filesById.get(fileId);
+        if (!existing) return undefined;
+        const next = { ...existing, ...update } as FileEntity;
+        filesById.set(fileId, next);
+        return next;
+      }),
       subscribe: vi.fn(() => () => {}),
       registerMimeResolver: vi.fn(),
       registerEditorResolver: vi.fn(),
@@ -194,6 +241,7 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
     mocks.registerExecutionContextProviderMock.mockReset();
     mocks.registerEngineResolverMock.mockReset();
     mocks.onQueryEventMock.mockReset();
+    mocks.executeQueryForFlowMock.mockReset();
     mocks.buildEngineStateMock.mockReset();
     mocks.applyEngineStatePatchMock.mockReset();
     mocks.initializeStoreMock.mockReset();
@@ -204,6 +252,603 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
     mocks.getCoreSettingsServiceMock.mockReturnValue(null);
     mocks.subscribeContributionsMock.mockReturnValue(() => {});
     mocks.onSettingsInitializedMock.mockReturnValue(() => {});
+    mocks.executeQueryForFlowMock.mockResolvedValue({ rowsAffected: 1, rows: [{ ok: true }], preview: "select 1" });
+    clearFlowNodeTypeContributionsForTests();
+  });
+
+  it("contributes Payloadbuilder flow query node type", () => {
+    mocks.listContributionsMock.mockReturnValue([{
+      catalogId: "elasticsearch",
+      title: "Elasticsearch",
+      defaultAlias: "es",
+      allowMultiple: true,
+      flowMappingFields: [
+        { id: "connectionId", label: "Connection", kind: "select", required: true, listOptions: () => ["cluster1"] },
+        { id: "index", label: "Index", kind: "text", required: true }
+      ]
+    }]);
+    mocks.getCoreSettingsServiceMock.mockReturnValue({
+      getValue: vi.fn(() => undefined),
+      refreshSchemaFromRegistry: vi.fn(),
+      syncRegistryModules: vi.fn(async () => {}),
+      setValue: vi.fn(async () => ({ ok: true }))
+    });
+
+    coreQueryEnginePayloadbuilderPlugin.activate(createContext());
+
+    const contribution = getFlowNodeTypeContribution("payloadbuilder.query");
+    expect(contribution?.title).toBe("Payloadbuilder Query");
+    expect(contribution?.getSummary?.({
+      node: {
+        index: 0,
+        action: "select 1",
+        range: { metadataStartLine: 1, metadataEndLine: 4, actionStartLine: 5, actionEndLine: 5 },
+        metadata: {
+          id: "search",
+          type: "payloadbuilder.query",
+          additional: {
+            payloadbuilder: {
+              defaultCatalogAlias: "search",
+              catalogs: {
+                search: { provider: "elasticsearch" }
+              }
+            }
+          }
+        }
+      }
+    })).toEqual([
+      { label: "Catalog", value: "search" },
+      { label: "Provider", value: "Elasticsearch" }
+    ]);
+    expect(contribution?.validateConfiguration?.({
+      node: {
+        index: 0,
+        action: "select 1",
+        range: { metadataStartLine: 1, metadataEndLine: 4, actionStartLine: 5, actionEndLine: 5 },
+        metadata: {
+          id: "search",
+          type: "payloadbuilder.query",
+          additional: {
+            payloadbuilder: {
+              defaultCatalogAlias: "search",
+              catalogs: {
+                search: {}
+              }
+            }
+          }
+        }
+      }
+    })).toEqual([
+      { field: "payloadbuilder.catalogs.search.provider", message: "Provider is required." }
+    ]);
+  });
+
+  it("resolves persisted connection label to runtime connection id in flow execute", async () => {
+    mocks.listContributionsMock.mockReturnValue([
+      {
+        catalogId: "elasticsearch",
+        title: "Elasticsearch",
+        defaultAlias: "es",
+        allowMultiple: true,
+        flowMappingFields: [
+          {
+            id: "connectionId",
+            label: "Connection",
+            kind: "select",
+            required: true,
+            persistAsLabel: true,
+            mappingKind: "elasticsearch.connection",
+            listOptions: () => [{ value: "uuid-1", label: "Cluster One" }]
+          },
+          { id: "index", label: "Index", kind: "text", required: true }
+        ]
+      }
+    ]);
+
+    coreQueryEnginePayloadbuilderPlugin.activate(createContext());
+
+    const contribution = getFlowNodeTypeContribution("payloadbuilder.query");
+    expect(contribution).toBeDefined();
+
+    const result = await contribution?.execute({
+      fileId: "file-1",
+      action: "select * from search._doc",
+      ctx: {},
+      node: {
+        index: 0,
+        action: "select * from search._doc",
+        range: { metadataStartLine: 1, metadataEndLine: 7, actionStartLine: 8, actionEndLine: 8 },
+        metadata: {
+          id: "search-orders",
+          type: "payloadbuilder.query",
+          additional: {
+            payloadbuilder: {
+              defaultCatalogAlias: "search",
+              catalogs: {
+                search: {
+                  provider: "elasticsearch",
+                  connectionId: "Cluster One",
+                  index: "orders-*"
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    expect(result).toEqual({ ok: true, output: { rowsAffected: 1, rows: [{ ok: true }], preview: "select 1" } });
+    expect(mocks.executeQueryForFlowMock).toHaveBeenCalledWith({
+      engineId: "payloadbuilder",
+      fileId: "file-1",
+      text: "select * from search._doc",
+      engineState: {
+        payloadbuilder: {
+          defaultCatalogAlias: "search",
+          catalogs: {
+            search: {
+              catalogId: "elasticsearch",
+              properties: {
+                connectionId: "uuid-1",
+                index: "orders-*"
+              }
+            }
+          }
+        }
+      }
+    });
+  });
+
+  it("resolves portable connection ref through core.flow local mapping", async () => {
+    mocks.listContributionsMock.mockReturnValue([
+      {
+        catalogId: "elasticsearch",
+        title: "Elasticsearch",
+        defaultAlias: "es",
+        allowMultiple: true,
+        flowMappingFields: [
+          {
+            id: "connectionId",
+            label: "Connection",
+            kind: "select",
+            required: true,
+            persistAsLabel: true,
+            mappingKind: "elasticsearch.connection",
+            listOptions: () => [{ value: "uuid-1", label: "Cluster One" }]
+          }
+        ]
+      }
+    ]);
+    mocks.getCoreSettingsServiceMock.mockReturnValue({
+      getValue: vi.fn((settingId: string) => settingId === "core.flow.environments"
+        ? {
+            activeEnvironment: "dev",
+            environments: ["dev"],
+            mappings: [{
+              environment: "dev",
+              owner: "core.queryengine.payloadbuilder",
+              kind: "elasticsearch.connection",
+              ref: "someConnection",
+              value: "uuid-1"
+            }]
+          }
+        : undefined),
+      refreshSchemaFromRegistry: vi.fn(),
+      syncRegistryModules: vi.fn(async () => {}),
+      setValue: vi.fn(async () => ({ ok: true }))
+    });
+
+    coreQueryEnginePayloadbuilderPlugin.activate(createContext());
+
+    const contribution = getFlowNodeTypeContribution("payloadbuilder.query");
+    const result = await contribution?.execute({
+      fileId: "file-1",
+      action: "select * from search._doc",
+      ctx: {},
+      node: {
+        index: 0,
+        action: "select * from search._doc",
+        range: { metadataStartLine: 1, metadataEndLine: 7, actionStartLine: 8, actionEndLine: 8 },
+        metadata: {
+          id: "search-orders",
+          type: "payloadbuilder.query",
+          additional: {
+            payloadbuilder: {
+              defaultCatalogAlias: "search",
+              catalogs: {
+                search: {
+                  provider: "elasticsearch",
+                  connectionId: "someConnection"
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    expect(result?.ok).toBe(true);
+    expect(mocks.executeQueryForFlowMock).toHaveBeenCalledWith(expect.objectContaining({
+      engineState: {
+        payloadbuilder: {
+          defaultCatalogAlias: "search",
+          catalogs: {
+            search: {
+              catalogId: "elasticsearch",
+              properties: {
+                connectionId: "uuid-1"
+              }
+            }
+          }
+        }
+      }
+    }));
+
+    expect(contribution?.getCodeLens?.({
+      node: {
+        index: 0,
+        action: "select * from search._doc",
+        range: { metadataStartLine: 1, metadataEndLine: 7, actionStartLine: 8, actionEndLine: 8 },
+        metadata: {
+          id: "search-orders",
+          type: "payloadbuilder.query",
+          additional: {
+            payloadbuilder: {
+              defaultCatalogAlias: "search",
+              catalogs: {
+                search: {
+                  provider: "elasticsearch",
+                  connectionId: "someConnection"
+                }
+              }
+            }
+          }
+        }
+      }
+    })).toEqual([{ title: "🔗 Uses local mapping => Cluster One", commandId: "core.flow.configureNodeAtCursor", arguments: ["search-orders"] }]);
+  });
+
+  it("resolves multiple payloadbuilder catalogs from flow metadata", async () => {
+    mocks.listContributionsMock.mockReturnValue([
+      {
+        catalogId: "elasticsearch",
+        title: "Elasticsearch",
+        defaultAlias: "es",
+        allowMultiple: true,
+        flowMappingFields: [
+          {
+            id: "connectionId",
+            label: "Connection",
+            kind: "select",
+            required: true,
+            persistAsLabel: true,
+            mappingKind: "elasticsearch.connection",
+            listOptions: () => [{ value: "es-uuid", label: "Search Prod" }]
+          },
+          { id: "index", label: "Index", kind: "text", required: true }
+        ]
+      },
+      {
+        catalogId: "jdbc",
+        title: "JDBC",
+        defaultAlias: "jdbc",
+        allowMultiple: true,
+        flowMappingFields: [
+          {
+            id: "connectionId",
+            label: "Connection",
+            kind: "select",
+            required: true,
+            persistAsLabel: true,
+            mappingKind: "jdbc.connection",
+            listOptions: () => [{ value: "jdbc-uuid", label: "Reporting DB" }]
+          }
+        ]
+      }
+    ]);
+    mocks.getCoreSettingsServiceMock.mockReturnValue({
+      getValue: vi.fn((settingId: string) => settingId === "core.flow.environments"
+        ? {
+            activeEnvironment: "dev",
+            environments: ["dev"],
+            mappings: [
+              {
+                environment: "dev",
+                owner: "core.queryengine.payloadbuilder",
+                kind: "elasticsearch.connection",
+                ref: "search-prod",
+                value: "es-uuid"
+              },
+              {
+                environment: "dev",
+                owner: "core.queryengine.payloadbuilder",
+                kind: "jdbc.connection",
+                ref: "reporting-db",
+                value: "jdbc-uuid"
+              }
+            ]
+          }
+        : undefined),
+      refreshSchemaFromRegistry: vi.fn(),
+      syncRegistryModules: vi.fn(async () => {}),
+      setValue: vi.fn(async () => ({ ok: true }))
+    });
+
+    coreQueryEnginePayloadbuilderPlugin.activate(createContext());
+
+    const action = [
+      "select top 10 *",
+      "from es#_doc d",
+      "inner join jdbc#some.table t",
+      "  on t.id = d.id"
+    ].join("\n");
+    const contribution = getFlowNodeTypeContribution("payloadbuilder.query");
+    const result = await contribution?.execute({
+      fileId: "file-1",
+      action,
+      ctx: {},
+      node: {
+        index: 0,
+        action,
+        range: { metadataStartLine: 1, metadataEndLine: 13, actionStartLine: 14, actionEndLine: 17 },
+        metadata: {
+          id: "join-catalogs",
+          type: "payloadbuilder.query",
+          additional: {
+            payloadbuilder: {
+              defaultCatalogAlias: "es",
+              catalogs: {
+                es: {
+                  provider: "elasticsearch",
+                  connectionId: "search-prod",
+                  index: "my-index"
+                },
+                jdbc: {
+                  provider: "jdbc",
+                  connectionId: "reporting-db"
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    expect(result?.ok).toBe(true);
+    expect(mocks.executeQueryForFlowMock).toHaveBeenCalledWith({
+      engineId: "payloadbuilder",
+      fileId: "file-1",
+      text: action,
+      engineState: {
+        payloadbuilder: {
+          defaultCatalogAlias: "es",
+          catalogs: {
+            es: {
+              catalogId: "elasticsearch",
+              properties: {
+                connectionId: "es-uuid",
+                index: "my-index"
+              }
+            },
+            jdbc: {
+              catalogId: "jdbc",
+              properties: {
+                connectionId: "jdbc-uuid"
+              }
+            }
+          }
+        }
+      }
+    });
+
+    expect(contribution?.getCodeLens?.({
+      node: {
+        index: 0,
+        action,
+        range: { metadataStartLine: 1, metadataEndLine: 13, actionStartLine: 14, actionEndLine: 17 },
+        metadata: {
+          id: "join-catalogs",
+          type: "payloadbuilder.query",
+          additional: {
+            payloadbuilder: {
+              defaultCatalogAlias: "es",
+              catalogs: {
+                es: {
+                  provider: "elasticsearch",
+                  connectionId: "search-prod",
+                  index: "my-index"
+                },
+                jdbc: {
+                  provider: "jdbc",
+                  connectionId: "reporting-db"
+                }
+              }
+            }
+          }
+        }
+      }
+    })).toEqual([{ title: "🔗 Uses 2 local mappings => Search Prod, Reporting DB", commandId: "core.flow.configureNodeAtCursor", arguments: ["join-catalogs"] }]);
+  });
+
+  it("prefers explicit local mapping over direct label match", async () => {
+    mocks.listContributionsMock.mockReturnValue([
+      {
+        catalogId: "elasticsearch",
+        title: "Elasticsearch",
+        defaultAlias: "es",
+        allowMultiple: true,
+        flowMappingFields: [
+          {
+            id: "connectionId",
+            label: "Connection",
+            kind: "select",
+            required: true,
+            persistAsLabel: true,
+            mappingKind: "elasticsearch.connection",
+            listOptions: () => [
+              { value: "uuid-1", label: "Cluster One" },
+              { value: "uuid-2", label: "Cluster Two" }
+            ]
+          }
+        ]
+      }
+    ]);
+    mocks.getCoreSettingsServiceMock.mockReturnValue({
+      getValue: vi.fn((settingId: string) => settingId === "core.flow.environments"
+        ? {
+            activeEnvironment: "dev",
+            environments: ["dev"],
+            mappings: [{
+              environment: "dev",
+              owner: "core.queryengine.payloadbuilder",
+              kind: "elasticsearch.connection",
+              ref: "Cluster One",
+              value: "uuid-2"
+            }]
+          }
+        : undefined),
+      refreshSchemaFromRegistry: vi.fn(),
+      syncRegistryModules: vi.fn(async () => {}),
+      setValue: vi.fn(async () => ({ ok: true }))
+    });
+
+    coreQueryEnginePayloadbuilderPlugin.activate(createContext());
+
+    const contribution = getFlowNodeTypeContribution("payloadbuilder.query");
+    const result = await contribution?.execute({
+      fileId: "file-1",
+      action: "select * from search._doc",
+      ctx: {},
+      node: {
+        index: 0,
+        action: "select * from search._doc",
+        range: { metadataStartLine: 1, metadataEndLine: 7, actionStartLine: 8, actionEndLine: 8 },
+        metadata: {
+          id: "search-orders",
+          type: "payloadbuilder.query",
+          additional: {
+            payloadbuilder: {
+              defaultCatalogAlias: "search",
+              catalogs: {
+                search: {
+                  provider: "elasticsearch",
+                  connectionId: "Cluster One"
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    expect(result?.ok).toBe(true);
+    expect(mocks.executeQueryForFlowMock).toHaveBeenCalledWith(expect.objectContaining({
+      engineState: {
+        payloadbuilder: {
+          defaultCatalogAlias: "search",
+          catalogs: {
+            search: {
+              catalogId: "elasticsearch",
+              properties: {
+                connectionId: "uuid-2"
+              }
+            }
+          }
+        }
+      }
+    }));
+
+    expect(contribution?.getCodeLens?.({
+      node: {
+        index: 0,
+        action: "select * from search._doc",
+        range: { metadataStartLine: 1, metadataEndLine: 7, actionStartLine: 8, actionEndLine: 8 },
+        metadata: {
+          id: "search-orders",
+          type: "payloadbuilder.query",
+          additional: {
+            payloadbuilder: {
+              defaultCatalogAlias: "search",
+              catalogs: {
+                search: {
+                  provider: "elasticsearch",
+                  connectionId: "Cluster One"
+                }
+              }
+            }
+          }
+        }
+      }
+    })).toEqual([{ title: "🔗 Uses local mapping => Cluster Two", commandId: "core.flow.configureNodeAtCursor", arguments: ["search-orders"] }]);
+  });
+
+  it("returns configuration error when persisted label has no local mapping", async () => {
+    mocks.listContributionsMock.mockReturnValue([
+      {
+        catalogId: "elasticsearch",
+        title: "Elasticsearch",
+        defaultAlias: "es",
+        allowMultiple: true,
+        flowMappingFields: [
+          {
+            id: "connectionId",
+            label: "Connection",
+            kind: "select",
+            required: true,
+            persistAsLabel: true,
+            mappingKind: "elasticsearch.connection",
+            listOptions: () => [{ value: "uuid-2", label: "Cluster Two" }]
+          },
+          { id: "index", label: "Index", kind: "text", required: true }
+        ]
+      }
+    ]);
+
+    coreQueryEnginePayloadbuilderPlugin.activate(createContext());
+
+    const contribution = getFlowNodeTypeContribution("payloadbuilder.query");
+    expect(contribution).toBeDefined();
+
+    const result = await contribution?.execute({
+      fileId: "file-1",
+      action: "select * from search._doc",
+      ctx: {},
+      node: {
+        index: 0,
+        action: "select * from search._doc",
+        range: { metadataStartLine: 1, metadataEndLine: 7, actionStartLine: 8, actionEndLine: 8 },
+        metadata: {
+          id: "search-orders",
+          type: "payloadbuilder.query",
+          additional: {
+            payloadbuilder: {
+              defaultCatalogAlias: "search",
+              catalogs: {
+                search: {
+                  provider: "elasticsearch",
+                  connectionId: "Cluster One",
+                  index: "orders-*"
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      code: "FLOW_MAPPING_MISSING",
+      message: "Payloadbuilder flow mapping 'connectionId' value 'Cluster One' is not mapped locally.",
+      details: {
+        owner: "core.queryengine.payloadbuilder",
+        kind: "elasticsearch.connection",
+        ref: "Cluster One",
+        field: "connectionId",
+        alias: "search"
+      }
+    });
+    expect(mocks.executeQueryForFlowMock).not.toHaveBeenCalled();
   });
 
   it("wires payloadbuilder engineState into execute context", () => {
@@ -318,6 +963,41 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
     );
 
     expect(mocks.applyEngineStatePatchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores completed payloadbuilder engineState for non-plbsql files", () => {
+    const context = createContext();
+    coreQueryEnginePayloadbuilderPlugin.activate(context);
+
+    const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+      | ((
+          event: { method: string; params?: { engineState?: unknown } },
+          executeContext?: { engineId?: string; fileId?: string }
+        ) => void)
+      | undefined;
+    expect(listener).toBeTypeOf("function");
+
+    listener?.(
+      {
+        method: "queryengine.completed",
+        params: {
+          engineState: {
+            payloadbuilder: {
+              catalogs: {
+                jdbc1: {
+                  properties: {
+                    database: "reporting"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      { engineId: "payloadbuilder", fileId: "file-sql" }
+    );
+
+    expect(mocks.applyEngineStatePatchMock).not.toHaveBeenCalled();
   });
 
   it("adapts catalog instance setting with newly contributed catalogs", async () => {

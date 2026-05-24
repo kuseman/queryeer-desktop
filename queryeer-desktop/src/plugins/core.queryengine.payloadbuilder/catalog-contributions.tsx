@@ -8,6 +8,22 @@ export type PayloadbuilderCatalogPanelProps = {
   setProperty: (propertyKey: string, value: unknown) => void;
 };
 
+export type PayloadbuilderCatalogFlowMappingField = {
+  id: string;
+  label: string;
+  placeholder?: string;
+  kind?: "text" | "select";
+  required?: boolean;
+  /**
+   * Persist the human-friendly option label in flow metadata and resolve to runtime value locally.
+   * Use for local-only identifiers (for example UUID connection ids).
+   */
+  persistAsLabel?: boolean;
+  /** Stable local-mapping kind owned by the contribution, for example "elasticsearch.connection". */
+  mappingKind?: string;
+  listOptions?: (values: Record<string, string>) => Array<string | { value: string; label: string }> | Promise<Array<string | { value: string; label: string }>>;
+};
+
 export type PayloadbuilderCatalogContribution = {
   catalogId: string;
   title: string;
@@ -15,6 +31,7 @@ export type PayloadbuilderCatalogContribution = {
   allowMultiple: boolean;
   order?: number;
   renderPanel?: (props: PayloadbuilderCatalogPanelProps) => ReactNode;
+  flowMappingFields?: PayloadbuilderCatalogFlowMappingField[];
   filterPersistedProperties?: (properties: Record<string, unknown>) => Record<string, unknown>;
   resolveRuntimeProperties?: (properties: Record<string, unknown>) => Record<string, unknown>;
 };

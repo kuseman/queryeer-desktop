@@ -430,4 +430,35 @@ describe("core.files plugin", () => {
     });
     expect(result).toBeNull();
   });
+
+  it("mime types renderer resolves latest registered mime types at render time", () => {
+    const harness = createHarness();
+
+    coreFilesPlugin.activate(harness.context);
+
+    const rendererCalls = (harness.context.settings.registerAdvancedRenderer as ReturnType<typeof vi.fn>).mock
+      .calls as Array<[{ id: string; render: (params: { value: unknown; setValue: (value: unknown) => void; readonly: boolean }) => JSX.Element }]>
+    ;
+    const mimeRenderer = rendererCalls.find((call) => call[0].id === "core.files.mimeTypes.renderer")?.[0];
+    expect(mimeRenderer).toBeDefined();
+
+    const listAllMimeTypesMock = harness.context.files.capabilities.listAllMimeTypes as ReturnType<typeof vi.fn>;
+    listAllMimeTypesMock.mockReturnValue([
+      "application/sql",
+      "application/plbsql",
+      "application/json",
+      "application/vnd.queryeer.flow+plain"
+    ]);
+
+    const element = mimeRenderer!.render({
+      value: [],
+      setValue: () => {},
+      readonly: false
+    });
+
+    const props = element.props as {
+      options: Array<{ mimeType: string }>;
+    };
+    expect(props.options.map((option) => option.mimeType)).toContain("application/vnd.queryeer.flow+plain");
+  });
 });
