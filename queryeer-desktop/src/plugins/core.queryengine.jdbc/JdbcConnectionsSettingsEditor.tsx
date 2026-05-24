@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { SecretRefValue } from "../../contracts/security/Security";
 import { generateConnectionId } from "../../core/utils/ids";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
+import { pathToFileUri } from "../../contracts/files/Resolvers";
 import {
   CollectionSettingsListEditor,
   useCollectionSettingsPersistence
@@ -44,6 +45,11 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
   const [rows, setRows] = useState<Row[]>(() => toRows(parseJdbcConnectionDefinitions(value)));
   const [selectedRowId, setSelectedRowId] = useState<string | undefined>(() => rows[0]?.id);
   const [dialects, setDialects] = useState<JdbcDialectOption[]>([{ id: "jdbc", displayName: "Generic JDBC" }]);
+  const [appDir, setAppDir] = useState<string | null>(null);
+
+  useEffect(() => {
+    void window.appShell.getAppDir().then(setAppDir);
+  }, []);
   const [testStatusByRowId, setTestStatusByRowId] = useState<
     Record<string, { state: "idle" | "running" | "ok" | "error"; message?: string }>
   >({});
@@ -204,6 +210,19 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
 
         return (
           <div className="jdbc-settings-detail-grid" role="group" aria-label="JDBC connection details">
+            <div className="jdbc-settings-cell">
+              <span className="jdbc-settings-help">
+                JDBC driver JARs must be placed in{" "}
+                <a
+                  href="#"
+                  onClick={(e) => { e.preventDefault(); if (appDir) void window.appShell.openPath(pathToFileUri(appDir + "/libShared")); }}
+                >
+                  <code>libShared/</code>
+                </a>
+                {" "}under the app data directory.
+              </span>
+            </div>
+
             <div className="jdbc-settings-cell">
               <label className="jdbc-settings-label" htmlFor={`jdbc-title-${row.id}`}>
                 Title

@@ -25,3 +25,7 @@ export function fileUriToPath(uri: string): string {
   }
   return withoutScheme;
 }
+
+export function pathToFileUri(filePath: string): string {
+  return "file:///" + filePath.replace(/\\/g, "/");
+}
