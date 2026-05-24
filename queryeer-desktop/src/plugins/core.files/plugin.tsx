@@ -104,7 +104,14 @@ function renderUnsupportedEditorView(
   );
 }
 
-function fileExtensionForMimeType(mimeType: string): string {
+function fileExtensionForMimeType(
+  context: Parameters<Plugin["activate"]>[0],
+  mimeType: string
+): string {
+  const preferred = context.files.capabilities.getPreferredExtension?.(mimeType);
+  if (preferred) {
+    return preferred;
+  }
   return MIME_EXTENSION_OVERRIDES[mimeType] ?? "txt";
 }
 
@@ -123,7 +130,7 @@ function listNewFileMimeTypeOptions(context: Parameters<Plugin["activate"]>[0]):
   const mimeTypes = context.files.capabilities.listMimeTypesByCapability("editable");
   return mimeTypes.map((mimeType) => ({
     mimeType,
-    extension: fileExtensionForMimeType(mimeType),
+    extension: fileExtensionForMimeType(context, mimeType),
     label: context.files.capabilities.getLabel?.(mimeType) ?? toMimeLabel(mimeType),
     icon: context.files.mimeIcons.getMimeIcon(mimeType) ?? DocumentIcon
   }));
@@ -162,11 +169,28 @@ function listConfiguredNewFileMimeTypeOptions(
   return sorted;
 }
 
+function listAllMimeTypeOptions(
+  context: Parameters<Plugin["activate"]>[0]
+): Array<{
+  mimeType: string;
+  extension: string;
+  label: string;
+  icon: (props: { className?: string }) => JSX.Element;
+}> {
+  const mimeTypes = context.files.capabilities.listAllMimeTypes();
+  return mimeTypes.map((mimeType) => ({
+    mimeType,
+    extension: fileExtensionForMimeType(context, mimeType),
+    label: context.files.capabilities.getLabel?.(mimeType) ?? toMimeLabel(mimeType),
+    icon: context.files.mimeIcons.getMimeIcon(mimeType) ?? DocumentIcon
+  }));
+}
+
 async function createNewFileFromMimeType(
   context: Parameters<Plugin["activate"]>[0],
   mimeType: string
 ): Promise<void> {
-  const extension = fileExtensionForMimeType(mimeType);
+  const extension = fileExtensionForMimeType(context, mimeType);
   await context.fileMediator.createUntitledFile({
     mimeType,
     extension,
@@ -230,27 +254,23 @@ export const coreFilesPlugin: Plugin = {
       icon: DocumentIcon
     });
 
-    const allMimeTypeOptions = allMimeTypes.map((mimeType) => ({
-      mimeType,
-      extension: fileExtensionForMimeType(mimeType),
-      label: context.files.capabilities.getLabel?.(mimeType) ?? toMimeLabel(mimeType),
-      icon: context.files.mimeIcons.getMimeIcon(mimeType) ?? DocumentIcon
-    }));
-
     context.settings.registerAdvancedRenderer({
       id: "core.files.mimeTypes.renderer",
-      render: ({ value, setValue, readonly }) => (
-        <MimeTypesSettingsEditor
-          value={value}
-          setValue={setValue}
-          readonly={readonly}
-          options={allMimeTypeOptions.map((option) => ({
-            mimeType: option.mimeType,
-            label: option.label,
-            icon: option.icon
-          }))}
-        />
-      )
+      render: ({ value, setValue, readonly }) => {
+        const allMimeTypeOptions = listAllMimeTypeOptions(context);
+        return (
+          <MimeTypesSettingsEditor
+            value={value}
+            setValue={setValue}
+            readonly={readonly}
+            options={allMimeTypeOptions.map((option) => ({
+              mimeType: option.mimeType,
+              label: option.label,
+              icon: option.icon
+            }))}
+          />
+        );
+      }
     });
 
     context.layout.registerTabHeaderStyle({
@@ -388,7 +408,7 @@ export const coreFilesPlugin: Plugin = {
         const selectedMimeType = activeInConfigured
           ? active?.mimeType
           : (configuredOptions[0]?.mimeType ?? active?.mimeType ?? "text/plain");
-        const extension = fileExtensionForMimeType(selectedMimeType);
+        const extension = fileExtensionForMimeType(context, selectedMimeType);
         await context.fileMediator.createUntitledFile({
           extension,
           mimeType: selectedMimeType,

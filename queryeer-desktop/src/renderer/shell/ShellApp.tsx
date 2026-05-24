@@ -26,6 +26,7 @@ import { filterSidebarViews } from "./sidebar-view-filter";
 import { filterToolbarActions } from "./toolbar-action-filter";
 import { inflateDottedKeys } from "./context-value-flatten";
 import { subscribeOpenPanelRequests } from "./layout-panel-events";
+import { subscribeFocusSidebarViewRequests } from "./layout-sidebar-events";
 import { getOutlineRegistry } from "../../core/plugin-runtime/ExtensionRegistry";
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../../plugins/core.settings/service";
 import { getKeybindingLabel } from "../../plugins/core.commands/keybinding-label-accessor";
@@ -386,6 +387,31 @@ export function ShellApp({
       }
     });
   }, []);
+
+  useEffect(() => {
+    return subscribeFocusSidebarViewRequests((request) => {
+      const requestedZone = request.zone
+        ?? (request.viewId
+          ? extensions.layout.views.find((view) => view.id === request.viewId)?.defaultZone
+          : undefined)
+        ?? "primarySidebar";
+
+      setVisibleZones((previous) => {
+        const next = new Set(previous);
+        next.add(requestedZone);
+        next.add("mainArea");
+        next.add("statusBar");
+        return next;
+      });
+
+      if (request.viewId) {
+        setPanelStates((previous) => ({
+          ...previous,
+          [request.viewId!]: true
+        }));
+      }
+    });
+  }, [extensions.layout.views]);
 
   const handleTabContextMenuAction = useCallback(
     (actionId: string, _file: FileEntity) => {

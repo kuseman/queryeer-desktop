@@ -120,6 +120,10 @@ export function resolveMonacoLanguageId(mimeType: string): string {
   return MIME_TYPE_TO_LANGUAGE.get(mimeType) ?? "plaintext";
 }
 
+export function registerMonacoLanguageIdForMimeType(mimeType: string, monacoLanguageId: string): void {
+  MIME_TYPE_TO_LANGUAGE.set(mimeType, monacoLanguageId);
+}
+
 export function registerTextEditorMimeTypes(files: FilesRegistry): void {
   registerMimeTypeBundle(files, TEXT_EDITOR_MIME_TYPES, resolveTextEditorMimeType);
 }

@@ -1,15 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginContext } from "../../contracts/plugin/Plugin";
 import { registerJdbcQueryPlanDialectSupport } from "../core.queryengine/query-plan/supported-dialects";
+import {
+  clearFlowNodeTypeContributionsForTests,
+  getFlowNodeTypeContribution
+} from "../core.flow/flow-node-type-contributions";
 
 const mocks = vi.hoisted(() => ({
   registerExecutionContextProviderMock: vi.fn(),
   registerEngineResolverMock: vi.fn(),
   onQueryEventMock: vi.fn(),
+  executeQueryForFlowMock: vi.fn(),
   invokeMock: vi.fn(async (): Promise<unknown> => []),
   getConfiguredJdbcConnectionsMock: vi.fn<() => unknown[]>(() => []),
   loadConnectionRootsMock: vi.fn(),
-  openQuickCommandMock: vi.fn()
+  openQuickCommandMock: vi.fn(),
+  getCoreSettingsServiceMock: vi.fn<() => unknown | null>(() => null),
+  onSettingsInitializedMock: vi.fn<(listener: (service: unknown) => void) => () => void>(() => () => {})
 }));
 
 vi.mock("../core.queryengine/QueryEngineService", () => ({
@@ -19,6 +26,16 @@ vi.mock("../core.queryengine/QueryEngineService", () => ({
     onQueryEvent: mocks.onQueryEventMock,
     invoke: mocks.invokeMock
   })
+}));
+
+vi.mock("../core.queryengine/flow-query-execution", () => ({
+  executeQueryForFlow: mocks.executeQueryForFlowMock
+}));
+
+vi.mock("../core.settings/service", () => ({
+  getCoreSettingsService: () => mocks.getCoreSettingsServiceMock(),
+  onCoreSettingsServiceInitialized: (listener: (service: unknown) => void) =>
+    mocks.onSettingsInitializedMock(listener)
 }));
 
 vi.mock("./jdbc-navigation-store", () => ({
@@ -217,10 +234,186 @@ describe("core.queryengine.jdbc plugin integration", () => {
     mocks.registerExecutionContextProviderMock.mockReset();
     mocks.registerEngineResolverMock.mockReset();
     mocks.onQueryEventMock.mockReset();
+    mocks.executeQueryForFlowMock.mockReset();
     mocks.invokeMock.mockReset();
     mocks.invokeMock.mockResolvedValue([]);
     mocks.loadConnectionRootsMock.mockReset();
     mocks.getConfiguredJdbcConnectionsMock.mockReset();
+    mocks.getCoreSettingsServiceMock.mockReset();
+    mocks.onSettingsInitializedMock.mockReset();
+    mocks.getCoreSettingsServiceMock.mockReturnValue(null);
+    mocks.onSettingsInitializedMock.mockReturnValue(() => {});
+    mocks.executeQueryForFlowMock.mockResolvedValue({ rowsAffected: 1, rows: [{ ok: true }], preview: "select 1" });
+    clearFlowNodeTypeContributionsForTests();
+  });
+
+  it("contributes JDBC flow query node type", () => {
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([
+      { connectionId: "conn-a", title: "Orders", dialectId: "sqlserver", enabled: true, url: "jdbc:a" },
+      { connectionId: "conn-disabled", title: "Disabled", dialectId: "jdbc", enabled: false, url: "jdbc:b" }
+    ]);
+
+    coreQueryEngineJdbcPlugin.activate(createContext());
+
+    const contribution = getFlowNodeTypeContribution("jdbc.query");
+    expect(contribution?.title).toBe("JDBC Query");
+    expect(contribution?.getSummary?.({
+      node: {
+        index: 0,
+        action: "select 1",
+        range: { metadataStartLine: 1, metadataEndLine: 4, actionStartLine: 5, actionEndLine: 5 },
+        metadata: {
+          id: "load",
+          type: "jdbc.query",
+          additional: { jdbc: { connection: "Orders", database: "reporting" } }
+        }
+      }
+    })).toEqual([
+      { label: "Connection", value: "Orders" },
+      { label: "Database", value: "reporting" }
+    ]);
+    expect(contribution?.validateConfiguration?.({
+      node: {
+        index: 0,
+        action: "select 1",
+        range: { metadataStartLine: 1, metadataEndLine: 4, actionStartLine: 5, actionEndLine: 5 },
+        metadata: {
+          id: "load",
+          type: "jdbc.query",
+          additional: { jdbc: { database: "reporting" } }
+        }
+      }
+    })).toEqual([
+      { field: "jdbc.connection", message: "Connection is required." }
+    ]);
+  });
+
+  it("resolves JDBC flow connection through core.flow local mapping", async () => {
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([
+      { connectionId: "conn-a", title: "Orders", dialectId: "sqlserver", enabled: true, url: "jdbc:a" }
+    ]);
+    mocks.getCoreSettingsServiceMock.mockReturnValue({
+      getValue: vi.fn((settingId: string) => settingId === "core.flow.environments"
+        ? {
+            activeEnvironment: "dev",
+            environments: ["dev"],
+            mappings: [{
+              environment: "dev",
+              owner: "core.queryengine.jdbc",
+              kind: "jdbc.connection",
+              ref: "orders-db",
+              value: "conn-a"
+            }]
+          }
+        : undefined),
+      refreshSchemaFromRegistry: vi.fn(),
+      syncRegistryModules: vi.fn(async () => {}),
+      setValue: vi.fn(async () => ({ ok: true })),
+      subscribe: vi.fn(() => () => {})
+    });
+
+    coreQueryEngineJdbcPlugin.activate(createContext());
+
+    const contribution = getFlowNodeTypeContribution("jdbc.query");
+    const result = await contribution?.execute({
+      fileId: "file-1",
+      action: "select * from orders",
+      ctx: {},
+      node: {
+        index: 0,
+        action: "select * from orders",
+        range: { metadataStartLine: 1, metadataEndLine: 6, actionStartLine: 7, actionEndLine: 7 },
+        metadata: {
+          id: "load-orders",
+          type: "jdbc.query",
+          additional: {
+            jdbc: {
+              connection: "orders-db",
+              database: "reporting"
+            }
+          }
+        }
+      }
+    });
+
+    expect(result).toEqual({ ok: true, output: { rowsAffected: 1, rows: [{ ok: true }], preview: "select 1" } });
+    expect(mocks.executeQueryForFlowMock).toHaveBeenCalledWith({
+      engineId: "jdbc",
+      fileId: "file-1",
+      text: "select * from orders",
+      engineState: {
+        connectionId: "conn-a",
+        database: "reporting"
+      }
+    });
+    expect(contribution?.getCodeLens?.({
+      node: {
+        index: 0,
+        action: "select * from orders",
+        range: { metadataStartLine: 1, metadataEndLine: 6, actionStartLine: 7, actionEndLine: 7 },
+        metadata: {
+          id: "load-orders",
+          type: "jdbc.query",
+          additional: {
+            jdbc: {
+              connection: "orders-db",
+              database: "reporting"
+            }
+          }
+        }
+      }
+    })).toEqual([{ title: "🔗 Uses local mapping => Orders", commandId: "core.flow.configureNodeAtCursor", arguments: ["load-orders"] }]);
+  });
+
+  it("returns configuration error when JDBC flow connection is not mapped locally", async () => {
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([
+      { connectionId: "conn-a", title: "Orders", dialectId: "sqlserver", enabled: true, url: "jdbc:a" }
+    ]);
+
+    coreQueryEngineJdbcPlugin.activate(createContext());
+
+    const contribution = getFlowNodeTypeContribution("jdbc.query");
+    const node = {
+      index: 0,
+      action: "select * from orders",
+      range: { metadataStartLine: 1, metadataEndLine: 5, actionStartLine: 6, actionEndLine: 6 },
+      metadata: {
+        id: "load-orders",
+        type: "jdbc.query",
+        additional: {
+          jdbc: {
+            connection: "orders-db"
+          }
+        }
+      }
+    };
+
+    expect(contribution?.validateConfiguration?.({ node })).toEqual([{
+      field: "jdbc.connection",
+      message: "JDBC flow mapping 'connection' value 'orders-db' is not mapped locally."
+    }]);
+    expect(await contribution?.execute({
+      fileId: "file-1",
+      action: "select * from orders",
+      ctx: {},
+      node
+    })).toEqual({
+      ok: false,
+      code: "FLOW_MAPPING_MISSING",
+      message: "JDBC flow mapping 'connection' value 'orders-db' is not mapped locally.",
+      details: {
+        owner: "core.queryengine.jdbc",
+        kind: "jdbc.connection",
+        ref: "orders-db",
+        field: "connection"
+      }
+    });
+    expect(contribution?.getCodeLens?.({ node })).toEqual([{
+      title: "🔴 Missing mapping: orders-db",
+      commandId: "core.flow.configureNodeAtCursor",
+      arguments: ["load-orders"]
+    }]);
+    expect(mocks.executeQueryForFlowMock).not.toHaveBeenCalled();
   });
 
   it("wires JDBC engineState with connectionId and database into execute context", () => {
@@ -400,6 +593,41 @@ describe("core.queryengine.jdbc plugin integration", () => {
     );
 
     expect(context.files.setEditorState).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores completed jdbc engineState for non-sql files", () => {
+    const context = createContext();
+    const file = context.files.getFile("file-1");
+    if (file) {
+      file.mimeType = "application/vnd.queryeer.flow+plain";
+      file.engineBinding = { engineId: "jdbc", connectionId: "conn-a" };
+    }
+
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+      | ((
+          event: { method: string; params?: { engineState?: unknown } },
+          executeContext?: { engineId?: string; fileId?: string }
+        ) => void)
+      | undefined;
+    expect(listener).toBeTypeOf("function");
+
+    listener?.(
+      {
+        method: "queryengine.completed",
+        params: {
+          engineState: {
+            database: "newdb",
+            sessionId: "session-1"
+          }
+        }
+      },
+      { engineId: "jdbc", fileId: "file-1" }
+    );
+
+    expect(context.files.setEditorState).not.toHaveBeenCalled();
+    expect(context.files.updateFile).not.toHaveBeenCalled();
   });
 
   it("applies completed engineState sessionId into runtime metadata", () => {

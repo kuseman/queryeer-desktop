@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
 import type * as monacoType from "monaco-editor";
-import { WHEN_LANGUAGE_ID, getAllContextVariables, setupWhenExpressionLanguage, getMonaco } from "./when-expression-language";
+import type { CtxVar } from "./when-expression-types";
+import {
+  WHEN_LANGUAGE_ID,
+  getAllContextVariables,
+  setupWhenExpressionLanguage,
+  getMonaco,
+  setWhenExpressionModelVariables,
+  clearWhenExpressionModelVariables
+} from "./when-expression-language";
 import { getRegisteredWhenExpressionTemplates } from "./when-expression-template-registry";
 import "./when-expression-editor.css";
 
@@ -18,9 +26,18 @@ export type InlineMonacoEditorProps = {
   height: number | "flex";
   readonly?: boolean;
   wordWrap?: boolean;
+  contextVariables?: CtxVar[];
 };
 
-export function InlineMonacoEditor({ value, onChange, language, height, readonly, wordWrap = true }: InlineMonacoEditorProps): JSX.Element {
+export function InlineMonacoEditor({
+  value,
+  onChange,
+  language,
+  height,
+  readonly,
+  wordWrap = true,
+  contextVariables = []
+}: InlineMonacoEditorProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monacoType.editor.IStandaloneCodeEditor | null>(null);
   const onChangeRef = useRef(onChange);
@@ -66,6 +83,11 @@ export function InlineMonacoEditor({ value, onChange, language, height, readonly
       createdEditor = editor;
       editorRef.current = editor;
 
+      const modelUri = editor.getModel()?.uri.toString();
+      if (modelUri && language === WHEN_LANGUAGE_ID) {
+        setWhenExpressionModelVariables(modelUri, contextVariables);
+      }
+
       const rect = containerRef.current?.getBoundingClientRect();
       editor.layout({
         width: rect ? rect.width : 400,
@@ -102,6 +124,10 @@ export function InlineMonacoEditor({ value, onChange, language, height, readonly
       mounted = false;
       const editor = createdEditor;
       if (editor) {
+        const modelUri = editor.getModel()?.uri.toString();
+        if (modelUri && language === WHEN_LANGUAGE_ID) {
+          clearWhenExpressionModelVariables(modelUri);
+        }
         (editor as unknown as { _resizeObs?: ResizeObserver })._resizeObs?.disconnect();
         (editor as unknown as { _contentSub?: monacoType.IDisposable })._contentSub?.dispose();
         editor.dispose();
@@ -109,6 +135,19 @@ export function InlineMonacoEditor({ value, onChange, language, height, readonly
       }
     };
   }, []); // create once — value sync handled by the effect below
+
+  useEffect(() => {
+    if (language !== WHEN_LANGUAGE_ID) {
+      return;
+    }
+
+    const modelUri = editorRef.current?.getModel()?.uri.toString();
+    if (!modelUri) {
+      return;
+    }
+
+    setWhenExpressionModelVariables(modelUri, contextVariables);
+  }, [language, contextVariables]);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -244,9 +283,19 @@ export type WhenExpressionEditorProps = {
   height?: number;
   readonly?: boolean;
   wordWrap?: boolean;
+  showInfoPopover?: boolean;
+  contextVariables?: CtxVar[];
 };
 
-export function WhenExpressionEditor({ value, onChange, height, readonly, wordWrap = false }: WhenExpressionEditorProps): JSX.Element {
+export function WhenExpressionEditor({
+  value,
+  onChange,
+  height,
+  readonly,
+  wordWrap = false,
+  showInfoPopover = true,
+  contextVariables = []
+}: WhenExpressionEditorProps): JSX.Element {
   useEffect(() => {
     void setupWhenExpressionLanguage();
   }, []);
@@ -260,8 +309,9 @@ export function WhenExpressionEditor({ value, onChange, height, readonly, wordWr
         height={height ?? 32}
         wordWrap={wordWrap}
         readonly={readonly}
+        contextVariables={contextVariables}
       />
-      <WhenInfoPopover readonly={readonly} onSelectTemplate={onChange} />
+      {showInfoPopover && <WhenInfoPopover readonly={readonly} onSelectTemplate={onChange} />}
     </div>
   );
 }

@@ -41,6 +41,7 @@ export class FileRegistry {
   private readonly editorResolvers: EditorResolver[] = [];
   private readonly mimeCapabilities = new Map<string, Set<MimeCapability>>();
   private readonly mimeLabels = new Map<string, string>();
+  private readonly preferredExtensionsByMimeType = new Map<string, string>();
   private readonly preferredNewFileMimeTypes = new Map<string, number>();
   private readonly mimeContentCategories = new Map<string, ContentCategory>();
   private readonly mimeIcons = new Map<string, MimeIconContribution>();
@@ -134,6 +135,16 @@ export class FileRegistry {
       },
       getLabel: (mimeType) => {
         return this.mimeLabels.get(mimeType);
+      },
+      registerPreferredExtension: (mimeType, extension) => {
+        const normalized = normalizeExtension(extension);
+        if (!normalized) {
+          return;
+        }
+        this.preferredExtensionsByMimeType.set(mimeType, normalized);
+      },
+      getPreferredExtension: (mimeType) => {
+        return this.preferredExtensionsByMimeType.get(mimeType);
       },
       registerPreferredNewFileMimeType: (mimeType, order = 0) => {
         this.preferredNewFileMimeTypes.set(mimeType, order);
@@ -425,6 +436,14 @@ export class FileRegistry {
     }
     this.updateFile(fileId, { dirtyVsDisk: true, version: file.version + 1 });
   }
+}
+
+function normalizeExtension(extension: string): string {
+  const trimmed = extension.trim().toLowerCase();
+  if (!trimmed) {
+    return "";
+  }
+  return trimmed.startsWith(".") ? trimmed.slice(1) : trimmed;
 }
 
 function extractExtension(uri: string): string | undefined {

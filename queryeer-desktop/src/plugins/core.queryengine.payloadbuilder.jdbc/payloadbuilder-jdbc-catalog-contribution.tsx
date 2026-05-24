@@ -25,6 +25,33 @@ export function registerPayloadbuilderJdbcCatalogContribution(): void {
       database: asText(properties.database)
     }),
     resolveRuntimeProperties: (properties) => properties,
+    flowMappingFields: [
+      {
+        id: "connectionId",
+        label: "Connection",
+        kind: "select",
+        required: true,
+        persistAsLabel: true,
+        mappingKind: "jdbc.connection",
+        placeholder: "Select connection...",
+        listOptions: () => getConfiguredJdbcConnections()
+          .filter((connection) => connection.enabled)
+          .map((connection) => ({
+            value: connection.connectionId,
+            label: connection.title?.trim() || connection.connectionId
+          }))
+      },
+      {
+        id: "database",
+        label: "Database",
+        kind: "select",
+        placeholder: "Select database...",
+        listOptions: async (values) => {
+          const connectionId = values.connectionId;
+          return connectionId ? getJdbcDatabaseCache().load(connectionId) : [];
+        }
+      }
+    ],
     renderPanel: (props) => <PayloadbuilderJdbcPanel {...props} />
   });
 }

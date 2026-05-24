@@ -28,6 +28,30 @@ export function registerPayloadbuilderElasticsearchCatalogContribution(): void {
       index: asText(properties.index)
     }),
     resolveRuntimeProperties: (properties) => properties,
+    flowMappingFields: [
+      {
+        id: "connectionId",
+        label: "Connection",
+        kind: "select",
+        required: true,
+        persistAsLabel: true,
+        mappingKind: "elasticsearch.connection",
+        placeholder: "Select connection...",
+        listOptions: () => getConfiguredElasticsearchConnections()
+          .filter((connection) => connection.enabled)
+          .map((connection) => ({
+            value: connection.connectionId,
+            label: connection.title?.trim() || connection.connectionId
+          }))
+      },
+      {
+        id: "index",
+        label: "Index",
+        kind: "text",
+        required: true,
+        placeholder: "orders-*"
+      }
+    ],
     renderPanel: (props) => <ElasticsearchPanel {...props} />
   });
 }

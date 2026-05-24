@@ -56,6 +56,10 @@ describe("payloadbuilder jdbc catalog contribution", () => {
     registerPayloadbuilderJdbcCatalogContribution();
     const contribution = getPayloadbuilderCatalogContribution("jdbc");
     expect(contribution).toBeDefined();
+    expect(await contribution?.flowMappingFields?.[0]?.listOptions?.({})).toEqual([{
+      value: "conn-a",
+      label: "Reports"
+    }]);
     const renderPanel = contribution?.renderPanel;
     if (!renderPanel) {
       throw new Error("Expected jdbc contribution renderPanel");
