@@ -31,6 +31,7 @@ type DataEditorProps = {
   reorderColumns?: boolean;
   scrollOffsetX?: number;
   scrollOffsetY?: number;
+  gridSelection?: GridSelectionLike;
 };
 
 type GridSelectionLike = {
@@ -1372,6 +1373,130 @@ describe("GridComponent", () => {
     expect(snapshot.rowsByIndex).toBeDefined();
     expect(snapshot.rowsByIndex[0]).toBeDefined();
     expect(snapshot.rowsByIndex[0]?.__values).toEqual([1, "hello"]);
+  });
+
+  it("drag across non-contiguous data columns sets selectedDataCols to exclude the gap", async () => {
+    // Columns: a(0) b(1) c(2) d(3)
+    // Move c (visual 2) to visual 0 → visual order [c, a, b, d]
+    // getDataIndex: vis0→2(c), vis1→0(a), vis2→1(b), vis3→3(d)
+    // Drag visual 0-1 (c and a, data [2,0]) → gap at data col 1(b)
+    const onSelectionChange = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[
+            { key: "a", title: "A", type: "int" },
+            { key: "b", title: "B", type: "int" },
+            { key: "c", title: "C", type: "int" },
+            { key: "d", title: "D", type: "int" },
+          ]}
+          getRowCount={() => 3}
+          getRowsRange={(start, end) => [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]].slice(start, end)}
+          getRow={(index) => [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          onSelectionChange={onSelectionChange}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    // move c from visual 2 to visual 0 → [c, a, b, d]
+    act(() => { latestDataEditorProps?.onColumnMoved?.(2, 0); });
+
+    // drag visual columns 0-1 → selects c(data=2) and a(data=0), skipping b(data=1)
+    act(() => {
+      latestDataEditorProps?.onGridSelectionChange(createGridSelection({ x: 0, y: 0, width: 2, height: 2 }));
+    });
+
+    const lastCall = onSelectionChange.mock.calls.at(-1)?.[0];
+    expect(lastCall?.rect?.colIndexStart).toBe(0);
+    expect(lastCall?.rect?.colIndexEnd).toBe(2);
+    // b (data=1) must be excluded
+    expect(lastCall?.rect?.selectedDataCols).toEqual([0, 2]);
+  });
+
+  it("drag across contiguous data columns after reorder does not set selectedDataCols", async () => {
+    // Columns a(0) b(1) c(2); move b to visual 0 → [b, a, c]
+    // Drag visual 0-1 (b and a, data [1,0]) → sorted [0,1], contiguous → no selectedDataCols
+    const onSelectionChange = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[
+            { key: "a", title: "A", type: "int" },
+            { key: "b", title: "B", type: "int" },
+            { key: "c", title: "C", type: "int" },
+          ]}
+          getRowCount={() => 2}
+          getRowsRange={(start, end) => [[1, 2, 3], [4, 5, 6]].slice(start, end)}
+          getRow={(index) => [[1, 2, 3], [4, 5, 6]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          onSelectionChange={onSelectionChange}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => { latestDataEditorProps?.onColumnMoved?.(1, 0); });
+
+    act(() => {
+      latestDataEditorProps?.onGridSelectionChange(createGridSelection({ x: 0, y: 0, width: 2, height: 2 }));
+    });
+
+    const lastCall = onSelectionChange.mock.calls.at(-1)?.[0];
+    expect(lastCall?.rect?.selectedDataCols).toBeUndefined();
+    expect(lastCall?.rect?.colIndexStart).toBe(0);
+    expect(lastCall?.rect?.colIndexEnd).toBe(1);
+  });
+
+  it("toGlideSelection shows correct visual range for non-contiguous selectedDataCols", async () => {
+    // Columns a(0) b(1) c(2) d(3); move c to visual 0 → [c, a, b, d]
+    // Drag visual 0-1 → selectedDataCols=[0,2] (a and c)
+    // toGlideSelection: visualCols=[1, 0] → visMin=0, visMax=1 → x=0, width=2 (not 3)
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[
+            { key: "a", title: "A", type: "int" },
+            { key: "b", title: "B", type: "int" },
+            { key: "c", title: "C", type: "int" },
+            { key: "d", title: "D", type: "int" },
+          ]}
+          getRowCount={() => 2}
+          getRowsRange={(start, end) => [[1, 2, 3, 4], [5, 6, 7, 8]].slice(start, end)}
+          getRow={(index) => [[1, 2, 3, 4], [5, 6, 7, 8]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => { latestDataEditorProps?.onColumnMoved?.(2, 0); });
+
+    act(() => {
+      latestDataEditorProps?.onGridSelectionChange(createGridSelection({ x: 0, y: 0, width: 2, height: 2 }));
+    });
+
+    // gridSelection fed back to Glide must cover exactly visual cols 0-1 (width=2), not 0-2 (width=3)
+    expect(latestDataEditorProps?.gridSelection?.current?.range).toMatchObject({ x: 0, width: 2 });
   });
 
   describe("search / find", () => {

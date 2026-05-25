@@ -289,6 +289,7 @@ type TableGridProps = {
   resultSetIndex: number;
   schema: { columns: Column[] };
   fileId?: string;
+  executionStartedAtMs?: number | null;
   onPreviewValue: (options: { title: string; value: string; mimeType?: string }) => void;
   isStreaming?: boolean;
   searchText?: string;
@@ -299,7 +300,7 @@ type TableGridProps = {
   onSearchMatchesUpdate?: (matches: Array<{ row: number; col: number }>) => void;
 };
 
-function TableGrid({ resultSetIndex, schema, fileId, onPreviewValue, isStreaming, searchText, searchCaseSensitive, searchRegex, searchWholeWord, searchActiveMatch, onSearchMatchesUpdate }: TableGridProps): JSX.Element {
+function TableGrid({ resultSetIndex, schema, fileId, executionStartedAtMs, onPreviewValue, isStreaming, searchText, searchCaseSensitive, searchRegex, searchWholeWord, searchActiveMatch, onSearchMatchesUpdate }: TableGridProps): JSX.Element {
   const storeKey = useMemo(() => ({ fileId, resultSetIndex }), [fileId, resultSetIndex]);
   const gridColumns = useMemo(() => toGridColumns(schema.columns), [schema.columns]);
   const [isDarkTheme, setIsDarkTheme] = useState<boolean>(() => (getThemeService()?.getActiveThemeMode() ?? "dark") === "dark");
@@ -338,7 +339,7 @@ function TableGrid({ resultSetIndex, schema, fileId, onPreviewValue, isStreaming
   return (
     <>
       <GridComponent
-        key={`${fileId ?? ""}:${resultSetIndex}`}
+        key={`${fileId ?? ""}:${resultSetIndex}:${executionStartedAtMs ?? 0}`}
         columns={gridColumns}
         rowNumberWidth={ROW_NUMBER_COL_WIDTH_PX}
         getRowCount={handleGetRowCount}
@@ -850,6 +851,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
                         resultSetIndex={resultSet.resultSetIndex}
                         schema={resultSet.schema}
                         fileId={context.fileId}
+                        executionStartedAtMs={context.executionStartedAtMs}
                         onPreviewValue={onPreviewValue}
                         isStreaming={context.state === "running"}
                         searchText={searchText}
@@ -896,6 +898,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
                   resultSetIndex={activeSet.resultSetIndex}
                   schema={activeSet.schema}
                   fileId={context.fileId}
+                  executionStartedAtMs={context.executionStartedAtMs}
                   onPreviewValue={onPreviewValue}
                   isStreaming={context.state === "running"}
                   searchText={searchText}
@@ -1096,7 +1099,18 @@ export const coreQueryEngineOutputTablePlugin: Plugin = {
       title: "Results",
       icon: outputTableIconUrl,
       priority: 0,
-      onExecutionStart: ({ fileId }) => getTableResultStore().clearFile(fileId),
+      onExecutionStart: ({ fileId }) => {
+        getTableResultStore().clearFile(fileId);
+        if (fileId) {
+          getFileStateRegistry().set(fileId, SELECTION_KEY, {});
+          const gridState = getFileStateRegistry().get(fileId, GRID_STATE_KEY) ?? {};
+          const clearedGridState: Record<number, GridComponentState> = {};
+          for (const [key, state] of Object.entries(gridState)) {
+            clearedGridState[Number(key)] = { columnWidths: state.columnWidths };
+          }
+          getFileStateRegistry().set(fileId, GRID_STATE_KEY, clearedGridState);
+        }
+      },
       onChunkRows: ({ fileId, resultSetIndex, rows }) => getTableResultStore().appendRows({ fileId, resultSetIndex }, rows),
       render: (outputContext) => <TableOutputView context={outputContext} onPreviewValue={(options) => void context.dialog.showValuePreview?.(options)} />
     });

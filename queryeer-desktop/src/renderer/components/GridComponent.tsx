@@ -216,12 +216,25 @@ function toGlideSelection(
       rows: rowSelection,
     };
   }
-  const colStart = model.rect.colIndexStart;
-  const colEnd = model.rect.colIndexEnd;
-  const visStart = toVisualIndex(colStart);
-  const visEnd = toVisualIndex(colEnd);
-  const x = Math.min(visStart, visEnd);
-  const width = Math.abs(visEnd - visStart) + 1;
+  const selectedDataCols = model.rect.selectedDataCols;
+  let visStart: number;
+  let x: number;
+  let width: number;
+  if (selectedDataCols && selectedDataCols.length > 0) {
+    const visualCols = selectedDataCols.map(toVisualIndex);
+    const visMin = Math.min(...visualCols);
+    const visMax = Math.max(...visualCols);
+    visStart = visMin;
+    x = visMin;
+    width = visMax - visMin + 1;
+  } else {
+    const colStart = model.rect.colIndexStart;
+    const colEnd = model.rect.colIndexEnd;
+    visStart = toVisualIndex(colStart);
+    const visEnd = toVisualIndex(colEnd);
+    x = Math.min(visStart, visEnd);
+    width = Math.abs(visEnd - visStart) + 1;
+  }
   return {
     current: {
       cell: [visStart, model.rect.rowStart],
@@ -255,16 +268,19 @@ function fromGlideSelection(
   const colVisEnd = current.range.x + current.range.width - 1;
   let colIndexStart: number;
   let colIndexEnd: number;
+  let selectedDataCols: number[] | undefined;
   if (hasReorderedColumns) {
-    let dataMin = totalCols;
-    let dataMax = 0;
+    const dataColSet: number[] = [];
     for (let c = colVisStart; c <= colVisEnd; c++) {
       const dataIdx = toDataIndex(c);
-      if (dataIdx < dataMin) dataMin = dataIdx;
-      if (dataIdx > dataMax) dataMax = dataIdx;
+      if (dataIdx >= 0 && dataIdx < totalCols) dataColSet.push(dataIdx);
     }
-    colIndexStart = Math.max(0, dataMin);
-    colIndexEnd = Math.min(totalCols - 1, dataMax);
+    dataColSet.sort((a, b) => a - b);
+    colIndexStart = dataColSet[0] ?? Math.max(0, colVisStart);
+    colIndexEnd = dataColSet[dataColSet.length - 1] ?? Math.min(totalCols - 1, colVisEnd);
+    if (dataColSet.length < colIndexEnd - colIndexStart + 1) {
+      selectedDataCols = dataColSet;
+    }
   } else {
     colIndexStart = Math.max(0, colVisStart);
     colIndexEnd = Math.min(totalCols - 1, colVisEnd);
@@ -277,7 +293,7 @@ function fromGlideSelection(
     };
   }
   return {
-    selection: { rect: { rowStart, rowEnd, colIndexStart, colIndexEnd }, cells },
+    selection: { rect: { rowStart, rowEnd, colIndexStart, colIndexEnd, selectedDataCols }, cells },
     anchor: { row: current.cell[1], colIndex: colIndexStart },
   };
 }

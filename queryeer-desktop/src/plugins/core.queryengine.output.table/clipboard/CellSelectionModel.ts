@@ -3,6 +3,8 @@ export type CellSelection = {
   rowEnd: number;
   colIndexStart: number;
   colIndexEnd: number;
+  /** When columns are reordered, the exact data-column indices in this selection (supercedes range check). */
+  selectedDataCols?: number[];
 };
 
 export type SelectionAnchor = {
@@ -73,12 +75,11 @@ export function extendSelection(
 // ---------------------------------------------------------------------------
 
 export function isCellSelected(model: SelectionModel, row: number, colIndex: number): boolean {
-  if (
-    model.rect != null &&
-    row >= model.rect.rowStart && row <= model.rect.rowEnd &&
-    colIndex >= model.rect.colIndexStart && colIndex <= model.rect.colIndexEnd
-  ) {
-    return true;
+  if (model.rect != null && row >= model.rect.rowStart && row <= model.rect.rowEnd) {
+    const inCol = model.rect.selectedDataCols
+      ? model.rect.selectedDataCols.includes(colIndex)
+      : colIndex >= model.rect.colIndexStart && colIndex <= model.rect.colIndexEnd;
+    if (inCol) return true;
   }
   // colIndex === -1 on a stored cell means the entire row was selected
   return model.cells.some((c) => c.row === row && (c.colIndex === colIndex || c.colIndex === -1));
