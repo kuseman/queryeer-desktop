@@ -41,6 +41,16 @@ function isInEditor(): boolean {
   return active.closest("[data-context='editor'], .shell-editor-pane, .shell-editor-content") !== null;
 }
 
+function isInsideModalDialog(target: EventTarget | null): boolean {
+  const element = target instanceof HTMLElement
+    ? target
+    : (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+  if (!element) {
+    return false;
+  }
+  return element.closest("[role='dialog'][aria-modal='true']") !== null;
+}
+
 /** True when Monaco has an open transient widget (suggest, find, parameter hints)
  *  that should receive Escape natively instead of our keybinding handler. */
 function monacoHasOpenWidget(): boolean {
@@ -135,6 +145,13 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
   const onKeyDown = (event: KeyboardEvent): void => {
     const normalized = eventToNormalizedKey(event);
     if (!normalized) {
+      return;
+    }
+
+    // Do not evaluate global keybindings while a modal dialog is active.
+    // Modal hosts (input/message/security dialogs) own Enter/Escape semantics,
+    // and keybinding interception here can leave command state out of sync.
+    if (isInsideModalDialog(event.target)) {
       return;
     }
 

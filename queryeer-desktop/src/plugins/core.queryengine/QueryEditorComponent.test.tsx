@@ -484,6 +484,52 @@ const filesRegistry = {
     expect(output?.getAttribute("data-state")).toBe("failed");
   });
 
+  it("does not stay running while SECURITY_SESSION_CLOSED unlock is pending", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+    mocks.executeMock.mockResolvedValueOnce("exec-1").mockResolvedValueOnce("exec-2");
+
+    let resolveUnlock: ((accepted: boolean) => void) | undefined;
+    mocks.ensureUnlockedForSecretAccessMock.mockImplementationOnce(
+      () => new Promise<boolean>((resolve) => {
+        resolveUnlock = resolve;
+      })
+    );
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+
+    const firstListener = mocks.subscribeByExecutionId.get("exec-1");
+    expect(firstListener).toBeTruthy();
+
+    await act(async () => {
+      firstListener?.({ method: "queryengine.failed", params: { error: { code: "SECURITY_SESSION_CLOSED", message: "locked" } } });
+      await Promise.resolve();
+    });
+
+    let output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-state")).toBe("failed");
+    expect(mocks.executeMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveUnlock?.(true);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.ensureUnlockedForSecretAccessMock).toHaveBeenCalledTimes(1);
+    expect(mocks.executeMock).toHaveBeenCalledTimes(2);
+    output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-state")).toBe("running");
+  });
+
   it("preserves one-shot execute options when retrying after SECURITY_SESSION_CLOSED", async () => {
     const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
     const executeOptions = {
@@ -518,6 +564,80 @@ const filesRegistry = {
     expect(mocks.executeMock).toHaveBeenNthCalledWith(1, expect.objectContaining({ options: executeOptions.optionsOverride }));
     expect(mocks.executeMock).toHaveBeenNthCalledWith(2, expect.objectContaining({ options: executeOptions.optionsOverride }));
     expect(mocks.consumeExecuteOptionsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks execution failed when SECURITY_SESSION_CLOSED retry unlock is rejected", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+    mocks.executeMock.mockResolvedValueOnce("exec-1");
+    mocks.ensureUnlockedForSecretAccessMock.mockResolvedValueOnce(false);
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+
+    const firstListener = mocks.subscribeByExecutionId.get("exec-1");
+    expect(firstListener).toBeTruthy();
+
+    await act(async () => {
+      firstListener?.({ method: "queryengine.failed", params: { error: { code: "SECURITY_SESSION_CLOSED", message: "locked" } } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-state")).toBe("failed");
+    expect(mocks.cancelMock).not.toHaveBeenCalled();
+  });
+
+  it("cancels cleanly when cancel is requested while execution start is pending", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+
+    let resolveExecute: ((executionId: string) => void) | undefined;
+    mocks.executeMock.mockImplementationOnce(
+      () => new Promise<string>((resolve) => {
+        resolveExecute = resolve;
+      })
+    );
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      for (const listener of mocks.cancelRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+
+    let output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-state")).toBe("cancelled");
+
+    await act(async () => {
+      resolveExecute?.("exec-pending");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.cancelMock).toHaveBeenCalledWith("exec-pending");
+    expect(mocks.subscribeByExecutionId.has("exec-pending")).toBe(false);
+
+    output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-state")).toBe("cancelled");
   });
 
   it("keeps default results tab when query has no rows", async () => {

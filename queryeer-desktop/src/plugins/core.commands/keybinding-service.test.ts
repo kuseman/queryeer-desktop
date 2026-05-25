@@ -399,4 +399,79 @@ describe("createKeybindingService", () => {
     expect(event.defaultPrevented).toBe(true);
     service.dispose();
   });
+
+  it("does not execute keybindings for Enter inside modal dialog", async () => {
+    const executeCommand = vi.fn(async () => ({ commandId: "core.files.save", executed: true }));
+    const service = createKeybindingService({
+      executeCommand,
+      getUserKeybindings: async () => ({
+        version: KEYBINDINGS_SCHEMA_VERSION,
+        bindings: [{ commandId: "core.files.save", key: "Enter", when: "global", scope: "global" }],
+        unbound: []
+      })
+    });
+
+    const extensions = makeExtensions();
+    extensions.keybindings.push({
+      id: "k.save.enter",
+      commandId: "core.files.save",
+      key: "Enter",
+      when: "global",
+      scope: "global",
+      order: 20
+    });
+
+    await service.initialize(extensions);
+
+    const overlay = document.createElement("div");
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    const input = document.createElement("input");
+    overlay.appendChild(input);
+    document.body.appendChild(overlay);
+    input.focus();
+
+    const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    input.dispatchEvent(event);
+
+    expect(executeCommand).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+
+    document.body.removeChild(overlay);
+    service.dispose();
+  });
+
+  it("does not execute Escape keybindings inside modal dialog", async () => {
+    const executeCommand = vi.fn(async () => ({ commandId: "core.queryengine.cancel", executed: true }));
+    const service = createKeybindingService({
+      executeCommand,
+      getUserKeybindings: async () => ({
+        version: KEYBINDINGS_SCHEMA_VERSION,
+        bindings: [{ commandId: "core.queryengine.cancel", key: "Escape", when: "global", scope: "global" }],
+        unbound: []
+      })
+    });
+
+    const extensions = makeExtensions();
+    extensions.commands.push({ id: "core.queryengine.cancel", title: "Cancel Query", handler: () => {} });
+
+    await service.initialize(extensions);
+
+    const overlay = document.createElement("div");
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    const input = document.createElement("input");
+    overlay.appendChild(input);
+    document.body.appendChild(overlay);
+    input.focus();
+
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    input.dispatchEvent(event);
+
+    expect(executeCommand).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+
+    document.body.removeChild(overlay);
+    service.dispose();
+  });
 });
