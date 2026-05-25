@@ -413,8 +413,21 @@ export const coreEditorPlugin: Plugin = {
         const actions = [
           { id: "editor.find", title: "Find", description: "Open find widget", commandId: "core.editor.text.find" },
           { id: "editor.toggleComment", title: "Toggle Line Comment", description: "Comment or uncomment lines", commandId: "core.editor.text.toggleCommentLine" },
+          { id: "editor.blockComment", title: "Toggle Block Comment", description: "Comment or uncomment with block comment", commandId: "core.editor.text.blockComment" },
           { id: "editor.trimWhitespace", title: "Trim Trailing Whitespace", description: "Remove trailing whitespace from all lines", commandId: "core.editor.text.trimTrailingWhitespace" },
-          { id: "editor.selectAll", title: "Select All", description: "Select all content in the editor", commandId: "core.editor.text.selectAll" }
+          { id: "editor.selectAll", title: "Select All", description: "Select all content in the editor", commandId: "core.editor.text.selectAll" },
+          { id: "editor.duplicateSelection", title: "Duplicate Selection", description: "Duplicate the current selection", commandId: "core.editor.text.duplicateSelection" },
+          { id: "editor.removeDuplicateLines", title: "Delete Duplicate Lines", description: "Remove duplicate lines from selection", commandId: "core.editor.text.removeDuplicateLines" },
+          { id: "editor.sortLinesAscending", title: "Sort Lines Ascending", description: "Sort selected lines in ascending order", commandId: "core.editor.text.sortLinesAscending" },
+          { id: "editor.sortLinesDescending", title: "Sort Lines Descending", description: "Sort selected lines in descending order", commandId: "core.editor.text.sortLinesDescending" },
+          { id: "editor.reverseLines", title: "Reverse Lines", description: "Reverse the order of selected lines", commandId: "core.editor.text.reverseLines" },
+          { id: "editor.insertLineBefore", title: "Insert Line Above", description: "Insert a blank line above the current line", commandId: "core.editor.text.insertLineBefore" },
+          { id: "editor.insertLineAfter", title: "Insert Line Below", description: "Insert a blank line below the current line", commandId: "core.editor.text.insertLineAfter" },
+          { id: "editor.insertCursorAbove", title: "Add Cursor Above", description: "Insert a cursor above the current line", commandId: "core.editor.text.insertCursorAbove" },
+          { id: "editor.insertCursorBelow", title: "Add Cursor Below", description: "Insert a cursor below the current line", commandId: "core.editor.text.insertCursorBelow" },
+          { id: "editor.insertCursorAtEndOfLines", title: "Add Cursors to Line Ends", description: "Insert cursors at the end of each selected line", commandId: "core.editor.text.insertCursorAtEndOfLines" },
+          { id: "editor.selectAllOccurrences", title: "Select All Occurrences", description: "Select all occurrences of the current selection", commandId: "core.editor.text.selectAllOccurrences" },
+          { id: "editor.addSelectionToNextFindMatch", title: "Add Selection to Next Find Match", description: "Add current selection to the next find match", commandId: "core.editor.text.addSelectionToNextFindMatch" }
         ];
 
         return actions.map((a) => ({

@@ -340,4 +340,148 @@ export function registerTextEditorCommands(
       registry.getCommandTargetEditor()?.outdentLines();
     }
   });
+
+  context.commands.registerCommand({
+    id: "core.editor.text.transformToUppercase",
+    title: "Transform to Uppercase",
+    handler: async () => {
+      registry.getCommandTargetEditor()?.transformToUppercase();
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.editor.text.transformToLowercase",
+    title: "Transform to Lowercase",
+    handler: async () => {
+      registry.getCommandTargetEditor()?.transformToLowercase();
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.editor.text.transformToTitleCase",
+    title: "Transform to Title Case",
+    handler: async () => {
+      registry.getCommandTargetEditor()?.transformToTitleCase();
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.editor.text.transformToSnakeCase",
+    title: "Transform to Snake Case",
+    handler: async () => {
+      registry.getCommandTargetEditor()?.transformToSnakeCase();
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.editor.text.transformToCamelCase",
+    title: "Transform to Camel Case",
+    handler: async () => {
+      registry.getCommandTargetEditor()?.transformToCamelCase();
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.editor.text.transformToPascalCase",
+    title: "Transform to Pascal Case",
+    handler: async () => {
+      registry.getCommandTargetEditor()?.transformToPascalCase();
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.editor.text.transformToKebabCase",
+    title: "Transform to Kebab Case",
+    handler: async () => {
+      registry.getCommandTargetEditor()?.transformToKebabCase();
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.editor.text.blockComment",
+    title: "Toggle Block Comment",
+    handler: async () => {
+      registry.getCommandTargetEditor()?.blockComment();
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.editor.text.duplicateSelection",
+    title: "Duplicate Selection",
+    handler: async () => {
+      registry.getCommandTargetEditor()?.duplicateSelection();
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.editor.text.removeDuplicateLines",
+    title: "Delete Duplicate Lines",
+    handler: async () => {
+      registry.getCommandTargetEditor()?.removeDuplicateLines();
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.editor.text.reverseLines",
+    title: "Reverse Lines",
+    handler: async () => {
+      registry.getCommandTargetEditor()?.reverseLines();
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.editor.text.insertLineBefore",
+    title: "Insert Line Above",
+    handler: async () => {
+      registry.getCommandTargetEditor()?.insertLineBefore();
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.editor.text.insertLineAfter",
+    title: "Insert Line Below",
+    handler: async () => {
+      registry.getCommandTargetEditor()?.insertLineAfter();
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.editor.text.insertCursorAbove",
+    title: "Add Cursor Above",
+    handler: async () => {
+      registry.getCommandTargetEditor()?.insertCursorAbove();
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.editor.text.insertCursorBelow",
+    title: "Add Cursor Below",
+    handler: async () => {
+      registry.getCommandTargetEditor()?.insertCursorBelow();
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.editor.text.insertCursorAtEndOfLines",
+    title: "Add Cursors to Line Ends",
+    handler: async () => {
+      registry.getCommandTargetEditor()?.insertCursorAtEndOfLines();
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.editor.text.selectAllOccurrences",
+    title: "Select All Occurrences",
+    handler: async () => {
+      registry.getCommandTargetEditor()?.selectAllOccurrences();
+    }
+  });
+
+  context.commands.registerCommand({
+    id: "core.editor.text.addSelectionToNextFindMatch",
+    title: "Add Selection to Next Find Match",
+    handler: async () => {
+      registry.getCommandTargetEditor()?.addSelectionToNextFindMatch();
+    }
+  });
 }

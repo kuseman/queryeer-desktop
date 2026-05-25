@@ -349,6 +349,27 @@ export interface ICodeEditor {
   addCommentLine(): void;
   removeCommentLine(): void;
 
+  transformToUppercase(): void;
+  transformToLowercase(): void;
+  transformToTitleCase(): void;
+  transformToSnakeCase(): void;
+  transformToCamelCase(): void;
+  transformToPascalCase(): void;
+  transformToKebabCase(): void;
+
+  blockComment(): void;
+  duplicateSelection(): void;
+  removeDuplicateLines(): void;
+  reverseLines(): void;
+  insertLineBefore(): void;
+  insertLineAfter(): void;
+
+  insertCursorAbove(): void;
+  insertCursorBelow(): void;
+  insertCursorAtEndOfLines(): void;
+  selectAllOccurrences(): void;
+  addSelectionToNextFindMatch(): void;
+
   format(): Promise<void>;
   formatRange(range: TextRange): Promise<void>;
   formatOnPaste(): Promise<void>;
