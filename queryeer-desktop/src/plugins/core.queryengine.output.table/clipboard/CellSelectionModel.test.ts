@@ -166,6 +166,38 @@ describe("isCellSelected — mixed rect + cells", () => {
 });
 
 // ---------------------------------------------------------------------------
+// isCellSelected — selectedDataCols (reordered columns)
+// ---------------------------------------------------------------------------
+
+describe("isCellSelected — selectedDataCols excludes gap columns", () => {
+  const reorderedModel: SelectionModel = {
+    rect: { rowStart: 0, rowEnd: 2, colIndexStart: 0, colIndexEnd: 2, selectedDataCols: [0, 2] },
+    cells: [],
+  };
+
+  it("data col present in selectedDataCols is selected", () => {
+    expect(isCellSelected(reorderedModel, 1, 0)).toBe(true);
+    expect(isCellSelected(reorderedModel, 1, 2)).toBe(true);
+  });
+
+  it("data col NOT in selectedDataCols is not selected even though it falls within colIndexStart–colIndexEnd", () => {
+    expect(isCellSelected(reorderedModel, 1, 1)).toBe(false);
+  });
+
+  it("row outside rect rows is not selected regardless of selectedDataCols", () => {
+    expect(isCellSelected(reorderedModel, 5, 0)).toBe(false);
+  });
+
+  it("falls back to range check when selectedDataCols is absent", () => {
+    const plainModel: SelectionModel = {
+      rect: { rowStart: 0, rowEnd: 2, colIndexStart: 0, colIndexEnd: 2 },
+      cells: [],
+    };
+    expect(isCellSelected(plainModel, 1, 1)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // isRowSelected
 // ---------------------------------------------------------------------------
 
