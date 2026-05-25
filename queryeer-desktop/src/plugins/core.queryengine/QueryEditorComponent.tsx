@@ -28,6 +28,17 @@ type ActiveExecution = {
   unsubscribe: () => void;
 };
 
+type QueryEditorFileRuntimeState = {
+  activeExecution?: ActiveExecution;
+  pendingExecutionStart?: boolean;
+  cancelPendingExecution?: boolean;
+  executionAnchor?: ExecutionAnchor;
+  securityRetryCount?: number;
+  executionPrimaryOverride?: string;
+  fileOutputPath?: string;
+  fileOutputSchema?: Map<number, { columns: Column[] }>;
+};
+
 type ExecutionAnchor = {
   line: number;
   column: number;
@@ -55,14 +66,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
   const [outputCollapsed, setOutputCollapsed] = useState(false);
   const [selectedPrimaryId, setSelectedPrimaryId] = useState<string | null>(null);
 
-  const activeExecutionByFileIdRef = useRef(new Map<string, ActiveExecution>());
-  const executionAnchorByFileIdRef = useRef(new Map<string, ExecutionAnchor>());
-  const securityRetryCountByFileIdRef = useRef(new Map<string, number>());
-  const executionPrimaryOverrideByFileIdRef = useRef(new Map<string, string | null>());
-  /** File output: destination path chosen via save dialog before execution. */
-  const fileOutputPathByFileIdRef = useRef(new Map<string, string>());
-  /** File output: per-result-set schema indexed by resultSetIndex. */
-  const fileOutputSchemaByFileIdRef = useRef(new Map<string, Map<number, { columns: Column[] }>>());
+  const runtimeStateByFileIdRef = useRef(new Map<string, QueryEditorFileRuntimeState>());
   const handleExecuteRef = useRef<(retryExecuteOptions?: ExecuteRequestOptions | null) => void>(() => {});
   const handleCancelRef = useRef<() => void>(() => {});
   const splitContainerRef = useRef<HTMLDivElement>(null);
@@ -70,6 +74,53 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
   const executingRef = useRef(false);
   const fileIdRef = useRef(file?.fileId);
   fileIdRef.current = file?.fileId;
+
+  const getRuntimeState = (targetFileId: string): QueryEditorFileRuntimeState => {
+    let state = runtimeStateByFileIdRef.current.get(targetFileId);
+    if (!state) {
+      state = {};
+      runtimeStateByFileIdRef.current.set(targetFileId, state);
+    }
+    return state;
+  };
+
+  const peekRuntimeState = (targetFileId: string): QueryEditorFileRuntimeState | undefined => {
+    return runtimeStateByFileIdRef.current.get(targetFileId);
+  };
+
+  const pruneRuntimeState = (targetFileId: string): void => {
+    const state = runtimeStateByFileIdRef.current.get(targetFileId);
+    if (!state) {
+      return;
+    }
+    const hasAnyState = state.activeExecution !== undefined
+      || state.pendingExecutionStart === true
+      || state.cancelPendingExecution === true
+      || state.executionAnchor !== undefined
+      || state.securityRetryCount !== undefined
+      || state.executionPrimaryOverride !== undefined
+      || state.fileOutputPath !== undefined
+      || state.fileOutputSchema !== undefined;
+
+    if (!hasAnyState) {
+      runtimeStateByFileIdRef.current.delete(targetFileId);
+    }
+  };
+
+  const clearRuntimeExecutionState = (targetFileId: string): void => {
+    const state = runtimeStateByFileIdRef.current.get(targetFileId);
+    if (!state) {
+      return;
+    }
+    state.activeExecution = undefined;
+    state.pendingExecutionStart = undefined;
+    state.cancelPendingExecution = undefined;
+    state.executionAnchor = undefined;
+    state.securityRetryCount = undefined;
+    state.fileOutputPath = undefined;
+    state.fileOutputSchema = undefined;
+    pruneRuntimeState(targetFileId);
+  };
 
   // Restore per-file context and primary selection on tab switch
   useEffect(() => {
@@ -98,7 +149,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
         : (queryViewState.textOutputFormat ?? restoredContext.textOutputFormat ?? "plain"),
       rowsTargetPrimaryId: defaultRowsTargetPrimaryId
     });
-    const override = executionPrimaryOverrideByFileIdRef.current.get(fileId);
+    const override = peekRuntimeState(fileId)?.executionPrimaryOverride;
     setSelectedPrimaryId(
       queryViewState.panelActiveOutputId
       ?? override
@@ -128,7 +179,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       return;
     }
     return getQueryViewStateStore().subscribe(fileId, (state) => {
-      const override = executionPrimaryOverrideByFileIdRef.current.get(fileId);
+      const override = peekRuntimeState(fileId)?.executionPrimaryOverride;
       if (state.panelActiveOutputId !== undefined) {
         setSelectedPrimaryId(state.panelActiveOutputId);
       } else if (override !== undefined) {
@@ -154,11 +205,13 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
   );
 
   const setExecutionPrimaryOverride = useCallback((targetFileId: string, outputId: string | null) => {
+    const runtimeState = getRuntimeState(targetFileId);
     if (outputId === null) {
-      executionPrimaryOverrideByFileIdRef.current.delete(targetFileId);
+      runtimeState.executionPrimaryOverride = undefined;
     } else {
-      executionPrimaryOverrideByFileIdRef.current.set(targetFileId, outputId);
+      runtimeState.executionPrimaryOverride = outputId;
     }
+    pruneRuntimeState(targetFileId);
     if (fileIdRef.current === targetFileId) {
       const persisted =
         getQueryViewStateStore().read(targetFileId).panelActiveOutputId
@@ -176,16 +229,17 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     const run = async () => {
       const targetFileId = file?.fileId;
       if (!targetFileId) return;
-      if (!securityRetryCountByFileIdRef.current.has(targetFileId)) {
-        securityRetryCountByFileIdRef.current.set(targetFileId, 0);
+      const runtimeState = getRuntimeState(targetFileId);
+      if (runtimeState.securityRetryCount === undefined) {
+        runtimeState.securityRetryCount = 0;
       }
 
       // Cancel any existing execution for this file before starting a new one
-      const existingExecution = activeExecutionByFileIdRef.current.get(targetFileId);
+      const existingExecution = runtimeState.activeExecution;
       if (existingExecution) {
         existingExecution.unsubscribe();
         await getQueryEngineService().cancel(existingExecution.executionId).catch(() => {});
-        activeExecutionByFileIdRef.current.delete(targetFileId);
+        runtimeState.activeExecution = undefined;
       }
 
       const executeOptions = retryExecuteOptions ?? getQueryEngineService().consumeExecuteOptions();
@@ -208,7 +262,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
                   : Math.min(selection.selectionStartColumn, selection.positionColumn))
           }
         : { line: 1, column: 1 };
-      executionAnchorByFileIdRef.current.set(targetFileId, anchor);
+      runtimeState.executionAnchor = anchor;
 
       const panelState = getQueryViewStateStore().read(targetFileId);
       const selectedFromToolbar = executeOptions?.outputIdOverride ?? panelState.executionTargetOutputId;
@@ -228,8 +282,8 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       const panelOutputId = executeOptions?.outputIdOverride ?? targetPrimaryId;
 
       const isFileOutput = targetPrimaryId === FILE_OUTPUT_PRIMARY_ID;
-      fileOutputPathByFileIdRef.current.delete(targetFileId);
-      fileOutputSchemaByFileIdRef.current.delete(targetFileId);
+      runtimeState.fileOutputPath = undefined;
+      runtimeState.fileOutputSchema = undefined;
 
       if (isFileOutput) {
         const format = panelState.textOutputFormat ?? "csv";
@@ -243,8 +297,8 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
           ]
         });
         if (dialogResult.canceled || !dialogResult.filePath) return;
-        fileOutputPathByFileIdRef.current.set(targetFileId, dialogResult.filePath);
-        fileOutputSchemaByFileIdRef.current.set(targetFileId, new Map());
+        runtimeState.fileOutputPath = dialogResult.filePath;
+        runtimeState.fileOutputSchema = new Map();
       }
 
       outputRegistry.notifyExecutionStart({ fileId: targetFileId }, targetPrimaryId);
@@ -264,11 +318,28 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
 
       try {
         const service = getQueryEngineService();
+        runtimeState.pendingExecutionStart = true;
+        runtimeState.cancelPendingExecution = undefined;
         const executionId = await service.execute({
           fileId: targetFileId,
           text,
           ...(executeOptions?.optionsOverride ? { options: executeOptions.optionsOverride } : {})
         });
+        runtimeState.pendingExecutionStart = undefined;
+
+        if (runtimeState.cancelPendingExecution === true) {
+          runtimeState.cancelPendingExecution = undefined;
+          void service.cancel(executionId).catch(() => {});
+          clearRuntimeExecutionState(targetFileId);
+          updateOutputContextForFile(targetFileId, (prev) => ({
+            ...prev,
+            state: "cancelled",
+            progress: null,
+            executionStartedAtMs: null
+          }));
+          setExecutionPrimaryOverride(targetFileId, null);
+          return;
+        }
 
         const unsubscribe = service.subscribe(executionId, (event) => {
           if (event.method === "queryengine.progress") {
@@ -280,7 +351,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
           } else if (event.method === "queryengine.chunkStart") {
             const p = event.params as { resultSetIndex: number; schema: { columns: Array<{ name: string; type: ColumnType }>; metadata?: Record<string, string> } };
             // Preserve schema for file output export-stream reconstruction
-            const schemas = fileOutputSchemaByFileIdRef.current.get(targetFileId);
+            const schemas = runtimeState.fileOutputSchema;
             schemas?.set(p.resultSetIndex, { columns: p.schema.columns });
 
             // Pre-open the export stream for file output so it's ready before rows arrive.
@@ -314,7 +385,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
 
             // Handle output messages (info/warnings/errors from the engine)
             if (p.messages && p.messages.length > 0) {
-              const executionAnchor = executionAnchorByFileIdRef.current.get(targetFileId) ?? { line: 1, column: 1 };
+              const executionAnchor = runtimeState.executionAnchor ?? { line: 1, column: 1 };
               const outputMessages: OutputMessage[] = p.messages.map((m) => ({
                 ...toAbsoluteLocation(
                   executionAnchor,
@@ -436,8 +507,8 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
             const p = event.params as { metrics?: { durationMs?: number; rowCount?: number }; features?: string[]; artifacts?: OutputContext["artifacts"] };
             const artifacts = p.artifacts ?? [];
             const hasPlanGraphArtifact = artifacts.some((artifact) => artifact.kind === "graph" && artifact.capability === "plan");
-            activeExecutionByFileIdRef.current.delete(targetFileId);
-            securityRetryCountByFileIdRef.current.delete(targetFileId);
+            runtimeState.activeExecution = undefined;
+            runtimeState.securityRetryCount = undefined;
             updateOutputContextForFile(targetFileId, (prev) => ({
               ...prev,
               state: "completed",
@@ -448,15 +519,15 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
               executionStartedAtMs: null
             }));
 
-            if (hasPlanGraphArtifact && !fileOutputPathByFileIdRef.current.has(targetFileId)) {
+            if (hasPlanGraphArtifact && runtimeState.fileOutputPath == null) {
               getQueryViewStateStore().setPanelSelectedOutput(targetFileId, PLAN_OUTPUT_ID);
             }
             setExecutionPrimaryOverride(targetFileId, null);
 
             // Finalize any open export streams and patch exportPath back into the result set
             const ctx = getFileStateRegistry().get(targetFileId, OUTPUT_CONTEXT_KEY) ?? IDLE_OUTPUT_CONTEXT;
-            const fileOutputPath = fileOutputPathByFileIdRef.current.get(targetFileId);
-            const schemas = fileOutputSchemaByFileIdRef.current.get(targetFileId);
+            const fileOutputPath = runtimeState.fileOutputPath;
+            const schemas = runtimeState.fileOutputSchema;
 
             const isFileOutput = fileOutputPath != null;
 
@@ -522,13 +593,12 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
             }
 
             // Clean up file output state
-            fileOutputPathByFileIdRef.current.delete(targetFileId);
-            fileOutputSchemaByFileIdRef.current.delete(targetFileId);
+            clearRuntimeExecutionState(targetFileId);
           } else if (event.method === "queryengine.failed") {
             const p = event.params as {
               error?: { code: string; message: string; details?: Record<string, unknown> };
             };
-            const executionAnchor = executionAnchorByFileIdRef.current.get(targetFileId) ?? { line: 1, column: 1 };
+            const executionAnchor = runtimeState.executionAnchor ?? { line: 1, column: 1 };
             const relativeLine =
               typeof p.error?.details?.line === "number"
                 ? p.error.details.line
@@ -549,34 +619,45 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
                 }
               : null;
             if (p.error?.code === "SECURITY_SESSION_CLOSED") {
+              const retryCount = runtimeState.securityRetryCount ?? 0;
+              clearRuntimeExecutionState(targetFileId);
+              updateOutputContextForFile(targetFileId, (prev) => ({
+                ...prev,
+                state: "failed",
+                error: errorWithLocation,
+                progress: null,
+                executionStartedAtMs: null
+              }));
+              setExecutionPrimaryOverride(targetFileId, null);
+
               void (async () => {
+                let accepted = false;
                 const security = getCoreSecurityService();
-                if (security) {
-                  const accepted = await security.ensureUnlockedForSecretAccess({ interactive: true });
-                  const retryCount = securityRetryCountByFileIdRef.current.get(targetFileId) ?? 0;
-                  if (accepted && retryCount < 1) {
-                    securityRetryCountByFileIdRef.current.set(targetFileId, retryCount + 1);
-                    handleExecuteRef.current(executeOptions);
+                try {
+                  accepted = security
+                    ? await security.ensureUnlockedForSecretAccess({ interactive: true })
+                    : false;
+                } catch {
+                  accepted = false;
+                }
+
+                if (accepted && retryCount < 1) {
+                  const latestState = peekRuntimeState(targetFileId);
+                  if (latestState?.activeExecution || latestState?.pendingExecutionStart === true) {
                     return;
                   }
+                  const retryState = getRuntimeState(targetFileId);
+                  retryState.securityRetryCount = retryCount + 1;
+                  handleExecuteRef.current(executeOptions);
+                  return;
                 }
-                activeExecutionByFileIdRef.current.delete(targetFileId);
-                securityRetryCountByFileIdRef.current.delete(targetFileId);
-                updateOutputContextForFile(targetFileId, (prev) => ({
-                  ...prev,
-                  state: "failed",
-                  error: errorWithLocation,
-                  progress: null,
-                  executionStartedAtMs: null
-                }));
+
                 getQueryViewStateStore().setPanelSelectedOutput(targetFileId, TEXT_OUTPUT_PRIMARY_ID);
                 setExecutionPrimaryOverride(targetFileId, null);
               })();
               return;
             }
-            activeExecutionByFileIdRef.current.delete(targetFileId);
-            fileOutputPathByFileIdRef.current.delete(targetFileId);
-            fileOutputSchemaByFileIdRef.current.delete(targetFileId);
+            clearRuntimeExecutionState(targetFileId);
             updateOutputContextForFile(targetFileId, (prev) => ({
               ...prev,
               state: "failed",
@@ -589,13 +670,22 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
           }
         });
 
-        activeExecutionByFileIdRef.current.set(targetFileId, { executionId, unsubscribe });
+        runtimeState.activeExecution = { executionId, unsubscribe };
       } catch (error) {
-        activeExecutionByFileIdRef.current.delete(targetFileId);
-        executionAnchorByFileIdRef.current.delete(targetFileId);
-        securityRetryCountByFileIdRef.current.delete(targetFileId);
-        fileOutputPathByFileIdRef.current.delete(targetFileId);
-        fileOutputSchemaByFileIdRef.current.delete(targetFileId);
+        runtimeState.pendingExecutionStart = undefined;
+        if (runtimeState.cancelPendingExecution === true) {
+          runtimeState.cancelPendingExecution = undefined;
+          clearRuntimeExecutionState(targetFileId);
+          updateOutputContextForFile(targetFileId, (prev) => ({
+            ...prev,
+            state: "cancelled",
+            progress: null,
+            executionStartedAtMs: null
+          }));
+          setExecutionPrimaryOverride(targetFileId, null);
+          return;
+        }
+        clearRuntimeExecutionState(targetFileId);
         updateOutputContextForFile(targetFileId, () => ({
           ...IDLE_OUTPUT_CONTEXT,
           state: "failed",
@@ -619,16 +709,28 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     const targetFileId = file?.fileId;
     if (!targetFileId) return;
 
-    const execution = activeExecutionByFileIdRef.current.get(targetFileId);
-    if (!execution) return;
+    const runtimeState = getRuntimeState(targetFileId);
+
+    const execution = runtimeState.activeExecution;
+    if (!execution) {
+      if (runtimeState.pendingExecutionStart === true) {
+        runtimeState.cancelPendingExecution = true;
+        updateOutputContextForFile(targetFileId, (prev) => ({
+          ...prev,
+          state: "cancelled",
+          progress: null,
+          executionStartedAtMs: null
+        }));
+        setExecutionPrimaryOverride(targetFileId, null);
+      }
+      return;
+    }
 
     execution.unsubscribe();
     void getQueryEngineService()
       .cancel(execution.executionId)
       .catch(() => {});
-    activeExecutionByFileIdRef.current.delete(targetFileId);
-    executionAnchorByFileIdRef.current.delete(targetFileId);
-    securityRetryCountByFileIdRef.current.delete(targetFileId);
+    clearRuntimeExecutionState(targetFileId);
     updateOutputContextForFile(targetFileId, (prev) => ({
       ...prev,
       state: "cancelled",
@@ -665,14 +767,14 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
 
   useEffect(() => {
     return () => {
-      for (const execution of activeExecutionByFileIdRef.current.values()) {
+      for (const state of runtimeStateByFileIdRef.current.values()) {
+        const execution = state.activeExecution;
+        if (!execution) {
+          continue;
+        }
         execution.unsubscribe();
       }
-      activeExecutionByFileIdRef.current.clear();
-      executionAnchorByFileIdRef.current.clear();
-      securityRetryCountByFileIdRef.current.clear();
-      fileOutputPathByFileIdRef.current.clear();
-      fileOutputSchemaByFileIdRef.current.clear();
+      runtimeStateByFileIdRef.current.clear();
     };
   }, []);
 
@@ -720,7 +822,11 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
             onSelectPrimary={(id) => {
               const fileId = file?.fileId;
               if (fileId) {
-                executionPrimaryOverrideByFileIdRef.current.delete(fileId);
+                const runtimeState = peekRuntimeState(fileId);
+                if (runtimeState) {
+                  runtimeState.executionPrimaryOverride = undefined;
+                  pruneRuntimeState(fileId);
+                }
                 getQueryViewStateStore().setPanelSelectedOutput(fileId, id);
               }
               setSelectedPrimaryId(id);
