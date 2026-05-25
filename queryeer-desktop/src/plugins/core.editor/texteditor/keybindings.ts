@@ -181,5 +181,32 @@ export function registerTextEditorKeybindings(context: PluginContext): void {
     order: 120
   });
 
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.transformToUppercase",
+    commandId: "core.editor.text.transformToUppercase",
+    key: "Ctrl+Shift+U",
+    when: "editorFocus",
+    scope: "editor",
+    order: 200
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.transformToLowercase",
+    commandId: "core.editor.text.transformToLowercase",
+    key: "Ctrl+Shift+L",
+    when: "editorFocus",
+    scope: "editor",
+    order: 201
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.transformToTitleCase",
+    commandId: "core.editor.text.transformToTitleCase",
+    key: "Ctrl+Shift+T",
+    when: "editorFocus",
+    scope: "editor",
+    order: 202
+  });
+
   // Tab/Shift+Tab handled natively by Monaco for smart indentation
 }

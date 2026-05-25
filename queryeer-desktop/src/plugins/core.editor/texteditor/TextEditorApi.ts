@@ -88,6 +88,27 @@ export abstract class TextEditorApi {
   abstract indentLines(): void;
   abstract outdentLines(): void;
 
+  abstract transformToUppercase(): void;
+  abstract transformToLowercase(): void;
+  abstract transformToTitleCase(): void;
+  abstract transformToSnakeCase(): void;
+  abstract transformToCamelCase(): void;
+  abstract transformToPascalCase(): void;
+  abstract transformToKebabCase(): void;
+
+  abstract blockComment(): void;
+  abstract duplicateSelection(): void;
+  abstract removeDuplicateLines(): void;
+  abstract reverseLines(): void;
+  abstract insertLineBefore(): void;
+  abstract insertLineAfter(): void;
+
+  abstract insertCursorAbove(): void;
+  abstract insertCursorBelow(): void;
+  abstract insertCursorAtEndOfLines(): void;
+  abstract selectAllOccurrences(): void;
+  abstract addSelectionToNextFindMatch(): void;
+
   abstract pushUndoStop(): boolean;
   abstract popUndoStop(): boolean;
 

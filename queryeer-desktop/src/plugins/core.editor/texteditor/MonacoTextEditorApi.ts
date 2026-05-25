@@ -490,6 +490,96 @@ export class MonacoTextEditorApi extends TextEditorApi {
     this.editor.getAction("editor.action.outdentLines")?.run();
   }
 
+  transformToUppercase(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.transformToUppercase")?.run();
+  }
+
+  transformToLowercase(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.transformToLowercase")?.run();
+  }
+
+  transformToTitleCase(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.transformToTitlecase")?.run();
+  }
+
+  transformToSnakeCase(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.transformToSnakecase")?.run();
+  }
+
+  transformToCamelCase(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.transformToCamelcase")?.run();
+  }
+
+  transformToPascalCase(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.transformToPascalcase")?.run();
+  }
+
+  transformToKebabCase(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.transformToKebabcase")?.run();
+  }
+
+  blockComment(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.blockComment")?.run();
+  }
+
+  duplicateSelection(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.duplicateSelection")?.run();
+  }
+
+  removeDuplicateLines(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.removeDuplicateLines")?.run();
+  }
+
+  reverseLines(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.reverseLines")?.run();
+  }
+
+  insertLineBefore(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.insertLineBefore")?.run();
+  }
+
+  insertLineAfter(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.insertLineAfter")?.run();
+  }
+
+  insertCursorAbove(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.insertCursorAbove")?.run();
+  }
+
+  insertCursorBelow(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.insertCursorBelow")?.run();
+  }
+
+  insertCursorAtEndOfLines(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.insertCursorAtEndOfEachLineSelected")?.run();
+  }
+
+  selectAllOccurrences(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.selectHighlights")?.run();
+  }
+
+  addSelectionToNextFindMatch(): void {
+    if (!this.editor) return;
+    this.editor.getAction("editor.action.addSelectionToNextFindMatch")?.run();
+  }
+
   pushUndoStop(): boolean {
     if (!this.editor) return false;
     return this.editor.pushUndoStop();
