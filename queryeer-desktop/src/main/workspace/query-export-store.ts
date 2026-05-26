@@ -15,6 +15,8 @@ function safeSegment(value: string): string {
 export class QueryExportStore {
   private readonly exportsDir: string;
   private readonly pathsByKey = new Map<string, string>();
+  // Chains append operations per stream so finalizeStream can await all pending writes.
+  private readonly appendChainByKey = new Map<string, Promise<void>>();
 
   public constructor(exportsDir: string) {
     this.exportsDir = exportsDir;
@@ -47,19 +49,48 @@ export class QueryExportStore {
   }
 
   public async appendChunk(params: ExportAppendParams): Promise<void> {
-    const path = await this.ensurePath(params);
+    const key = this.key(params);
     const payload = params.rows
       .map((row) => JSON.stringify(row))
       .join("\n");
     if (payload.length === 0) {
       return;
     }
-    await appendFile(path, `${payload}\n`, "utf8");
+
+    // Fast path: when the path is already known (openStream was called first),
+    // set up the chain entry synchronously before any await. This is critical
+    // for correctness when appendChunk is called concurrently without awaiting
+    // (fire-and-forget IPC pattern): callers that arrive before any yield still
+    // see each other's chain entries and form a complete serialised chain that
+    // finalizeStream can await.
+    const knownPath = this.pathsByKey.get(key);
+    if (knownPath) {
+      const prev = this.appendChainByKey.get(key) ?? Promise.resolve();
+      const next = prev.then(() => appendFile(knownPath, `${payload}\n`, "utf8"));
+      this.appendChainByKey.set(key, next);
+      await next;
+      return;
+    }
+
+    // Slow path: openStream was not called first — resolve the path first.
+    const path = await this.ensurePath(params);
+    const prev = this.appendChainByKey.get(key) ?? Promise.resolve();
+    const next = prev.then(() => appendFile(path, `${payload}\n`, "utf8"));
+    this.appendChainByKey.set(key, next);
+    await next;
   }
 
   public async finalizeStream(params: ExportParams): Promise<string> {
+    const key = this.key(params);
+    // Wait for all in-flight appends before handing back the path so callers
+    // get a complete file when they subsequently read it.
+    const pending = this.appendChainByKey.get(key);
+    if (pending) {
+      await pending;
+    }
+    this.appendChainByKey.delete(key);
     const path = await this.ensurePath(params);
-    this.pathsByKey.delete(this.key(params));
+    this.pathsByKey.delete(key);
     return pathToFileURL(path).toString();
   }
 
