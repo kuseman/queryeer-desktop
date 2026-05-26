@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, useImperativeHandle, forwardRef } from "react";
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { OutputContext, Column } from "../../contracts/extensions/OutputExtension";
 import { getOutputRegistry } from "../core.queryengine/output/OutputRegistry";
@@ -39,7 +39,7 @@ import { createTableActionProvider } from "./table-action-provider";
 import { TableActionsSettingsEditor } from "./table-action-settings";
 import { getTableResultStore } from "./table-result-store";
 import { GridComponent } from "../../renderer/components/GridComponent";
-import type { GridComponentColumn, GridComponentRow, GridComponentSelectionSnapshot, GridComponentState } from "../../renderer/components/GridComponent";
+import type { GridComponentColumn, GridComponentRow, GridComponentSelectionSnapshot, GridComponentState, GridSearchHandle } from "../../renderer/components/GridComponent";
 
 const GRID_STATE_KEY = defineStateKey<Record<number, GridComponentState>>("core.queryengine.output.table.gridState");
 const ACTIVE_RESULT_SET_KEY = defineStateKey<number>("core.queryengine.output.table.activeResultSet");
@@ -296,11 +296,12 @@ type TableGridProps = {
   searchCaseSensitive?: boolean;
   searchRegex?: boolean;
   searchWholeWord?: boolean;
+  searchMarkAll?: boolean;
   searchActiveMatch?: { row: number; col: number } | null;
   onSearchMatchesUpdate?: (matches: Array<{ row: number; col: number }>) => void;
 };
 
-function TableGrid({ resultSetIndex, schema, fileId, executionStartedAtMs, onPreviewValue, isStreaming, searchText, searchCaseSensitive, searchRegex, searchWholeWord, searchActiveMatch, onSearchMatchesUpdate }: TableGridProps): JSX.Element {
+const TableGrid = forwardRef<GridSearchHandle, TableGridProps>(function TableGrid({ resultSetIndex, schema, fileId, executionStartedAtMs, onPreviewValue, isStreaming, searchText, searchCaseSensitive, searchRegex, searchWholeWord, searchMarkAll, searchActiveMatch, onSearchMatchesUpdate }: TableGridProps, ref): JSX.Element {
   const storeKey = useMemo(() => ({ fileId, resultSetIndex }), [fileId, resultSetIndex]);
   const gridColumns = useMemo(() => toGridColumns(schema.columns), [schema.columns]);
   const [isDarkTheme, setIsDarkTheme] = useState<boolean>(() => (getThemeService()?.getActiveThemeMode() ?? "dark") === "dark");
@@ -336,9 +337,17 @@ function TableGrid({ resultSetIndex, schema, fileId, executionStartedAtMs, onPre
     getFileStateRegistry().set(fileId, GRID_STATE_KEY, { ...map, [resultSetIndex]: state });
   }, [fileId, resultSetIndex]);
 
+  const gridCompRef = useRef<GridSearchHandle | null>(null);
+  useImperativeHandle(ref, () => ({
+    findNext: (from) => gridCompRef.current?.findNext(from) ?? Promise.resolve(null),
+    findPrev: (from) => gridCompRef.current?.findPrev(from) ?? Promise.resolve(null),
+    cancelSearch: () => gridCompRef.current?.cancelSearch(),
+  }), []);
+
   return (
     <>
       <GridComponent
+        ref={gridCompRef}
         key={`${fileId ?? ""}:${resultSetIndex}:${executionStartedAtMs ?? 0}`}
         columns={gridColumns}
         rowNumberWidth={ROW_NUMBER_COL_WIDTH_PX}
@@ -413,6 +422,7 @@ function TableGrid({ resultSetIndex, schema, fileId, executionStartedAtMs, onPre
         searchCaseSensitive={searchCaseSensitive}
         searchRegex={searchRegex}
         searchWholeWord={searchWholeWord}
+        searchMarkAll={searchMarkAll}
         searchActiveMatch={searchActiveMatch}
         onSearchMatchesUpdate={onSearchMatchesUpdate}
       />
@@ -427,7 +437,7 @@ function TableGrid({ resultSetIndex, schema, fileId, executionStartedAtMs, onPre
       )}
     </>
   );
-}
+});
 
 function ResultSetMetadata({ metadata }: { metadata?: Record<string, string> }): JSX.Element | null {
   if (!metadata || Object.keys(metadata).length === 0) {
@@ -460,8 +470,12 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
   const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
   const [searchRegex, setSearchRegex] = useState(false);
   const [searchWholeWord, setSearchWholeWord] = useState(false);
+  const [searchMarkAll, setSearchMarkAll] = useState(false);
   const [matchesByResultSet, setMatchesByResultSet] = useState<Record<number, Array<{ row: number; col: number }>>>({});
   const [currentMatchIndex, setCurrentMatchIndex] = useState(-1);
+  const [currentActiveLazy, setCurrentActiveLazy] = useState<{ resultSetIndex: number; row: number; col: number } | null>(null);
+  const lazySearchHandles = useRef(new Map<number, GridSearchHandle | null>());
+  const lazyFindSeqRef = useRef(0);
 
   // Restore per-file active tab when the active file changes
   useEffect(() => {
@@ -584,6 +598,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
     setSearchText("");
     setMatchesByResultSet({});
     setCurrentMatchIndex(-1);
+    setCurrentActiveLazy(null);
   }, [context.fileId]);
 
   const handleCloseFind = useCallback(() => {
@@ -591,6 +606,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
     setSearchText("");
     setMatchesByResultSet({});
     setCurrentMatchIndex(-1);
+    setCurrentActiveLazy(null);
     containerRef.current?.focus();
   }, []);
 
@@ -663,6 +679,29 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
     }
   }, [searchText]);
 
+  // Auto-jump to first match when search params change in lazy mode
+  useEffect(() => {
+    if (searchMarkAll) return;
+    setCurrentActiveLazy(null);
+    if (!searchText) return;
+    const seq = ++lazyFindSeqRef.current;
+    const timer = setTimeout(() => {
+      const rsIndex = isStacked
+        ? (activeStackedResultSetIndex ?? context.resultSets[0]?.resultSetIndex ?? 0)
+        : (context.resultSets[clampedIndex]?.resultSetIndex ?? 0);
+      const handle = lazySearchHandles.current.get(rsIndex);
+      if (!handle) return;
+      handle.findNext(null).then(match => {
+        if (lazyFindSeqRef.current !== seq) return;
+        setCurrentActiveLazy(match ? { resultSetIndex: rsIndex, ...match } : null);
+      });
+    }, 150);
+    return () => {
+      clearTimeout(timer);
+      for (const handle of lazySearchHandles.current.values()) handle?.cancelSearch();
+    };
+  }, [searchText, searchCaseSensitive, searchRegex, searchWholeWord, searchMarkAll, isStacked, activeStackedResultSetIndex, clampedIndex]);
+
   // Derived: aggregated matches for cross-table navigation
   const allMatches = useMemo(() => {
     const result: Array<{ resultSetIndex: number; row: number; col: number }> = [];
@@ -675,7 +714,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
     return result;
   }, [matchesByResultSet]);
 
-  // Derived: active match
+  // Derived: active match (mark-all mode)
   const activeMatch = useMemo(() => {
     if (currentMatchIndex < 0 || currentMatchIndex >= allMatches.length) return null;
     return allMatches[currentMatchIndex];
@@ -683,50 +722,84 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
 
   // Memoized searchActiveMatch per result set to avoid new object references on every render
   const searchActiveMatchByResultSet = useMemo(() => {
+    const effectiveMatch = searchMarkAll ? activeMatch : currentActiveLazy;
     const map = new Map<number, { row: number; col: number } | null>();
     for (const rs of context.resultSets) {
       map.set(rs.resultSetIndex,
-        activeMatch?.resultSetIndex === rs.resultSetIndex
-          ? { row: activeMatch.row, col: activeMatch.col }
+        effectiveMatch?.resultSetIndex === rs.resultSetIndex
+          ? { row: effectiveMatch.row, col: effectiveMatch.col }
           : null
       );
     }
     return map;
-  }, [activeMatch, context.resultSets]);
+  }, [searchMarkAll, activeMatch, currentActiveLazy, context.resultSets]);
 
-  // Advance to first match when search results arrive fresh
+  // Advance to first match when search results arrive fresh (mark-all mode only)
   useEffect(() => {
+    if (!searchMarkAll) return;
     if (allMatches.length > 0 && currentMatchIndex === -1) {
       setCurrentMatchIndex(0);
     }
-  }, [allMatches, currentMatchIndex]);
+  }, [searchMarkAll, allMatches, currentMatchIndex]);
 
   // Navigation handlers
   const handleFindNext = useCallback(() => {
-    if (allMatches.length === 0) return;
-    const nextIndex = (currentMatchIndex + 1) % allMatches.length;
-    const match = allMatches[nextIndex];
-    setCurrentMatchIndex(nextIndex);
-    const targetIndex = context.resultSets.findIndex(rs => rs.resultSetIndex === match.resultSetIndex);
-    if (isStacked) {
-      scrollToStackedResultSet(match.resultSetIndex);
-    } else if (targetIndex !== -1 && targetIndex !== clampedIndex) {
-      handleSetActive(targetIndex);
+    if (searchMarkAll) {
+      if (allMatches.length === 0) return;
+      const nextIndex = (currentMatchIndex + 1) % allMatches.length;
+      const match = allMatches[nextIndex];
+      setCurrentMatchIndex(nextIndex);
+      const targetIndex = context.resultSets.findIndex(rs => rs.resultSetIndex === match.resultSetIndex);
+      if (isStacked) {
+        scrollToStackedResultSet(match.resultSetIndex);
+      } else if (targetIndex !== -1 && targetIndex !== clampedIndex) {
+        handleSetActive(targetIndex);
+      }
+    } else {
+      const rsIndex = isStacked
+        ? (activeStackedResultSetIndex ?? context.resultSets[0]?.resultSetIndex ?? 0)
+        : (context.resultSets[clampedIndex]?.resultSetIndex ?? 0);
+      const handle = lazySearchHandles.current.get(rsIndex);
+      if (!handle || !searchText) return;
+      const seq = ++lazyFindSeqRef.current;
+      const from = currentActiveLazy?.resultSetIndex === rsIndex
+        ? { row: currentActiveLazy.row, col: currentActiveLazy.col }
+        : null;
+      handle.findNext(from).then(match => {
+        if (lazyFindSeqRef.current !== seq) return;
+        setCurrentActiveLazy(match ? { resultSetIndex: rsIndex, ...match } : null);
+      });
     }
-  }, [allMatches, currentMatchIndex, context.resultSets, isStacked, clampedIndex, handleSetActive, scrollToStackedResultSet]);
+  }, [searchMarkAll, allMatches, currentMatchIndex, context.resultSets, isStacked, clampedIndex, handleSetActive, scrollToStackedResultSet, activeStackedResultSetIndex, currentActiveLazy, searchText]);
 
   const handleFindPrev = useCallback(() => {
-    if (allMatches.length === 0) return;
-    const prevIndex = (currentMatchIndex - 1 + allMatches.length) % allMatches.length;
-    const match = allMatches[prevIndex];
-    setCurrentMatchIndex(prevIndex);
-    const targetIndex = context.resultSets.findIndex(rs => rs.resultSetIndex === match.resultSetIndex);
-    if (isStacked) {
-      scrollToStackedResultSet(match.resultSetIndex);
-    } else if (targetIndex !== -1 && targetIndex !== clampedIndex) {
-      handleSetActive(targetIndex);
+    if (searchMarkAll) {
+      if (allMatches.length === 0) return;
+      const prevIndex = (currentMatchIndex - 1 + allMatches.length) % allMatches.length;
+      const match = allMatches[prevIndex];
+      setCurrentMatchIndex(prevIndex);
+      const targetIndex = context.resultSets.findIndex(rs => rs.resultSetIndex === match.resultSetIndex);
+      if (isStacked) {
+        scrollToStackedResultSet(match.resultSetIndex);
+      } else if (targetIndex !== -1 && targetIndex !== clampedIndex) {
+        handleSetActive(targetIndex);
+      }
+    } else {
+      const rsIndex = isStacked
+        ? (activeStackedResultSetIndex ?? context.resultSets[0]?.resultSetIndex ?? 0)
+        : (context.resultSets[clampedIndex]?.resultSetIndex ?? 0);
+      const handle = lazySearchHandles.current.get(rsIndex);
+      if (!handle || !searchText) return;
+      const seq = ++lazyFindSeqRef.current;
+      const from = currentActiveLazy?.resultSetIndex === rsIndex
+        ? { row: currentActiveLazy.row, col: currentActiveLazy.col }
+        : null;
+      handle.findPrev(from).then(match => {
+        if (lazyFindSeqRef.current !== seq) return;
+        setCurrentActiveLazy(match ? { resultSetIndex: rsIndex, ...match } : null);
+      });
     }
-  }, [allMatches, currentMatchIndex, context.resultSets, isStacked, clampedIndex, handleSetActive, scrollToStackedResultSet]);
+  }, [searchMarkAll, allMatches, currentMatchIndex, context.resultSets, isStacked, clampedIndex, handleSetActive, scrollToStackedResultSet, activeStackedResultSetIndex, currentActiveLazy, searchText]);
 
   if (context.resultSets.length === 0) {
     if (context.state === "failed") {
@@ -790,6 +863,10 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
             <input type="checkbox" checked={searchWholeWord} onChange={(e) => setSearchWholeWord(e.target.checked)} />
             W
           </label>
+          <label>
+            <input type="checkbox" checked={searchMarkAll} onChange={(e) => setSearchMarkAll(e.target.checked)} />
+            Mark all
+          </label>
           <button type="button" onClick={handleCloseFind}>Close</button>
         </div>
       )}
@@ -848,6 +925,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
                       style={isOnlyOne ? { flex: 1, minHeight: 0 } : { height: `${resolvedHeight}px`, maxHeight: `${resolvedHeight}px` }}
                     >
                       <TableGrid
+                        ref={(handle) => { lazySearchHandles.current.set(resultSet.resultSetIndex, handle); }}
                         resultSetIndex={resultSet.resultSetIndex}
                         schema={resultSet.schema}
                         fileId={context.fileId}
@@ -858,6 +936,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
                         searchCaseSensitive={searchCaseSensitive}
                         searchRegex={searchRegex}
                         searchWholeWord={searchWholeWord}
+                        searchMarkAll={searchMarkAll}
                         searchActiveMatch={searchActiveMatchByResultSet.get(resultSet.resultSetIndex) ?? null}
                         onSearchMatchesUpdate={(matches) => onGridSearchMatchesUpdate(resultSet.resultSetIndex, matches)}
                       />
@@ -895,6 +974,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
               <ResultSetMetadata metadata={activeSet.metadata} />
               <div className="table-output-grid">
                 <TableGrid
+                  ref={(handle) => { lazySearchHandles.current.set(activeSet.resultSetIndex, handle); }}
                   resultSetIndex={activeSet.resultSetIndex}
                   schema={activeSet.schema}
                   fileId={context.fileId}
@@ -905,6 +985,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
                   searchCaseSensitive={searchCaseSensitive}
                   searchRegex={searchRegex}
                   searchWholeWord={searchWholeWord}
+                  searchMarkAll={searchMarkAll}
                   searchActiveMatch={searchActiveMatchByResultSet.get(activeSet.resultSetIndex) ?? null}
                   onSearchMatchesUpdate={(matches) => onGridSearchMatchesUpdate(activeSet.resultSetIndex, matches)}
                 />
