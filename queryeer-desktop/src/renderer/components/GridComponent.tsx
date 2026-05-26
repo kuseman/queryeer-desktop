@@ -903,7 +903,7 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
     if (!event.ctrlKey && !event.metaKey && !event.shiftKey && colIndex >= 0 && hasCellLink(visCol, rowIndex) && runCellPrimaryAction(visCol, rowIndex)) {
       return;
     }
-    if (!event.ctrlKey && !event.metaKey) return;
+    if (!event.ctrlKey && !event.metaKey && !event.shiftKey) return;
     event.preventDefault();
     const existing = previousSelectionRef.current ?? selectionRef.current;
     const next = computeNextSelectionFromClick({ mouseEvent: event, rowIndex, colIndex, totalCols: columns.length, existing, anchor: anchorRef.current });
@@ -1109,7 +1109,6 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
         rowSelect="multi"
         drawFocusRing={false}
         fillHandle={false}
-        getCellsForSelection={true}
         onPaste={false}
         maxColumnWidth={5000}
         theme={theme}
