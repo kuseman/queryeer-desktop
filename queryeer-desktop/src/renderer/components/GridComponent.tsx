@@ -1,5 +1,5 @@
 import "./GridComponent.css";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import {
   CompactSelection,
   DataEditor,
@@ -70,6 +70,12 @@ export type GridComponentContextMenuEvent = {
   preventDefault: () => void;
 };
 
+export type GridSearchHandle = {
+  findNext: (from: { row: number; col: number } | null) => Promise<{ row: number; col: number } | null>;
+  findPrev: (from: { row: number; col: number } | null) => Promise<{ row: number; col: number } | null>;
+  cancelSearch: () => void;
+};
+
 export type GridComponentProps = {
   columns: GridComponentColumn[];
   rowNumberWidth?: number;
@@ -93,6 +99,7 @@ export type GridComponentProps = {
   searchCaseSensitive?: boolean;
   searchRegex?: boolean;
   searchWholeWord?: boolean;
+  searchMarkAll?: boolean;
   searchActiveMatch?: { row: number; col: number } | null;
   onSearchMatchesUpdate?: (matches: Array<{ row: number; col: number }>) => void;
 };
@@ -353,7 +360,7 @@ function resolveScrollOffsetFromVisibleRegion(range: { x: number; y: number }, c
   return { x, y: range.y * ROW_HEIGHT_PX };
 }
 
-export function GridComponent({
+export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(function GridComponent({
   columns,
   rowNumberWidth = DEFAULT_ROW_NUMBER_COL_WIDTH_PX,
   autoSizeColumnThreshold = 30,
@@ -376,9 +383,10 @@ export function GridComponent({
   searchCaseSensitive,
   searchRegex,
   searchWholeWord,
+  searchMarkAll = false,
   searchActiveMatch,
   onSearchMatchesUpdate,
-}: GridComponentProps): JSX.Element {
+}: GridComponentProps, ref): JSX.Element {
   const gridRef = useRef<DataEditorRef | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [initialGridState] = useState(() => getInitialGridState?.());
@@ -415,6 +423,17 @@ export function GridComponent({
   onSearchMatchesUpdateRef.current = onSearchMatchesUpdate;
   const resolveCellDisplayValueRef = useRef(resolveCellDisplayValue);
   resolveCellDisplayValueRef.current = resolveCellDisplayValue;
+  const getRowsRangeRef = useRef(getRowsRange);
+  getRowsRangeRef.current = getRowsRange;
+  const activeCancelRef = useRef<(() => void) | null>(null);
+  const searchTextRef = useRef(searchText);
+  searchTextRef.current = searchText;
+  const searchCaseSensitiveRef = useRef(searchCaseSensitive);
+  searchCaseSensitiveRef.current = searchCaseSensitive;
+  const searchRegexRef = useRef(searchRegex);
+  searchRegexRef.current = searchRegex;
+  const searchWholeWordRef = useRef(searchWholeWord);
+  searchWholeWordRef.current = searchWholeWord;
   const columnsRef = useRef(columns);
   columnsRef.current = columns;
   const getRowDataRef = useRef<(rowIndex: number) => GridComponentRow | undefined>(undefined as never);
@@ -425,6 +444,117 @@ export function GridComponent({
   const internalSearchMatchSet = useMemo(() => {
     return new Set(internalSearchMatches.map(m => `${m.row}:${m.col}`));
   }, [internalSearchMatches]);
+
+  const FIND_BATCH = 500;
+
+  const findNextMatch = useCallback((from: { row: number; col: number } | null): Promise<{ row: number; col: number } | null> => {
+    activeCancelRef.current?.();
+    return new Promise<{ row: number; col: number } | null>((resolve) => {
+      const token = { cancelled: false };
+      activeCancelRef.current = () => { token.cancelled = true; };
+      const text = searchTextRef.current;
+      if (!text) { resolve(null); return; }
+      const count = getRowCountRef.current();
+      const cols = columnsRef.current;
+      if (count === 0 || cols.length === 0) { resolve(null); return; }
+      const numCols = cols.length;
+      let startRow: number, startCol: number;
+      if (from === null) {
+        startRow = 0; startCol = 0;
+      } else {
+        startCol = from.col + 1; startRow = from.row;
+        if (startCol >= numCols) { startCol = 0; startRow++; }
+        if (startRow >= count) { resolve(null); return; }
+      }
+      const scanBatch = (batchStart: number, batchStartCol: number, endRow: number, endCol: number, onDone: () => void) => {
+        if (token.cancelled) { onDone(); return; }
+        if (batchStart > endRow) { onDone(); return; }
+        const batchEnd = Math.min(batchStart + FIND_BATCH, endRow + 1);
+        const rawRows = getRowsRangeRef.current(batchStart, batchEnd);
+        for (let r = batchStart; r < batchEnd; r++) {
+          const rawRow = rawRows[r - batchStart] as unknown[] | undefined;
+          if (!rawRow) continue;
+          const cStart = r === batchStart ? batchStartCol : 0;
+          const cLast = r === endRow ? endCol : numCols - 1;
+          for (let c = cStart; c <= cLast; c++) {
+            const val = resolveCellDisplayValueRef.current(cols[c].type, (rawRow[c] as unknown) ?? null);
+            if (matchesSearch(val, text, searchCaseSensitiveRef.current, searchRegexRef.current, searchWholeWordRef.current)) {
+              resolve({ row: r, col: c }); return;
+            }
+          }
+        }
+        if (batchEnd > endRow) { onDone(); }
+        else { setTimeout(() => scanBatch(batchEnd, 0, endRow, endCol, onDone), 0); }
+      };
+      // Phase 1: from startRow to end of data
+      scanBatch(startRow, startCol, count - 1, numCols - 1, () => {
+        if (token.cancelled || from === null) { resolve(null); return; }
+        // Phase 2: wrap — from (0,0) to just before 'from'
+        let wrapEndRow = from.row, wrapEndCol = from.col - 1;
+        if (wrapEndCol < 0) { wrapEndRow = from.row - 1; wrapEndCol = numCols - 1; }
+        if (wrapEndRow < 0) { resolve(null); return; }
+        scanBatch(0, 0, wrapEndRow, wrapEndCol, () => { if (!token.cancelled) resolve(null); });
+      });
+    });
+  }, []);
+
+  const findPrevMatch = useCallback((from: { row: number; col: number } | null): Promise<{ row: number; col: number } | null> => {
+    activeCancelRef.current?.();
+    return new Promise<{ row: number; col: number } | null>((resolve) => {
+      const token = { cancelled: false };
+      activeCancelRef.current = () => { token.cancelled = true; };
+      const text = searchTextRef.current;
+      if (!text) { resolve(null); return; }
+      const count = getRowCountRef.current();
+      const cols = columnsRef.current;
+      if (count === 0 || cols.length === 0) { resolve(null); return; }
+      const numCols = cols.length;
+      let startRow: number, startCol: number;
+      if (from === null) {
+        startRow = count - 1; startCol = numCols - 1;
+      } else {
+        startCol = from.col - 1; startRow = from.row;
+        if (startCol < 0) { startCol = numCols - 1; startRow--; }
+        if (startRow < 0) { resolve(null); return; }
+      }
+      const scanBatchRev = (batchUpper: number, batchUpperCol: number, endRow: number, endCol: number, onDone: () => void) => {
+        if (token.cancelled) { onDone(); return; }
+        if (batchUpper < endRow) { onDone(); return; }
+        const batchLower = Math.max(endRow, batchUpper - FIND_BATCH + 1);
+        const rawRows = getRowsRangeRef.current(batchLower, batchUpper + 1);
+        for (let r = batchUpper; r >= batchLower; r--) {
+          const rawRow = rawRows[r - batchLower] as unknown[] | undefined;
+          if (!rawRow) continue;
+          const cStart = r === batchUpper ? batchUpperCol : numCols - 1;
+          const cLast = r === endRow ? endCol : 0;
+          for (let c = cStart; c >= cLast; c--) {
+            const val = resolveCellDisplayValueRef.current(cols[c].type, (rawRow[c] as unknown) ?? null);
+            if (matchesSearch(val, text, searchCaseSensitiveRef.current, searchRegexRef.current, searchWholeWordRef.current)) {
+              resolve({ row: r, col: c }); return;
+            }
+          }
+        }
+        if (batchLower <= endRow) { onDone(); }
+        else { setTimeout(() => scanBatchRev(batchLower - 1, numCols - 1, endRow, endCol, onDone), 0); }
+      };
+      // Phase 1: from startRow down to row 0
+      scanBatchRev(startRow, startCol, 0, 0, () => {
+        if (token.cancelled || from === null) { resolve(null); return; }
+        // Phase 2: wrap — from end of data down to just after 'from'
+        let wrapStartRow = from.row, wrapStartCol = from.col + 1;
+        if (wrapStartCol >= numCols) { wrapStartRow = from.row + 1; wrapStartCol = 0; }
+        if (wrapStartRow >= count) { resolve(null); return; }
+        scanBatchRev(count - 1, numCols - 1, wrapStartRow, wrapStartCol, () => { if (!token.cancelled) resolve(null); });
+      });
+    });
+  }, []);
+
+  const cancelSearchFn = useCallback(() => {
+    activeCancelRef.current?.();
+    activeCancelRef.current = null;
+  }, []);
+
+  useImperativeHandle(ref, () => ({ findNext: findNextMatch, findPrev: findPrevMatch, cancelSearch: cancelSearchFn }), [findNextMatch, findPrevMatch, cancelSearchFn]);
 
   const getDataIndex = useCallback((visualColIndex: number): number => {
     if (!columnOrder || visualColIndex < 0 || visualColIndex >= columnOrder.length) return visualColIndex;
@@ -862,6 +992,8 @@ export function GridComponent({
         window.clearTimeout(sortTimeoutRef.current);
         sortTimeoutRef.current = null;
       }
+      activeCancelRef.current?.();
+      activeCancelRef.current = null;
     };
   }, []);
 
@@ -902,7 +1034,7 @@ export function GridComponent({
   }, [searchActiveMatch, getVisualIndex]);
 
   useEffect(() => {
-    if (!searchText) {
+    if (!searchMarkAll || !searchText) {
       setInternalSearchMatches([]);
       onSearchMatchesUpdateRef.current?.([]);
       return;
@@ -926,7 +1058,7 @@ export function GridComponent({
       onSearchMatchesUpdateRef.current?.(newMatches);
     }, 150);
     return () => clearTimeout(timer);
-  }, [searchText, searchCaseSensitive, searchRegex, searchWholeWord, rowCount]);
+  }, [searchMarkAll, searchText, searchCaseSensitive, searchRegex, searchWholeWord, rowCount]);
 
   return (
     <div ref={containerRef} style={{ height: "100%", width: "100%", position: "relative" }}>
@@ -1000,4 +1132,4 @@ export function GridComponent({
       )}
     </div>
   );
-}
+});

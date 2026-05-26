@@ -1,7 +1,7 @@
-import React, { act } from "react";
+import React, { act, createRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { GridComponent } from "./GridComponent";
+import { GridComponent, type GridSearchHandle } from "./GridComponent";
 
 void React;
 
@@ -1522,6 +1522,7 @@ describe("GridComponent", () => {
             onContextMenuSelection={() => undefined}
             isDarkTheme={false}
             searchText="Alice"
+            searchMarkAll={true}
             onSearchMatchesUpdate={onSearchMatchesUpdate}
           />
         );
@@ -1552,6 +1553,7 @@ describe("GridComponent", () => {
             onContextMenuSelection={() => undefined}
             isDarkTheme={false}
             searchText="Alice"
+            searchMarkAll={true}
           />
         );
       });
@@ -1590,6 +1592,7 @@ describe("GridComponent", () => {
             onContextMenuSelection={() => undefined}
             isDarkTheme={false}
             searchText="Alice"
+            searchMarkAll={true}
             onSearchMatchesUpdate={onSearchMatchesUpdate}
           />
         );
@@ -1652,6 +1655,7 @@ describe("GridComponent", () => {
             isDarkTheme={false}
             searchText="Alice"
             searchCaseSensitive={true}
+            searchMarkAll={true}
             onSearchMatchesUpdate={onSearchMatchesUpdate}
           />
         );
@@ -1684,6 +1688,7 @@ describe("GridComponent", () => {
             isDarkTheme={false}
             searchText="^A"
             searchRegex={true}
+            searchMarkAll={true}
             onSearchMatchesUpdate={onSearchMatchesUpdate}
           />
         );
@@ -1716,6 +1721,7 @@ describe("GridComponent", () => {
             isDarkTheme={false}
             searchText="Alice"
             searchWholeWord={true}
+            searchMarkAll={true}
             onSearchMatchesUpdate={onSearchMatchesUpdate}
           />
         );
@@ -1756,6 +1762,7 @@ describe("GridComponent", () => {
             onContextMenuSelection={() => undefined}
             isDarkTheme={false}
             searchText="Bob"
+            searchMarkAll={true}
             onSearchMatchesUpdate={onSearchMatchesUpdate}
           />
         );
@@ -1781,6 +1788,263 @@ describe("GridComponent", () => {
       });
 
       expect(onSearchMatchesUpdate).toHaveBeenCalledWith([{ row: 1, col: 0 }]);
+    });
+
+    it("findNext via ref resolves to first match", async () => {
+      const gridRef = createRef<GridSearchHandle>();
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            ref={gridRef}
+            columns={[{ key: "name", title: "Name", type: "string" }, { key: "code", title: "Code", type: "string" }]}
+            getRowCount={() => 3}
+            getRowsRange={(start, end) => [["Alice", "x"], ["Bob", "y"], ["Alice", "z"]].slice(start, end)}
+            getRow={(index) => [["Alice", "x"], ["Bob", "y"], ["Alice", "z"]][index]}
+            subscribeRowsChanged={() => () => undefined}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText="Alice"
+          />
+        );
+      });
+
+      const match = await act(async () => gridRef.current!.findNext(null));
+      expect(match).toEqual({ row: 0, col: 0 });
+    });
+
+    it("findNext from first match advances to next match", async () => {
+      const gridRef = createRef<GridSearchHandle>();
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            ref={gridRef}
+            columns={[{ key: "name", title: "Name", type: "string" }, { key: "code", title: "Code", type: "string" }]}
+            getRowCount={() => 3}
+            getRowsRange={(start, end) => [["Alice", "x"], ["Bob", "y"], ["Alice", "z"]].slice(start, end)}
+            getRow={(index) => [["Alice", "x"], ["Bob", "y"], ["Alice", "z"]][index]}
+            subscribeRowsChanged={() => () => undefined}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText="Alice"
+          />
+        );
+      });
+
+      const match = await act(async () => gridRef.current!.findNext({ row: 0, col: 0 }));
+      expect(match).toEqual({ row: 2, col: 0 });
+    });
+
+    it("findNext wraps around from last match back to first", async () => {
+      const gridRef = createRef<GridSearchHandle>();
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            ref={gridRef}
+            columns={[{ key: "name", title: "Name", type: "string" }, { key: "code", title: "Code", type: "string" }]}
+            getRowCount={() => 3}
+            getRowsRange={(start, end) => [["Alice", "x"], ["Bob", "y"], ["Alice", "z"]].slice(start, end)}
+            getRow={(index) => [["Alice", "x"], ["Bob", "y"], ["Alice", "z"]][index]}
+            subscribeRowsChanged={() => () => undefined}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText="Alice"
+          />
+        );
+      });
+
+      // from=(2,0) — last match is at col 0 (not the last col), so phase 1 scans col 1 of
+      // row 2 (no match), then phase 2 wraps from (0,0)..(1,1) and finds (0,0).
+      const match = await act(async () => gridRef.current!.findNext({ row: 2, col: 0 }));
+      expect(match).toEqual({ row: 0, col: 0 });
+    });
+
+    it("findPrev via ref resolves to last match", async () => {
+      const gridRef = createRef<GridSearchHandle>();
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            ref={gridRef}
+            columns={[{ key: "name", title: "Name", type: "string" }, { key: "code", title: "Code", type: "string" }]}
+            getRowCount={() => 3}
+            getRowsRange={(start, end) => [["Alice", "x"], ["Bob", "y"], ["Alice", "z"]].slice(start, end)}
+            getRow={(index) => [["Alice", "x"], ["Bob", "y"], ["Alice", "z"]][index]}
+            subscribeRowsChanged={() => () => undefined}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText="Alice"
+          />
+        );
+      });
+
+      const match = await act(async () => gridRef.current!.findPrev(null));
+      expect(match).toEqual({ row: 2, col: 0 });
+    });
+
+    it("findPrev from last match steps back to prior match", async () => {
+      const gridRef = createRef<GridSearchHandle>();
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            ref={gridRef}
+            columns={[{ key: "name", title: "Name", type: "string" }, { key: "code", title: "Code", type: "string" }]}
+            getRowCount={() => 3}
+            getRowsRange={(start, end) => [["Alice", "x"], ["Bob", "y"], ["Alice", "z"]].slice(start, end)}
+            getRow={(index) => [["Alice", "x"], ["Bob", "y"], ["Alice", "z"]][index]}
+            subscribeRowsChanged={() => () => undefined}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText="Alice"
+          />
+        );
+      });
+
+      const match = await act(async () => gridRef.current!.findPrev({ row: 2, col: 0 }));
+      expect(match).toEqual({ row: 0, col: 0 });
+    });
+
+    it("findNext resolves null when no match exists", async () => {
+      const gridRef = createRef<GridSearchHandle>();
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            ref={gridRef}
+            columns={[{ key: "name", title: "Name", type: "string" }]}
+            getRowCount={() => 2}
+            getRowsRange={(start, end) => [["Alice"], ["Bob"]].slice(start, end)}
+            getRow={(index) => [["Alice"], ["Bob"]][index]}
+            subscribeRowsChanged={() => () => undefined}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText="Charlie"
+          />
+        );
+      });
+
+      const match = await act(async () => gridRef.current!.findNext(null));
+      expect(match).toBeNull();
+    });
+
+    it("findNext resolves null when searchText is empty", async () => {
+      const gridRef = createRef<GridSearchHandle>();
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            ref={gridRef}
+            columns={[{ key: "name", title: "Name", type: "string" }]}
+            getRowCount={() => 2}
+            getRowsRange={(start, end) => [["Alice"], ["Bob"]].slice(start, end)}
+            getRow={(index) => [["Alice"], ["Bob"]][index]}
+            subscribeRowsChanged={() => () => undefined}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText=""
+          />
+        );
+      });
+
+      const match = await act(async () => gridRef.current!.findNext(null));
+      expect(match).toBeNull();
+    });
+
+    it("does not call onSearchMatchesUpdate with matches when searchMarkAll is false", async () => {
+      vi.useFakeTimers();
+      const onSearchMatchesUpdate = vi.fn();
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            columns={[{ key: "name", title: "Name", type: "string" }]}
+            getRowCount={() => 2}
+            getRowsRange={(start, end) => [["Alice"], ["Bob"]].slice(start, end)}
+            getRow={(index) => [["Alice"], ["Bob"]][index]}
+            subscribeRowsChanged={() => () => undefined}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText="Alice"
+            onSearchMatchesUpdate={onSearchMatchesUpdate}
+          />
+        );
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+
+      expect(onSearchMatchesUpdate).toHaveBeenCalledWith([]);
+      expect(onSearchMatchesUpdate).not.toHaveBeenCalledWith([{ row: 0, col: 0 }]);
+    });
+
+    it("does not highlight cells in getCellContent when searchMarkAll is false", async () => {
+      vi.useFakeTimers();
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            columns={[{ key: "name", title: "Name", type: "string" }]}
+            getRowCount={() => 2}
+            getRowsRange={(start, end) => [["Alice"], ["Bob"]].slice(start, end)}
+            getRow={(index) => [["Alice"], ["Bob"]][index]}
+            subscribeRowsChanged={() => () => undefined}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText="Alice"
+          />
+        );
+      });
+
+      act(() => {
+        latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 1, height: 2 }, 0, 0);
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(200);
+      });
+
+      const matchCell = latestDataEditorProps?.getCellContent([0, 0]);
+      expect(matchCell?.themeOverride).toBeUndefined();
     });
   });
 });
