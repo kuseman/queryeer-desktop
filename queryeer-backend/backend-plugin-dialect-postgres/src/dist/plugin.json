@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "queryengine.jdbc.dialect.postgres",
+  "name": "PostgreSQL JDBC Dialect",
+  "version": "${project.version}",
+  "description": "PostgreSQL dialect runtime contribution.",
+  "dependencies": ["queryengine.jdbc"],
+  "providesCapabilities": ["queryengine.jdbc.dialect.postgres"],
+  "requiredCapabilities": ["queryengine.jdbc.connection"],
+  "backend": {
+    "entrypointClass": "com.queryeer.backend.plugin.jdbc.postgres.PostgresBackendPlugin"
+  }
+}

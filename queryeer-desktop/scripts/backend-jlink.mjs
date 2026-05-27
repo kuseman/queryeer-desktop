@@ -14,7 +14,8 @@ const backendModules = [
   "backend-lib-queryengine-sql-parser",
   "backend-plugin-jdbc",
   "backend-plugin-payloadbuilder",
-  "backend-plugin-dialect-sqlserver"
+  "backend-plugin-dialect-sqlserver",
+  "backend-plugin-dialect-postgres"
 ];
 
 function run(label, cmd, opts = {}) {

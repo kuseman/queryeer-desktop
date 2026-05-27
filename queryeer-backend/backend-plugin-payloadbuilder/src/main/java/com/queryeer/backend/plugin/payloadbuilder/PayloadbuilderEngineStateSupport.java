@@ -37,7 +37,7 @@ final class PayloadbuilderEngineStateSupport
             return new PayloadbuilderCatalogState(null, null, Map.of());
         }
 
-        var pb = engineState.payloadbuilder();
+        PayloadbuilderEngineState.PayloadbuilderCatalogState pb = engineState.payloadbuilder();
         String defaultCatalogAlias = trimToNull(pb.defaultCatalogAlias());
         String selectedEnvironmentId = trimToNull(pb.selectedEnvironmentId());
 

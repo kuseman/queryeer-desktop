@@ -7,6 +7,7 @@ import java.util.Map;
 import com.queryeer.backend.plugin.jdbc.DefaultJdbcSchemaResolver;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
 
 public final class JdbcSchemaRouter
 {
@@ -29,9 +30,9 @@ public final class JdbcSchemaRouter
             options.put(OPTION_TARGET, target);
         }
 
-        var branchResolvers = connection.dialect()
+        Map<String, JdbcSchemaResolver> branchResolvers = connection.dialect()
                 .branchResolvers();
-        var resolver = branchResolvers.getOrDefault(parentKind, defaultResolver);
+        JdbcSchemaResolver resolver = branchResolvers.getOrDefault(parentKind, defaultResolver);
         return resolver.resolveSchema(connection, options);
     }
 }

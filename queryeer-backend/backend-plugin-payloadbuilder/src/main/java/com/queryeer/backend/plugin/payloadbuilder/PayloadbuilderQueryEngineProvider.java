@@ -331,19 +331,19 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
         }
 
         Map<String, Object> result = new HashMap<>(environment.variables.size());
-        for (EnvironmentVariable var : environment.variables)
+        for (EnvironmentVariable envVar : environment.variables)
         {
             Object value;
-            if (var.secretRef != null)
+            if (envVar.secretRef != null)
             {
-                value = configService.materializeSecrets(var.secretRef);
+                value = configService.materializeSecrets(envVar.secretRef);
             }
             else
             {
-                value = var.value;
+                value = envVar.value;
             }
 
-            result.put(var.key, value);
+            result.put(envVar.key, value);
         }
         return result;
     }

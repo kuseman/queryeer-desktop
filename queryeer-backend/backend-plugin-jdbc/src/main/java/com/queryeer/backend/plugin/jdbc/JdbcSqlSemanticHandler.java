@@ -539,13 +539,6 @@ final class JdbcSqlSemanticHandler
 
     // -- Snapshot tree helpers --
 
-    private static List<JdbcSchemaObject> flattenTablesInDatabase(List<JdbcSchemaObject> nodes, String selectedDatabase)
-    {
-        return flattenTableMatchesInDatabase(nodes, selectedDatabase).stream()
-                .map(TableMatch::node)
-                .toList();
-    }
-
     private static List<TableMatch> flattenTableMatchesInDatabase(List<JdbcSchemaObject> nodes, String selectedDatabase)
     {
         List<TableMatch> tables = new ArrayList<>();
@@ -607,13 +600,6 @@ final class JdbcSqlSemanticHandler
                 flattenTablesRecursive(children, nextPath, normalizedSelectedDb, target);
             }
         }
-    }
-
-    private static JdbcSchemaObject findTableInSnapshot(List<JdbcSchemaObject> nodes, String lookupName, String lookupSchema, String selectedDatabase)
-    {
-        TableMatch match = findTableMatch(nodes, lookupName, lookupSchema, selectedDatabase);
-        return match != null ? match.node()
-                : null;
     }
 
     private static TableMatch findTableMatch(List<JdbcSchemaObject> nodes, String lookupName, String lookupSchema, String selectedDatabase)

@@ -2,6 +2,7 @@ package com.queryeer.backend.runner;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -32,7 +33,7 @@ class PluginClassLoaderFactoryTest
         PluginClassLoaderFactory factory = createFactory();
         PluginManifest manifest = pluginManifest(null);
 
-        try (var classLoader = factory.createClassLoader(tempDir, manifest))
+        try (URLClassLoader classLoader = factory.createClassLoader(tempDir, manifest))
         {
             Class<?> loaded = classLoader.loadClass(BackendPlugin.class.getName());
 
@@ -48,7 +49,7 @@ class PluginClassLoaderFactoryTest
 
         PluginClassLoaderFactory factory = createFactory();
         PluginManifest manifest = pluginManifest(new PluginManifest.Classpath(".", List.of(".")));
-        try (var classLoader = factory.createClassLoader(classesRoot, manifest))
+        try (URLClassLoader classLoader = factory.createClassLoader(classesRoot, manifest))
         {
             Class<?> loaded = classLoader.loadClass("com.queryeer.backend.runner.testsupport.ShadowedType");
             Object instance = loaded.getDeclaredConstructor()
@@ -74,7 +75,7 @@ class PluginClassLoaderFactoryTest
 
         PluginManifest manifest = pluginManifest(new PluginManifest.Classpath(".", List.of("classes", "@deps-list.txt")));
         PluginClassLoaderFactory factory = createFactory();
-        try (var classLoader = factory.createClassLoader(sourceDir, manifest))
+        try (URLClassLoader classLoader = factory.createClassLoader(sourceDir, manifest))
         {
             Class<?> loaded = classLoader.loadClass("dev.sample.PluginType");
             Assertions.assertSame(classLoader, loaded.getClassLoader());
@@ -96,7 +97,7 @@ class PluginClassLoaderFactoryTest
 
         PluginManifest manifest = pluginManifest(new PluginManifest.Classpath(".", List.of("classes", "@deps-list.txt")));
         PluginClassLoaderFactory factory = createFactory();
-        try (var classLoader = factory.createClassLoader(sourceDir, manifest))
+        try (URLClassLoader classLoader = factory.createClassLoader(sourceDir, manifest))
         {
             Class<?> loaded = classLoader.loadClass("dev.sample.PluginType");
             Assertions.assertSame(classLoader, loaded.getClassLoader());
@@ -130,7 +131,7 @@ class PluginClassLoaderFactoryTest
 
         PluginManifest manifest = pluginManifest(new PluginManifest.Classpath("lib", List.of("*.jar")));
         PluginClassLoaderFactory factory = createFactory();
-        try (var classLoader = factory.createClassLoader(sourceDir, manifest))
+        try (URLClassLoader classLoader = factory.createClassLoader(sourceDir, manifest))
         {
             Assertions.assertNotNull(classLoader);
         }

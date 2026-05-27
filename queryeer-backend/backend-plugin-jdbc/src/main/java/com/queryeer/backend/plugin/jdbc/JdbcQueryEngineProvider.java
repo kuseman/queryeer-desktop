@@ -152,6 +152,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         long startedAt = System.currentTimeMillis();
         String sessionId = null;
         JdbcConnection resolved = null;
+        String sqlText = null;
         try
         {
             if (isBlank(text))
@@ -162,6 +163,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             {
                 throw new IllegalArgumentException(ERROR_FILE_ID_REQUIRED);
             }
+            sqlText = text;
             if (cancelledExecutionIds.contains(queryExecutionId))
             {
                 throw new QueryCancelledException();
@@ -169,6 +171,28 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
 
             JdbcEngineState state = payloadMapper.convert(engineState, JdbcEngineState.class);
             resolved = connections.resolve(state.connectionId());
+
+            // For dialects that cannot switch databases on an existing connection (e.g. PostgreSQL),
+            // embed the target database in the connection properties so each target database gets its
+            // own session connection in byFileId, properly tracked by the reaper.
+            if (!resolved.dialect()
+                    .canSwitchDatabase()
+                    && !isBlank(state.database()))
+            {
+                FileSessionHandle existing = byFileId.get(fileId);
+                if (existing != null
+                        && !state.database()
+                                .equals(getCatalogQuietly(existing.connection())))
+                {
+                    forceCloseFile(fileId);
+                }
+                Map<String, Object> effectiveProps = new LinkedHashMap<>(resolved.properties());
+                effectiveProps.put("database", state.database());
+                // Remove null values so Map.copyOf doesn't throw NPE
+                effectiveProps.values()
+                        .removeIf(v -> v == null);
+                resolved = new JdbcConnection(resolved.connectionId(), resolved.title(), resolved.dialect(), Map.copyOf(effectiveProps));
+            }
 
             sessionId = trimToNull(state.sessionId());
             sessionId = resolveSessionId(fileId, resolved, sessionId);
@@ -237,6 +261,22 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                 {
                     details.putAll(resolved.dialect()
                             .extractErrorDetails(e));
+                }
+                // Include stack trace and error type so the frontend sees more than just "NullPointerException"
+                details.putAll(ErrorMessages.buildErrorDetails(e));
+                // Convert character position (from e.g. PostgreSQL) to line/column using the SQL text
+                if (details.containsKey("position")
+                        && !details.containsKey("line")
+                        && sqlText != null)
+                {
+                    Object pos = details.get("position");
+                    if (pos instanceof Number n
+                            && n.intValue() > 0)
+                    {
+                        int[] lineCol = charPositionToLineColumn(sqlText, n.intValue());
+                        details.put("line", lineCol[0]);
+                        details.put("column", lineCol[1]);
+                    }
                 }
                 publisher.failed(ERROR_CODE_INTERNAL, ErrorMessages.buildFailureMessage(e), details.isEmpty() ? null
                         : details);
@@ -580,6 +620,18 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         return result;
     }
 
+    private static String getCatalogQuietly(Connection connection)
+    {
+        try
+        {
+            return connection.getCatalog();
+        }
+        catch (SQLException e)
+        {
+            return null;
+        }
+    }
+
     private static Connection openConnection(JdbcConnection resolved)
     {
         try
@@ -623,5 +675,26 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
 
     private record AcquiredConnection(Connection connection, boolean createdNew)
     {
+    }
+
+    /**
+     * Converts a 1-based character position in SQL text to a 1-based line/column pair. Used to translate PostgreSQL's character-offset error positions into the line/column format the frontend expects
+     * for editor navigation.
+     */
+    private static int[] charPositionToLineColumn(String sql, int position)
+    {
+        int line = 1;
+        int lastNewline = 0;
+        int length = Math.min(position - 1, sql.length());
+        for (int i = 0; i < length; i++)
+        {
+            if (sql.charAt(i) == '\n')
+            {
+                line++;
+                lastNewline = i + 1;
+            }
+        }
+        int column = position - lastNewline;
+        return new int[] { line, Math.max(1, column) };
     }
 }

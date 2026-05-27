@@ -55,7 +55,17 @@ public interface JdbcDialect
     }
 
     /**
-     * Switches the given connection to the requested database/catalog before executing statements. Default implementation uses {@link Connection#setCatalog(String)}.
+     * Whether this dialect can switch databases on an existing connection via {@link #applyDatabase}. Dialects backed by databases that lack a {@code USE} equivalent (e.g. PostgreSQL) should return
+     * {@code false} so the execution engine opens a fresh connection to the target database instead.
+     */
+    default boolean canSwitchDatabase()
+    {
+        return true;
+    }
+
+    /**
+     * Switches the given connection to the requested database/catalog before executing statements. Default implementation uses {@link Connection#setCatalog(String)}. Ignored when
+     * {@link #canSwitchDatabase()} returns {@code false}.
      */
     default void applyDatabase(Connection connection, String database) throws SQLException
     {

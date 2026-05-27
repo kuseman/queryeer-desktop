@@ -36,6 +36,7 @@ public interface PayloadbuilderCatalogProvider
 
     /**
      * After query execution, allows the provider to contribute catalog property changes to the engine state patch.
+     *
      * <p>
      * Called for each catalog instance that this provider owns. The returned map is merged into the patch under {@code payloadbuilder.catalogs.<alias>.properties}. Return an empty map if nothing
      * changed.

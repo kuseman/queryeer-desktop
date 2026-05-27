@@ -56,7 +56,7 @@ final class SqlServerQueryExecutor extends AbstractJdbcQueryExecutor implements 
         {
             return value.toString();
         }
-        return value;
+        return super.mapColumnValue(value, columnTypeName);
     }
 
     @Override

@@ -253,6 +253,7 @@ export function GraphViewer({
           minZoom={0.1}
           maxZoom={2.5}
           panOnScroll
+          panActivationKeyCode=""
           onPaneClick={() => selectEntity(null)}
           onNodeClick={(_event, node) => selectEntity(resolveGraphEntity(graph, "vertex", node.id))}
           onEdgeClick={(_event, edge) => selectEntity(resolveGraphEntity(graph, "edge", edge.id))}

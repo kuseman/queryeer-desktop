@@ -12,7 +12,8 @@ const moduleByPluginId = new Map([
   ["queryengine.runtime.sql-parser", "backend-lib-queryengine-sql-parser"],
   ["queryengine.jdbc", "backend-plugin-jdbc"],
   ["queryengine.payloadbuilder", "backend-plugin-payloadbuilder"],
-  ["queryengine.jdbc.dialect.sqlserver", "backend-plugin-dialect-sqlserver"]
+  ["queryengine.jdbc.dialect.sqlserver", "backend-plugin-dialect-sqlserver"],
+  ["queryengine.jdbc.dialect.postgres", "backend-plugin-dialect-postgres"]
 ]);
 
 function fail(message) {
