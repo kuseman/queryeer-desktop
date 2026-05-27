@@ -45,6 +45,7 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
     private static final String KIND_TABLES_FOLDER = "tables_folder";
     private static final String KIND_VIEWS_FOLDER = "views_folder";
     private static final String KIND_PROCEDURES_FOLDER = "procedures_folder";
+    private static final String KIND_TRIGGERS_FOLDER = "triggers_folder";
     private static final String KIND_COLUMNS_FOLDER = "columns_folder";
     private static final String KIND_INDEXES_FOLDER = "indexes_folder";
     private static final String KEY_TYPE = "type";
@@ -92,6 +93,7 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
             case KIND_TABLES_FOLDER -> readTables(jdbc, target);
             case KIND_VIEWS_FOLDER -> readViews(jdbc, target);
             case KIND_PROCEDURES_FOLDER -> readProcedures(jdbc, target);
+            case KIND_TRIGGERS_FOLDER -> readTriggers(jdbc, target);
             case KIND_COLUMNS_FOLDER -> readColumns(jdbc, target);
             case KIND_INDEXES_FOLDER -> readIndexes(jdbc, target);
             case KIND_TABLE, KIND_VIEW -> readTableFolders(jdbc, target);
@@ -176,7 +178,8 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
                                       : "");
         return List.of(new JdbcSchemaObject("tables_folder:" + schemaSuffix, "Tables", KIND_TABLES_FOLDER, null, attrs),
                 new JdbcSchemaObject("views_folder:" + schemaSuffix, "Views", KIND_VIEWS_FOLDER, null, attrs),
-                new JdbcSchemaObject("procedures_folder:" + schemaSuffix, "Procedures", KIND_PROCEDURES_FOLDER, null, attrs));
+                new JdbcSchemaObject("procedures_folder:" + schemaSuffix, "Procedures", KIND_PROCEDURES_FOLDER, null, attrs),
+                new JdbcSchemaObject("triggers_folder:" + schemaSuffix, "Triggers", KIND_TRIGGERS_FOLDER, null, attrs));
     }
 
     private List<JdbcSchemaObject> readTables(Connection jdbc, JdbcSchemaTarget target) throws SQLException
@@ -290,6 +293,34 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
         return result;
     }
 
+    private List<JdbcSchemaObject> readTriggers(Connection jdbc, JdbcSchemaTarget target) throws SQLException
+    {
+        List<JdbcSchemaObject> result = new ArrayList<>();
+        String sql = """
+                select event_object_catalog, event_object_schema, trigger_name, trigger_name
+                from information_schema.triggers
+                order by event_object_catalog, event_object_schema, trigger_name
+                """;
+        try (PreparedStatement statement = jdbc.prepareStatement(sql); ResultSet rs = statement.executeQuery())
+        {
+            while (rs.next())
+            {
+                String catalog = rs.getString(1);
+                String schema = rs.getString(2);
+                String triggerName = rs.getString(3);
+                if (target != null
+                        && !targetMatches(target, catalog, schema))
+                {
+                    continue;
+                }
+                String fullName = buildFullName(schema, triggerName);
+                result.add(new JdbcSchemaObject("trigger:" + key(catalog, schema) + ":" + triggerName, triggerName, "trigger", null, fullName, null,
+                        Map.of(KEY_CATALOG, nullToEmpty(catalog), KEY_SCHEMA, nullToEmpty(schema))));
+            }
+        }
+        return result;
+    }
+
     private List<JdbcSchemaObject> readTableFolders(Connection jdbc, JdbcSchemaTarget target) throws SQLException
     {
         if (target == null
@@ -300,11 +331,11 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
         }
         String tableCatalog = target.database();
         String tableSchema = target.schema();
-        String schemaKey = key(tableCatalog, tableSchema);
         Map<String, Object> folderAttrs = new LinkedHashMap<>();
         folderAttrs.put(KEY_CATALOG, nullToEmpty(tableCatalog));
         folderAttrs.put(KEY_SCHEMA, nullToEmpty(tableSchema));
         folderAttrs.put(KEY_TABLE, target.table());
+        String schemaKey = key(tableCatalog, tableSchema);
         return List.of(new JdbcSchemaObject(KIND_COLUMNS_FOLDER + ":" + schemaKey + ":" + target.table(), "Columns", KIND_COLUMNS_FOLDER, null, folderAttrs),
                 new JdbcSchemaObject(KIND_INDEXES_FOLDER + ":" + schemaKey + ":" + target.table(), "Indexes", KIND_INDEXES_FOLDER, null, folderAttrs));
     }
@@ -502,174 +533,6 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
         }
 
         return indexes;
-    }
-
-    private List<JdbcSchemaObject> readTableDetail(Connection jdbc, JdbcSchemaTarget target) throws SQLException
-    {
-        if (target == null
-                || target.table() == null
-                || PayloadUtils.isBlank(target.table()))
-        {
-            return List.of();
-        }
-        String tableName = target.table();
-        String tableSchema = target.schema();
-        String tableCatalog = target.database();
-        String schemaKey = key(tableCatalog, tableSchema);
-        DatabaseMetaData metadata = jdbc.getMetaData();
-
-        Set<String> pkColumns = new HashSet<>();
-        try (ResultSet rs = metadata.getPrimaryKeys(nullToEmpty(tableCatalog), nullToEmpty(tableSchema), tableName))
-        {
-            while (rs.next())
-            {
-                String col = rs.getString("COLUMN_NAME");
-                if (col != null)
-                {
-                    pkColumns.add(col);
-                }
-            }
-        }
-        catch (SQLException ignored)
-        {
-        }
-        Map<String, List<String>> fkMap = new HashMap<>();
-        try (ResultSet rs = metadata.getImportedKeys(nullToEmpty(tableCatalog), nullToEmpty(tableSchema), tableName))
-        {
-            while (rs.next())
-            {
-                String col = rs.getString("FKCOLUMN_NAME");
-                String refTable = rs.getString("PKTABLE_NAME");
-                String refColumn = rs.getString("PKCOLUMN_NAME");
-                if (col != null)
-                {
-                    fkMap.put(col, List.of(nullToEmpty(refTable), nullToEmpty(refColumn)));
-                }
-            }
-        }
-        catch (SQLException ignored)
-        {
-        }
-
-        String sql = """
-                select column_name, data_type, is_nullable, ordinal_position
-                from information_schema.columns
-                where table_name = ?
-                and (table_schema = ? or ? is null)
-                order by ordinal_position
-                """;
-        List<JdbcSchemaObject> columns = new ArrayList<>();
-        try (PreparedStatement statement = jdbc.prepareStatement(sql))
-        {
-            statement.setString(1, tableName);
-            statement.setString(2, tableSchema == null ? ""
-                    : tableSchema);
-            statement.setString(3, tableSchema);
-            try (ResultSet rs = statement.executeQuery())
-            {
-                while (rs.next())
-                {
-                    String dataType = rs.getString(2);
-                    String nullable = rs.getString(3);
-                    int ordinal = rs.getInt(4);
-                    Map<String, Object> attrs = new LinkedHashMap<>();
-                    attrs.put(KEY_TYPE, nullToEmpty(dataType).toLowerCase());
-                    if (nullable != null)
-                    {
-                        attrs.put("nullable", nullable);
-                    }
-                    attrs.put("ordinal", ordinal);
-                    String colName = rs.getString(1);
-                    if (pkColumns.contains(colName))
-                    {
-                        attrs.put("primaryKey", true);
-                    }
-                    List<String> fkInfo = fkMap.get(colName);
-                    if (fkInfo != null)
-                    {
-                        attrs.put("foreignKey", true);
-                        attrs.put("referencesTable", fkInfo.get(0));
-                        attrs.put("referencesColumn", fkInfo.get(1));
-                    }
-                    columns.add(new JdbcSchemaObject("column:" + schemaKey + ":" + tableName + ":" + colName, colName, "column", null, Map.copyOf(attrs)));
-                }
-            }
-        }
-
-        List<JdbcSchemaObject> indexes = new ArrayList<>();
-        try (ResultSet rs = metadata.getIndexInfo(nullToEmpty(tableCatalog), nullToEmpty(tableSchema), tableName, false, false))
-        {
-            Map<String, List<String>> indexColMap = new LinkedHashMap<>();
-            Map<String, Short> indexOrdinalMap = new LinkedHashMap<>();
-            Map<String, String> indexSortMap = new LinkedHashMap<>();
-            Map<String, Boolean> indexUniqueMap = new HashMap<>();
-            while (rs.next())
-            {
-                String indexName = rs.getString("INDEX_NAME");
-                if (indexName == null
-                        || indexName.isBlank())
-                {
-                    continue;
-                }
-                String colName = rs.getString("COLUMN_NAME");
-                short ordinal = rs.getShort("ORDINAL_POSITION");
-                String ascOrDesc = rs.getString("ASC_OR_DESC");
-                boolean nonUnique = rs.getBoolean("NON_UNIQUE");
-                if (colName != null)
-                {
-                    indexColMap.computeIfAbsent(indexName, _ -> new ArrayList<>())
-                            .add(colName);
-                    indexOrdinalMap.putIfAbsent(indexName + ":" + colName, ordinal);
-                    if (ascOrDesc != null)
-                    {
-                        String sortOrder = "A".equalsIgnoreCase(ascOrDesc) ? "ASC"
-                                : "D".equalsIgnoreCase(ascOrDesc) ? "DESC"
-                                        : ascOrDesc;
-                        indexSortMap.putIfAbsent(indexName + ":" + colName, sortOrder);
-                    }
-                }
-                indexUniqueMap.putIfAbsent(indexName, !nonUnique);
-            }
-            for (Map.Entry<String, List<String>> entry : indexColMap.entrySet())
-            {
-                String indexName = entry.getKey();
-                Map<String, Object> attrs = new LinkedHashMap<>();
-                attrs.put("columns", String.join(", ", entry.getValue()));
-                Boolean unique = indexUniqueMap.get(indexName);
-                if (unique != null)
-                {
-                    attrs.put("unique", unique);
-                }
-                List<JdbcSchemaObject> indexColumnChildren = new ArrayList<>();
-                int pos = 0;
-                for (String colName : entry.getValue())
-                {
-                    pos++;
-                    Short ord = indexOrdinalMap.get(indexName + ":" + colName);
-                    String sortOrder = indexSortMap.get(indexName + ":" + colName);
-                    Map<String, Object> colAttrs = new LinkedHashMap<>();
-                    colAttrs.put("ordinal", ord != null ? ord
-                            : pos);
-                    if (sortOrder != null)
-                    {
-                        colAttrs.put("sortOrder", sortOrder);
-                    }
-                    indexColumnChildren.add(new JdbcSchemaObject("index_col:" + schemaKey + ":" + tableName + ":" + indexName + ":" + colName, colName, "index_column", null, Map.copyOf(colAttrs)));
-                }
-                indexes.add(new JdbcSchemaObject("index:" + schemaKey + ":" + tableName + ":" + indexName, indexName, "index", indexColumnChildren.isEmpty() ? null
-                        : List.copyOf(indexColumnChildren), Map.copyOf(attrs)));
-            }
-        }
-        catch (SQLException ignored)
-        {
-        }
-
-        Map<String, Object> folderAttrs = new LinkedHashMap<>();
-        folderAttrs.put(KEY_CATALOG, nullToEmpty(tableCatalog));
-        folderAttrs.put(KEY_SCHEMA, nullToEmpty(tableSchema));
-        folderAttrs.put(KEY_TABLE, target.table());
-        return List.of(new JdbcSchemaObject(KIND_COLUMNS_FOLDER + ":" + schemaKey + ":" + tableName, "Columns", KIND_COLUMNS_FOLDER, columns, folderAttrs),
-                new JdbcSchemaObject(KIND_INDEXES_FOLDER + ":" + schemaKey + tableName, "Indexes", KIND_INDEXES_FOLDER, indexes, folderAttrs));
     }
 
     private static List<JdbcSchemaObject> readSchemaNodes(Connection jdbc) throws SQLException

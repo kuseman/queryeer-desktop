@@ -98,6 +98,7 @@
         <module>backend-plugin-payloadbuilder</module>
         <module>backend-plugin-jdbc</module>
         <module>backend-plugin-dialect-sqlserver</module>
+        <module>backend-plugin-dialect-postgres</module>
     </modules>
 
     <build>

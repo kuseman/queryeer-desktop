@@ -53,9 +53,9 @@ class DefaultJdbcSchemaResolverTest
                 .get(0);
         Assertions.assertEquals("schema", schema.kind());
 
-        // Expand schema → folders (Tables, Views, Procedures)
+        // Expand schema → folders (Tables, Views, Procedures, Triggers)
         List<JdbcSchemaObject> folders = resolver.resolveSchema(conn, Map.of("parentKind", "schema"));
-        Assertions.assertEquals(3, folders.size());
+        Assertions.assertEquals(4, folders.size());
         Assertions.assertEquals("tables_folder", folders.get(0)
                 .kind());
 
@@ -102,7 +102,7 @@ class DefaultJdbcSchemaResolverTest
 
         // Folders for schema "public"
         List<JdbcSchemaObject> publicFolders = resolver.resolveSchema(conn, Map.of("parentKind", "schema", "target", Map.of("database", "test", "schema", "public")));
-        Assertions.assertEquals(3, publicFolders.size());
+        Assertions.assertEquals(4, publicFolders.size());
         String publicTablesId = publicFolders.get(0)
                 .id();
         Assertions.assertTrue(publicTablesId.contains("public"), "public's tables_folder id should mention 'public': " + publicTablesId);

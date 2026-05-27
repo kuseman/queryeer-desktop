@@ -1,7 +1,14 @@
 package com.queryeer.backend.plugin.jdbc.sqlserver;
 
+import java.util.List;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import com.queryeer.backend.contract.graph.GraphDocument;
+import com.queryeer.backend.contract.graph.GraphProperty;
+import com.queryeer.backend.contract.graph.GraphPropertyGroup;
+import com.queryeer.backend.contract.graph.GraphVertex;
 
 class SqlServerShowPlanGraphConverterTest
 {
@@ -37,7 +44,7 @@ class SqlServerShowPlanGraphConverterTest
                 </ShowPlanXML>
                 """;
 
-        var graph = SqlServerShowPlanGraphConverter.convert(xml, "plan");
+        GraphDocument graph = SqlServerShowPlanGraphConverter.convert(xml, "plan");
 
         Assertions.assertEquals("plan", graph.id());
         Assertions.assertEquals(2, graph.vertices()
@@ -91,7 +98,7 @@ class SqlServerShowPlanGraphConverterTest
                 .anyMatch(property -> "actualRows".equals(property.id())
                         && Double.valueOf(10D)
                                 .equals(property.value())));
-        var runtimeProperties = graph.vertices()
+        List<GraphProperty> runtimeProperties = graph.vertices()
                 .getFirst()
                 .properties()
                 .stream()
@@ -161,13 +168,13 @@ class SqlServerShowPlanGraphConverterTest
                 </ShowPlanXML>
                 """;
 
-        var graph = SqlServerShowPlanGraphConverter.convert(xml, "plan");
-        var parent = graph.vertices()
+        GraphDocument graph = SqlServerShowPlanGraphConverter.convert(xml, "plan");
+        GraphVertex parent = graph.vertices()
                 .stream()
                 .filter(vertex -> "relop-0".equals(vertex.id()))
                 .findFirst()
                 .orElseThrow();
-        var child = graph.vertices()
+        GraphVertex child = graph.vertices()
                 .stream()
                 .filter(vertex -> "relop-1".equals(vertex.id()))
                 .findFirst()
@@ -211,14 +218,14 @@ class SqlServerShowPlanGraphConverterTest
                 </ShowPlanXML>
                 """;
 
-        var graph = SqlServerShowPlanGraphConverter.convert(xml, "plan");
+        GraphDocument graph = SqlServerShowPlanGraphConverter.convert(xml, "plan");
 
-        var parent = graph.vertices()
+        GraphVertex parent = graph.vertices()
                 .stream()
                 .filter(vertex -> "relop-0".equals(vertex.id()))
                 .findFirst()
                 .orElseThrow();
-        var child = graph.vertices()
+        GraphVertex child = graph.vertices()
                 .stream()
                 .filter(vertex -> "relop-1".equals(vertex.id()))
                 .findFirst()
@@ -274,10 +281,10 @@ class SqlServerShowPlanGraphConverterTest
                 </ShowPlanXML>
                 """;
 
-        var graph = SqlServerShowPlanGraphConverter.convert(xml, "plan");
-        var root = graph.vertices()
+        GraphDocument graph = SqlServerShowPlanGraphConverter.convert(xml, "plan");
+        GraphVertex root = graph.vertices()
                 .getFirst();
-        var missingIndexGroup = root.properties()
+        GraphPropertyGroup missingIndexGroup = root.properties()
                 .stream()
                 .filter(group -> "missingIndexes".equals(group.id()))
                 .findFirst()
@@ -347,18 +354,18 @@ class SqlServerShowPlanGraphConverterTest
                 </ShowPlanXML>
                 """;
 
-        var graph = SqlServerShowPlanGraphConverter.convert(xml, "plan");
-        var parent = graph.vertices()
+        GraphDocument graph = SqlServerShowPlanGraphConverter.convert(xml, "plan");
+        GraphVertex parent = graph.vertices()
                 .stream()
                 .filter(vertex -> "relop-0".equals(vertex.id()))
                 .findFirst()
                 .orElseThrow();
-        var seek = graph.vertices()
+        GraphVertex seek = graph.vertices()
                 .stream()
                 .filter(vertex -> "relop-1".equals(vertex.id()))
                 .findFirst()
                 .orElseThrow();
-        var filter = graph.vertices()
+        GraphVertex filter = graph.vertices()
                 .stream()
                 .filter(vertex -> "relop-2".equals(vertex.id()))
                 .findFirst()
@@ -419,8 +426,8 @@ class SqlServerShowPlanGraphConverterTest
                 </ShowPlanXML>
                 """;
 
-        var graph = SqlServerShowPlanGraphConverter.convert(xml, "plan");
-        var parentColumns = graph.vertices()
+        GraphDocument graph = SqlServerShowPlanGraphConverter.convert(xml, "plan");
+        List<GraphProperty> parentColumns = graph.vertices()
                 .stream()
                 .filter(vertex -> "relop-0".equals(vertex.id()))
                 .findFirst()
@@ -473,8 +480,8 @@ class SqlServerShowPlanGraphConverterTest
                 </ShowPlanXML>
                 """;
 
-        var graph = SqlServerShowPlanGraphConverter.convert(xml, "plan");
-        var operatorProperties = graph.vertices()
+        GraphDocument graph = SqlServerShowPlanGraphConverter.convert(xml, "plan");
+        List<GraphProperty> operatorProperties = graph.vertices()
                 .stream()
                 .filter(vertex -> "relop-0".equals(vertex.id()))
                 .findFirst()

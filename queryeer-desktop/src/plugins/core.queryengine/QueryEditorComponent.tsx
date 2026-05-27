@@ -521,6 +521,9 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
 
             if (hasPlanGraphArtifact && runtimeState.fileOutputPath == null) {
               getQueryViewStateStore().setPanelSelectedOutput(targetFileId, PLAN_OUTPUT_ID);
+              requestAnimationFrame(() => {
+                editorRegistryHost?.getActiveEditor()?.focus?.focus();
+              });
             }
             setExecutionPrimaryOverride(targetFileId, null);
 
@@ -703,7 +706,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     run().finally(() => {
       executingRef.current = false;
     });
-  }, [file?.fileId, setExecutionPrimaryOverride, updateOutputContextForFile]);
+  }, [file?.fileId, setExecutionPrimaryOverride, updateOutputContextForFile, editorRegistryHost]);
 
   const handleCancel = useCallback(() => {
     const targetFileId = file?.fileId;

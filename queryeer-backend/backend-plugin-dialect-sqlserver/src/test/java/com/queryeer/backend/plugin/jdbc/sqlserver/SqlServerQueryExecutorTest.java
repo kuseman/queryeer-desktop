@@ -15,6 +15,7 @@ import org.mockito.Mockito;
 import com.queryeer.backend.contract.query.QueryExecuteOptions;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryEventListener;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryRequest;
+import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryResult;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcResultColumn;
 
 class SqlServerQueryExecutorTest
@@ -149,7 +150,7 @@ class SqlServerQueryExecutorTest
         QueryExecuteOptions options = new QueryExecuteOptions(null, null, "plan.actual", null, null);
         JdbcQueryRequest request = new JdbcQueryRequest("query-1", "file-1", "SELECT name FROM sys.objects", "connection-1", null, connection, null, null, options);
 
-        var result = executor.executeWithPlan(request, listener);
+        JdbcQueryResult result = executor.executeWithPlan(request, listener);
 
         Assertions.assertEquals(250L, result.rowCount());
         Assertions.assertFalse(rowsReadAtPublish.isEmpty());

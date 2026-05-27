@@ -1,12 +1,22 @@
 package com.queryeer.backend.queryengine.jdbc.execute;
 
+import static com.queryeer.backend.api.PayloadUtils.isBlank;
+
+import java.sql.Array;
+import java.sql.Blob;
+import java.sql.Clob;
 import java.sql.Connection;
+import java.sql.Ref;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.SQLWarning;
+import java.sql.SQLXML;
 import java.sql.Statement;
+import java.sql.Struct;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -52,6 +62,70 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
      */
     protected Object mapColumnValue(Object value, String columnTypeName)
     {
+        return convertJdbcValue(value);
+    }
+
+    /**
+     * Converts JDBC-specific types that Jackson cannot serialize into plain equivalents. Recurses into container types ({@link Array}, {@link Struct}).
+     */
+    private static Object convertJdbcValue(Object value)
+    {
+        if (value == null)
+        {
+            return null;
+        }
+        try
+        {
+            if (value instanceof Array array)
+            {
+                Object arrayValue = array.getArray();
+                if (arrayValue instanceof Object[] objArray)
+                {
+                    return Arrays.stream(objArray)
+                            .map(AbstractJdbcQueryExecutor::convertJdbcValue)
+                            .toList();
+                }
+                return arrayValue;
+            }
+            if (value instanceof Struct struct)
+            {
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("sqlType", struct.getSQLTypeName());
+                result.put("attributes", Arrays.stream(struct.getAttributes())
+                        .map(AbstractJdbcQueryExecutor::convertJdbcValue)
+                        .toList());
+                return result;
+            }
+            if (value instanceof Clob clob)
+            {
+                long length = clob.length();
+                return length > 0L ? clob.getSubString(1L, (int) Math.min(length, Integer.MAX_VALUE))
+                        : "";
+            }
+            if (value instanceof Blob blob)
+            {
+                long length = blob.length();
+                if (length > 0L)
+                {
+                    return blob.getBytes(1L, (int) Math.min(length, Integer.MAX_VALUE));
+                }
+                return new byte[0];
+            }
+            if (value instanceof SQLXML sqlxml)
+            {
+                return sqlxml.getString();
+            }
+            if (value instanceof Ref ref)
+            {
+                Object refValue = ref.getObject();
+                return refValue != null ? convertJdbcValue(refValue)
+                        : null;
+            }
+        }
+        catch (SQLException e)
+        {
+            return value.toString();
+        }
         return value;
     }
 
@@ -69,13 +143,7 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
             if (sessionConnection != null)
             {
                 applyDatabaseIfRequested(request, sessionConnection);
-                for (String sql : statements)
-                {
-                    try (Statement statement = sessionConnection.createStatement())
-                    {
-                        rowCount += runStatement(sql, request.queryExecutionId(), eventListener, statement);
-                    }
-                }
+                rowCount += executeStatements(request, eventListener, statements, sessionConnection);
                 forwardWarnings(sessionConnection.getWarnings(), eventListener);
                 sessionConnection.clearWarnings();
                 resolvedDatabase = resolveCurrentDatabaseIfPossible(request, sessionConnection);
@@ -83,16 +151,10 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
             else
             {
                 try (Connection jdbcConnection = request.dialect()
-                        .openSessionConnection(request.connectionProperties()))
+                        .openSessionConnection(effectiveConnectionProperties(request)))
                 {
                     applyDatabaseIfRequested(request, jdbcConnection);
-                    for (String sql : statements)
-                    {
-                        try (Statement statement = jdbcConnection.createStatement())
-                        {
-                            rowCount += runStatement(sql, request.queryExecutionId(), eventListener, statement);
-                        }
-                    }
+                    rowCount += executeStatements(request, eventListener, statements, jdbcConnection);
                     forwardWarnings(jdbcConnection.getWarnings(), eventListener);
                     jdbcConnection.clearWarnings();
                     resolvedDatabase = resolveCurrentDatabaseIfPossible(request, jdbcConnection);
@@ -109,17 +171,46 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
             activeStatements.remove(request.queryExecutionId());
         }
 
-        java.util.Map<String, Object> engineState = new java.util.LinkedHashMap<>();
+        Map<String, Object> engineState = new LinkedHashMap<>();
         if (resolvedDatabase != null)
         {
             engineState.put("database", resolvedDatabase);
         }
-        if (resolvedSessionId != null
-                && !resolvedSessionId.isBlank())
+        if (!isBlank(resolvedSessionId))
         {
             engineState.put("sessionId", resolvedSessionId);
         }
         return new JdbcQueryResult(rowCount, engineState);
+    }
+
+    private long executeStatements(JdbcQueryRequest request, JdbcQueryEventListener eventListener, List<String> statements, Connection connection) throws SQLException
+    {
+        long count = 0L;
+        for (String sql : statements)
+        {
+            try (Statement statement = connection.createStatement())
+            {
+                count += runStatement(sql, request.queryExecutionId(), eventListener, statement);
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Returns connection properties with the target database merged in when the dialect cannot switch databases on an existing connection.
+     */
+    private static Map<String, Object> effectiveConnectionProperties(JdbcQueryRequest request)
+    {
+        if (!isBlank(request.database())
+                && request.dialect() != null
+                && !request.dialect()
+                        .canSwitchDatabase())
+        {
+            Map<String, Object> props = new LinkedHashMap<>(request.connectionProperties());
+            props.put("database", request.database());
+            return props;
+        }
+        return request.connectionProperties();
     }
 
     private void forwardWarnings(SQLWarning warning, JdbcQueryEventListener eventListener)
@@ -133,9 +224,7 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
 
     private static void applyDatabaseIfRequested(JdbcQueryRequest request, Connection connection) throws SQLException
     {
-        if (request.database() != null
-                && !request.database()
-                        .isBlank()
+        if (!isBlank(request.database())
                 && request.dialect() != null)
         {
             request.dialect()

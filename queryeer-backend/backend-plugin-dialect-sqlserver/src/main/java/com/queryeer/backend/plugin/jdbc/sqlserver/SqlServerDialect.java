@@ -1,10 +1,10 @@
 package com.queryeer.backend.plugin.jdbc.sqlserver;
 
 import static com.queryeer.backend.api.PayloadUtils.isBlank;
-import static com.queryeer.backend.api.PayloadUtils.nullToEmpty;
 import static com.queryeer.backend.api.PayloadUtils.stringValue;
 import static com.queryeer.backend.api.PayloadUtils.toNullableInteger;
 import static com.queryeer.backend.api.PayloadUtils.trimToNull;
+import static java.util.Optional.of;
 
 import java.lang.reflect.Method;
 import java.sql.Connection;
@@ -15,19 +15,20 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialect;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectMetadata;
+import com.queryeer.backend.queryengine.jdbc.JdbcDialectSupport;
 import com.queryeer.backend.queryengine.jdbc.JdbcTreeBranch;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryExecutor;
+import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryPlanExecutor;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaTarget;
@@ -39,7 +40,6 @@ public final class SqlServerDialect implements JdbcDialect
 
     private static final String KEY_CATALOG = "catalog";
     private static final String KEY_SCHEMA = "schema";
-    private static final String KEY_TABLE = "table";
     private static final String KEY_DATABASE = "database";
     private static final String OPTION_TARGET = "target";
 
@@ -80,6 +80,16 @@ public final class SqlServerDialect implements JdbcDialect
               on s.schema_id = o.schema_id
             where o.type = 'P' and o.is_ms_shipped = 0
             order by s.name, o.name
+            """;
+    private static final String SQL_TRIGGERS = """
+            select s.name as schema_name, tr.name as object_name
+            from sys.triggers tr
+            join sys.tables t
+              on t.object_id = tr.parent_id
+            join sys.schemas s
+              on s.schema_id = t.schema_id
+            where tr.is_ms_shipped = 0
+            order by s.name, tr.name
             """;
     private static final String SQL_COLUMNS = """
             select c.name as column_name, t.name as type_name, c.max_length as max_length, c.precision as numeric_precision, c.scale as numeric_scale, c.is_nullable as is_nullable
@@ -135,26 +145,40 @@ public final class SqlServerDialect implements JdbcDialect
     }
 
     @Override
-    public java.util.Optional<com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryPlanExecutor> queryPlanExecutor()
+    public Optional<JdbcQueryPlanExecutor> queryPlanExecutor()
     {
-        return java.util.Optional.of(queryExecutor);
+        return of(queryExecutor);
     }
 
     @Override
     public Map<String, JdbcSchemaResolver> branchResolvers()
     {
-        return Map.ofEntries(Map.entry("databases_container", this::resolveDatabasesContainer), Map.entry("database", this::resolveDatabaseChildren),
-                Map.entry("schemas_container", this::resolveSchemas), Map.entry("tables_folder", this::resolveTables), Map.entry("views_folder", this::resolveViews),
-                Map.entry("procedures_folder", this::resolveProcedures), Map.entry("table", this::resolveTableFolders), Map.entry("view", this::resolveTableFolders),
-                Map.entry("columns_folder", this::resolveColumnsFolder), Map.entry("indexes_folder", this::resolveIndexes), Map.entry("security_container", (_, _) -> createSecurityFolders()),
+        //@formatter:off
+        return Map.ofEntries(
+                Map.entry("databases_container", this::resolveDatabasesContainer),
+                Map.entry("database", this::resolveDatabaseChildren),
+                Map.entry("schemas_container", this::resolveSchemas),
+                Map.entry("tables_folder", this::resolveTables),
+                Map.entry("views_folder", this::resolveViews),
+                Map.entry("procedures_folder", this::resolveProcedures),
+                Map.entry("triggers_folder", this::resolveTriggers),
+                Map.entry("table", this::resolveTableFolders),
+                Map.entry("view", this::resolveTableFolders),
+                Map.entry("columns_folder", this::resolveColumnsRaw),
+                Map.entry("indexes_folder", this::resolveIndexes),
+                Map.entry("security_container", (_, _) -> createSecurityFolders()),
                 Map.entry("users_folder", (c, _) -> resolveUsers(c)));
+        //@formatter:on
     }
 
     @Override
     public List<JdbcTreeBranch> treeBranches()
     {
-        return List.of(new JdbcTreeBranch("connection", "security_container", NodeType.CONTAINER, "Security", null),
+        //@formatter:off
+        return List.of(
+                new JdbcTreeBranch("connection", "security_container", NodeType.CONTAINER, "Security", null),
                 new JdbcTreeBranch("security_container", "users_folder", NodeType.FOLDER, "Users", null));
+        //@formatter:on
     }
 
     @Override
@@ -258,39 +282,14 @@ public final class SqlServerDialect implements JdbcDialect
         return listObjects(connection, targetFrom(options.get(OPTION_TARGET)), SQL_PROCEDURES, "procedure");
     }
 
-    private List<JdbcSchemaObject> resolveTableFolders(JdbcConnection connection, Map<String, Object> options)
+    private List<JdbcSchemaObject> resolveTriggers(JdbcConnection connection, Map<String, Object> options)
     {
-        JdbcSchemaTarget target = targetFrom(options.get(OPTION_TARGET));
-        if (target == null
-                || target.table() == null)
-        {
-            return List.of();
-        }
-        String database = trimToNull(target.database());
-        String schema = trimToNull(target.schema());
-        String table = trimToNull(target.table());
-        Map<String, Object> folderAttrs = new LinkedHashMap<>();
-        if (database != null)
-        {
-            folderAttrs.put(KEY_CATALOG, database);
-        }
-        if (schema != null)
-        {
-            folderAttrs.put(KEY_SCHEMA, schema);
-        }
-        folderAttrs.put(KEY_TABLE, table);
-        String idPrefix = (database != null ? database + "."
-                : "")
-                + (schema != null ? schema + "."
-                        : "")
-                + table;
-        return List.of(new JdbcSchemaObject("columns_folder:" + idPrefix, "Columns", "columns_folder", null, Map.copyOf(folderAttrs)),
-                new JdbcSchemaObject("indexes_folder:" + idPrefix, "Indexes", "indexes_folder", null, Map.copyOf(folderAttrs)));
+        return listObjects(connection, targetFrom(options.get(OPTION_TARGET)), SQL_TRIGGERS, "trigger");
     }
 
-    private List<JdbcSchemaObject> resolveColumnsFolder(JdbcConnection connection, Map<String, Object> options)
+    private List<JdbcSchemaObject> resolveTableFolders(JdbcConnection connection, Map<String, Object> options)
     {
-        return resolveColumnsRaw(connection, options);
+        return JdbcDialectSupport.resolveTableFolders(targetFrom(options.get(OPTION_TARGET)));
     }
 
     private List<JdbcSchemaObject> resolveIndexes(JdbcConnection connection, Map<String, Object> options)
@@ -390,11 +389,6 @@ public final class SqlServerDialect implements JdbcDialect
         return indexes;
     }
 
-    private List<JdbcSchemaObject> resolveColumns(JdbcConnection connection, Map<String, Object> options)
-    {
-        return resolveColumnsRaw(connection, options);
-    }
-
     private List<JdbcSchemaObject> resolveColumnsRaw(JdbcConnection connection, Map<String, Object> options)
     {
         JdbcSchemaTarget target = targetFrom(options.get(OPTION_TARGET));
@@ -415,42 +409,9 @@ public final class SqlServerDialect implements JdbcDialect
         List<JdbcSchemaObject> columns = new ArrayList<>();
         try (Connection conn = openForDatabase(connection, database))
         {
-            DatabaseMetaData metadata = conn.getMetaData();
-
-            // Collect PK and FK column info
-            Set<String> pkColumns = new HashSet<>();
-            try (ResultSet rs = metadata.getPrimaryKeys(null, schema, table))
-            {
-                while (rs.next())
-                {
-                    String col = rs.getString("COLUMN_NAME");
-                    if (col != null)
-                    {
-                        pkColumns.add(col);
-                    }
-                }
-            }
-            catch (SQLException ignored)
-            {
-            }
-
-            Map<String, List<String>> fkMap = new HashMap<>();
-            try (ResultSet rs = metadata.getImportedKeys(null, schema, table))
-            {
-                while (rs.next())
-                {
-                    String col = rs.getString("FKCOLUMN_NAME");
-                    String refTable = rs.getString("PKTABLE_NAME");
-                    String refCol = rs.getString("PKCOLUMN_NAME");
-                    if (col != null)
-                    {
-                        fkMap.put(col, List.of(nullToEmpty(refTable), nullToEmpty(refCol)));
-                    }
-                }
-            }
-            catch (SQLException ignored)
-            {
-            }
+            DatabaseMetaData meta = conn.getMetaData();
+            Set<String> pkColumns = JdbcDialectSupport.collectPrimaryKeys(meta, null, schema, table);
+            Map<String, List<String>> fkMap = JdbcDialectSupport.collectForeignKeys(meta, null, schema, table);
 
             try (PreparedStatement statement = conn.prepareStatement(SQL_COLUMNS))
             {
