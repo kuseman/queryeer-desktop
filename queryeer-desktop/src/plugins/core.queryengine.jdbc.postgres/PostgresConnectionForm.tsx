@@ -86,8 +86,9 @@ export function PostgresConnectionForm({ connectionId, properties, password, rea
           id={id("database")}
           className="jdbc-settings-input"
           value={properties.database ?? ""}
-          placeholder="Initial database (optional)"
+          placeholder="e.g., my_database"
           readOnly={readonly}
+          required
           onChange={(e) => updateProp("database", e.target.value)}
         />
       </div>

@@ -42,6 +42,8 @@ export function InlineMonacoEditor({
   const editorRef = useRef<monacoType.editor.IStandaloneCodeEditor | null>(null);
   const onChangeRef = useRef(onChange);
   const isSettingValueRef = useRef(false);
+  const ownChangeVersionRef = useRef(0);
+  const lastAppliedChangeVersionRef = useRef(0);
   onChangeRef.current = onChange;
   const isFlex = height === "flex";
 
@@ -96,6 +98,7 @@ export function InlineMonacoEditor({
 
       const contentSub = editor.onDidChangeModelContent(() => {
         if (!isSettingValueRef.current) {
+          ownChangeVersionRef.current += 1;
           onChangeRef.current(editor.getValue());
         }
       });
@@ -151,10 +154,23 @@ export function InlineMonacoEditor({
 
   useEffect(() => {
     const editor = editorRef.current;
-    if (editor && editor.getValue() !== value) {
-      isSettingValueRef.current = true;
-      editor.setValue(value);
-      isSettingValueRef.current = false;
+    if (!editor) return;
+    if (editor.getValue() === value) return;
+
+    // If a user-initiated change has happened since the last time we
+    // applied a value, the incoming prop is stale — skip the overwrite
+    // to preserve cursor position.
+    if (ownChangeVersionRef.current !== lastAppliedChangeVersionRef.current) {
+      lastAppliedChangeVersionRef.current = ownChangeVersionRef.current;
+      return;
+    }
+
+    const viewState = editor.saveViewState();
+    isSettingValueRef.current = true;
+    editor.setValue(value);
+    isSettingValueRef.current = false;
+    if (viewState) {
+      editor.restoreViewState(viewState);
     }
   }, [value]);
 

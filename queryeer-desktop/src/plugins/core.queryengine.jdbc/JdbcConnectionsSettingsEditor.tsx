@@ -446,10 +446,10 @@ function toRows(definitions: JdbcConnectionDefinition[]): Row[] {
     color: definition.color
   }));
 }
-function buildRowErrors(rows: Row[]): Record<string, { url?: string; host?: string }> {
-  const errors: Record<string, { url?: string; host?: string }> = {};
+function buildRowErrors(rows: Row[]): Record<string, { url?: string; host?: string; database?: string }> {
+  const errors: Record<string, { url?: string; host?: string; database?: string }> = {};
   for (const row of rows) {
-    const rowError: { url?: string; host?: string } = {};
+    const rowError: { url?: string; host?: string; database?: string } = {};
 
     const dialect = getJdbcDialect(row.dialectId);
     if (dialect?.ConnectionForm) {
@@ -457,11 +457,17 @@ function buildRowErrors(rows: Row[]): Record<string, { url?: string; host?: stri
       if (!host) {
         rowError.host = "Host is required";
       }
+      if (row.properties && "database" in row.properties) {
+        const database = String(row.properties.database ?? "").trim();
+        if (!database) {
+          rowError.database = "Database is required";
+        }
+      }
     } else if (!row.url.trim()) {
       rowError.url = "JDBC URL is required";
     }
 
-    if (rowError.url || rowError.host) {
+    if (rowError.url || rowError.host || rowError.database) {
       errors[row.id] = rowError;
     }
   }
