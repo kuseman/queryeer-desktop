@@ -18,7 +18,7 @@ final class PostgresConnectionSetup
         return new JdbcConnectionSetupDefinition(
                 List.of(new JdbcConnectionFieldDefinition("host", "Host", JdbcConnectionFieldType.TEXT, true, "Hostname or IP address of the PostgreSQL server", List.of(), null, null),
                         new JdbcConnectionFieldDefinition("port", "Port", JdbcConnectionFieldType.NUMBER, false, "TCP port (default: 5432)", List.of(), 5432, null),
-                        new JdbcConnectionFieldDefinition("database", "Database", JdbcConnectionFieldType.TEXT, false, "Initial database to connect to", List.of(), null, null),
+                        new JdbcConnectionFieldDefinition("database", "Database", JdbcConnectionFieldType.TEXT, true, "Initial database to connect to", List.of(), null, null),
                         new JdbcConnectionFieldDefinition("username", "Username", JdbcConnectionFieldType.TEXT, true, null, List.of(), null, null),
                         new JdbcConnectionFieldDefinition("password", "Password", JdbcConnectionFieldType.SECRET, true, "Stored in security vault", List.of(), null, null),
                         new JdbcConnectionFieldDefinition("sslMode", "SSL Mode", JdbcConnectionFieldType.SELECT, false, "SSL/TLS mode for the connection", sslOptions, "prefer", null)));
