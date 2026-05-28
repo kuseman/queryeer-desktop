@@ -416,6 +416,23 @@ export class ExtensionRegistry {
   public createKeybindingRegistry(): KeybindingRegistry {
     return {
       registerKeybinding: (contribution) => {
+        if (import.meta.env.DEV) {
+          const key = contribution.key;
+          if (/\bCtrl(?:\+|$)/.test(key) && !/\bCmdOrCtrl(?:\+|$)/.test(key)) {
+            console.warn(
+              `[ExtensionRegistry] Keybinding "${contribution.id}" uses "Ctrl" directly. ` +
+              `Use "CmdOrCtrl" instead so the shortcut works on both Windows and macOS. ` +
+              `Key: "${key}"`
+            );
+          }
+          if (/\bCmd(?:\+|$)/.test(key) && !/\bCmdOrCtrl(?:\+|$)/.test(key)) {
+            console.warn(
+              `[ExtensionRegistry] Keybinding "${contribution.id}" uses "Cmd" directly. ` +
+              `Use "CmdOrCtrl" instead so the shortcut works on both Windows and macOS. ` +
+              `Key: "${key}"`
+            );
+          }
+        }
         this.keybindings.set(contribution.id, contribution);
       }
     };

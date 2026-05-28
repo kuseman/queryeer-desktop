@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useCallback, useState } from "react";
 import type * as monacoType from "monaco-editor";
+import { isPrimaryModifier } from "../../../shared/platform-utils";
 import type { FileEntity } from "../../../contracts/files/FileEntity";
 import type { TextEditorRegistry } from "./TextEditorRegistry";
 import type { EditorRegistryHost } from "../../../contracts/editor/EditorCapability";
@@ -266,7 +267,7 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
           if (!event.event.leftButton) {
             return;
           }
-          if (!event.event.ctrlKey && !event.event.metaKey) {
+          if (!isPrimaryModifier(event.event)) {
             return;
           }
           const position = event.target.position;
@@ -288,7 +289,7 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
 
       disposablesRef.current.push(
         editor.onKeyDown((event) => {
-          if (!event.ctrlKey && !event.metaKey) {
+          if (!isPrimaryModifier(event)) {
             return;
           }
           modifierPressed = true;

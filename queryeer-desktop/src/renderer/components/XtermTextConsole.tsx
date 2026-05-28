@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Terminal } from "@xterm/xterm";
+import { isPrimaryModifier } from "../../shared/platform-utils";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -282,7 +283,7 @@ export function XtermTextConsole({
     const root = rootRef.current;
     if (!root) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      const primaryModifier = e.ctrlKey || e.metaKey;
+      const primaryModifier = isPrimaryModifier(e);
 
       if (primaryModifier && e.key.toLowerCase() === "a") {
         e.preventDefault();

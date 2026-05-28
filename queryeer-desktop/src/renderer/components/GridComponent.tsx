@@ -13,6 +13,7 @@ import {
   type Theme,
 } from "@glideapps/glide-data-grid";
 import { computeSelection, extendSelection, getBoundingBox, isCellSelected } from "../../plugins/core.queryengine.output.table/clipboard/CellSelectionModel";
+import { isPrimaryModifier } from "../../shared/platform-utils";
 import type { SelectionAnchor, SelectionModel } from "../../plugins/core.queryengine.output.table/clipboard/CellSelectionModel";
 
 const DEFAULT_ROW_NUMBER_COL_WIDTH_PX = 78;
@@ -183,7 +184,7 @@ export function computeNextSelectionFromClick(input: {
   }
 
   const shift = !!mouseEvent?.shiftKey;
-  const ctrl = !!(mouseEvent?.ctrlKey || mouseEvent?.metaKey);
+  const ctrl = isPrimaryModifier(mouseEvent);
   let nextSelection: SelectionModel | null = existing;
   let nextAnchor: SelectionAnchor | null = anchor;
   if (shift && ctrl) {
@@ -900,10 +901,10 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
     }, 300);
     isKeyboardActivationRef.current = false;
     const colIndex = getDataIndex(visCol);
-    if (!event.ctrlKey && !event.metaKey && !event.shiftKey && colIndex >= 0 && hasCellLink(visCol, rowIndex) && runCellPrimaryAction(visCol, rowIndex)) {
+    if (!isPrimaryModifier(event) && !event.shiftKey && colIndex >= 0 && hasCellLink(visCol, rowIndex) && runCellPrimaryAction(visCol, rowIndex)) {
       return;
     }
-    if (!event.ctrlKey && !event.metaKey && !event.shiftKey) return;
+    if (!isPrimaryModifier(event) && !event.shiftKey) return;
     event.preventDefault();
     const existing = previousSelectionRef.current ?? selectionRef.current;
     const next = computeNextSelectionFromClick({ mouseEvent: event, rowIndex, colIndex, totalCols: columns.length, existing, anchor: anchorRef.current });
@@ -1001,11 +1002,11 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
     const el = containerRef.current;
     if (!el) return;
     const handler = (event: KeyboardEvent) => {
-      if (event.key === "Enter" && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+      if (event.key === "Enter" && !isPrimaryModifier(event) && !event.shiftKey && !event.altKey) {
         isKeyboardActivationRef.current = true;
         return;
       }
-      if (!event.ctrlKey || event.key !== "c") return;
+      if (!isPrimaryModifier(event) || event.key !== "c") return;
       const model = selectionRef.current;
       if (!model) return;
       const snapshot = collectSelectionSnapshot(model);

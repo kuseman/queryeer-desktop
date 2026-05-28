@@ -2,6 +2,7 @@ import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PluginContext } from "../../../contracts/plugin/Plugin";
+import { isPrimaryModifier } from "../../../shared/platform-utils";
 import type { AssistantChatMessage, AssistantChatTool, AssistantContextItem, AssistantToolApproval, AssistantToolContribution, AssistantToolResult } from "../../../contracts/assistant/Assistant";
 import { getCoreSettingsService } from "../../core.settings/service";
 import { getCommandContext, subscribeCommandContext } from "../../core.commands/command-context-accessor";
@@ -340,7 +341,7 @@ export function AssistantChatView({ context }: Props): JSX.Element {
           placeholder={selectedModelId ? "Message assistant" : "Fetch and select a model first"}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+            if (event.key === "Enter" && isPrimaryModifier(event)) {
               event.preventDefault();
               void sendMessage();
             }

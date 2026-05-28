@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { MenuItemContribution } from "../../contracts/extensions/MenuExtension";
+import { isPrimaryModifier } from "../../shared/platform-utils";
 import queryeerLogoUrl from "../../assets/icons/queryeer-logo.svg";
 import { layoutToolbarIconMap } from "../../renderer/icons/LayoutIcons";
 import {
@@ -266,7 +267,7 @@ export function CoreMenuBar({
       const active = menuBarFocused || openPath.length > 0;
       const inputTarget = isTextInputTarget(event.target);
 
-      if (event.key === "Alt" && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+      if (event.key === "Alt" && !isPrimaryModifier(event) && !event.shiftKey) {
         event.preventDefault();
         if (active) {
           closeMenus(false);

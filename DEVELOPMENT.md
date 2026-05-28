@@ -84,6 +84,30 @@ On PowerShell, prefer `-DcheckstyleSkip=true` to avoid quoting dotted Maven prop
 .\mvnw.cmd -f queryeer-backend/pom.xml '-Dcheckstyle.skip=true' validate
 ```
 
+### Platform Keybinding Conventions
+
+This application runs on Windows, Linux, and macOS. Keyboard shortcuts must handle the macOS `Cmd` key correctly.
+
+**Rules:**
+
+1. Use `CmdOrCtrl` in all keybinding registrations. Never use `Ctrl` or `Cmd` alone:
+   - `key: "CmdOrCtrl+S"` — correct (resolves to `Cmd+S` on macOS, `Ctrl+S` elsewhere)
+   - `key: "Ctrl+S"` — wrong (broken on macOS)
+   - `key: "Cmd+S"` — wrong (broken on Windows/Linux)
+
+   The `normalizeKeybindingKey()` function in `src/plugins/core.commands/keybinding-resolver.ts` resolves `CmdOrCtrl` per platform. In `DEV` mode, the extension registry warns when a keybinding uses raw `Ctrl` or `Cmd`.
+
+2. When handling keyboard events directly in DOM event handlers, use `isPrimaryModifier()` from `src/shared/platform-utils.ts` instead of checking `ctrlKey` or `metaKey` individually:
+   ```typescript
+   import { isPrimaryModifier } from "../../shared/platform-utils";
+   // Instead of: if (event.ctrlKey || event.metaKey)
+   if (isPrimaryModifier(event)) { ... }
+   ```
+
+3. Already-existing patterns like `const primaryModifier = e.ctrlKey || e.metaKey` are being migrated to `isPrimaryModifier(e)`.
+
+4. Tests that simulate shortcuts with `ctrlKey: true` should also add a `metaKey: true` variant to validate macOS behaviour.
+
 ### Desktop Commands
 
 From `queryeer-desktop/`:
