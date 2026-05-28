@@ -495,14 +495,28 @@ export const coreFilesPlugin: Plugin = {
       isVisible: () => listConfiguredNewFileMimeTypeOptions(context).length > 0
     });
 
+    context.layout.registerTabContextMenu({
+      id: "core.files.save.tabContextMenu",
+      order: 5,
+      actions: [
+        {
+          id: "core.files.save",
+          label: "Save",
+          order: 10,
+          enabledWhen: "editable && (dirtyVsDisk || dirtyVsBackend)"
+        }
+      ]
+    });
+
     context.commands.registerCommand({
       id: "core.files.save",
       title: "Save File",
       handler: async () => {
-        const activeFileId = context.fileMediator.getActiveFileId();
-        if (activeFileId) {
-          await maybeFormatBeforeSave(activeFileId, context.editors);
-          await context.fileMediator.saveFile(activeFileId);
+        const contextFileId = context.fileMediator.getContextFileId();
+        const fileId = contextFileId ?? context.fileMediator.getActiveFileId();
+        if (fileId) {
+          await maybeFormatBeforeSave(fileId, context.editors);
+          await context.fileMediator.saveFile(fileId);
         }
       }
     });

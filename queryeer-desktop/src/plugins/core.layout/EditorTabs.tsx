@@ -217,7 +217,14 @@ export function EditorTabs({
               try {
                 return getExpressionRuntime().evaluateBooleanSync(
                   action.enabledWhen,
-                  { uri: contextMenu.file.uri, mimeType: contextMenu.file.mimeType },
+                  {
+                    uri: contextMenu.file.uri,
+                    mimeType: contextMenu.file.mimeType,
+                    fileId: contextMenu.file.fileId,
+                    dirtyVsDisk: contextMenu.file.dirtyVsDisk,
+                    dirtyVsBackend: contextMenu.file.dirtyVsBackend,
+                    editable: hasMimeCapability?.(contextMenu.file.mimeType, "editable") ?? false
+                  },
                   { mode: "when", source: `tabContextMenu:${action.id}`, timeoutMs: 50 }
                 );
               } catch {

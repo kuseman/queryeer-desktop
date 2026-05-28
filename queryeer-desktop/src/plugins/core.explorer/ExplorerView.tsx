@@ -89,6 +89,17 @@ function resolveAccentColor(file: FileEntity): string | undefined {
   return undefined;
 }
 
+type FileContextMenu = {
+  fileId: string;
+  uri: string;
+  mimeType: string;
+  dirtyVsDisk: boolean;
+  dirtyVsBackend: boolean;
+  editable: boolean;
+  x: number;
+  y: number;
+};
+
 function fileAccentStyle(file: FileEntity): React.CSSProperties | undefined {
   const color = resolveAccentColor(file);
   if (!color) {
@@ -108,6 +119,7 @@ export function ExplorerView({ context, filesRegistry, store, readDir }: Explore
   );
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [hoveredWorkspaceRow, setHoveredWorkspaceRow] = useState<HoveredWorkspaceRow | null>(null);
+  const [fileContextMenu, setFileContextMenu] = useState<FileContextMenu | null>(null);
   const [, setForceUpdate] = useState(0);
   const loadedRef = useRef<Set<string>>(new Set());
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
@@ -306,6 +318,27 @@ export function ExplorerView({ context, filesRegistry, store, readDir }: Explore
     [context.fileMediator, openFiles, store]
   );
 
+  const closeFileContextMenu = useCallback(() => {
+    setFileContextMenu(null);
+  }, []);
+
+  useEffect(() => {
+    if (!fileContextMenu) return;
+    const handleClickOutside = () => closeFileContextMenu();
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [fileContextMenu, closeFileContextMenu]);
+
+  const handleFileContextMenu = useCallback(
+    (e: React.MouseEvent, info: { fileId: string; uri: string; mimeType: string; dirtyVsDisk: boolean; dirtyVsBackend: boolean; editable: boolean }) => {
+      e.preventDefault();
+      e.stopPropagation();
+      context.fileMediator.setContextFileId(info.fileId);
+      setFileContextMenu({ ...info, x: e.clientX, y: e.clientY });
+    },
+    [context.fileMediator]
+  );
+
   const setWorkspaceOrderValue = useCallback(async (nextOrder: WorkspaceOpenFilesOrder) => {
     setWorkspaceOrder(nextOrder);
     setWorkspaceMenuOpen(false);
@@ -377,6 +410,7 @@ export function ExplorerView({ context, filesRegistry, store, readDir }: Explore
               const selectedItemId = store.getSelectedItemId();
               const isSelected = selectedItemId === `${WORKSPACE_SELECTED_PREFIX}${file.fileId}`;
               const isDirty = file.dirtyVsDisk || file.dirtyVsBackend;
+              const editable = filesRegistry.capabilities.hasCapability(file.mimeType, "editable");
               return (
                 <div
                   key={file.fileId}
@@ -394,6 +428,14 @@ export function ExplorerView({ context, filesRegistry, store, readDir }: Explore
                     });
                   }}
                   onMouseLeave={() => setHoveredWorkspaceRow(null)}
+                  onContextMenu={(e) => handleFileContextMenu(e, {
+                    fileId: file.fileId,
+                    uri: file.uri,
+                    mimeType: file.mimeType,
+                    dirtyVsDisk: file.dirtyVsDisk,
+                    dirtyVsBackend: file.dirtyVsBackend,
+                    editable
+                  })}
                 >
                   <span className="explorer-file-icon">📄</span>
                   <span className="explorer-file-name">{getFileName(file.uri)}</span>
@@ -413,6 +455,8 @@ export function ExplorerView({ context, filesRegistry, store, readDir }: Explore
             onToggle={handleToggleFolder}
             onFileClick={handleFileClick}
             onLoadChildren={loadChildren}
+            filesRegistry={filesRegistry}
+            onFileContextMenu={handleFileContextMenu}
             onRemoveFolder={(folderId) => {
               void (async () => {
                 const folder = store.getFolders().find((item) => item.id === folderId);
@@ -460,6 +504,61 @@ export function ExplorerView({ context, filesRegistry, store, readDir }: Explore
           <TabTooltip {...hoveredTooltipProps} />
         </div>
       )}
+      {fileContextMenu && (
+        <div
+          className="shell-context-menu explorer-file-context-menu"
+          style={{ left: fileContextMenu.x, top: fileContextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {fileContextMenu.fileId && fileContextMenu.editable && (fileContextMenu.dirtyVsDisk || fileContextMenu.dirtyVsBackend) && (
+            <div
+              className="shell-context-menu__item"
+              onClick={() => {
+                void context.fileMediator.saveFile(fileContextMenu.fileId);
+                closeFileContextMenu();
+              }}
+            >
+              <span className="shell-context-menu-label">Save</span>
+            </div>
+          )}
+          {fileContextMenu.fileId && (
+            <div
+              className="shell-context-menu__item"
+              onClick={() => {
+                void context.fileMediator.closeFile(fileContextMenu.fileId, { discardDirty: true });
+                closeFileContextMenu();
+              }}
+            >
+              <span className="shell-context-menu-label">Close</span>
+            </div>
+          )}
+          {fileContextMenu.uri.startsWith("file://") && (
+            <>
+              <div
+                className="shell-context-menu__item"
+                onClick={() => {
+                  const path = fileContextMenu.uri.startsWith("file:///")
+                    ? fileContextMenu.uri.slice(8)
+                    : fileContextMenu.uri.slice(7);
+                  void navigator.clipboard.writeText(decodeURIComponent(path));
+                  closeFileContextMenu();
+                }}
+              >
+                <span className="shell-context-menu-label">Copy Path</span>
+              </div>
+              <div
+                className="shell-context-menu__item"
+                onClick={() => {
+                  void window.appShell.showItemInFolder(fileContextMenu.uri);
+                  closeFileContextMenu();
+                }}
+              >
+                <span className="shell-context-menu-label">Open in System Explorer</span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -475,6 +574,8 @@ type FolderTreeItemProps = {
   onLoadChildren: (folderId: string, folderUri: string) => Promise<void>;
   onRemoveFolder: (folderId: string) => void;
   canRemove?: boolean;
+  filesRegistry: FilesRegistry;
+  onFileContextMenu?: (e: React.MouseEvent, file: { fileId: string; uri: string; mimeType: string; dirtyVsDisk: boolean; dirtyVsBackend: boolean; editable: boolean }) => void;
 };
 
 function FolderTreeItem({
@@ -487,7 +588,9 @@ function FolderTreeItem({
   onFileClick,
   onLoadChildren,
   onRemoveFolder,
-  canRemove = false
+  canRemove = false,
+  filesRegistry,
+  onFileContextMenu
 }: FolderTreeItemProps) {
   const treeNodes = store.getTreeNodes();
   const folderNode = treeNodes.get(folder.id);
@@ -547,6 +650,8 @@ function FolderTreeItem({
                   onFileClick={onFileClick}
                   onLoadChildren={onLoadChildren}
                   onRemoveFolder={onRemoveFolder}
+                  filesRegistry={filesRegistry}
+                  onFileContextMenu={onFileContextMenu}
                   canRemove={false}
                 />
               );
@@ -567,6 +672,19 @@ function FolderTreeItem({
                 onDoubleClick={() => {
                   void onFileClick(fileNode.uri, true);
                 }}
+                onContextMenu={onFileContextMenu ? (e) => {
+                  const fileId = openFile?.fileId ?? "";
+                  const mimeType = openFile?.mimeType ?? "";
+                  const editable = mimeType ? filesRegistry.capabilities.hasCapability(mimeType, "editable") : false;
+                  onFileContextMenu(e, {
+                    fileId,
+                    uri: fileNode.uri,
+                    mimeType,
+                    dirtyVsDisk: openFile?.dirtyVsDisk ?? false,
+                    dirtyVsBackend: openFile?.dirtyVsBackend ?? false,
+                    editable
+                  });
+                } : undefined}
               >
                 <span className="explorer-file-icon">📄</span>
                 <span className="explorer-file-name">{fileNode.name}</span>
