@@ -26,6 +26,16 @@ jobs:
           cache: npm
           cache-dependency-path: queryeer-desktop/package-lock.json
 
+      - name: Get Electron version
+        id: electron-cache
+        run: echo "version=$(node -p "require('./package.json').devDependencies.electron")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Electron binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.electron
+          key: ${{ runner.os }}-electron-${{ steps.electron-cache.outputs.version }}
+
       - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
@@ -34,7 +44,7 @@ jobs:
           cache: maven
 
       - name: Install desktop dependencies
-        run: npm ci
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: Run desktop unit tests
         run: npm run test
@@ -83,6 +93,16 @@ jobs:
           cache: npm
           cache-dependency-path: queryeer-desktop/package-lock.json
 
+      - name: Get Electron version
+        id: electron-cache
+        run: echo "version=$(node -p "require('./queryeer-desktop/package.json').devDependencies.electron")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Electron binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.electron
+          key: ${{ runner.os }}-electron-${{ steps.electron-cache.outputs.version }}
+
       - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
@@ -96,7 +116,7 @@ jobs:
       - name: Install desktop dependencies
         run: |
           cd ./queryeer-desktop
-          npm ci
+          npm ci --prefer-offline --no-audit --no-fund
 
       - name: Run integration tests
         run: |
