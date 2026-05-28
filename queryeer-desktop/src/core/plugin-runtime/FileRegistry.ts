@@ -434,7 +434,20 @@ export class FileRegistry {
     if (!file) {
       return;
     }
-    this.updateFile(fileId, { dirtyVsDisk: true, version: file.version + 1 });
+    this.files.set(fileId, { ...file, dirtyVsDisk: true, version: file.version + 1 });
+    this.scheduleCoalescedEmit();
+  }
+
+  private coalescedEmitTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private scheduleCoalescedEmit(): void {
+    if (this.coalescedEmitTimer !== null) {
+      return;
+    }
+    this.coalescedEmitTimer = setTimeout(() => {
+      this.coalescedEmitTimer = null;
+      this.emit();
+    }, 50);
   }
 }
 

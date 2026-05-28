@@ -239,20 +239,16 @@ export class TextEditorRegistry {
   markDirty(fileId: string): void {
     this.filesRegistry?.markDirty(fileId);
     try {
+      const text = this.editorApi?.getContent();
+      if (text === undefined) {
+        return;
+      }
       const activeModel = this.modelsByFileId.get(fileId);
       if (activeModel) {
-        const text = this.editorApi?.getContent();
-        if (text !== undefined) {
-          activeModel.setContent(text);
-        }
+        activeModel.setContent(text);
       }
-      if (this.contentDirtyListeners.length > 0) {
-        const text = this.editorApi?.getContent();
-        if (text !== undefined) {
-          for (const listener of this.contentDirtyListeners) {
-            listener(fileId, text);
-          }
-        }
+      for (const listener of this.contentDirtyListeners) {
+        listener(fileId, text);
       }
     } catch {
       // File content too large to materialize as a string; dirty flag still set above

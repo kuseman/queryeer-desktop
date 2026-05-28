@@ -314,8 +314,8 @@ export function XtermTextConsole({
         setSearchOpen(false);
       }
     };
-    root.addEventListener("keydown", onKeyDown, true);
-    return () => root.removeEventListener("keydown", onKeyDown, true);
+    root.addEventListener("keydown", onKeyDown);
+    return () => root.removeEventListener("keydown", onKeyDown);
   }, [searchOpen]);
 
   useEffect(() => {
