@@ -2,6 +2,10 @@ package com.queryeer.backend.queryengine.jdbc.execute;
 
 import static com.queryeer.backend.api.PayloadUtils.isBlank;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.net.URI;
+import java.net.URL;
 import java.sql.Array;
 import java.sql.Blob;
 import java.sql.Clob;
@@ -14,11 +18,21 @@ import java.sql.SQLWarning;
 import java.sql.SQLXML;
 import java.sql.Statement;
 import java.sql.Struct;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.OffsetTime;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.queryeer.backend.queryengine.jdbc.CancellableJdbcQueryExecutor;
@@ -64,6 +78,13 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
     {
         return convertJdbcValue(value);
     }
+
+    /**
+     * Types that Jackson serialises cleanly without bean introspection. Anything not in this set falls back to {@code toString()} to avoid exposing driver-internal state (e.g. PGObject).
+     */
+    private static final Set<Class<?>> JACKSON_SAFE_TYPES = Set.of(String.class, Boolean.class, Byte.class, Short.class, Integer.class, Long.class, Float.class, Double.class, BigDecimal.class,
+            BigInteger.class, byte[].class, Date.class, LocalDate.class, LocalTime.class, LocalDateTime.class, OffsetDateTime.class, OffsetTime.class, Instant.class, ZonedDateTime.class, UUID.class,
+            URI.class, URL.class);
 
     /**
      * Converts JDBC-specific types that Jackson cannot serialize into plain equivalents. Recurses into container types ({@link Array}, {@link Struct}).
@@ -126,7 +147,21 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
         {
             return value.toString();
         }
-        return value;
+        // Jackson-safe container types: pass through as-is
+        if (value instanceof List
+                || value instanceof Map
+                || value.getClass()
+                        .isArray())
+        {
+            return value;
+        }
+        // Jackson-safe leaf types: pass through as-is
+        if (JACKSON_SAFE_TYPES.contains(value.getClass()))
+        {
+            return value;
+        }
+        // Last resort: toString() for DB-specific types (PGObject, oracle.sql.*, etc.)
+        return value.toString();
     }
 
     @Override

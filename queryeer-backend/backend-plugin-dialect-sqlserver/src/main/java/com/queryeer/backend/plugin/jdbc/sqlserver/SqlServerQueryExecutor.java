@@ -48,18 +48,6 @@ final class SqlServerQueryExecutor extends AbstractJdbcQueryExecutor implements 
     }
 
     @Override
-    protected Object mapColumnValue(Object value, String columnTypeName)
-    {
-        if (value != null
-                && "microsoft.sql.DateTimeOffset".equals(value.getClass()
-                        .getName()))
-        {
-            return value.toString();
-        }
-        return super.mapColumnValue(value, columnTypeName);
-    }
-
-    @Override
     public JdbcQueryResult executeWithPlan(JdbcQueryRequest request, JdbcQueryEventListener eventListener)
     {
         String intent = request.options() == null ? "plan.actual"
