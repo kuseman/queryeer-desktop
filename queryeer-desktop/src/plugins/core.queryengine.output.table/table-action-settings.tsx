@@ -29,6 +29,7 @@ const TARGET_OPTIONS: { value: TableActionOutputTarget; label: string }[] = [
   { value: "output", label: "Output panel" },
   { value: "clipboard", label: "Clipboard" },
   { value: "newFile", label: "New file" },
+  { value: "newFileAndExecute", label: "New file with execute" },
 ];
 
 function parseActions(value: unknown): TableAction[] {

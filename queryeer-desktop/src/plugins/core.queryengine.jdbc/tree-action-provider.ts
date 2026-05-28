@@ -81,6 +81,18 @@ export function createTreeActionProvider(deps: TreeActionProviderDeps): void {
           deps.applyRecoveredContent(file.fileId, rendered);
           return;
         }
+        if (action.outputTarget === "newQueryAndExecute") {
+          const file = await deps.createUntitledFile({
+            mimeType: "application/sql",
+            extension: "sql",
+            title: action.label.replace(/[<>:"/\\|?*]/g, "_").slice(0, 100)
+          });
+          deps.applyRecoveredContent(file.fileId, rendered);
+          setTimeout(() => {
+            getQueryEngineService().requestExecute({ textOverride: rendered, fileIdOverride: file.fileId });
+          }, 0);
+          return;
+        }
         return;
       }
 
@@ -113,6 +125,20 @@ export function createTreeActionProvider(deps: TreeActionProviderDeps): void {
         });
         deps.applyRecoveredContent(file.fileId, combinedText);
         deps.setFileEngineBinding(file.fileId, node.connectionId, database);
+        return;
+      }
+
+      if (action.outputTarget === "newQueryAndExecute") {
+        const file = await deps.createUntitledFile({
+          mimeType: "application/sql",
+          extension: "sql",
+          title: `${action.label.replace(/[<>:"/\\|?*]/g, "_").slice(0, 100)} - Result`
+        });
+        deps.applyRecoveredContent(file.fileId, rendered);
+        deps.setFileEngineBinding(file.fileId, node.connectionId, database);
+        setTimeout(() => {
+          getQueryEngineService().requestExecute({ textOverride: rendered, outputIdOverride: action.outputId, formatOverride: "plain", fileIdOverride: file.fileId });
+        }, 0);
         return;
       }
 

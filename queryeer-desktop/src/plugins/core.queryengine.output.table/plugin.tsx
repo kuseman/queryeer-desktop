@@ -1141,7 +1141,7 @@ export const coreQueryEngineOutputTablePlugin: Plugin = {
           moduleId: "core.queryengine.output.table",
           title: "Table Actions",
           description: "Context menu actions that appear when right-clicking on table cell selections. Actions can execute generated queries or render template results.",
-          sectionPath: ["Query Engine", "Table", "Actions"],
+          sectionPath: ["Query Engine", "Table", "Table Actions"],
           tags: ["query", "table", "actions", "context menu", "template"],
           type: "json",
           defaultValue: [],

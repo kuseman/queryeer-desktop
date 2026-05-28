@@ -242,7 +242,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
         runtimeState.activeExecution = undefined;
       }
 
-      const executeOptions = retryExecuteOptions ?? getQueryEngineService().consumeExecuteOptions();
+      const executeOptions = retryExecuteOptions ?? getQueryEngineService().consumeExecuteOptions(targetFileId);
 
       const handle = editorRegistryHost?.getActiveEditor();
       const selectedText = handle?.selection?.getSelectedText() ?? "";
@@ -753,13 +753,32 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
 
   useEffect(() => {
     const service = getQueryEngineService();
-    const unsubExec = service.onExecuteRequest(() => handleExecuteRef.current());
+
+    // On mount, consume any pending execution options targeting this file
+    const targetFileId = fileIdRef.current;
+    if (targetFileId) {
+      const pendingOptions = service.consumeExecuteOptions(targetFileId);
+      if (pendingOptions) {
+        handleExecuteRef.current(pendingOptions);
+      }
+    }
+
+    const unsubExec = service.onExecuteRequest(() => {
+      // Skip if pending options are targeting a different file.
+      // Prevents the old file from executing when newFileAndExecute
+      // fired requestExecute for the new file.
+      const pending = service.peekExecuteOptions();
+      if (pending?.fileIdOverride && pending.fileIdOverride !== fileIdRef.current) {
+        return;
+      }
+      handleExecuteRef.current();
+    });
     const unsubCancel = service.onCancelRequest(() => handleCancelRef.current());
     const unsubToggle = service.onToggleOutputPanelRequest(() => {
-      const targetFileId = fileIdRef.current;
-      if (!targetFileId) return;
-      const current = getQueryViewStateStore().read(targetFileId).outputPanelCollapsed ?? false;
-      getQueryViewStateStore().setOutputPanelCollapsed(targetFileId, !current);
+      const targetFileIdInner = fileIdRef.current;
+      if (!targetFileIdInner) return;
+      const current = getQueryViewStateStore().read(targetFileIdInner).outputPanelCollapsed ?? false;
+      getQueryViewStateStore().setOutputPanelCollapsed(targetFileIdInner, !current);
     });
     return () => {
       unsubExec();
