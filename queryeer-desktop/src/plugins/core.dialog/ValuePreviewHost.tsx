@@ -12,6 +12,7 @@ import {
   type ValuePreviewWindowState,
 } from "./value-preview-dialog-service";
 import "./value-preview-dialog.css";
+import { isPrimaryModifier } from "../../shared/platform-utils";
 
 let monacoModuleInstance: typeof monacoType | null = null;
 
@@ -217,7 +218,7 @@ function ValuePreviewWindow({ windowState }: { windowState: ValuePreviewWindowSt
       if (!windowRef.current?.contains(event.target as Node)) {
         return;
       }
-      const isMod = event.ctrlKey || event.metaKey;
+      const isMod = isPrimaryModifier(event);
       if (isMod && event.key === "f") {
         event.preventDefault();
         handleFind();

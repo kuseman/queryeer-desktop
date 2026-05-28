@@ -17,6 +17,7 @@ import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegist
 import { createBackendCommandContext } from "./backend-command-context";
 import { filterMenuItemsByWhen } from "../../plugins/core.menu/menu-item-filter";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
+import { isPrimaryModifier } from "../../shared/platform-utils";
 import type { FileMediator } from "../../contracts/files/FileMediator";
 import { inflateDottedKeys } from "./context-value-flatten";
 import { createContextChain } from "../../plugins/core.commands/context-chain";
@@ -356,7 +357,7 @@ export async function bootstrapShell() {
   });
 
   const handleZoomKeyboard = (event: KeyboardEvent) => {
-    const isCtrlOrMeta = event.ctrlKey || event.metaKey;
+    const isCtrlOrMeta = isPrimaryModifier(event);
     if (!isCtrlOrMeta) {
       return;
     }

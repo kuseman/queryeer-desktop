@@ -184,7 +184,7 @@ export function registerTextEditorKeybindings(context: PluginContext): void {
   context.keybindings.registerKeybinding({
     id: "core.editor.text.keybinding.transformToUppercase",
     commandId: "core.editor.text.transformToUppercase",
-    key: "Ctrl+Shift+U",
+    key: "CmdOrCtrl+Shift+U",
     when: "editorFocus",
     scope: "editor",
     order: 200
@@ -193,7 +193,7 @@ export function registerTextEditorKeybindings(context: PluginContext): void {
   context.keybindings.registerKeybinding({
     id: "core.editor.text.keybinding.transformToLowercase",
     commandId: "core.editor.text.transformToLowercase",
-    key: "Ctrl+Shift+L",
+    key: "CmdOrCtrl+Shift+L",
     when: "editorFocus",
     scope: "editor",
     order: 201
@@ -202,7 +202,7 @@ export function registerTextEditorKeybindings(context: PluginContext): void {
   context.keybindings.registerKeybinding({
     id: "core.editor.text.keybinding.transformToTitleCase",
     commandId: "core.editor.text.transformToTitleCase",
-    key: "Ctrl+Shift+T",
+    key: "CmdOrCtrl+Shift+T",
     when: "editorFocus",
     scope: "editor",
     order: 202

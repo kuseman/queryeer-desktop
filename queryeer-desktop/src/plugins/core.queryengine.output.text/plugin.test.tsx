@@ -163,6 +163,24 @@ describe("text output keyboard shortcuts", () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
+  it("handles Cmd+A on macOS by selecting all terminal text", () => {
+    const terminal = mocks.terminals[0];
+    expect(terminal).toBeTruthy();
+
+    const rootNode = rootElement.querySelector(".query-output-text-root") as HTMLElement;
+    const event = new KeyboardEvent("keydown", {
+      key: "a",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true
+    });
+
+    rootNode.dispatchEvent(event);
+
+    expect(terminal!.selectAll).toHaveBeenCalledTimes(1);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
   it("handles Ctrl/Cmd+C by copying selected terminal text", async () => {
     const terminal = mocks.terminals[0];
     expect(terminal).toBeTruthy();
@@ -183,6 +201,26 @@ describe("text output keyboard shortcuts", () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
+  it("handles Cmd+C on macOS by copying selected terminal text", async () => {
+    const terminal = mocks.terminals[0];
+    expect(terminal).toBeTruthy();
+    terminal!.getSelection.mockReturnValue("copied text");
+
+    const rootNode = rootElement.querySelector(".query-output-text-root") as HTMLElement;
+    const event = new KeyboardEvent("keydown", {
+      key: "c",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true
+    });
+
+    rootNode.dispatchEvent(event);
+    await Promise.resolve();
+
+    expect(clipboardWriteText).toHaveBeenCalledWith("copied text");
+    expect(event.defaultPrevented).toBe(true);
+  });
+
   it("does not copy when terminal selection is empty", async () => {
     const terminal = mocks.terminals[0];
     expect(terminal).toBeTruthy();
@@ -192,6 +230,26 @@ describe("text output keyboard shortcuts", () => {
     const event = new KeyboardEvent("keydown", {
       key: "c",
       ctrlKey: true,
+      bubbles: true,
+      cancelable: true
+    });
+
+    rootNode.dispatchEvent(event);
+    await Promise.resolve();
+
+    expect(clipboardWriteText).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("does not copy via Cmd+C on macOS when terminal selection is empty", async () => {
+    const terminal = mocks.terminals[0];
+    expect(terminal).toBeTruthy();
+    terminal!.getSelection.mockReturnValue("");
+
+    const rootNode = rootElement.querySelector(".query-output-text-root") as HTMLElement;
+    const event = new KeyboardEvent("keydown", {
+      key: "c",
+      metaKey: true,
       bubbles: true,
       cancelable: true
     });

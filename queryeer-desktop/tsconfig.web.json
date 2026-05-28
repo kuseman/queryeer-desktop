@@ -20,6 +20,7 @@
     "src/plugins/**/*.tsx",
     "src/plugins/**/*.json",
     "src/renderer/**/*.ts",
-    "src/renderer/**/*.tsx"
+    "src/renderer/**/*.tsx",
+    "src/shared/**/*.ts"
   ]
 }

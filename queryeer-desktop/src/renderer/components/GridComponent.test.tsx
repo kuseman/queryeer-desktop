@@ -897,6 +897,46 @@ describe("GridComponent", () => {
     expect(snapshot.colOrder).toEqual(["b", "a", "c"]);
   });
 
+  it("copy via Cmd+C on macOS triggers selection copy", async () => {
+    const onCopySelection = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "a", title: "A", type: "int" }, { key: "b", title: "B", type: "string" }]}
+          getRowCount={() => 2}
+          getRowsRange={(start, end) => [[1, "hello"], [2, "world"]].slice(start, end)}
+          getRow={(index) => [[1, "hello"], [2, "world"]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          onCopySelection={onCopySelection}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 2, height: 2 }, 0, 0);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onGridSelectionChange(createGridSelection({ x: 0, y: 0, width: 1, height: 1 }));
+    });
+
+    const container = rootElement.firstElementChild;
+    expect(container).not.toBeNull();
+    act(() => {
+      container!.dispatchEvent(new KeyboardEvent("keydown", { key: "c", metaKey: true, bubbles: true }));
+    });
+
+    expect(onCopySelection).toHaveBeenCalledTimes(1);
+    const snapshot = onCopySelection.mock.calls[0]?.[0];
+    expect(snapshot).toBeDefined();
+  });
+
   it("copy without column reorder has undefined colOrder", async () => {
     const onCopySelection = vi.fn();
 
@@ -930,6 +970,46 @@ describe("GridComponent", () => {
     expect(container).not.toBeNull();
     act(() => {
       container!.dispatchEvent(new KeyboardEvent("keydown", { key: "c", ctrlKey: true, bubbles: true }));
+    });
+
+    expect(onCopySelection).toHaveBeenCalledTimes(1);
+    const snapshot = onCopySelection.mock.calls[0]?.[0];
+    expect(snapshot.colOrder).toBeUndefined();
+  });
+
+  it("copy via Cmd+C on macOS without column reorder has undefined colOrder", async () => {
+    const onCopySelection = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "a", title: "A", type: "int" }, { key: "b", title: "B", type: "string" }]}
+          getRowCount={() => 2}
+          getRowsRange={(start, end) => [[1, "hello"], [2, "world"]].slice(start, end)}
+          getRow={(index) => [[1, "hello"], [2, "world"]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          onCopySelection={onCopySelection}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 2, height: 2 }, 0, 0);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onGridSelectionChange(createGridSelection({ x: 0, y: 0, width: 2, height: 2 }));
+    });
+
+    const container = rootElement.firstElementChild;
+    expect(container).not.toBeNull();
+    act(() => {
+      container!.dispatchEvent(new KeyboardEvent("keydown", { key: "c", metaKey: true, bubbles: true }));
     });
 
     expect(onCopySelection).toHaveBeenCalledTimes(1);
@@ -977,6 +1057,53 @@ describe("GridComponent", () => {
     expect(container).not.toBeNull();
     act(() => {
       container!.dispatchEvent(new KeyboardEvent("keydown", { key: "c", ctrlKey: true, bubbles: true }));
+    });
+
+    expect(onCopySelection).toHaveBeenCalledTimes(1);
+    const snapshot = onCopySelection.mock.calls[0]?.[0];
+    expect(snapshot.colOrder).toEqual(["y", "x", "z"]);
+  });
+
+  it("copy via Cmd+C on macOS after column reorder carries colOrder matching visual order", async () => {
+    const onCopySelection = vi.fn();
+    const onSelectionChange = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "x", title: "X", type: "int" }, { key: "y", title: "Y", type: "string" }, { key: "z", title: "Z", type: "int" }]}
+          getRowCount={() => 2}
+          getRowsRange={(start, end) => [[1, "hello", 2], [4, "world", 5]].slice(start, end)}
+          getRow={(index) => [[1, "hello", 2], [4, "world", 5]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          onSelectionChange={onSelectionChange}
+          onCopySelection={onCopySelection}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 3, height: 3 }, 0, 0);
+    });
+
+    // Reorder: move Y from index 1 to visual index 0 => visual order [Y, X, Z]
+    act(() => {
+      latestDataEditorProps?.onColumnMoved?.(1, 0);
+    });
+
+    act(() => {
+      latestDataEditorProps?.onGridSelectionChange(createGridSelection({ x: 0, y: 0, width: 2, height: 1 }));
+    });
+
+    const container = rootElement.firstElementChild;
+    expect(container).not.toBeNull();
+    act(() => {
+      container!.dispatchEvent(new KeyboardEvent("keydown", { key: "c", metaKey: true, bubbles: true }));
     });
 
     expect(onCopySelection).toHaveBeenCalledTimes(1);

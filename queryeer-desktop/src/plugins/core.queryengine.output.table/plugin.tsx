@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, useImperativeHandle, forwardRef } from "react";
 import type { Plugin } from "../../contracts/plugin/Plugin";
+import { isPrimaryModifier } from "../../shared/platform-utils";
 import type { OutputContext, Column } from "../../contracts/extensions/OutputExtension";
 import { getOutputRegistry } from "../core.queryengine/output/OutputRegistry";
 import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistryImpl";
@@ -105,7 +106,7 @@ export function computeNextSelectionFromClick(input: SelectionClickInput): Selec
   }
 
   const shift = !!mouseEvent?.shiftKey;
-  const ctrl = !!(mouseEvent?.ctrlKey || mouseEvent?.metaKey);
+  const ctrl = isPrimaryModifier(mouseEvent);
 
   let nextSelection: SelectionModel | null = existing;
   let nextAnchor: SelectionAnchor | null = anchor;
@@ -617,7 +618,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
     const onKeyDown = (e: KeyboardEvent) => {
       const el = containerRef.current;
       if (!el || !el.contains(e.target as Node)) return;
-      const primaryModifier = e.ctrlKey || e.metaKey;
+      const primaryModifier = isPrimaryModifier(e);
       if (primaryModifier && (e.key.toLowerCase() === "f" || e.key.toLowerCase() === "x")) {
         e.preventDefault();
         e.stopPropagation();
