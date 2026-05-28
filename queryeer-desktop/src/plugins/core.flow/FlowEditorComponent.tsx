@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { EditorRegistryHost } from "../../contracts/editor/EditorCapability";
 import type { OutlineRegistry } from "../../contracts/extensions/OutlineExtension";
@@ -111,17 +111,28 @@ export function FlowEditorComponent({ file, editorRegistryHost, outlineRegistry,
       syncDocument();
     });
 
+    const parseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     const unsubscribeDirty = flowTextRegistry.onContentDirty((dirtyFileId, text) => {
       if (dirtyFileId !== fileId) {
         return;
       }
-      const parsed = parseQflowDocument(text);
-      getFlowStateStore().setDocument(fileId, parsed);
+      if (parseTimerRef.current !== null) {
+        clearTimeout(parseTimerRef.current);
+      }
+      parseTimerRef.current = setTimeout(() => {
+        parseTimerRef.current = null;
+        const parsed = parseQflowDocument(text);
+        getFlowStateStore().setDocument(fileId, parsed);
+      }, 80);
     });
 
     return () => {
       subscription.dispose();
       unsubscribeDirty();
+      if (parseTimerRef.current !== null) {
+        clearTimeout(parseTimerRef.current);
+      }
     };
   }, [file, fileId]);
 

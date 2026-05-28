@@ -180,18 +180,6 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
     api.attach(editor);
     apiRef.current = api;
 
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-          requestAnimationFrame(() => {
-            editor.layout({ width: entry.contentRect.width, height: entry.contentRect.height });
-          });
-        }
-      }
-    });
-    resizeObserver.observe(containerRef.current, { box: "content-box" });
-    disposablesRef.current.push({ dispose: () => resizeObserver.disconnect() });
-
     const { width, height } = containerRef.current.getBoundingClientRect();
     if (width > 0 && height > 0) {
       editor.layout({ width, height });
@@ -237,11 +225,6 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
 
     disposablesRef.current.push(
       editor.onDidFocusEditorWidget(() => {
-        if (!containerRef.current) return;
-        const { width, height } = containerRef.current.getBoundingClientRect();
-        if (width > 0 && height > 0) {
-          editor.layout({ width, height });
-        }
         if (editorRegistryHost && outlineRegistry) {
           const handle = createTextEditorHandle(editorId ?? "core.editor.text", api, outlineRegistry, registry);
           editorRegistryHost.setActiveEditor(handle);
