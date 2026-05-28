@@ -2,7 +2,8 @@ import React from "react";
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import { getQueryEngineService } from "./QueryEngineService";
-import { getQueryPlanArtifactStore, queryCompletedArtifacts } from "./query-plan/artifact-store";
+import { getQueryPlanArtifactStore, queryCompletedArtifacts, isPlanGraphArtifact } from "./query-plan/artifact-store";
+import { clearGraphViewState } from "../core.graph/graph-view-state-store";
 import { queryTextRegistry } from "./QueryTextEditorRegistry";
 import { QueryEditorComponent } from "./QueryEditorComponent";
 import { QueryRunIcon, QueryStopIcon } from "./query-toolbar-icons";
@@ -174,6 +175,16 @@ export const coreQueryEnginePlugin: Plugin = {
       if (event.method === "queryengine.completed") {
         const artifacts = queryCompletedArtifacts(event.params);
         if (artifacts.length > 0) {
+          // Clear viewport state for previous plan artifacts so the new plan
+          // doesn't restore a zoom/pan that doesn't fit the current data
+          for (const old of queryPlanStore.list(fileId)) {
+            clearGraphViewState(old.graph.id);
+          }
+          for (const artifact of artifacts) {
+            if (isPlanGraphArtifact(artifact)) {
+              clearGraphViewState(artifact.graph.id);
+            }
+          }
           queryPlanStore.rememberArtifacts(fileId, artifacts);
         }
         fileIdByExecutionId.delete(params.queryExecutionId);

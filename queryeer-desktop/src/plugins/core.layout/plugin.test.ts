@@ -37,6 +37,7 @@ function createContext(file?: FileEntity) {
       canExecuteCommand: vi.fn(() => true)
     },
     filesystems: { registerFileSystem: vi.fn() },
+    graphNodeTypes: { registerNodeType: vi.fn(), unregisterNodeType: vi.fn(), getComponent: vi.fn(), getAll: vi.fn(() => new Map()) },
     files: {
       capabilities: {
         registerCapabilities: vi.fn(),

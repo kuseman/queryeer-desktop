@@ -188,6 +188,7 @@ function createContext(): PluginContext {
     contextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
     tableOutputContextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
     jdbcTreeContextMenu: { registerContribution: vi.fn(), unregisterContribution: vi.fn(), getItemsForNode: vi.fn() },
+    graphNodeTypes: { registerNodeType: vi.fn(), unregisterNodeType: vi.fn(), getComponent: vi.fn(), getAll: vi.fn(() => new Map()) },
     outline: {
       registerOutlineProvider: vi.fn(),
       registerSupplementaryOutlineProvider: vi.fn(),

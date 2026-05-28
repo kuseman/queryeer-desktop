@@ -1,22 +1,11 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import {
-  Background,
-  Controls,
-  Handle,
-  MarkerType,
-  MiniMap,
-  Position,
-  ReactFlow,
-  useNodesInitialized,
-  useReactFlow,
-  type Edge as FlowEdge,
-  type Node as FlowNode,
-  type NodeTypes
-} from "@xyflow/react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Background, Controls, MarkerType, MiniMap, Position, ReactFlow, getViewportForBounds, Handle, type Edge as FlowEdge, type Node as FlowNode, type Node, type Edge, type NodeTypes, type ReactFlowInstance } from "@xyflow/react";
 import type { GraphActionInvocation, GraphDocument, GraphEntity, GraphLayoutDirection, GraphVertex } from "../../contracts/graph";
 import { ContextMenuSurface } from "../../renderer/components/ContextMenuSurface";
-import { dagreGraphLayoutProvider, type GraphLayoutProvider } from "./graph-layout";
+import { dagreGraphLayoutProvider, type GraphLayoutProvider, type PositionedGraphVertex } from "./graph-layout";
 import { formatGraphPropertyValue, getGraphEntityActions, getGraphEntityProperties, getImportantProperties, resolveGraphEntity, validateGraphDocument } from "./graph-utils";
+import { getGraphNodeTypeRegistry } from "./graph-node-type-registry";
+import { getGraphViewState, setGraphViewState } from "./graph-view-state-store";
 import "@xyflow/react/dist/style.css";
 import "./graph.css";
 
@@ -41,6 +30,7 @@ const EMPTY_INTERACTION_STATE: GraphInteractionSnapshot = {
 
 type GraphViewerProps = {
   graph: GraphDocument;
+  viewStateKey?: string;
   layoutProvider?: GraphLayoutProvider;
   iconResolver?: (label?: string, kind?: string) => string | undefined;
   interactionStore?: GraphInteractionStoreLike;
@@ -67,10 +57,6 @@ type TooltipState = {
   entity: GraphEntity;
 };
 
-const nodeTypes: NodeTypes = {
-  graphVertex: GraphVertexNode as unknown as NodeTypes[string]
-};
-
 const layoutDirectionOptions: Array<{ value: GraphLayoutDirection; label: string }> = [
   { value: "top-bottom", label: "Top to bottom" },
   { value: "bottom-top", label: "Bottom to top" },
@@ -80,19 +66,34 @@ const layoutDirectionOptions: Array<{ value: GraphLayoutDirection; label: string
 
 export function GraphViewer({
   graph,
+  viewStateKey,
   layoutProvider = dagreGraphLayoutProvider,
   iconResolver,
   interactionStore,
   onEntityAction,
   onSelectionChanged
 }: GraphViewerProps): JSX.Element {
+  const graphViewStateKey = viewStateKey ?? graph.id;
   const validation = useMemo(() => validateGraphDocument(graph), [graph]);
   const externalInteraction = useInteractionState(graph.id, interactionStore);
   const [localSelection, setLocalSelection] = useState<GraphInteractionSnapshot["selection"]>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
-  const [layoutDirectionOverride, setLayoutDirectionOverride] = useState<GraphLayoutDirection | "auto">("auto");
+  const [layoutDirectionOverride, setLayoutDirectionOverride] = useState<GraphLayoutDirection | "auto">(
+    () => getGraphViewState(graphViewStateKey)?.layoutDirection ?? "auto"
+  );
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const graphIdRef = useRef(graphViewStateKey);
+  const layoutDirectionRef = useRef(layoutDirectionOverride);
+  const latestViewportRef = useRef<{ x: number; y: number; zoom: number }>({ x: 0, y: 0, zoom: 1 });
+  const rfInstanceRef = useRef<ReactFlowInstance<Node<GraphVertexNodeData>, Edge> | null>(null);
+  const viewportAppliedRef = useRef(false);
+  const applyingViewportRef = useRef(false);
+
+  // Keep layoutDirectionRef in sync during render (graphIdRef is updated in effect to avoid
+  // breaking the save-on-switch guard)
+  layoutDirectionRef.current = layoutDirectionOverride;
+
   const interaction = interactionStore
     ? externalInteraction
     : {
@@ -117,6 +118,15 @@ export function GraphViewer({
     ? graph.layout?.direction ?? "top-bottom"
     : layoutDirectionOverride;
 
+  const nodeTypes = useMemo<NodeTypes>(() => {
+    const registry = getGraphNodeTypeRegistry();
+    const types: NodeTypes = { default: GraphVertexNode as unknown as NodeTypes[string] };
+    for (const [kind, component] of registry.getAll()) {
+      types[kind] = component as unknown as NodeTypes[string];
+    }
+    return types;
+  }, []);
+
   const graphWithLayoutOverride = useMemo<GraphDocument>(() => {
     if (layoutDirectionOverride === "auto") {
       return graph;
@@ -132,9 +142,16 @@ export function GraphViewer({
 
   const positionedGraph = useMemo(() => layoutProvider.layout(graphWithLayoutOverride), [graphWithLayoutOverride, layoutProvider]);
 
-  const nodes = useMemo<Array<FlowNode<GraphVertexNodeData>>>(() => positionedGraph.vertices.map((vertex) => ({
+  const defaultViewport = useMemo(
+    () => getGraphViewState(graphViewStateKey)?.viewport ?? { x: 0, y: 0, zoom: 1 },
+    [graphViewStateKey]
+  );
+
+  const nodes = useMemo<Array<FlowNode<GraphVertexNodeData>>>(() => {
+    const registry = getGraphNodeTypeRegistry();
+    return positionedGraph.vertices.map((vertex) => ({
     id: vertex.id,
-    type: "graphVertex",
+    type: registry.getComponent(vertex.kind ?? "") ? vertex.kind! : "default",
     position: vertex.position,
     selected: selectedEntity?.type === "vertex" && selectedEntity.entity.id === vertex.id,
     data: {
@@ -147,43 +164,64 @@ export function GraphViewer({
       width: vertex.style?.width ?? 180,
       height: vertex.style?.height ?? 72
     }
-  })), [effectiveLayoutDirection, highlightedVertexIds, iconResolver, positionedGraph, selectedEntity]);
+  }));
+}, [effectiveLayoutDirection, highlightedVertexIds, iconResolver, positionedGraph, selectedEntity]);
 
-  const edges = useMemo<FlowEdge[]>(() => graph.edges.map((edge) => {
-    const selected = selectedEntity?.type === "edge" && selectedEntity.entity.id === edge.id;
-    const highlighted = highlightedEdgeIds.has(edge.id);
-    const className = [
-      selected ? "is-selected" : "",
-      highlighted ? "is-highlighted" : ""
-    ].filter(Boolean).join(" ");
-    const edgeColor = selected
-      ? "var(--accent-muted)"
-      : highlighted
-        ? "var(--accent)"
-        : edge.style?.color;
-    return {
-      id: edge.id,
-      source: edge.sourceVertexId,
-      target: edge.targetVertexId,
-      label: edge.label,
-      type: edge.style?.shape === "bezier" ? "default" : edge.style?.shape,
-      selected,
-      className: className.length > 0 ? className : undefined,
-      markerEnd: edge.style?.markerEnd === "none" ? undefined : {
-        type: MarkerType.ArrowClosed,
-        color: edgeColor
-      },
-      style: {
-        stroke: edgeColor,
-        strokeWidth: selected
-          ? Math.max((edge.style?.width ?? 2) + 1, 3)
-          : highlighted
-            ? Math.max(edge.style?.width ?? 2, 3)
-            : edge.style?.width,
-        strokeDasharray: edge.style?.dash ? "6 4" : undefined
+  const edges = useMemo<FlowEdge[]>(() => {
+    const vertexMap = new Map(graph.vertices.map((v) => [v.id, v]));
+    return graph.edges.map((edge) => {
+      const selected = selectedEntity?.type === "edge" && selectedEntity.entity.id === edge.id;
+      const highlighted = highlightedEdgeIds.has(edge.id);
+      const className = [
+        selected ? "is-selected" : "",
+        highlighted ? "is-highlighted" : ""
+      ].filter(Boolean).join(" ");
+      const edgeColor = selected
+        ? "var(--accent-muted)"
+        : highlighted
+          ? "var(--accent)"
+          : edge.style?.color;
+
+      let sourceHandle: string | undefined;
+      let targetHandle: string | undefined;
+      if (edge.kind === "fk" && edge.label) {
+        sourceHandle = "fk:" + edge.label;
+        const targetVertex = vertexMap.get(edge.targetVertexId);
+        if (targetVertex) {
+          const columnsGroup = targetVertex.properties?.find((g) => g.id === "columns");
+          const pkCol = columnsGroup?.properties.find((p) => p.important === true);
+          if (pkCol) {
+            targetHandle = "pk:" + pkCol.label;
+          }
+        }
       }
-    };
-  }), [graph.edges, highlightedEdgeIds, selectedEntity]);
+
+      return {
+        id: edge.id,
+        source: edge.sourceVertexId,
+        target: edge.targetVertexId,
+        sourceHandle,
+        targetHandle,
+        label: edge.label,
+        type: edge.style?.shape === "bezier" ? "default" : edge.style?.shape,
+        selected,
+        className: className.length > 0 ? className : undefined,
+        markerEnd: edge.style?.markerEnd === "none" ? undefined : {
+          type: MarkerType.ArrowClosed,
+          color: edgeColor
+        },
+        style: {
+          stroke: edgeColor,
+          strokeWidth: selected
+            ? Math.max((edge.style?.width ?? 2) + 1, 3)
+            : highlighted
+              ? Math.max(edge.style?.width ?? 2, 3)
+              : edge.style?.width,
+          strokeDasharray: edge.style?.dash ? "6 4" : undefined
+        }
+      };
+    });
+  }, [graph.edges, graph.vertices, highlightedEdgeIds, selectedEntity]);
 
   useEffect(() => {
     onSelectionChanged?.(selectedEntity);
@@ -226,6 +264,88 @@ export function GraphViewer({
     });
   };
 
+  // View state persistence
+
+  const handleMoveEnd = useCallback((_event: MouseEvent | TouchEvent | null, viewport: { x: number; y: number; zoom: number }) => {
+    if (!viewportAppliedRef.current || applyingViewportRef.current) {
+      return;
+    }
+    latestViewportRef.current = viewport;
+    setGraphViewState(graphIdRef.current, {
+      viewport,
+      layoutDirection: layoutDirectionRef.current,
+    });
+  }, []);
+
+  useEffect(() => {
+    // graphIdRef.current is the previous graph's id (not overwritten during render)
+    const prevId = graphIdRef.current;
+    if (prevId !== graphViewStateKey) {
+      if (viewportAppliedRef.current) {
+        setGraphViewState(prevId, {
+          viewport: latestViewportRef.current,
+          layoutDirection: layoutDirectionRef.current,
+        });
+      }
+      viewportAppliedRef.current = false;
+      graphIdRef.current = graphViewStateKey;
+      const saved = getGraphViewState(graphViewStateKey);
+      setLayoutDirectionOverride(saved?.layoutDirection ?? "auto");
+    }
+  }, [graphViewStateKey]);
+
+  useEffect(() => {
+    return () => {
+      if (viewportAppliedRef.current) {
+        setGraphViewState(graphIdRef.current, {
+          viewport: latestViewportRef.current,
+          layoutDirection: layoutDirectionRef.current,
+        });
+      }
+    };
+  }, []);
+
+  const applyViewport = useCallback((instance: ReactFlowInstance<Node<GraphVertexNodeData>, Edge>) => {
+    const saved = getGraphViewState(graphViewStateKey);
+    if (saved && saved.layoutDirection === layoutDirectionRef.current) {
+      latestViewportRef.current = saved.viewport;
+      viewportAppliedRef.current = true;
+      applyingViewportRef.current = true;
+      instance.setViewport(saved.viewport, { duration: 0 });
+      requestAnimationFrame(() => { applyingViewportRef.current = false; });
+      return;
+    }
+    const bounds = getGraphBounds(positionedGraph.vertices);
+    if (!bounds) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return;
+    const vp = getViewportForBounds(bounds, rect.width, rect.height, 0.1, 2.5, 0.18);
+    latestViewportRef.current = vp;
+    viewportAppliedRef.current = true;
+    applyingViewportRef.current = true;
+    instance.setViewport(vp, { duration: 0 });
+    setGraphViewState(graphViewStateKey, { viewport: vp, layoutDirection: layoutDirectionRef.current });
+    requestAnimationFrame(() => { applyingViewportRef.current = false; });
+  }, [graphViewStateKey, positionedGraph.vertices]);
+
+  useLayoutEffect(() => {
+    viewportAppliedRef.current = false;
+    const instance = rfInstanceRef.current;
+    if (instance) applyViewport(instance);
+  }, [applyViewport]);
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    const observer = new ResizeObserver(() => {
+      const instance = rfInstanceRef.current;
+      if (instance && !viewportAppliedRef.current) {
+        applyViewport(instance);
+      }
+    });
+    observer.observe(canvasRef.current);
+    return () => observer.disconnect();
+  }, [applyViewport]);
+
   if (!validation.valid) {
     return (
       <div className="graph-viewer graph-viewer-invalid">
@@ -245,15 +365,17 @@ export function GraphViewer({
           onDirectionChanged={setLayoutDirectionOverride}
         />
         <ReactFlow
+          key={graphViewStateKey}
+          defaultViewport={defaultViewport}
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
           proOptions={{ hideAttribution: true }}
-          fitView
           minZoom={0.1}
           maxZoom={2.5}
           panOnScroll
           panActivationKeyCode=""
+          onInit={(instance) => { rfInstanceRef.current = instance; applyViewport(instance); }}
           onPaneClick={() => selectEntity(null)}
           onNodeClick={(_event, node) => selectEntity(resolveGraphEntity(graph, "vertex", node.id))}
           onEdgeClick={(_event, edge) => selectEntity(resolveGraphEntity(graph, "edge", edge.id))}
@@ -263,11 +385,8 @@ export function GraphViewer({
           onEdgeMouseEnter={(event, edge) => openTooltip(event, resolveGraphEntity(graph, "edge", edge.id), setTooltip)}
           onNodeMouseLeave={() => setTooltip(null)}
           onEdgeMouseLeave={() => setTooltip(null)}
+          onMoveEnd={handleMoveEnd}
         >
-          <GraphFitController
-            canvasRef={canvasRef}
-            fitKey={`${graph.id}:${nodes.length}:${edges.length}:${effectiveLayoutDirection}`}
-          />
           <Background />
           <MiniMap
             style={{
@@ -310,53 +429,23 @@ export function GraphViewer({
   );
 }
 
-function GraphFitController({
-  canvasRef,
-  fitKey
-}: {
-  canvasRef: RefObject<HTMLDivElement>;
-  fitKey: string;
-}): null {
-  const nodesInitialized = useNodesInitialized();
-  const { fitView } = useReactFlow();
-
-  useEffect(() => {
-    if (!nodesInitialized) {
-      return;
-    }
-    const fit = () => {
-      void fitView({ padding: 0.18, duration: 0, includeHiddenNodes: false });
-    };
-    const frame = requestAnimationFrame(() => {
-      requestAnimationFrame(fit);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [fitKey, fitView, nodesInitialized]);
-
-  useEffect(() => {
-    if (!nodesInitialized || !canvasRef.current) {
-      return;
-    }
-    let frame: number | null = null;
-    const observer = new ResizeObserver(() => {
-      if (frame !== null) {
-        cancelAnimationFrame(frame);
-      }
-      frame = requestAnimationFrame(() => {
-        frame = null;
-        void fitView({ padding: 0.18, duration: 0, includeHiddenNodes: false });
-      });
-    });
-    observer.observe(canvasRef.current);
-    return () => {
-      observer.disconnect();
-      if (frame !== null) {
-        cancelAnimationFrame(frame);
-      }
-    };
-  }, [canvasRef, fitView, nodesInitialized]);
-
-  return null;
+function getGraphBounds(vertices: PositionedGraphVertex[]): { x: number; y: number; width: number; height: number } | undefined {
+  if (vertices.length === 0) return undefined;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const vertex of vertices) {
+    const w = vertex.style?.width ?? 180;
+    const h = vertex.style?.height ?? 72;
+    const x = vertex.position?.x ?? 0;
+    const y = vertex.position?.y ?? 0;
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    const rx = x + w;
+    const by = y + h;
+    if (rx > maxX) maxX = rx;
+    if (by > maxY) maxY = by;
+  }
+  const bounds = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  return bounds.width > 0 && bounds.height > 0 ? bounds : undefined;
 }
 
 function GraphLayoutToolbar({

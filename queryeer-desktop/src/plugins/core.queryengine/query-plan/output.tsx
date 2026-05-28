@@ -10,6 +10,19 @@ import { resolveQueryPlanOperatorIcon } from "./icons";
 import outputGraphIconUrl from "./output.svg";
 import "./output.css";
 
+const artifactViewStateIds = new WeakMap<object, number>();
+let nextArtifactViewStateId = 1;
+
+function getArtifactViewStateKey(context: OutputContext, artifact: OutputContext["artifacts"][number]): string {
+  // Plan graph ids are deterministic per statement, so object identity separates executions.
+  let instanceId = artifactViewStateIds.get(artifact);
+  if (instanceId === undefined) {
+    instanceId = nextArtifactViewStateId++;
+    artifactViewStateIds.set(artifact, instanceId);
+  }
+  return ["query-plan", context.fileId ?? "unknown-file", artifact.id, artifact.graph.id, instanceId].join(":");
+}
+
 export function registerQueryPlanOutput(context: PluginContext): void {
   const queryPlanInteractionStore = getQueryPlanInteractionStore();
 
@@ -62,6 +75,7 @@ function QueryPlanGraphOutput({
   const viewer = (
     <GraphViewer
       graph={selectedArtifact.graph}
+      viewStateKey={getArtifactViewStateKey(context, selectedArtifact)}
       iconResolver={resolveQueryPlanOperatorIcon}
       interactionStore={interactionStore}
     />
@@ -91,6 +105,7 @@ function QueryPlanGraphOutput({
         <GraphViewer
           key={selectedArtifact.id}
           graph={selectedArtifact.graph}
+          viewStateKey={getArtifactViewStateKey(context, selectedArtifact)}
           iconResolver={resolveQueryPlanOperatorIcon}
           interactionStore={interactionStore}
         />

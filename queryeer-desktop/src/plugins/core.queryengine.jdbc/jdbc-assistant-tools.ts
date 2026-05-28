@@ -128,7 +128,7 @@ async function getJdbcObjectDetails(context: PluginContext, request: AssistantTo
   };
 }
 
-async function loadDeepSnapshot(connectionId: string): Promise<JdbcSchemaObject[]> {
+export async function loadDeepSnapshot(connectionId: string): Promise<JdbcSchemaObject[]> {
   const result = await getQueryEngineService().invoke(
     { engineId: "jdbc", action: "jdbc.schema.snapshot", payload: { connectionId, scope: "deep" } },
     { silent: true }

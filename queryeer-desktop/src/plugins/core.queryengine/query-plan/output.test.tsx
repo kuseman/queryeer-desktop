@@ -13,7 +13,9 @@ vi.mock("../output/OutputRegistry", () => ({
 }));
 
 vi.mock("../../core.graph/GraphViewer", () => ({
-  GraphViewer: ({ graph }: { graph: { id: string } }) => <div data-testid="mock-graph-viewer">{graph.id}</div>
+  GraphViewer: ({ graph, viewStateKey }: { graph: { id: string }; viewStateKey?: string }) => (
+    <div data-testid="mock-graph-viewer" data-view-state-key={viewStateKey}>{graph.id}</div>
+  )
 }));
 
 import { registerQueryPlanOutput } from "./output";
@@ -119,5 +121,47 @@ describe("query plan output registration", () => {
     });
 
     expect(rootElement.textContent).toContain("graph-2");
+  });
+
+  it("uses a fresh graph view state key for each plan artifact instance", async () => {
+    const context = makePluginContext();
+    registerQueryPlanOutput(context);
+
+    const contributor = outputRegistryMock.register.mock.calls
+      .map((call) => call[0] as OutputContributor)
+      .find((candidate) => candidate.id === "core.graph.queryPlanOutput");
+    expect(contributor).toBeDefined();
+
+    const artifact = {
+      id: "plan-1",
+      capability: "plan",
+      kind: "graph" as const,
+      title: "Actual Query Plan",
+      graph: { id: "postgres-plan-1", vertices: [{ id: "a", label: "A" }], edges: [] }
+    };
+
+    await act(async () => {
+      root.render(<>{contributor!.render({
+        ...baseOutputContext,
+        artifacts: [artifact]
+      })}</>);
+    });
+
+    const firstKey = rootElement.querySelector("[data-testid='mock-graph-viewer']")?.getAttribute("data-view-state-key");
+    expect(firstKey).toMatch(/^query-plan:file-1:plan-1:postgres-plan-1:\d+$/);
+
+    await act(async () => {
+      root.render(<>{contributor!.render({
+        ...baseOutputContext,
+        artifacts: [{
+          ...artifact,
+          graph: { id: "postgres-plan-1", vertices: [{ id: "b", label: "B" }], edges: [] }
+        }]
+      })}</>);
+    });
+
+    const secondKey = rootElement.querySelector("[data-testid='mock-graph-viewer']")?.getAttribute("data-view-state-key");
+    expect(secondKey).toMatch(/^query-plan:file-1:plan-1:postgres-plan-1:\d+$/);
+    expect(secondKey).not.toBe(firstKey);
   });
 });

@@ -19,6 +19,7 @@ import {
 } from "./PluginValidation";
 import { getFileStateRegistry } from "./FileStateRegistryImpl";
 import { getJdbcTreeContextMenuRegistry } from "../../plugins/core.queryengine.jdbc/jdbc-tree-context-menu-registry";
+import { getGraphNodeTypeRegistry } from "../../plugins/core.graph/graph-node-type-registry";
 import { registerChangelog } from "../../plugins/core.about/about-service.js";
 import { getNotificationService } from "../../plugins/core.notification/notification-service";
 
@@ -121,6 +122,7 @@ export class PluginHost {
       contextMenu: this.extensionRegistry.createContextMenuRegistry(),
       tableOutputContextMenu: this.extensionRegistry.createTableOutputContextMenuRegistry(),
       jdbcTreeContextMenu: getJdbcTreeContextMenuRegistry(),
+      graphNodeTypes: getGraphNodeTypeRegistry(),
       about: { registerChangelog },
       notifications: getNotificationService(),
       assistant: this.extensionRegistry.createAssistantRegistry()

@@ -1,0 +1,143 @@
+.schema-table-node {
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-1);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.24);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--ui-font-size-sm);
+}
+
+.schema-table-node.is-selected {
+  border-color: var(--accent-muted);
+  box-shadow: 0 0 0 2px rgba(17, 119, 187, 0.3), 0 8px 18px rgba(0, 0, 0, 0.24);
+}
+
+.schema-table-node-handle {
+  opacity: 0;
+}
+
+.schema-table-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  color: #fff;
+  font-weight: 600;
+}
+
+.schema-table-kind {
+  font-size: var(--ui-font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+}
+
+.schema-table-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--ui-font-size-md);
+}
+
+.schema-table-columns {
+  flex: 1;
+  overflow: auto;
+}
+
+.schema-table-empty {
+  padding: 8px 12px;
+  color: var(--text-1);
+  font-style: italic;
+  font-size: var(--ui-font-size-xs);
+}
+
+.schema-table-column {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  position: relative;
+}
+
+.schema-table-column:last-child {
+  border-bottom: none;
+}
+
+.schema-table-column:nth-child(even) {
+  background: color-mix(in srgb, var(--bg-2) 50%, transparent);
+}
+
+.schema-table-col-name {
+  font-family: var(--mono-font, "Cascadia Code", "JetBrains Mono", "Fira Code", monospace);
+  font-size: var(--ui-font-size-xs);
+  color: var(--text-0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.schema-table-col-type {
+  font-size: var(--ui-font-size-xs);
+  color: var(--text-1);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.schema-table-col-badges {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.schema-table-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.03em;
+}
+
+.schema-table-badge-pk {
+  background: #fbbf24;
+  color: #1e1b0e;
+  border: 1px solid #f59e0b;
+}
+
+.schema-table-badge-fk {
+  background: #c4b5fd;
+  color: #1e1b2e;
+  border: 1px solid #a78bfa;
+}
+
+.schema-table-col-handle {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  border-width: 2px !important;
+  border-style: solid !important;
+  background: var(--bg-1) !important;
+  z-index: 1;
+  pointer-events: all !important;
+  cursor: default;
+}
+
+.schema-table-col-handle-pk {
+  border-color: #fbbf24 !important;
+}
+
+.schema-table-col-handle-fk {
+  border-color: #6366f1 !important;
+}
