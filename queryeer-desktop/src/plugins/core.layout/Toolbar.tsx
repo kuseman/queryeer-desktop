@@ -7,7 +7,7 @@ import type {
 } from "../../contracts/extensions/LayoutExtension";
 import { GenericActionIcon, layoutToolbarIconMap } from "../../renderer/icons/LayoutIcons";
 import type { CommandExecutionResult } from "../../contracts/plugin/Plugin";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 
 type ToolbarProps = {
   toolbarActions: LayoutToolbarContribution[];
@@ -25,7 +25,7 @@ const zoneToggleByCommand: Record<string, LayoutZone | undefined> = {
   "core.layout.togglePanel": "panel"
 };
 
-export function Toolbar({
+function ToolbarComponent({
   toolbarActions,
   visibleZones,
   onToggleZone,
@@ -215,3 +215,5 @@ export function Toolbar({
     </section>
   );
 }
+
+export const Toolbar = memo(ToolbarComponent);

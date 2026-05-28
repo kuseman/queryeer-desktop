@@ -58,7 +58,8 @@ describe("EditorCursorPositionIndicator", () => {
     expect(container.textContent).toBe("Ln 42, Col 15");
   });
 
-  it("updates position on cursor change event", () => {
+  it("updates position on cursor change event", async () => {
+    vi.useFakeTimers();
     const mockEditor = {
       getPosition: mocks.getPositionMock,
       onDidChangeCursorPosition: mocks.onDidChangeCursorPositionMock
@@ -74,6 +75,8 @@ describe("EditorCursorPositionIndicator", () => {
         listener({ position: { lineNumber: 99, column: 7 } });
       }
     });
+    act(() => { vi.advanceTimersByTime(100); });
     expect(container.textContent).toBe("Ln 99, Col 7");
+    vi.useRealTimers();
   });
 });

@@ -260,4 +260,51 @@ describe("text output keyboard shortcuts", () => {
     expect(clipboardWriteText).not.toHaveBeenCalled();
     expect(event.defaultPrevented).toBe(false);
   });
+
+  it("handles Ctrl/Cmd+A even when child element stops event propagation (capture phase)", () => {
+    const terminal = mocks.terminals[0];
+    expect(terminal).toBeTruthy();
+
+    const rootNode = rootElement.querySelector(".query-output-text-root") as HTMLElement;
+
+    const child = document.createElement("div");
+    child.addEventListener("keydown", (e) => e.stopPropagation());
+    rootNode.appendChild(child);
+
+    const event = new KeyboardEvent("keydown", {
+      key: "a",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true
+    });
+
+    child.dispatchEvent(event);
+
+    expect(terminal!.selectAll).toHaveBeenCalledTimes(1);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("handles Ctrl/Cmd+F to open search even when child element stops event propagation (capture phase)", async () => {
+    const rootNode = rootElement.querySelector(".query-output-text-root") as HTMLElement;
+
+    const child = document.createElement("div");
+    child.addEventListener("keydown", (e) => e.stopPropagation());
+    rootNode.appendChild(child);
+
+    const event = new KeyboardEvent("keydown", {
+      key: "f",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true
+    });
+
+    await act(async () => {
+      child.dispatchEvent(event);
+      await Promise.resolve();
+    });
+
+    const findbar = rootNode.querySelector(".query-output-text-findbar");
+    expect(findbar).toBeTruthy();
+    expect(event.defaultPrevented).toBe(true);
+  });
 });

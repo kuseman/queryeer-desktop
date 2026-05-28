@@ -320,13 +320,19 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
       editorRegistryHost.setActiveEditor(handle);
     }
 
+    let dirtyTimer: ReturnType<typeof setTimeout> | null = null;
     api.onDidChangeModelContent((event) => {
       if (event.isFlush) {
         return;
       }
-      const currentFile = registry.getActiveFile();
-      if (currentFile?.fileId) {
-        registry.markDirty(currentFile.fileId);
+      if (dirtyTimer === null) {
+        dirtyTimer = setTimeout(() => {
+          dirtyTimer = null;
+          const currentFile = registry.getActiveFile();
+          if (currentFile?.fileId) {
+            registry.markDirty(currentFile.fileId);
+          }
+        }, 0);
       }
     });
 

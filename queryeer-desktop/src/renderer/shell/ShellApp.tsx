@@ -5,6 +5,7 @@ import type {
   LayoutEditorContribution
 } from "../../contracts/extensions/LayoutExtension";
 import type { FileEntity } from "../../contracts/files/FileEntity";
+import { filesAreStructurallyIdentical } from "./file-entity-utils";
 import type { FileMediator } from "../../contracts/files/FileMediator";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import type { CommandExecutionResult } from "../../contracts/plugin/Plugin";
@@ -162,8 +163,14 @@ export function ShellApp({
   }, [workspaceService]);
 
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
     return onCommandContextChanged(() => {
-      setCommandContextVersion((version) => version + 1);
+      if (timer === null) {
+        timer = setTimeout(() => {
+          timer = null;
+          setCommandContextVersion((version) => version + 1);
+        }, 500);
+      }
     });
   }, [onCommandContextChanged]);
 
@@ -177,7 +184,7 @@ export function ShellApp({
     return () => unsub?.();
   }, []);
 
-  const toggleZone = (zone: LayoutZone) => {
+  const toggleZone = useCallback((zone: LayoutZone) => {
     setVisibleZones((previous) => {
       const next = new Set(previous);
       if (next.has(zone)) {
@@ -189,7 +196,7 @@ export function ShellApp({
       next.add("statusBar");
       return next;
     });
-  };
+  }, []);
 
   const statusItemsLeft = useMemo(
     () =>
@@ -281,6 +288,16 @@ export function ShellApp({
     }
     return map;
   }, [extensions.commands]);
+
+  const getCommandTitle = useCallback(
+    (commandId: string) => commandTitleById.get(commandId),
+    [commandTitleById]
+  );
+
+  const getCommandAccelerator = useCallback(
+    (commandId: string) => getKeybindingLabel(commandId),
+    []
+  );
 
   useEffect(() => {
     return subscribeKeybindingsRuntime(() => {
@@ -521,11 +538,18 @@ export function ShellApp({
       let nextOpenFileIds: string[] = [];
       let addedFileIds: string[] = [];
       let previousOpenFileIdsForActivation: string[] = [];
-      setFiles(next);
+      setFiles((prev) => {
+        if (filesAreStructurallyIdentical(prev, next)) return prev;
+        return next;
+      });
       setTabActivationQueue((previousQueue) => {
         const nextSet = new Set(next.map((file) => file.fileId));
         const nextQueue = previousQueue.filter((queuedId) => nextSet.has(queuedId));
         tabActivationQueueRef.current = nextQueue;
+        if (nextQueue.length === previousQueue.length &&
+            nextQueue.every((id, i) => id === previousQueue[i])) {
+          return previousQueue;
+        }
         return nextQueue;
       });
       setOpenFileIds((prev) => {
@@ -541,6 +565,11 @@ export function ShellApp({
         });
         nextOpenFileIds = resolution.nextOpenFileIds;
         addedFileIds = resolution.addedFileIds;
+        if (resolution.addedFileIds.length === 0 &&
+            resolution.nextOpenFileIds.length === prev.length &&
+            resolution.nextOpenFileIds.every((id, i) => id === prev[i])) {
+          return prev;
+        }
         const uriByFileId = new Map(next.map((file) => [file.fileId, file.uri]));
         workspaceService.setOpenFileOrder(
           resolution.nextOpenFileIds
@@ -557,9 +586,14 @@ export function ShellApp({
           addedFileIds,
           activationQueue: tabActivationQueueRef.current
         });
-        tabActivationQueueRef.current = resolution.nextQueue;
-        setTabActivationQueue(resolution.nextQueue);
+        if (resolution.nextQueue !== tabActivationQueueRef.current) {
+          tabActivationQueueRef.current = resolution.nextQueue;
+          setTabActivationQueue(resolution.nextQueue);
+        }
         activeFileIdRef.current = resolution.nextActiveFileId;
+        if (resolution.nextActiveFileId === prev) {
+          return prev;
+        }
         return resolution.nextActiveFileId;
       });
     });
@@ -629,7 +663,7 @@ export function ShellApp({
         menuItems={menuItems}
         executeCommand={executeCommand}
         canExecuteCommand={canExecuteCommand}
-        getCommandAccelerator={(commandId) => getKeybindingLabel(commandId)}
+        getCommandAccelerator={getCommandAccelerator}
         getMimeIcon={filesRegistry.mimeIcons.getMimeIcon}
       />
       {visibleZones.has("toolBar") && (
@@ -639,8 +673,8 @@ export function ShellApp({
           onToggleZone={toggleZone}
           canExecuteCommand={canExecuteCommand}
           executeCommand={executeCommand}
-          getCommandTitle={(commandId) => commandTitleById.get(commandId)}
-          getCommandAccelerator={(commandId) => getKeybindingLabel(commandId)}
+          getCommandTitle={getCommandTitle}
+          getCommandAccelerator={getCommandAccelerator}
         />
       )}
 

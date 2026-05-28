@@ -27,8 +27,15 @@ export function EditorCursorPositionIndicator() {
           } else {
             setPosition(null);
           }
+          let rafId: number | null = null;
+          const latestEvent = { position: editor.getPosition() };
           disposableRef.current = editor.onDidChangeCursorPosition((event) => {
-            setPosition((previous) => updatePosition(previous, event.position));
+            latestEvent.position = event.position;
+            if (rafId !== null) return;
+            rafId = window.requestAnimationFrame(() => {
+              rafId = null;
+              setPosition((previous) => updatePosition(previous, latestEvent.position!));
+            });
           });
         } else {
           setPosition(null);
