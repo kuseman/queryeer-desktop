@@ -27,9 +27,12 @@ import { TreeActionsSettingsEditor } from "./tree-action-settings";
 import { createTreeActionProvider } from "./tree-action-provider";
 import { onCoreSettingsServiceInitialized } from "../core.settings/service";
 import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegistry";
-import { createJdbcAssistantTools } from "./jdbc-assistant-tools";
+import { createJdbcAssistantTools, loadDeepSnapshot } from "./jdbc-assistant-tools";
 import { subscribeJdbcQueryPlanDialectSupport } from "../core.queryengine/query-plan/supported-dialects";
 import { registerJdbcFlowNodeContribution } from "./flow-node-contribution";
+import { buildSchemaGraph } from "./jdbc-schema-graph-builder";
+import { SchemaTableNode } from "./SchemaTableNode";
+import { GRAPH_DOCUMENT_MIME_TYPE, GRAPH_DOCUMENT_EXTENSION } from "../core.graph/constants";
 
 const JDBC_SESSION_ID_METADATA_KEY = "core.queryengine.jdbc.sessionId";
 const JDBC_SESSION_CONNECTION_TITLE_KEY = "core.queryengine.jdbc.sessionConnection";
@@ -214,6 +217,12 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
 
     const treeContextMenu = getJdbcTreeContextMenuRegistry();
 
+    // Register custom graph node types for TABLE/VIEW rendering
+    context.graphNodeTypes.registerNodeType({
+      kind: ["TABLE", "VIEW"],
+      component: SchemaTableNode,
+    });
+
     treeContextMenu.registerContribution({
       id: "core.queryengine.jdbc.navigation.newQuery.connection",
       label: "New Query",
@@ -244,6 +253,30 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
           ? node.attributes.catalog
           : node.name;
         initJdbcFileBinding(file.fileId, node.connectionId, database, context.files);
+      }
+    });
+
+    treeContextMenu.registerContribution({
+      id: "core.queryengine.jdbc.showSchemaDiagram",
+      label: "Schema Diagram",
+      section: "diagram",
+      order: 150,
+      matches: (node) => node.kind === "database",
+      run: async (node) => {
+        const snapshot = await loadDeepSnapshot(node.connectionId);
+        const graph = buildSchemaGraph(snapshot, node.name);
+        const file = await context.fileMediator.createUntitledFile({
+          mimeType: GRAPH_DOCUMENT_MIME_TYPE,
+          extension: GRAPH_DOCUMENT_EXTENSION,
+          title: `ER Diagram - ${node.name}`,
+        });
+        context.files.updateFile(file.fileId, {
+          metadata: {
+            ...(file.metadata ?? {}),
+            workspaceTransient: true,
+            graphDocument: graph,
+          },
+        });
       }
     });
 

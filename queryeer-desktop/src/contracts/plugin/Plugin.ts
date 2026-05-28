@@ -14,6 +14,7 @@ import type { EditorRegistry } from "../editor/EditorCapability.js";
 import type { ContextMenuRegistry } from "../extensions/ContextMenuExtension.js";
 import type { TableOutputContextMenuRegistry } from "../extensions/TableOutputContextMenuExtension.js";
 import type { JdbcTreeContextMenuRegistry } from "../extensions/JdbcTreeContextMenuExtension.js";
+import type { GraphNodeTypeRegistry } from "../extensions/GraphNodeTypeExtension.js";
 import type { AboutExtension } from "../extensions/AboutExtension.js";
 import type { NotificationService } from "../extensions/NotificationExtension.js";
 import type { AssistantRegistry } from "../assistant/Assistant.js";
@@ -46,6 +47,7 @@ export type PluginContext = {
   contextMenu: ContextMenuRegistry;
   tableOutputContextMenu: TableOutputContextMenuRegistry;
   jdbcTreeContextMenu: JdbcTreeContextMenuRegistry;
+  graphNodeTypes: GraphNodeTypeRegistry;
   about: AboutExtension;
   notifications: NotificationService;
   assistant: AssistantRegistry;
