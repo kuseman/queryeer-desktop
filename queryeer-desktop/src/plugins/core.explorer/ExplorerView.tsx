@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { FileEntity } from "../../contracts/files/FileEntity";
+import { filesAreStructurallyIdentical } from "../../renderer/shell/file-entity-utils";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import type { PluginContext } from "../../contracts/plugin/Plugin";
 import type { ExplorerFolder, ExplorerTreeNode, ExplorerFolderNode, ExplorerFileNode } from "./types";
@@ -153,7 +154,10 @@ export function ExplorerView({ context, filesRegistry, store, readDir }: Explore
 
   useEffect(() => {
     const unsubscribe = filesRegistry.subscribe((files) => {
-      setOpenFiles(files);
+      setOpenFiles((prev) => {
+        if (filesAreStructurallyIdentical(prev, files)) return prev;
+        return files;
+      });
       for (const file of files) {
         store.markFileOpen(file.fileId, true);
       }

@@ -54,6 +54,9 @@ export class TextEditorModel {
   }
 
   setContent(content: string): void {
+    if (this.content === content) {
+      return;
+    }
     this.content = content;
     this.version++;
     this.rebuildLineCache();

@@ -20,6 +20,7 @@ import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import { isPrimaryModifier } from "../../shared/platform-utils";
 import type { FileMediator } from "../../contracts/files/FileMediator";
 import { inflateDottedKeys } from "./context-value-flatten";
+import { filesAreStructurallyIdentical } from "./file-entity-utils";
 import { createContextChain } from "../../plugins/core.commands/context-chain";
 import { ContextPriority } from "../../plugins/core.commands/context-priority";
 import { createZoneFocusScope } from "../../plugins/core.commands/context-key-service";
@@ -211,7 +212,12 @@ export async function bootstrapShell() {
     });
   };
   fileMediator.onActiveFileChanged(() => updateActiveFileScope());
-  filesRegistry.subscribe(() => updateActiveFileScope());
+  let previousFiles: readonly FileEntity[] = [];
+  filesRegistry.subscribe((next) => {
+    if (filesAreStructurallyIdentical(previousFiles, next)) return;
+    previousFiles = next;
+    updateActiveFileScope();
+  });
   updateActiveFileScope();
 
   const externalFrontendPlugins = await window.appShell.getExternalFrontendPlugins();

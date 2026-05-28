@@ -1,6 +1,6 @@
 import DOMPurify from "dompurify";
 import { marked } from "marked";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { PluginContext } from "../../../contracts/plugin/Plugin";
 import { isPrimaryModifier } from "../../../shared/platform-utils";
 import type { AssistantChatMessage, AssistantChatTool, AssistantContextItem, AssistantToolApproval, AssistantToolContribution, AssistantToolResult } from "../../../contracts/assistant/Assistant";
@@ -28,7 +28,7 @@ type PendingToolApproval = {
 
 type ToolApprovalDecision = "deny" | "once" | "session";
 
-export function AssistantChatView({ context }: Props): JSX.Element {
+function AssistantChatViewComponent({ context }: Props): JSX.Element {
   const [activeFileId, setActiveFileId] = useState(() => context.fileMediator.getActiveFileId());
   const [version, setVersion] = useState(0);
   const [draft, setDraft] = useState("");
@@ -57,7 +57,17 @@ export function AssistantChatView({ context }: Props): JSX.Element {
     return service?.subscribe(() => setVersion((previous) => previous + 1)) ?? (() => {});
   }, []);
 
-  useEffect(() => subscribeCommandContext(() => setVersion((previous) => previous + 1)), []);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    return subscribeCommandContext(() => {
+      if (timer === null) {
+        timer = setTimeout(() => {
+          timer = null;
+          setVersion((previous) => previous + 1);
+        }, 500);
+      }
+    });
+  }, []);
 
   const connections = useMemo(() => listAssistantConnections(), [version]);
   const state = activeFileId ? getAssistantChatState(context.fileState, activeFileId) : null;
@@ -354,6 +364,8 @@ export function AssistantChatView({ context }: Props): JSX.Element {
     </div>
   );
 }
+
+export const AssistantChatView = memo(AssistantChatViewComponent);
 
 async function runRequestedTools(
   context: PluginContext,
