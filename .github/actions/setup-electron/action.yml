@@ -1,0 +1,63 @@
+name: Setup Electron
+description: Download and cache Electron binary for CI (handles flaky CDN with retries and mirrors)
+
+inputs:
+  mode:
+    description: >
+      Operation mode. Use "cache" before npm ci to detect version and restore
+      ~/.electron cache. Use "ensure" after npm ci to download, extract and
+      verify the Electron binary if the cache missed.
+    required: false
+    default: cache
+  working-directory:
+    description: Directory containing package.json with electron devDependency
+    required: false
+    default: queryeer-desktop
+
+runs:
+  using: composite
+  steps:
+    - name: Get Electron version
+      id: electron-version
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: echo "version=$(node -p "require('./package.json').devDependencies.electron.replace('^', '')")" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Electron binary
+      if: inputs.mode == 'cache'
+      uses: actions/cache@v4
+      with:
+        path: ~/.electron
+        key: ${{ runner.os }}-electron-${{ steps.electron-version.outputs.version }}
+
+    - name: Ensure Electron binary is installed
+      if: inputs.mode == 'ensure'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        ELECTRON_VERSION="${{ steps.electron-version.outputs.version }}"
+        ELECTRON_PLATFORM=$(node -p "process.platform")
+        ELECTRON_ARCH=$(node -p "process.arch === 'arm64' ? 'arm64' : 'x64'")
+        ELECTRON_BINARY=$(node -p "process.platform === 'win32' ? 'electron.exe' : process.platform === 'darwin' ? 'Electron.app/Contents/MacOS/Electron' : 'electron'")
+        CACHE_DIR="$HOME/.electron"
+        mkdir -p "$CACHE_DIR"
+        rm -rf node_modules/electron/dist
+        for mirror in \
+          "https://github.com/electron/electron/releases/download/v" \
+          "https://npmmirror.com/mirrors/electron/"; do
+          URL="${mirror}${ELECTRON_VERSION}/electron-v${ELECTRON_VERSION}-${ELECTRON_PLATFORM}-${ELECTRON_ARCH}.zip"
+          for i in 1 2 3; do
+            echo "Downloading electron-v${ELECTRON_VERSION} (attempt $i, mirror: ${mirror})..."
+            if curl -fL --retry 2 --max-time 120 -o "$CACHE_DIR/electron-v${ELECTRON_VERSION}-${ELECTRON_PLATFORM}-${ELECTRON_ARCH}.zip" "$URL" 2>&1; then
+              rm -rf /tmp/electron-extract && mkdir -p /tmp/electron-extract
+              unzip -qo "$CACHE_DIR/electron-v${ELECTRON_VERSION}-${ELECTRON_PLATFORM}-${ELECTRON_ARCH}.zip" -d /tmp/electron-extract 2>&1 || continue
+              rm -rf node_modules/electron/dist && mkdir -p node_modules/electron/dist
+              mv /tmp/electron-extract/* node_modules/electron/dist/
+              echo "$ELECTRON_VERSION" > node_modules/electron/dist/version
+              echo "$ELECTRON_BINARY" > node_modules/electron/path.txt
+              node -e "require('electron')" && echo "Electron binary OK" && break 2
+            fi
+            sleep 10
+          done
+        done
+        node -e "require('electron')"
