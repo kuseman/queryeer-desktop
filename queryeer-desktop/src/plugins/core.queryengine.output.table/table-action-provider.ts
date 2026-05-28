@@ -142,6 +142,25 @@ async function executeTableAction(
       return;
     }
 
+    if (action.outputTarget === "newFileAndExecute") {
+      const activeFile = (context as Record<string, unknown>).activeFile as { fileId?: string; mimeType?: string } | undefined;
+      const mimeType = activeFile?.mimeType ?? "text/plain";
+      const title = renderedLabel ? renderedLabel.replace(/[<>:"/\\|?*]/g, "_").slice(0, 100) : undefined;
+      const file = await pluginContext.fileMediator.createUntitledFile({
+        mimeType,
+        title,
+        cloneFromFileId: activeFile?.fileId ?? undefined,
+      });
+      getEditorRegistryHost().applyRecoveredContent(file.fileId, rendered);
+      // Defer execution to give React time to mount the new tab's component.
+      // The mount-time check and peekExecuteOptions guard ensure the request
+      // targets the correct file.
+      setTimeout(() => {
+        getQueryEngineService().requestExecute({ textOverride: rendered, fileIdOverride: file.fileId });
+      }, 0);
+      return;
+    }
+
     if (action.outputTarget === "newFile") {
       const activeFile = (context as Record<string, unknown>).activeFile as { fileId?: string; mimeType?: string } | undefined;
       const mimeType = activeFile?.mimeType ?? "text/plain";

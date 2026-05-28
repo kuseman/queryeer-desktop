@@ -26,6 +26,8 @@ export type ExecuteRequestOptions = {
   formatOverride?: string;
   /** When set, overrides backend execution options for this execute request. */
   optionsOverride?: QueryExecuteOptions;
+  /** When set, restricts the execute request to a specific file; other files skip it. */
+  fileIdOverride?: string;
 };
 type ExecutionContextProvider = (params: ExecuteParams) => Partial<ExecuteParams> | void;
 type EngineResolver = (params: Omit<ExecuteParams, "engineId">) => string | undefined;
@@ -311,8 +313,16 @@ export class QueryEngineService {
     }
   }
 
-  consumeExecuteOptions(): ExecuteRequestOptions | null {
+  peekExecuteOptions(): ExecuteRequestOptions | null {
+    return this.pendingExecuteOptions;
+  }
+
+  consumeExecuteOptions(fileId?: string): ExecuteRequestOptions | null {
     const opts = this.pendingExecuteOptions;
+    if (!opts) return null;
+    if (opts.fileIdOverride && opts.fileIdOverride !== fileId) {
+      return null;
+    }
     this.pendingExecuteOptions = null;
     return opts;
   }

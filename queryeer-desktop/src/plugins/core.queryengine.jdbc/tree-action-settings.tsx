@@ -31,6 +31,7 @@ const TARGET_OPTIONS: { value: TreeActionOutputTarget; label: string }[] = [
   { value: "output", label: "Output panel" },
   { value: "clipboard", label: "Clipboard" },
   { value: "newQuery", label: "New query file" },
+  { value: "newQueryAndExecute", label: "New query file with execute" },
 ];
 
 function parseActions(value: unknown): TreeAction[] {

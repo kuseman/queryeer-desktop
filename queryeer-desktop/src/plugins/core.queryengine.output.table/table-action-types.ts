@@ -1,5 +1,5 @@
 export type TableActionMode = "execute" | "render";
-export type TableActionOutputTarget = "output" | "clipboard" | "newFile";
+export type TableActionOutputTarget = "output" | "clipboard" | "newFile" | "newFileAndExecute";
 
 export type TableAction = {
   id: string;

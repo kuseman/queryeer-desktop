@@ -1,5 +1,5 @@
 export type TreeActionMode = "execute" | "render";
-export type TreeActionOutputTarget = "output" | "clipboard" | "newQuery";
+export type TreeActionOutputTarget = "output" | "clipboard" | "newQuery" | "newQueryAndExecute";
 
 export type TreeAction = {
   id: string;

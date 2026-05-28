@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => {
   return {
     executeMock: vi.fn(async () => "exec-1"),
     consumeExecuteOptionsMock: vi.fn(() => null as { outputIdOverride?: string; optionsOverride?: QueryExecuteOptions } | null),
+    peekExecuteOptionsMock: vi.fn(() => null as { fileIdOverride?: string } | null),
     cancelMock: vi.fn(async () => {}),
     ensureUnlockedForSecretAccessMock: vi.fn(async () => true),
     notifyExecutionStartMock: vi.fn(),
@@ -102,7 +103,8 @@ vi.mock("./QueryEngineService", () => ({
     onExecuteRequest: mocks.onExecuteRequestMock,
     onCancelRequest: mocks.onCancelRequestMock,
     onToggleOutputPanelRequest: mocks.onToggleOutputPanelRequestMock,
-    consumeExecuteOptions: mocks.consumeExecuteOptionsMock
+    consumeExecuteOptions: mocks.consumeExecuteOptionsMock,
+    peekExecuteOptions: mocks.peekExecuteOptionsMock
   })
 }));
 
@@ -338,6 +340,8 @@ const filesRegistry = {
 
   it("passes one-shot execution option overrides to the query engine", async () => {
     const file = makeFile({ fileId: "file-plan", uri: "file:///plan.sql" });
+    // Mount-time consumeExecuteOptions check must return null
+    mocks.consumeExecuteOptionsMock.mockReturnValueOnce(null);
     mocks.consumeExecuteOptionsMock.mockReturnValueOnce({
       optionsOverride: {
         intent: "plan.estimated",
@@ -539,6 +543,7 @@ const filesRegistry = {
         requestedArtifacts: [{ capability: "plan" as const, kind: "graph" as const }]
       }
     };
+    mocks.consumeExecuteOptionsMock.mockReturnValueOnce(null); // mount-time check
     mocks.consumeExecuteOptionsMock.mockReturnValueOnce(executeOptions);
     mocks.executeMock.mockResolvedValueOnce("exec-1").mockResolvedValueOnce("exec-2");
 
@@ -563,7 +568,8 @@ const filesRegistry = {
     expect(mocks.executeMock).toHaveBeenCalledTimes(2);
     expect(mocks.executeMock).toHaveBeenNthCalledWith(1, expect.objectContaining({ options: executeOptions.optionsOverride }));
     expect(mocks.executeMock).toHaveBeenNthCalledWith(2, expect.objectContaining({ options: executeOptions.optionsOverride }));
-    expect(mocks.consumeExecuteOptionsMock).toHaveBeenCalledTimes(1);
+    // Called once on mount (fileId check) and once from handleExecute
+    expect(mocks.consumeExecuteOptionsMock).toHaveBeenCalledTimes(2);
   });
 
   it("marks execution failed when SECURITY_SESSION_CLOSED retry unlock is rejected", async () => {
@@ -857,6 +863,7 @@ const filesRegistry = {
 
   it("selects plan tab without routing row chunks to the plan output", async () => {
     const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+    mocks.consumeExecuteOptionsMock.mockReturnValueOnce(null); // mount-time check
     mocks.consumeExecuteOptionsMock.mockReturnValueOnce({
       outputIdOverride: "core.graph.queryPlanOutput",
       optionsOverride: {
