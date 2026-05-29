@@ -38,7 +38,7 @@ public final class JdbcSchemaNavigator
 
     public List<TableInfo> tableNamesForCompletion(String connectionId, String selectedDatabase)
     {
-        List<TableInfo> cached = schemaStore.tableNamesForCompletion(connectionId, selectedDatabase)
+        List<TableInfo> cached = schemaStore.entriesForCompletion(connectionId, selectedDatabase, List.of("table", "view", "base table"))
                 .stream()
                 .map(entry -> new TableInfo(entry.name(), entry.kind(), entry.database()))
                 .toList();
@@ -52,6 +52,31 @@ public final class JdbcSchemaNavigator
         List<TableInfo> tableInfos = new ArrayList<>();
         collectTableNames(snapshot, new NodePath(null, null), normalizedSelectedDatabase, tableInfos);
         return tableInfos;
+    }
+
+    public List<TableInfo> procedureNamesForCompletion(String connectionId, String selectedDatabase)
+    {
+        List<TableInfo> cached = schemaStore.entriesForCompletion(connectionId, selectedDatabase, List.of("procedure"))
+                .stream()
+                .map(entry -> new TableInfo(entry.name(), entry.kind(), entry.database()))
+                .toList();
+        if (!cached.isEmpty())
+        {
+            return cached;
+        }
+
+        String normalizedSelectedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
+        List<JdbcSchemaObject> snapshot = loadSnapshotForLookup(connectionId, selectedDatabase, normalizedSelectedDatabase);
+        List<TableInfo> procInfos = new ArrayList<>();
+        collectTableNames(snapshot, new NodePath(null, null), normalizedSelectedDatabase, procInfos);
+        return procInfos.stream()
+                .filter(info -> "procedure".equals(info.kind()))
+                .toList();
+    }
+
+    public List<String> procedureParameterNames(String connectionId, String schemaName, String procedureName)
+    {
+        return schemaStore.procedureParameterNames(connectionId, schemaName, procedureName);
     }
 
     /**
@@ -249,7 +274,13 @@ public final class JdbcSchemaNavigator
                 return liveResult;
             }
             List<JdbcSchemaObject> liveViews = router.resolve(resolved, "views_folder", null);
-            return findSymbolInSchema(liveViews, rawToken, normalizedDatabase);
+            liveResult = findSymbolInSchema(liveViews, rawToken, normalizedDatabase);
+            if (liveResult != null)
+            {
+                return liveResult;
+            }
+            List<JdbcSchemaObject> liveProcedures = router.resolve(resolved, "procedures_folder", null);
+            return findSymbolInSchema(liveProcedures, rawToken, normalizedDatabase);
         }
         catch (RuntimeException e)
         {
@@ -278,7 +309,8 @@ public final class JdbcSchemaNavigator
         {
             String kind = node.kind();
             if ("table".equals(kind)
-                    || "view".equals(kind))
+                    || "view".equals(kind)
+                    || "procedure".equals(kind))
             {
                 return true;
             }
@@ -338,7 +370,8 @@ public final class JdbcSchemaNavigator
                 nextPath = path.withSchema(trimToNull(node.name()));
             }
             else if ("table".equalsIgnoreCase(kind)
-                    || "view".equalsIgnoreCase(kind))
+                    || "view".equalsIgnoreCase(kind)
+                    || "procedure".equalsIgnoreCase(kind))
             {
                 String effectiveDatabase = effectiveDatabase(nextPath.database(), node);
                 if (filterDatabase != null
@@ -403,7 +436,8 @@ public final class JdbcSchemaNavigator
                 nextPath = nextPath.withSchema(trimToNull(node.name()));
             }
             if ("table".equalsIgnoreCase(kind)
-                    || "view".equalsIgnoreCase(kind))
+                    || "view".equalsIgnoreCase(kind)
+                    || "procedure".equalsIgnoreCase(kind))
             {
                 String normalizedNodeDatabase = JdbcUtils.normalizeIdentifier(nextPath.database());
                 if (normalizedSelectedDatabase != null

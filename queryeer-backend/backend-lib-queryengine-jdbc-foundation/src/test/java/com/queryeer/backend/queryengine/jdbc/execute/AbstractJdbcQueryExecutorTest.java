@@ -347,14 +347,12 @@ class AbstractJdbcQueryExecutorTest
             }
 
             @Override
-            @SuppressWarnings("unchecked")
             public <T extends javax.xml.transform.Source> T getSource(Class<T> sourceClass)
             {
                 return null;
             }
 
             @Override
-            @SuppressWarnings("unchecked")
             public <T extends javax.xml.transform.Result> T setResult(Class<T> resultClass)
             {
                 return null;

@@ -4,5 +4,6 @@ public enum SqlParseContext
 {
     TABLE_REFERENCE,
     COLUMN_REFERENCE,
+    PROCEDURE_CALL,
     OTHER
 }

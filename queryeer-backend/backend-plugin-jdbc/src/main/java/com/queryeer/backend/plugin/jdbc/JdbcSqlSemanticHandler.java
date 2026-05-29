@@ -117,6 +117,70 @@ final class JdbcSqlSemanticHandler
 
         recordUsage(connectionId, selectedDatabase);
 
+        if (context == SqlParseContext.PROCEDURE_CALL)
+        {
+            String text = payload != null ? payload.text()
+                    : null;
+            String procName = null;
+            boolean insideParams = isInsideProcedureParameterList(text, cursor);
+            if (!insideParams)
+            {
+                procName = extractProcedureNameBeforeCursor(text, cursor);
+            }
+            else
+            {
+                procName = extractProcedureName(text, cursor);
+            }
+            if (insideParams
+                    || procName != null)
+            {
+                if (procName == null)
+                {
+                    return List.of();
+                }
+                // Parse schema-qualified name
+                String schema = null;
+                String simpleName = procName;
+                int dotIndex = procName.lastIndexOf('.');
+                if (dotIndex >= 0)
+                {
+                    schema = procName.substring(0, dotIndex);
+                    simpleName = procName.substring(dotIndex + 1);
+                }
+                List<String> paramNames = schemaNavigator.procedureParameterNames(connectionId, schema, simpleName);
+                Set<String> seen = new HashSet<>();
+                return paramNames.stream()
+                        .filter(name -> prefix.isBlank()
+                                || name.toLowerCase()
+                                        .startsWith(prefix.toLowerCase()))
+                        .filter(name -> seen.add(name.toLowerCase()))
+                        .sorted(String.CASE_INSENSITIVE_ORDER)
+                        .limit(maxItems)
+                        .map(name -> Map.<String, Object>of("label", name, "kind", "parameter", "detail", "JDBC procedure parameter", "insertText", name, "insertTextFormat", "plain", "source",
+                                "jdbc.schema", "replaceRange", Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column())))
+                        .toList();
+            }
+            boolean explicitDatabasePrefix = qualifierPartCount(prefix) >= 3;
+            List<JdbcSchemaNavigator.TableInfo> procInfos = schemaNavigator.procedureNamesForCompletion(connectionId, explicitDatabasePrefix ? null
+                    : selectedDatabase);
+            Set<String> seen = new HashSet<>();
+            return procInfos.stream()
+                    .map(info -> explicitDatabasePrefix
+                            && info.database() != null ? new JdbcSchemaNavigator.TableInfo(info.database() + "." + info.name(), info.kind(), info.database())
+                                    : info)
+                    .filter(info -> prefix.isBlank()
+                            || info.name()
+                                    .toLowerCase()
+                                    .startsWith(prefix.toLowerCase()))
+                    .filter(info -> seen.add(info.name()
+                            .toLowerCase()))
+                    .sorted((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(a.name(), b.name()))
+                    .limit(maxItems)
+                    .map(info -> Map.<String, Object>of("label", info.name(), "kind", info.kind(), "detail", "JDBC procedure", "insertText", info.name(), "insertTextFormat", "plain", "source",
+                            "jdbc.schema", "replaceRange", Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column())))
+                    .toList();
+        }
+
         if (context == SqlParseContext.TABLE_REFERENCE)
         {
             boolean explicitDatabasePrefix = qualifierPartCount(prefix) >= 3;
@@ -209,6 +273,156 @@ final class JdbcSqlSemanticHandler
                 .toList();
     }
 
+    // -- Procedure call helpers --
+
+    private static boolean isInsideProcedureParameterList(String text, SqlCompletionSupport.SqlCompleteCursor cursor)
+    {
+        if (text == null
+                || cursor == null)
+        {
+            return false;
+        }
+        String[] lines = text.split("\\R", -1);
+        if (cursor.line() > lines.length)
+        {
+            return false;
+        }
+        String line = lines[cursor.line() - 1];
+        int col0 = Math.min(cursor.column() - 1, line.length());
+        String prefix = line.substring(0, col0);
+        int lastParen = prefix.lastIndexOf('(');
+        if (lastParen < 0)
+        {
+            return false;
+        }
+        // Verify there's a word before the paren (the procedure name)
+        String beforeParen = prefix.substring(0, lastParen)
+                .trim();
+        if (beforeParen.isEmpty())
+        {
+            return false;
+        }
+        int lastWordStart = beforeParen.length() - 1;
+        while (lastWordStart >= 0
+                && !Character.isWhitespace(beforeParen.charAt(lastWordStart))
+                && beforeParen.charAt(lastWordStart) != ',')
+        {
+            lastWordStart--;
+        }
+        String wordBeforeParen = beforeParen.substring(lastWordStart + 1)
+                .trim();
+        return !wordBeforeParen.isEmpty()
+                && Character.isLetter(wordBeforeParen.charAt(0));
+    }
+
+    private static String extractProcedureName(String text, SqlCompletionSupport.SqlCompleteCursor cursor)
+    {
+        if (text == null
+                || cursor == null)
+        {
+            return null;
+        }
+        String[] lines = text.split("\\R", -1);
+        if (cursor.line() > lines.length)
+        {
+            return null;
+        }
+        String line = lines[cursor.line() - 1];
+        int col0 = Math.min(cursor.column() - 1, line.length());
+        String prefix = line.substring(0, col0);
+        int lastParen = prefix.lastIndexOf('(');
+        if (lastParen < 0)
+        {
+            return null;
+        }
+        String beforeParen = prefix.substring(0, lastParen)
+                .trim();
+        if (beforeParen.isEmpty())
+        {
+            return null;
+        }
+        int end = beforeParen.length();
+        int start = end - 1;
+        while (start >= 0
+                && (Character.isLetterOrDigit(beforeParen.charAt(start))
+                        || beforeParen.charAt(start) == '_'
+                        || beforeParen.charAt(start) == '.'))
+        {
+            start--;
+        }
+        if (start == end - 1)
+        {
+            return null;
+        }
+        return beforeParen.substring(start + 1);
+    }
+
+    /**
+     * Returns the procedure name after CALL/EXEC when the cursor is past the procedure name but no '(' has been opened. Returns null if no completed procedure name is found.
+     */
+    static String extractProcedureNameBeforeCursor(String text, SqlCompletionSupport.SqlCompleteCursor cursor)
+    {
+        if (text == null
+                || cursor == null)
+        {
+            return null;
+        }
+        String[] lines = text.split("\\R", -1);
+        if (cursor.line() > lines.length)
+        {
+            return null;
+        }
+        String line = lines[cursor.line() - 1];
+        int col0 = Math.min(cursor.column(), line.length());
+        // If cursor is on a word char, the procedure name is still being typed — let procedure name completion handle it
+        if (col0 > 0
+                && (Character.isLetterOrDigit(line.charAt(col0 - 1))
+                        || line.charAt(col0 - 1) == '_'
+                        || line.charAt(col0 - 1) == '.'))
+        {
+            return null;
+        }
+        String prefix = line.substring(0, col0)
+                .trim();
+        // Find the last CALL/EXEC keyword before cursor
+        int keywordIdx = -1;
+        String lower = prefix.toLowerCase();
+        int idx;
+        idx = lower.lastIndexOf("call ");
+        if (idx >= 0)
+        {
+            keywordIdx = idx;
+        }
+        idx = lower.lastIndexOf("exec ");
+        if (idx >= 0
+                && idx > keywordIdx)
+        {
+            keywordIdx = idx;
+        }
+        if (keywordIdx < 0)
+        {
+            return null;
+        }
+        String afterKeyword = prefix.substring(keywordIdx + 5)
+                .trim();
+        if (afterKeyword.isEmpty())
+        {
+            return null;
+        }
+        String[] parts = afterKeyword.split("\\s+", 2);
+        String name = parts[0];
+        // Strip trailing non-name characters (e.g. '(')
+        int end = name.length();
+        while (end > 0
+                && !Character.isLetterOrDigit(name.charAt(end - 1))
+                && name.charAt(end - 1) != '_')
+        {
+            end--;
+        }
+        return end > 0 ? name.substring(0, end)
+                : null;
+    }
+
     // -- Semantic hover provider --
 
     Map<String, Object> semanticHover(SqlHoverSupport.SqlHoverPayload payload, String fileId, SqlHoverSupport.SqlHoverCursor cursor, String token, SqlParseContext context, Map<String, String> aliases)
@@ -247,6 +461,15 @@ final class JdbcSqlSemanticHandler
                 return null;
             }
             contents.add(Map.of("value", tableMarkdown, "isTrusted", false));
+        }
+        else if (context == SqlParseContext.PROCEDURE_CALL)
+        {
+            String procMarkdown = buildProcedureHoverMarkdown(snapshot, token, aliases, selectedDatabase);
+            if (procMarkdown == null)
+            {
+                return null;
+            }
+            contents.add(Map.of("value", procMarkdown, "isTrusted", false));
         }
         else if (context == SqlParseContext.COLUMN_REFERENCE)
         {
@@ -304,6 +527,157 @@ final class JdbcSqlSemanticHandler
         }
 
         return md.toString();
+    }
+
+    private static String buildProcedureHoverMarkdown(List<JdbcSchemaObject> snapshot, String token, Map<String, String> aliases, String selectedDatabase)
+    {
+        String procName = aliases.getOrDefault(token.toLowerCase(), token);
+        QualifiedTable lookup = parseQualifiedTable(procName);
+        String normalizedSelectedDb = JdbcUtils.normalizeIdentifier(lookup.database() != null ? lookup.database()
+                : selectedDatabase);
+        TableMatch procMatch = findProcedureInSnapshot(snapshot, new NodePath(null, null), lookup.name(), lookup.schema(), normalizedSelectedDb);
+        JdbcSchemaObject procNode = procMatch != null ? procMatch.node()
+                : null;
+        if (procNode == null)
+        {
+            return null;
+        }
+        String displayName = tableDisplayName(procMatch, procName);
+        StringBuilder md = new StringBuilder();
+        md.append("**Procedure: " + displayName + "**\n\n");
+        List<JdbcSchemaObject> params = procedureParameters(procNode);
+        if (!params.isEmpty())
+        {
+            md.append("| Parameter | Type | Mode |\n");
+            md.append("|---|---|---|\n");
+            for (JdbcSchemaObject param : params)
+            {
+                Map<String, Object> attrs = param.attributes() != null ? param.attributes()
+                        : Map.of();
+                String paramName = param.name() != null ? param.name()
+                        : "";
+                String paramType = Objects.toString(attrs.get("type"), "unknown");
+                String paramMode = Objects.toString(attrs.get("mode"), "IN");
+                md.append("| " + paramName + " | " + paramType + " | " + paramMode + " |\n");
+            }
+        }
+        else
+        {
+            md.append("*No parameters defined*\n");
+        }
+        return md.toString();
+    }
+
+    private static TableMatch findProcedureInSnapshot(List<JdbcSchemaObject> nodes, NodePath path, String lookupName, String lookupSchema, String normalizedSelectedDb)
+    {
+        for (JdbcSchemaObject node : nodes)
+        {
+            String kind = trimToNull(node.kind());
+            if (kind == null)
+            {
+                continue;
+            }
+            NodePath nextPath = path;
+            if (kind.endsWith("_container")
+                    || kind.endsWith("_folder"))
+            {
+                // fall through
+            }
+            else if ("database".equalsIgnoreCase(kind))
+            {
+                nextPath = new NodePath(node.name(), path.schema());
+            }
+            else if ("schema".equalsIgnoreCase(kind))
+            {
+                nextPath = new NodePath(path.database(), node.name());
+            }
+            if ("procedure".equalsIgnoreCase(kind))
+            {
+                if (node.name() != null
+                        && node.name()
+                                .equalsIgnoreCase(lookupName))
+                {
+                    if (normalizedSelectedDb != null
+                            && nextPath.database() != null)
+                    {
+                        String normalizedNodeDb = JdbcUtils.normalizeIdentifier(nextPath.database());
+                        if (!normalizedSelectedDb.equals(normalizedNodeDb))
+                        {
+                            List<JdbcSchemaObject> children = node.children();
+                            if (children != null
+                                    && !children.isEmpty())
+                            {
+                                TableMatch found = findProcedureInSnapshot(children, nextPath, lookupName, lookupSchema, normalizedSelectedDb);
+                                if (found != null)
+                                {
+                                    return found;
+                                }
+                            }
+                            continue;
+                        }
+                    }
+                    if (lookupSchema != null
+                            && nextPath.schema() != null
+                            && !nextPath.schema()
+                                    .equalsIgnoreCase(lookupSchema))
+                    {
+                        List<JdbcSchemaObject> children = node.children();
+                        if (children != null
+                                && !children.isEmpty())
+                        {
+                            TableMatch found = findProcedureInSnapshot(children, nextPath, lookupName, lookupSchema, normalizedSelectedDb);
+                            if (found != null)
+                            {
+                                return found;
+                            }
+                        }
+                        continue;
+                    }
+                    return new TableMatch(node, nextPath);
+                }
+            }
+            List<JdbcSchemaObject> children = node.children();
+            if (children != null
+                    && !children.isEmpty())
+            {
+                TableMatch found = findProcedureInSnapshot(children, nextPath, lookupName, lookupSchema, normalizedSelectedDb);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static List<JdbcSchemaObject> procedureParameters(JdbcSchemaObject procNode)
+    {
+        List<JdbcSchemaObject> result = new ArrayList<>();
+        List<JdbcSchemaObject> children = procNode.children();
+        if (children == null)
+        {
+            return result;
+        }
+        for (JdbcSchemaObject child : children)
+        {
+            String kind = trimToNull(child.kind());
+            if ("parameter".equalsIgnoreCase(kind))
+            {
+                result.add(child);
+            }
+            else if ("parameters_folder".equalsIgnoreCase(kind)
+                    && child.children() != null)
+            {
+                for (JdbcSchemaObject folderChild : child.children())
+                {
+                    if ("parameter".equalsIgnoreCase(trimToNull(folderChild.kind())))
+                    {
+                        result.add(folderChild);
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     private static String buildColumnHoverMarkdown(List<JdbcSchemaObject> snapshot, String token, Map<String, String> aliases, String selectedDatabase)

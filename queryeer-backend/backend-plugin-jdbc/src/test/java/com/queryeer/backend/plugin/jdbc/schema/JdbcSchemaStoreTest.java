@@ -183,12 +183,12 @@ class JdbcSchemaStoreTest
     }
 
     @Test
-    void tableNamesForCompletion_FiltersBySelectedDatabase(@TempDir Path tempDir)
+    void entriesForCompletion_FiltersBySelectedDatabase(@TempDir Path tempDir)
     {
         JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
         store.persistSnapshot("conn-1", JdbcSchemaCrawlScope.DEEP, lookupSnapshot());
 
-        List<JdbcSchemaStore.TableLookupEntry> entries = store.tableNamesForCompletion("conn-1", "sales");
+        List<JdbcSchemaStore.TableLookupEntry> entries = store.entriesForCompletion("conn-1", "sales", List.of("table", "view"));
 
         Assertions.assertEquals(List.of("dbo.orders", "dbo.order_summary"), entries.stream()
                 .map(JdbcSchemaStore.TableLookupEntry::name)

@@ -46,14 +46,16 @@ function resolveEngineId(file: FileEntity): string | undefined {
 function mapKind(monaco: typeof monacoType, kind: string | undefined): monacoType.languages.CompletionItemKind {
   switch (kind) {
     case "keyword": return monaco.languages.CompletionItemKind.Keyword;
-    case "function": return monaco.languages.CompletionItemKind.Function;
+    case "function":
+    case "procedure": return monaco.languages.CompletionItemKind.Function;
     case "table":
     case "view": return monaco.languages.CompletionItemKind.Class;
     case "column": return monaco.languages.CompletionItemKind.Field;
     case "schema":
     case "database": return monaco.languages.CompletionItemKind.Module;
     case "snippet": return monaco.languages.CompletionItemKind.Snippet;
-    case "variable": return monaco.languages.CompletionItemKind.Variable;
+    case "variable":
+    case "parameter": return monaco.languages.CompletionItemKind.Variable;
     case "operator": return monaco.languages.CompletionItemKind.Operator;
     default: return monaco.languages.CompletionItemKind.Text;
   }

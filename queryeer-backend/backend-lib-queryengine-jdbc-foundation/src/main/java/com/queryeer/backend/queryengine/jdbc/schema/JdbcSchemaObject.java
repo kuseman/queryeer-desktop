@@ -17,7 +17,7 @@ public record JdbcSchemaObject(String id, String name, String kind, NodeType nod
             nodeType = switch (kind)
             {
                 case "connection", "database", "schema" -> NodeType.STRUCTURAL;
-                case "column", "primary_key", "foreign_key", "index", "index_column" -> NodeType.PROPERTY;
+                case "column", "primary_key", "foreign_key", "index", "index_column", "parameter" -> NodeType.PROPERTY;
                 default -> kind.endsWith("_container") ? NodeType.CONTAINER
                         : kind.endsWith("_folder") ? NodeType.FOLDER
                                 : NodeType.OBJECT;

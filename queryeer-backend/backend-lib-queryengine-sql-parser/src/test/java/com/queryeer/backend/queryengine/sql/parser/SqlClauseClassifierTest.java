@@ -1,6 +1,7 @@
 package com.queryeer.backend.queryengine.sql.parser;
 
 import static com.queryeer.backend.queryengine.sql.parser.SqlParseContext.COLUMN_REFERENCE;
+import static com.queryeer.backend.queryengine.sql.parser.SqlParseContext.PROCEDURE_CALL;
 import static com.queryeer.backend.queryengine.sql.parser.SqlParseContext.TABLE_REFERENCE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -115,5 +116,35 @@ class SqlClauseClassifierTest
     void classifiesNonEmptyInsertColumnListAsColumnReference()
     {
         assertEquals(COLUMN_REFERENCE, SqlClauseClassifier.classify("INSERT INTO tableB (na", 1, 23));
+    }
+
+    @Test
+    void classifiesExecAsProcedureCall()
+    {
+        assertEquals(PROCEDURE_CALL, SqlClauseClassifier.classify("EXEC ", 1, 6));
+    }
+
+    @Test
+    void classifiesExecWithSchemaQualifiedNameAsProcedureCall()
+    {
+        assertEquals(PROCEDURE_CALL, SqlClauseClassifier.classify("EXEC dbo.my_proc ", 1, 18));
+    }
+
+    @Test
+    void classifiesCallAsProcedureCall()
+    {
+        assertEquals(PROCEDURE_CALL, SqlClauseClassifier.classify("CALL ", 1, 6));
+    }
+
+    @Test
+    void classifiesCallWithParensAsProcedureCall()
+    {
+        assertEquals(PROCEDURE_CALL, SqlClauseClassifier.classify("CALL my_proc(", 1, 14));
+    }
+
+    @Test
+    void doesNotClassifySelectAsProcedureCall()
+    {
+        assertEquals(TABLE_REFERENCE, SqlClauseClassifier.classify("SELECT * FROM ", 1, 15));
     }
 }
