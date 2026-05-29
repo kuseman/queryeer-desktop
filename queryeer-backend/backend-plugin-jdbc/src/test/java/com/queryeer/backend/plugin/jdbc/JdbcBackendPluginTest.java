@@ -187,10 +187,14 @@ class JdbcBackendPluginTest
         Assertions.assertNotNull(result);
         Assertions.assertEquals("table", result.get("kind"));
         Assertions.assertNotNull(result.get("name"));
+        Assertions.assertNotNull(result.get("fullName"));
         Assertions.assertTrue(result.get("name")
                 .toString()
                 .toUpperCase()
                 .contains("SYMBOL_TARGET"));
+        Map<String, Object> attributes = (Map<String, Object>) result.get("attributes");
+        Assertions.assertNotNull(attributes);
+        Assertions.assertEquals("SYMBOL_TARGET", attributes.get("name"));
     }
 
     @Test
@@ -228,6 +232,7 @@ class JdbcBackendPluginTest
         Assertions.assertNotNull(result);
         Assertions.assertEquals("table", result.get("kind"));
         Assertions.assertNotNull(result.get("name"));
+        Assertions.assertNotNull(result.get("fullName"));
         Assertions.assertTrue(result.get("name")
                 .toString()
                 .toUpperCase()

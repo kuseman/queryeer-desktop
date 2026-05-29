@@ -2,6 +2,7 @@ import { beforeEach, describe, it, expect, vi } from "vitest";
 import type { PluginContext } from "../../contracts/plugin/Plugin";
 import { coreQueryEngineJdbcPostgresPlugin } from "./plugin";
 import { registerJdbcDialect } from "../core.queryengine.jdbc/jdbc-dialect-registry";
+import { registerSymbolActionTemplate } from "../core.queryengine/symbol-action-template-registry";
 
 vi.mock("../core.queryengine.jdbc/jdbc-dialect-registry", () => ({
   registerJdbcDialect: vi.fn()
@@ -49,6 +50,20 @@ describe("coreQueryEngineJdbcPostgresPlugin", () => {
         supportsQueryPlan: true
       })
     );
+  });
+
+  it("registers describe action using unqualified symbol attribute name", () => {
+    const context = createContext();
+
+    coreQueryEngineJdbcPostgresPlugin.activate(context);
+
+    expect(context.commands.registerCommand).not.toHaveBeenCalled();
+    expect(registerSymbolActionTemplate).toHaveBeenCalledWith(expect.objectContaining({
+      id: "core.queryengine.jdbc.symbolAction.postgresDescribe",
+      action: expect.objectContaining({
+        query: expect.stringContaining("symbol.attributes.name")
+      })
+    }));
   });
 
   it("does not own shared plan commands or toolbar actions", () => {

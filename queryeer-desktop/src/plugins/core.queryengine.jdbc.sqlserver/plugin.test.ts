@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginContext } from "../../contracts/plugin/Plugin";
 import type { FileEntity } from "../../contracts/files/FileEntity";
+import { getExpressionRuntime } from "../core.expressions/runtime";
 
 const mocks = vi.hoisted(() => ({
   registerJdbcDialectMock: vi.fn(),
@@ -179,9 +180,23 @@ describe("coreQueryEngineJdbcSqlServerPlugin", () => {
     expect(mocks.registerSymbolActionTemplateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "core.queryengine.jdbc.symbolAction.sqlserverDescribe",
-        title: "SQLServer Describe"
+        title: "SQLServer Describe",
+        action: expect.objectContaining({
+          query: expect.stringContaining("fn.sqlserver.identifier")
+        })
       })
     );
+  });
+
+  it("registers SQL Server expression helpers from the dialect", () => {
+    const context = createContext();
+
+    coreQueryEngineJdbcSqlServerPlugin.activate(context);
+    coreQueryEngineJdbcSqlServerPlugin.activate(context);
+
+    const bindings = getExpressionRuntime().getFunctionRegistry().resolveRuntimeBindings();
+    const sqlserver = bindings.sqlserver as { identifier?: (value: unknown) => string } | undefined;
+    expect(sqlserver?.identifier?.("a]b")).toBe("[a]]b]");
   });
 
   it("does not own shared plan commands or toolbar actions", () => {

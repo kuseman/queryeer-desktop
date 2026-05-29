@@ -345,6 +345,16 @@ export type SymbolAtPositionInvokePayload = {
   database?: string;
 };
 
+export type SymbolAtPositionInvokeResult = {
+  kind: string;
+  /** Legacy display/reference name. Existing symbol actions rely on this shape. */
+  name: string;
+  /** Most complete resolved object name available, e.g. database.schema.table for JDBC. */
+  fullName?: string;
+  detail?: string;
+  attributes?: Record<string, unknown>;
+};
+
 export type SqlCompleteInvokePayload = {
   fileId?: string;
   version?: number;

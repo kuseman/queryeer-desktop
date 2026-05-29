@@ -14,6 +14,16 @@ type SymbolActionProviderDeps = {
   executeQuery: (fileId: string, query: string) => Promise<void>;
 };
 
+function createSymbolContext(symbol: SymbolAtPositionResult) {
+  return {
+    kind: symbol.kind,
+    name: symbol.name,
+    fullName: symbol.fullName ?? symbol.name,
+    detail: symbol.detail ?? "",
+    attributes: symbol.attributes ?? {}
+  };
+}
+
 export class SymbolActionProvider implements ContextMenuProvider {
   readonly id = "core.queryengine.symbolActions";
   private deps: SymbolActionProviderDeps;
@@ -43,11 +53,7 @@ export class SymbolActionProvider implements ContextMenuProvider {
     // This avoids mutating the context chain scope (which would wipe focus/language state).
     const baseContext = getCommandContext();
     const symbolContext = {
-      symbol: {
-        kind: symbol.kind,
-        name: symbol.name,
-        detail: symbol.detail ?? ""
-      }
+      symbol: createSymbolContext(symbol)
     };
     const mergedContext = { ...baseContext, ...symbolContext };
 
@@ -90,11 +96,7 @@ export class SymbolActionProvider implements ContextMenuProvider {
   ): Promise<void> {
     const runtime = getExpressionRuntime();
     const query = await runtime.renderTemplate(action.query, {
-      symbol: {
-        kind: symbol.kind,
-        name: symbol.name,
-        detail: symbol.detail ?? ""
-      }
+      symbol: createSymbolContext(symbol)
     }, {
       mode: "template",
       source: `symbol-action:${action.id}:query`
