@@ -233,6 +233,10 @@ class JdbcSchemaStoreTest
         Assertions.assertNotNull(symbol);
         Assertions.assertEquals("table", symbol.kind());
         Assertions.assertEquals("dbo.orders", symbol.name());
+        Assertions.assertEquals("sales.dbo.orders", symbol.fullName());
+        Assertions.assertEquals("sales", symbol.database());
+        Assertions.assertEquals("dbo", symbol.schema());
+        Assertions.assertEquals("orders", symbol.objectName());
         Assertions.assertNull(filtered);
     }
 
@@ -246,6 +250,10 @@ class JdbcSchemaStoreTest
 
         Assertions.assertNotNull(symbol);
         Assertions.assertEquals("hr.employees", symbol.name());
+        Assertions.assertEquals("hr.hr.employees", symbol.fullName());
+        Assertions.assertEquals("hr", symbol.database());
+        Assertions.assertEquals("hr", symbol.schema());
+        Assertions.assertEquals("employees", symbol.objectName());
     }
 
     @Test

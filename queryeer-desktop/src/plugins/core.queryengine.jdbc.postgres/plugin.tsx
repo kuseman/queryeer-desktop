@@ -45,7 +45,7 @@ export const coreQueryEngineJdbcPostgresPlugin: Plugin = {
       action: {
         label: "Describe",
         when: `activeFile.mimeType == 'application/sql' && ${POSTGRES_FILE_DIALECT_WHEN} && (symbol.kind == 'table' || symbol.kind == 'view')`,
-        query: "SELECT column_name, data_type, is_nullable, ordinal_position FROM information_schema.columns WHERE table_schema = '${symbol.attributes.schema}' AND table_name = '${symbol.name}' ORDER BY ordinal_position"
+        query: "SELECT column_name, data_type, is_nullable, ordinal_position FROM information_schema.columns WHERE table_schema = '${symbol.attributes.schema}' AND table_name = '${symbol.attributes.name || symbol.name}' ORDER BY ordinal_position"
       }
     });
 

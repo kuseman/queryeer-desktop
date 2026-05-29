@@ -1055,7 +1055,7 @@ public final class JdbcSchemaStore
                 String kind = normalizeTableKind(resultSet.getString(2));
                 String schema = resultSet.getString(3);
                 String database = resultSet.getString(4);
-                return new SymbolLookupEntry(kind, displayTableName(schema, name), kind.toUpperCase(), database, schema);
+                return new SymbolLookupEntry(kind, displayTableName(schema, name), displayFullTableName(database, schema, name), kind.toUpperCase(), database, schema, name);
             }
         }
         catch (SQLException e)
@@ -1349,7 +1349,7 @@ public final class JdbcSchemaStore
     {
     }
 
-    record SymbolLookupEntry(String kind, String name, String detail, String database, String schema)
+    record SymbolLookupEntry(String kind, String name, String fullName, String detail, String database, String schema, String objectName)
     {
     }
 
@@ -1469,6 +1469,18 @@ public final class JdbcSchemaStore
         return schema == null
                 || schema.isBlank() ? name
                         : schema + "." + name;
+    }
+
+    private static String displayFullTableName(String database, String schema, String name)
+    {
+        String displayName = displayTableName(schema, name);
+        if (displayName == null)
+        {
+            return null;
+        }
+        return database == null
+                || database.isBlank() ? displayName
+                        : database + "." + displayName;
     }
 
     private static String normalizeTableKind(String kind)

@@ -6,12 +6,23 @@ import { registerJdbcDialect } from "../core.queryengine.jdbc/jdbc-dialect-regis
 import { registerWhenExpressionTemplates } from "../core.commands/when-expression-template-registry";
 import { registerSymbolActionTemplate } from "../core.queryengine/symbol-action-template-registry";
 import { registerTreeActionTemplate } from "../core.queryengine.jdbc/tree-action-template-registry";
+import { getExpressionRuntime } from "../core.expressions/runtime";
 import { SqlServerConnectionForm } from "./SqlServerConnectionForm";
 
 const SQLSERVER_DIALECT_ID = "sqlserver";
 const SQLSERVER_PLAN_OUTPUT_SETTING_ID = "core.queryengine.jdbc.sqlserver.planXmlOutput";
 const SQLSERVER_FILE_DIALECT_WHEN = `activeFile.metadata.core.queryengine.jdbc?.dialectId == '${SQLSERVER_DIALECT_ID}'`;
 const SQLSERVER_NODE_DIALECT_WHEN = `node.dialectId == '${SQLSERVER_DIALECT_ID}'`;
+
+function registerSqlServerExpressionFunctions(): void {
+  const registry = getExpressionRuntime().getFunctionRegistry();
+  if (registry.listFunctions().some((entry) => entry.fqName === "sqlserver.identifier")) {
+    return;
+  }
+  registry.registerNamespace("sqlserver", {
+    identifier: (value: unknown) => `[${String(value).replace(/]/g, "]]")}]`
+  });
+}
 
 export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
   manifest: {
@@ -25,6 +36,8 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
     providesCapabilities: ["query.engine.jdbc.sqlserver"]
   },
   activate: (context) => {
+    registerSqlServerExpressionFunctions();
+
     // Register connection form for the JDBC settings editor
     registerJdbcDialect({
       dialectId: SQLSERVER_DIALECT_ID,
@@ -48,7 +61,7 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
       action: {
         label: "Describe",
         when: `activeFile.mimeType == 'application/sql' && ${SQLSERVER_FILE_DIALECT_WHEN} && (symbol.kind == 'table' || symbol.kind == 'view')`,
-        query: "exec sp_help '${symbol.name}'"
+        query: "${symbol.attributes.database ? `exec ${fn.sqlserver.identifier(symbol.attributes.database)}.sys.sp_help ${fn.sql.literal(symbol.name)}` : `exec sp_help ${fn.sql.literal(symbol.name)}`}"
       }
     });
 

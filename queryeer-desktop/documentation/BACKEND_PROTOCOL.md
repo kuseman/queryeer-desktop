@@ -573,6 +573,36 @@ Rules:
 - `payload` and `result` are opaque to the core protocol and transported as `unknown` JSON.
 - Backends SHOULD return `ENGINE_NOT_FOUND` for unknown `engineId` and `VALIDATION` for unsupported or invalid actions.
 
+JDBC semantic action `sql.symbolAtPosition` request payload:
+
+```json
+{
+  "fileId": "file-001",
+  "text": "select * from sales.dbo.orders",
+  "cursor": { "line": 1, "column": 25 },
+  "connectionId": "conn-001",
+  "database": "master"
+}
+```
+
+JDBC semantic action `sql.symbolAtPosition` result, or `null` when no symbol is resolved:
+
+```json
+{
+  "kind": "table",
+  "name": "dbo.orders",
+  "fullName": "sales.dbo.orders",
+  "detail": "TABLE",
+  "attributes": {
+    "database": "sales",
+    "schema": "dbo",
+    "name": "orders"
+  }
+}
+```
+
+`name` is the legacy display/reference name used by existing Symbol Actions. `fullName` is the most complete resolved object name available. `attributes.name` is the unqualified object name.
+
 Rules:
 
 - `engineState` is an engine-owned opaque blob. Core protocol forwards it without interpretation.
@@ -803,7 +833,7 @@ Current Java stdio scaffold implementation status:
 - `queryengine.execute` implemented (mocked progressive notifications); `fileId` is required and validated
 - `queryengine.cancel` implemented (mocked cancellation notification)
 - `backend.runtimeStatus` implemented
-- JDBC provider actions include `jdbc.schema.snapshot` (latest cached snapshot by `connectionId` and optional `scope`), `jdbc.schema.refresh` (synchronous refresh + cache persist with scope-aware behavior), and `sql.hover` (returns pre-formatted markdown for table/column names under the cursor, resolved from H2 DEEP snapshot only)
+- JDBC provider actions include `jdbc.schema.snapshot` (latest cached snapshot by `connectionId` and optional `scope`), `jdbc.schema.refresh` (synchronous refresh + cache persist with scope-aware behavior), `sql.symbolAtPosition` (returns symbol `name`, `fullName`, `detail`, and attributes for table/view names under the cursor), and `sql.hover` (returns pre-formatted markdown for table/column names under the cursor, resolved from H2 DEEP snapshot only)
 - JDBC provider action `jdbc.schema.fetch` resolves connection settings by `connectionId` only; fetch payload supports `connectionId`, `scope`, and optional `target` (no inline connection overrides).
 - JDBC provider action `jdbc.schema.status` returns crawl status/statistics for all configured connections (or a single connection when `connectionId` is provided). Each status entry includes: `connectionId`, `connectionTitle`, `scope` (`top`|`deep`), `databaseKey` (null for top), `lastSuccessAt`, `lastAttemptAt`, `lastFailureAt`, `nextDueAt`, `consecutiveFailures`, `usageScore`, `enabled`, `objectCount`, `lastError`.
 - JDBC provider action `jdbc.connection.test` accepts `{ "connectionId": "..." }` whole body for a connection.

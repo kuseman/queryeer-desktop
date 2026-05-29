@@ -4,6 +4,7 @@ import static com.queryeer.backend.api.PayloadUtils.isBlank;
 import static com.queryeer.backend.api.PayloadUtils.trimToNull;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -225,7 +226,7 @@ public final class JdbcSchemaNavigator
         String normalizedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
         // Try DEEP cache first
         JdbcSchemaStore.SymbolLookupEntry cached = schemaStore.findSymbol(connectionId, rawToken, selectedDatabase);
-        Map<String, Object> result = cached != null ? Map.of("kind", cached.kind(), "name", cached.name(), "detail", cached.detail())
+        Map<String, Object> result = cached != null ? symbolResult(cached.kind(), cached.name(), cached.fullName(), cached.detail(), cached.database(), cached.schema(), cached.objectName())
                 : findSymbolInSchema(loadCachedSnapshot(connectionId), rawToken, normalizedDatabase);
         if (result != null)
         {
@@ -339,9 +340,10 @@ public final class JdbcSchemaNavigator
             else if ("table".equalsIgnoreCase(kind)
                     || "view".equalsIgnoreCase(kind))
             {
+                String effectiveDatabase = effectiveDatabase(nextPath.database(), node);
                 if (filterDatabase != null
-                        && nextPath.database() != null
-                        && !filterDatabase.equals(JdbcUtils.normalizeIdentifier(nextPath.database())))
+                        && effectiveDatabase != null
+                        && !filterDatabase.equals(JdbcUtils.normalizeIdentifier(effectiveDatabase)))
                 {
                     continue;
                 }
@@ -360,7 +362,8 @@ public final class JdbcSchemaNavigator
                     }
                     String displayName = effectiveSchema != null ? effectiveSchema + "." + tableName
                             : tableName;
-                    return Map.of("kind", kind.toLowerCase(), "name", displayName, "detail", kind.toUpperCase());
+                    return symbolResult(kind.toLowerCase(), displayName, displayFullName(effectiveDatabase, effectiveSchema, tableName), kind.toUpperCase(), effectiveDatabase, effectiveSchema,
+                            tableName);
                 }
             }
 
@@ -441,6 +444,70 @@ public final class JdbcSchemaNavigator
             return trimToNull(attrSchema);
         }
         return null;
+    }
+
+    private static String effectiveDatabase(String databaseFromPath, JdbcSchemaObject node)
+    {
+        if (databaseFromPath != null)
+        {
+            return databaseFromPath;
+        }
+        if (node.attributes() != null)
+        {
+            Object database = node.attributes()
+                    .get("database");
+            if (database instanceof String attrDatabase)
+            {
+                return trimToNull(attrDatabase);
+            }
+            Object catalog = node.attributes()
+                    .get("catalog");
+            if (catalog instanceof String attrCatalog)
+            {
+                return trimToNull(attrCatalog);
+            }
+        }
+        return null;
+    }
+
+    private static String displayFullName(String database, String schema, String name)
+    {
+        if (name == null)
+        {
+            return null;
+        }
+        String displayName = schema == null ? name
+                : schema + "." + name;
+        return database == null ? displayName
+                : database + "." + displayName;
+    }
+
+    private static Map<String, Object> symbolResult(String kind, String name, String fullName, String detail, String database, String schema, String objectName)
+    {
+        Map<String, Object> result = new LinkedHashMap<>();
+        putIfPresent(result, "kind", kind);
+        putIfPresent(result, "name", name);
+        putIfPresent(result, "fullName", fullName != null ? fullName
+                : name);
+        putIfPresent(result, "detail", detail);
+
+        Map<String, Object> attributes = new LinkedHashMap<>();
+        putIfPresent(attributes, "database", database);
+        putIfPresent(attributes, "schema", schema);
+        putIfPresent(attributes, "name", objectName);
+        if (!attributes.isEmpty())
+        {
+            result.put("attributes", attributes);
+        }
+        return result;
+    }
+
+    private static void putIfPresent(Map<String, Object> target, String key, Object value)
+    {
+        if (value != null)
+        {
+            target.put(key, value);
+        }
     }
 
     private static QualifiedTable parseQualifiedTable(String value)

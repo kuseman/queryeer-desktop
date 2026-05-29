@@ -330,8 +330,12 @@ export const coreQueryEnginePlugin: Plugin = {
     // Symbol Actions: when-expression variables for context variable autocomplete
     registerWhenExpressionVariables([
       { name: "symbol.kind", type: "string", description: "Kind of symbol at cursor position (e.g. 'table', 'view', 'function', 'column')" },
-      { name: "symbol.name", type: "string", description: "Fully qualified name of symbol at cursor position (e.g. 'dbo.MyTable')" },
-      { name: "symbol.detail", type: "string", description: "Additional detail of symbol at cursor position (e.g. 'TABLE', 'VIEW')" }
+      { name: "symbol.name", type: "string", description: "Legacy display/reference name of symbol at cursor position (e.g. 'dbo.MyTable')" },
+      { name: "symbol.fullName", type: "string", description: "Most complete resolved symbol name available (e.g. 'database.dbo.MyTable')" },
+      { name: "symbol.detail", type: "string", description: "Additional detail of symbol at cursor position (e.g. 'TABLE', 'VIEW')" },
+      { name: "symbol.attributes.database", type: "string", description: "Resolved database/catalog name when available" },
+      { name: "symbol.attributes.schema", type: "string", description: "Resolved schema name when available" },
+      { name: "symbol.attributes.name", type: "string", description: "Unqualified object name when available" }
     ]);
 
     // Symbol Actions: register context menu provider

@@ -1,11 +1,12 @@
 import type { TextRange } from "../../contracts/editor/EditorApi";
+import type { SymbolAtPositionInvokeResult } from "../../contracts/backend/Types";
 
 export type SymbolAction = {
   id: string;
   label: string;
   /**
    * JS expression evaluated by ExpressionRuntime against the full context chain plus symbol.* variables:
-   *   symbol.kind, symbol.name, symbol.detail
+   *   symbol.kind, symbol.name, symbol.fullName, symbol.detail, symbol.attributes.*
    * plus all existing context variables (activeFile.mimeType, activeFile.metadata.*, etc.)
    */
   when: string;
@@ -15,10 +16,7 @@ export type SymbolAction = {
   order?: number;
 };
 
-export type SymbolAtPositionResult = {
-  kind: string;
-  name: string;
-  detail?: string;
+export type SymbolAtPositionResult = SymbolAtPositionInvokeResult & {
   range?: TextRange;
 };
 
