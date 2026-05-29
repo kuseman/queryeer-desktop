@@ -236,4 +236,57 @@ describe("buildSchemaGraph", () => {
     expect(fkCol.unit).toBe("FK");
     expect(fkCol.important).toBeUndefined();
   });
+
+  it("produces unique vertex IDs for same-named tables across schemas when fullName lacks qualifier", () => {
+    // Simulates snapshot data where fullName was lost during persist/retrieve
+    function tableNoFullName(name: string, schema: string, cols: JdbcSchemaObject[], kind: "table" | "view" = "table"): JdbcSchemaObject {
+      return {
+        id: `${schema}.${name}`,
+        name,
+        kind,
+        nodeType: "object" as const,
+        fullName: name,
+        children: [columnsFolder(cols)],
+        attributes: { schema, catalog: "testdb" },
+      };
+    }
+
+    const root = database("testdb", [
+      schema("dbo", [
+        tableNoFullName("Users", "dbo", [
+          col("id", { primaryKey: true, type: "int" }),
+        ]),
+      ]),
+      schema("audit", [
+        tableNoFullName("Users", "audit", [
+          col("id", { primaryKey: true, type: "int" }),
+        ]),
+      ]),
+    ]);
+
+    const result = buildSchemaGraph([root], "testdb");
+    expect(result.vertices).toHaveLength(2);
+
+    const ids = result.vertices.map((v) => v.id);
+    expect(new Set(ids).size).toBe(2);
+    expect(ids.some((id) => id.includes("dbo.Users"))).toBe(true);
+    expect(ids.some((id) => id.includes("audit.Users"))).toBe(true);
+  });
+
+  it("produces unique vertex IDs for same-named tables across schemas with proper fullName", () => {
+    const root = database("testdb", [
+      schema("dbo", [
+        table("Entity", "dbo", [col("id", { primaryKey: true, type: "int" })]),
+      ]),
+      schema("ext", [
+        table("Entity", "ext", [col("id", { primaryKey: true, type: "int" })]),
+      ]),
+    ]);
+
+    const result = buildSchemaGraph([root], "testdb");
+    expect(result.vertices).toHaveLength(2);
+
+    const ids = result.vertices.map((v) => v.id);
+    expect(new Set(ids).size).toBe(2);
+  });
 });
