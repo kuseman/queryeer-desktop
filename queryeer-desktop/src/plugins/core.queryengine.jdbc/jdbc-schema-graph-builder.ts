@@ -138,8 +138,8 @@ function stringAttr(value: unknown, fallback: string | undefined): string | unde
   return typeof value === "string" && value.length > 0 ? value : fallback;
 }
 
-function vertexId(fullName: string | undefined, name: string): string {
-  return "table-" + sanitizeId(fullName ?? name);
+function vertexId(qualifiedName: string): string {
+  return "table-" + sanitizeId(qualifiedName);
 }
 
 function sanitizeId(value: string): string {
@@ -148,7 +148,12 @@ function sanitizeId(value: string): string {
 
 function buildVertices(tables: FlatTable[]): TableVertex[] {
   return tables.map((table) => {
-    const id = vertexId(table.node.fullName, table.node.name);
+    const qualifiedName = table.node.fullName && table.node.fullName !== table.node.name
+      ? table.node.fullName
+      : table.schema
+        ? `${table.schema}.${table.node.name}`
+        : table.node.name;
+    const id = vertexId(qualifiedName);
     const columnProperties: GraphProperty[] = table.columns.map((col) => ({
       id: col.name,
       label: col.name,
