@@ -184,50 +184,16 @@ describe("coreQueryEngineJdbcSqlServerPlugin", () => {
     );
   });
 
-  it("registers showEstimatedPlan command with SQLSERVER_WHEN enablement", () => {
+  it("does not own shared plan commands or toolbar actions", () => {
     const context = createContext();
     coreQueryEngineJdbcSqlServerPlugin.activate(context);
 
-    expect(mocks.registerCommandMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "core.queryengine.jdbc.sqlserver.showEstimatedPlan",
-        title: "Show Estimated Query Plan",
-        category: "Query",
-        enablement: expect.stringContaining("hasActiveQueryPlanDialect")
-      })
-    );
-  });
-
-  it("registers toggleActualPlan command with SQLSERVER_WHEN enablement", () => {
-    const context = createContext();
-    coreQueryEngineJdbcSqlServerPlugin.activate(context);
-
-    expect(mocks.registerCommandMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "core.queryengine.jdbc.sqlserver.toggleActualPlan",
-        title: "Include Actual Query Plan",
-        category: "Query",
-        enablement: expect.stringContaining("hasActiveQueryPlanDialect")
-      })
-    );
-  });
-
-  it("registers toolbar actions for SQL Server plans", () => {
-    const context = createContext();
-    coreQueryEngineJdbcSqlServerPlugin.activate(context);
-
-    expect(mocks.registerToolbarActionMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "core.queryengine.jdbc.toolbar.sqlserver.showEstimatedPlan",
-        when: expect.stringContaining("hasActiveQueryPlanDialect")
-      })
-    );
-    expect(mocks.registerToolbarActionMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "core.queryengine.jdbc.toolbar.sqlserver.includeActualPlan",
-        when: expect.stringContaining("hasActiveQueryPlanDialect")
-      })
-    );
+    expect(mocks.registerCommandMock).not.toHaveBeenCalledWith(expect.objectContaining({
+      id: expect.stringContaining("Plan")
+    }));
+    expect(mocks.registerToolbarActionMock).not.toHaveBeenCalledWith(expect.objectContaining({
+      title: expect.stringContaining("Plan")
+    }));
   });
 
   it("registers the plan XML output setting", () => {

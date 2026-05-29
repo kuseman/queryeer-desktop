@@ -10,11 +10,14 @@ const mocks = vi.hoisted(() => ({
   registerExecutionContextProviderMock: vi.fn(),
   registerEngineResolverMock: vi.fn(),
   onQueryEventMock: vi.fn(),
+  requestExecuteMock: vi.fn(),
   executeQueryForFlowMock: vi.fn(),
   invokeMock: vi.fn(async (): Promise<unknown> => []),
   getConfiguredJdbcConnectionsMock: vi.fn<() => unknown[]>(() => []),
   loadConnectionRootsMock: vi.fn(),
   openQuickCommandMock: vi.fn(),
+  readViewStateMock: vi.fn(() => ({})),
+  setIncludeActualPlanMock: vi.fn(),
   getCoreSettingsServiceMock: vi.fn<() => unknown | null>(() => null),
   onSettingsInitializedMock: vi.fn<(listener: (service: unknown) => void) => () => void>(() => () => {})
 }));
@@ -24,7 +27,15 @@ vi.mock("../core.queryengine/QueryEngineService", () => ({
     registerExecutionContextProvider: mocks.registerExecutionContextProviderMock,
     registerEngineResolver: mocks.registerEngineResolverMock,
     onQueryEvent: mocks.onQueryEventMock,
+    requestExecute: mocks.requestExecuteMock,
     invoke: mocks.invokeMock
+  })
+}));
+
+vi.mock("../core.queryengine/QueryViewStateStore", () => ({
+  getQueryViewStateStore: () => ({
+    read: mocks.readViewStateMock,
+    setIncludeActualPlan: mocks.setIncludeActualPlanMock
   })
 }));
 
@@ -235,6 +246,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
     mocks.registerExecutionContextProviderMock.mockReset();
     mocks.registerEngineResolverMock.mockReset();
     mocks.onQueryEventMock.mockReset();
+    mocks.requestExecuteMock.mockReset();
     mocks.executeQueryForFlowMock.mockReset();
     mocks.invokeMock.mockReset();
     mocks.invokeMock.mockResolvedValue([]);
@@ -242,6 +254,9 @@ describe("core.queryengine.jdbc plugin integration", () => {
     mocks.getConfiguredJdbcConnectionsMock.mockReset();
     mocks.getCoreSettingsServiceMock.mockReset();
     mocks.onSettingsInitializedMock.mockReset();
+    mocks.readViewStateMock.mockReset();
+    mocks.readViewStateMock.mockReturnValue({});
+    mocks.setIncludeActualPlanMock.mockReset();
     mocks.getCoreSettingsServiceMock.mockReturnValue(null);
     mocks.onSettingsInitializedMock.mockReturnValue(() => {});
     mocks.executeQueryForFlowMock.mockResolvedValue({ rowsAffected: 1, rows: [{ ok: true }], preview: "select 1" });
@@ -716,15 +731,92 @@ describe("core.queryengine.jdbc plugin integration", () => {
     expect(mocks.openQuickCommandMock).toHaveBeenCalledWith("$", { when: "activeFile.mimeType == 'application/sql'" });
   });
 
-  it("does not register SQL Server commands from the generic JDBC plugin", () => {
+  it("registers generic query plan commands and toolbar actions", () => {
+    const context = createContext();
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const registerCommandMock = context.commands.registerCommand as ReturnType<typeof vi.fn>;
+    expect(registerCommandMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "core.queryengine.jdbc.showEstimatedPlan",
+        enablement: expect.stringContaining("backendHealthy &&")
+      })
+    );
+    expect(registerCommandMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "core.queryengine.jdbc.toggleActualPlan",
+        enablement: expect.stringContaining("hasActiveQueryPlanDialect")
+      })
+    );
+
+    const registerToolbarActionMock = context.layout.registerToolbarAction as ReturnType<typeof vi.fn>;
+    expect(registerToolbarActionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "core.queryengine.jdbc.toolbar.showEstimatedPlan",
+        commandId: "core.queryengine.jdbc.showEstimatedPlan",
+        when: expect.stringContaining("hasActiveQueryPlanDialect")
+      })
+    );
+    expect(registerToolbarActionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "core.queryengine.jdbc.toolbar.includeActualPlan",
+        commandId: "core.queryengine.jdbc.toggleActualPlan",
+        when: expect.stringContaining("hasActiveQueryPlanDialect")
+      })
+    );
+  });
+
+  it("does not register dialect-specific plan commands from the generic JDBC plugin", () => {
+    const context = createContext();
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const registerCommandMock = context.commands.registerCommand as ReturnType<typeof vi.fn>;
+    const sqlServerCommandCall = registerCommandMock.mock.calls.find(
+      (call: unknown[]) => (call[0] as { id?: string } | undefined)?.id === "core.queryengine.jdbc.sqlserver.toggleActualPlan"
+    );
+    const postgresCommandCall = registerCommandMock.mock.calls.find(
+      (call: unknown[]) => (call[0] as { id?: string } | undefined)?.id === "core.queryengine.jdbc.postgres.toggleActualPlan"
+    );
+    expect(sqlServerCommandCall).toBeUndefined();
+    expect(postgresCommandCall).toBeUndefined();
+  });
+
+  it("estimated plan command requests query plan output", async () => {
     const context = createContext();
     coreQueryEngineJdbcPlugin.activate(context);
 
     const registerCommandMock = context.commands.registerCommand as ReturnType<typeof vi.fn>;
     const commandCall = registerCommandMock.mock.calls.find(
-      (call: unknown[]) => (call[0] as { id?: string } | undefined)?.id === "core.queryengine.jdbc.sqlserver.toggleActualPlan"
+      (call: unknown[]) => (call[0] as { id?: string } | undefined)?.id === "core.queryengine.jdbc.showEstimatedPlan"
     );
-    expect(commandCall).toBeUndefined();
+    const handler = commandCall![0].handler as () => Promise<void>;
+
+    await handler();
+
+    expect(mocks.requestExecuteMock).toHaveBeenCalledWith({
+      outputIdOverride: "core.graph.queryPlanOutput",
+      optionsOverride: {
+        intent: "plan.estimated",
+        requestedArtifacts: [{ capability: "plan", kind: "graph" }]
+      }
+    });
+  });
+
+  it("actual plan command toggles active file view state", async () => {
+    const context = createContext();
+    (context.fileMediator.getActiveFileId as ReturnType<typeof vi.fn>).mockReturnValue("file-1");
+    mocks.readViewStateMock.mockReturnValue({ includeActualPlan: false });
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const registerCommandMock = context.commands.registerCommand as ReturnType<typeof vi.fn>;
+    const commandCall = registerCommandMock.mock.calls.find(
+      (call: unknown[]) => (call[0] as { id?: string } | undefined)?.id === "core.queryengine.jdbc.toggleActualPlan"
+    );
+    const handler = commandCall![0].handler as () => Promise<void>;
+
+    await handler();
+
+    expect(mocks.setIncludeActualPlanMock).toHaveBeenCalledWith("file-1", true);
   });
 
   it("applies connection color to tab header style for JDBC files", () => {

@@ -17,6 +17,7 @@ type ToolbarProps = {
   executeCommand: (commandId: string) => Promise<CommandExecutionResult>;
   getCommandTitle: (commandId: string) => string | undefined;
   getCommandAccelerator: (commandId: string) => string | undefined;
+  commandContextVersion?: number;
 };
 
 const zoneToggleByCommand: Record<string, LayoutZone | undefined> = {
