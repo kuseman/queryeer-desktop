@@ -1,7 +1,7 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { LayoutToolbarContribution } from "../../contracts/extensions/LayoutExtension";
+import type { LayoutToolbarContribution, LayoutZone } from "../../contracts/extensions/LayoutExtension";
 import { Toolbar } from "./Toolbar";
 
 describe("Toolbar", () => {
@@ -50,6 +50,46 @@ describe("Toolbar", () => {
     const buttons = rootElement.querySelectorAll("button.shell-toolbar-action");
     expect(buttons).toHaveLength(2);
     expect((buttons[1] as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("rechecks command enablement when command context changes", () => {
+    const actions: LayoutToolbarContribution[] = [
+      { id: "estimated-plan", commandId: "cmd.estimatedPlan", icon: "file-open", title: "Estimated Plan" }
+    ];
+    const visibleZones: ReadonlySet<LayoutZone> = new Set(["mainArea"]);
+    const onToggleZone = vi.fn();
+    const executeCommand = vi.fn(async () => ({ commandId: "cmd.estimatedPlan", executed: true as const }));
+    const getCommandTitle = () => undefined;
+    const getCommandAccelerator = () => undefined;
+    let canExecute = false;
+    const canExecuteCommand = () => canExecute;
+
+    const renderToolbar = (commandContextVersion: number) => {
+      root.render(
+        <Toolbar
+          toolbarActions={actions}
+          visibleZones={visibleZones}
+          onToggleZone={onToggleZone}
+          canExecuteCommand={canExecuteCommand}
+          executeCommand={executeCommand}
+          getCommandTitle={getCommandTitle}
+          getCommandAccelerator={getCommandAccelerator}
+          commandContextVersion={commandContextVersion}
+        />
+      );
+    };
+
+    act(() => {
+      renderToolbar(0);
+    });
+    expect((rootElement.querySelector("button.shell-toolbar-action") as HTMLButtonElement).disabled).toBe(true);
+
+    canExecute = true;
+    act(() => {
+      renderToolbar(1);
+    });
+
+    expect((rootElement.querySelector("button.shell-toolbar-action") as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("executes non-toggle commands on click", async () => {

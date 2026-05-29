@@ -1,6 +1,5 @@
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
-import { QUERY_PLAN_ARTIFACT_REQUEST, QUERY_PLAN_OUTPUT_ID as PLAN_OUTPUT_ID } from "../core.queryengine/query-plan/constants";
 import { getQueryViewStateStore } from "../core.queryengine/QueryViewStateStore";
 import { registerJdbcDialect } from "../core.queryengine.jdbc/jdbc-dialect-registry";
 import { registerWhenExpressionTemplates } from "../core.commands/when-expression-template-registry";
@@ -11,7 +10,6 @@ import { PostgresConnectionForm } from "./PostgresConnectionForm";
 const POSTGRES_DIALECT_ID = "postgres";
 const POSTGRES_FILE_DIALECT_WHEN = `activeFile.metadata.core.queryengine.jdbc?.dialectId == '${POSTGRES_DIALECT_ID}'`;
 const POSTGRES_NODE_DIALECT_WHEN = `node.dialectId == '${POSTGRES_DIALECT_ID}'`;
-const POSTGRES_WHEN = `hasActiveQueryExecutableFile && hasActiveQueryPlanDialect && activeFile?.metadata?.core?.queryengine?.jdbc?.dialectId == '${POSTGRES_DIALECT_ID}'`;
 
 export const coreQueryEngineJdbcPostgresPlugin: Plugin = {
   manifest: {
@@ -62,65 +60,6 @@ export const coreQueryEngineJdbcPostgresPlugin: Plugin = {
         query: "select * from ${node.fullName} limit 100",
         mode: "execute",
         outputTarget: "output"
-      }
-    });
-
-    const getActiveQueryFile = () => {
-      const fileId = context.fileMediator.getActiveFileId();
-      return fileId ? context.files.getFile(fileId) : undefined;
-    };
-
-    // PostgreSQL plan commands
-    context.commands.registerCommand({
-      id: "core.queryengine.jdbc.postgres.showEstimatedPlan",
-      title: "Show Estimated Query Plan",
-      category: "Query",
-      enablement: `backendHealthy && ${POSTGRES_WHEN}`,
-      handler: async () => {
-        getQueryEngineService().requestExecute({
-          outputIdOverride: PLAN_OUTPUT_ID,
-          optionsOverride: {
-            intent: "plan.estimated",
-            requestedArtifacts: QUERY_PLAN_ARTIFACT_REQUEST
-          }
-        });
-      }
-    });
-
-    context.commands.registerCommand({
-      id: "core.queryengine.jdbc.postgres.toggleActualPlan",
-      title: "Include Actual Query Plan",
-      category: "Query",
-      enablement: POSTGRES_WHEN,
-      handler: async () => {
-        const file = getActiveQueryFile();
-        if (!file) {
-          return;
-        }
-        const store = getQueryViewStateStore();
-        const current = store.read(file.fileId).includeActualPlan === true;
-        store.setIncludeActualPlan(file.fileId, !current);
-      }
-    });
-
-    // PostgreSQL toolbar actions
-    context.layout.registerToolbarAction({
-      id: "core.queryengine.jdbc.toolbar.postgres.showEstimatedPlan",
-      title: "Estimated Plan",
-      order: 44,
-      commandId: "core.queryengine.jdbc.postgres.showEstimatedPlan",
-      when: POSTGRES_WHEN
-    });
-
-    context.layout.registerToolbarAction({
-      id: "core.queryengine.jdbc.toolbar.postgres.includeActualPlan",
-      title: "Actual Plan",
-      order: 45,
-      commandId: "core.queryengine.jdbc.postgres.toggleActualPlan",
-      when: POSTGRES_WHEN,
-      pressed: () => {
-        const file = getActiveQueryFile();
-        return file ? getQueryViewStateStore().read(file.fileId).includeActualPlan === true : false;
       }
     });
 

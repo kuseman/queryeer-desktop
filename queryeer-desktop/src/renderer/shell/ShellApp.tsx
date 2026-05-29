@@ -131,7 +131,7 @@ export function ShellApp({
   });
   const tabActivationQueueRef = useRef<string[]>(tabActivationQueue);
   const activeFileIdRef = useRef<string | null>(activeFileId);
-  const [, setCommandContextVersion] = useState(0);
+  const [commandContextVersion, setCommandContextVersion] = useState(0);
   const [, setSettingsVersion] = useState(0);
   const layoutRef = useRef<HTMLElement | null>(null);
   const tabsRef = useRef<HTMLDivElement | null>(null);
@@ -675,6 +675,7 @@ export function ShellApp({
           executeCommand={executeCommand}
           getCommandTitle={getCommandTitle}
           getCommandAccelerator={getCommandAccelerator}
+          commandContextVersion={commandContextVersion}
         />
       )}
 

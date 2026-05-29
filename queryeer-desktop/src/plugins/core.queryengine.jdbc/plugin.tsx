@@ -1,6 +1,8 @@
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import { registerQueryExecutableEngine } from "../core.queryengine/engine-registration";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
+import { QUERY_PLAN_ARTIFACT_REQUEST, QUERY_PLAN_OUTPUT_ID as PLAN_OUTPUT_ID } from "../core.queryengine/query-plan/constants";
+import { getQueryViewStateStore } from "../core.queryengine/QueryViewStateStore";
 import { getCoreSettingsService } from "../core.settings/service";
 import { JdbcConnectionsSettingsEditor } from "./JdbcConnectionsSettingsEditor";
 import {
@@ -37,6 +39,8 @@ import { GRAPH_DOCUMENT_MIME_TYPE, GRAPH_DOCUMENT_EXTENSION } from "../core.grap
 const JDBC_SESSION_ID_METADATA_KEY = "core.queryengine.jdbc.sessionId";
 const JDBC_SESSION_CONNECTION_TITLE_KEY = "core.queryengine.jdbc.sessionConnection";
 const JDBC_SESSION_STATE_METADATA_KEY = "core.queryengine.jdbc.sessionState";
+const JDBC_QUERY_PLAN_WHEN = "hasActiveQueryExecutableFile && hasActiveQueryPlanDialect";
+const JDBC_QUERY_PLAN_ENABLEMENT = `backendHealthy && ${JDBC_QUERY_PLAN_WHEN}`;
 // Tracks which connectionId (UUID) each file's session was established with.
 // Kept in memory — same lifetime as metadata, which is also not persisted.
 const sessionConnectionUuidMap = new Map<string, string>();
@@ -165,12 +169,69 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       return match?.title?.trim() || connectionId;
     };
 
+    const getActiveQueryFile = () => {
+      const fileId = context.fileMediator.getActiveFileId();
+      return fileId ? context.files.getFile(fileId) : undefined;
+    };
+
     context.commands.registerCommand({
       id: "core.queryengine.jdbc.navigation.refresh",
       title: "Refresh JDBC Tree",
       handler: () => {
         getJdbcNavigationStore().loadConnectionRoots();
         getJdbcDatabaseCache().invalidate();
+      }
+    });
+
+    context.commands.registerCommand({
+      id: "core.queryengine.jdbc.showEstimatedPlan",
+      title: "Show Estimated Query Plan",
+      category: "Query",
+      enablement: JDBC_QUERY_PLAN_ENABLEMENT,
+      handler: async () => {
+        getQueryEngineService().requestExecute({
+          outputIdOverride: PLAN_OUTPUT_ID,
+          optionsOverride: {
+            intent: "plan.estimated",
+            requestedArtifacts: QUERY_PLAN_ARTIFACT_REQUEST
+          }
+        });
+      }
+    });
+
+    context.commands.registerCommand({
+      id: "core.queryengine.jdbc.toggleActualPlan",
+      title: "Include Actual Query Plan",
+      category: "Query",
+      enablement: JDBC_QUERY_PLAN_ENABLEMENT,
+      handler: async () => {
+        const file = getActiveQueryFile();
+        if (!file) {
+          return;
+        }
+        const store = getQueryViewStateStore();
+        const current = store.read(file.fileId).includeActualPlan === true;
+        store.setIncludeActualPlan(file.fileId, !current);
+      }
+    });
+
+    context.layout.registerToolbarAction({
+      id: "core.queryengine.jdbc.toolbar.showEstimatedPlan",
+      title: "Estimated Plan",
+      order: 44,
+      commandId: "core.queryengine.jdbc.showEstimatedPlan",
+      when: JDBC_QUERY_PLAN_WHEN
+    });
+
+    context.layout.registerToolbarAction({
+      id: "core.queryengine.jdbc.toolbar.includeActualPlan",
+      title: "Actual Plan",
+      order: 45,
+      commandId: "core.queryengine.jdbc.toggleActualPlan",
+      when: JDBC_QUERY_PLAN_WHEN,
+      pressed: () => {
+        const file = getActiveQueryFile();
+        return file ? getQueryViewStateStore().read(file.fileId).includeActualPlan === true : false;
       }
     });
 

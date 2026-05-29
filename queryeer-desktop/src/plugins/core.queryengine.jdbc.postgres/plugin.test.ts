@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import type { PluginContext } from "../../contracts/plugin/Plugin";
 import { coreQueryEngineJdbcPostgresPlugin } from "./plugin";
 import { registerJdbcDialect } from "../core.queryengine.jdbc/jdbc-dialect-registry";
@@ -31,6 +31,10 @@ function createContext(): PluginContext
 }
 
 describe("coreQueryEngineJdbcPostgresPlugin", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("has correct manifest", () => {
     expect(coreQueryEngineJdbcPostgresPlugin.manifest.id).toBe("core.queryengine.jdbc.postgres");
     expect(coreQueryEngineJdbcPostgresPlugin.manifest.dependencies).toContain("core.queryengine.jdbc");
@@ -45,5 +49,20 @@ describe("coreQueryEngineJdbcPostgresPlugin", () => {
         supportsQueryPlan: true
       })
     );
+  });
+
+  it("does not own shared plan commands or toolbar actions", () => {
+    const context = createContext();
+
+    coreQueryEngineJdbcPostgresPlugin.activate(context);
+
+    const registerCommand = vi.mocked(context.commands.registerCommand);
+    const registerToolbarAction = vi.mocked(context.layout.registerToolbarAction);
+    expect(registerCommand).not.toHaveBeenCalledWith(expect.objectContaining({
+      id: expect.stringContaining("Plan")
+    }));
+    expect(registerToolbarAction).not.toHaveBeenCalledWith(expect.objectContaining({
+      title: expect.stringContaining("Plan")
+    }));
   });
 });

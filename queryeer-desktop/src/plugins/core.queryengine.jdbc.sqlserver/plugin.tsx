@@ -1,6 +1,5 @@
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
-import { QUERY_PLAN_ARTIFACT_REQUEST, QUERY_PLAN_OUTPUT_ID as PLAN_OUTPUT_ID } from "../core.queryengine/query-plan/constants";
 import { getQueryViewStateStore } from "../core.queryengine/QueryViewStateStore";
 import { getCoreSettingsService } from "../core.settings/service";
 import { registerJdbcDialect } from "../core.queryengine.jdbc/jdbc-dialect-registry";
@@ -13,7 +12,6 @@ const SQLSERVER_DIALECT_ID = "sqlserver";
 const SQLSERVER_PLAN_OUTPUT_SETTING_ID = "core.queryengine.jdbc.sqlserver.planXmlOutput";
 const SQLSERVER_FILE_DIALECT_WHEN = `activeFile.metadata.core.queryengine.jdbc?.dialectId == '${SQLSERVER_DIALECT_ID}'`;
 const SQLSERVER_NODE_DIALECT_WHEN = `node.dialectId == '${SQLSERVER_DIALECT_ID}'`;
-const SQLSERVER_WHEN = `hasActiveQueryExecutableFile && hasActiveQueryPlanDialect && activeFile?.metadata?.core?.queryengine?.jdbc?.dialectId == '${SQLSERVER_DIALECT_ID}'`;
 
 export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
   manifest: {
@@ -108,65 +106,6 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
         query: "select top 100 * from ${node.fullName}",
         mode: "execute",
         outputTarget: "output"
-      }
-    });
-
-    const getActiveQueryFile = () => {
-      const fileId = context.fileMediator.getActiveFileId();
-      return fileId ? context.files.getFile(fileId) : undefined;
-    };
-
-    // SQL Server plan commands
-    context.commands.registerCommand({
-      id: "core.queryengine.jdbc.sqlserver.showEstimatedPlan",
-      title: "Show Estimated Query Plan",
-      category: "Query",
-      enablement: `backendHealthy && ${SQLSERVER_WHEN}`,
-      handler: async () => {
-        getQueryEngineService().requestExecute({
-          outputIdOverride: PLAN_OUTPUT_ID,
-          optionsOverride: {
-            intent: "plan.estimated",
-            requestedArtifacts: QUERY_PLAN_ARTIFACT_REQUEST
-          }
-        });
-      }
-    });
-
-    context.commands.registerCommand({
-      id: "core.queryengine.jdbc.sqlserver.toggleActualPlan",
-      title: "Include Actual Query Plan",
-      category: "Query",
-      enablement: SQLSERVER_WHEN,
-      handler: async () => {
-        const file = getActiveQueryFile();
-        if (!file) {
-          return;
-        }
-        const store = getQueryViewStateStore();
-        const current = store.read(file.fileId).includeActualPlan === true;
-        store.setIncludeActualPlan(file.fileId, !current);
-      }
-    });
-
-    // SQL Server toolbar actions
-    context.layout.registerToolbarAction({
-      id: "core.queryengine.jdbc.toolbar.sqlserver.showEstimatedPlan",
-      title: "Estimated Plan",
-      order: 44,
-      commandId: "core.queryengine.jdbc.sqlserver.showEstimatedPlan",
-      when: SQLSERVER_WHEN
-    });
-
-    context.layout.registerToolbarAction({
-      id: "core.queryengine.jdbc.toolbar.sqlserver.includeActualPlan",
-      title: "Actual Plan",
-      order: 45,
-      commandId: "core.queryengine.jdbc.sqlserver.toggleActualPlan",
-      when: SQLSERVER_WHEN,
-      pressed: () => {
-        const file = getActiveQueryFile();
-        return file ? getQueryViewStateStore().read(file.fileId).includeActualPlan === true : false;
       }
     });
 
