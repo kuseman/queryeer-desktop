@@ -272,25 +272,67 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
                 where routine_type = 'PROCEDURE'
                 order by specific_catalog, specific_schema, specific_name
                 """;
-        try (PreparedStatement statement = jdbc.prepareStatement(sql); ResultSet rs = statement.executeQuery())
+        String paramSql = """
+                select parameter_name, data_type, parameter_mode, ordinal_position
+                from information_schema.parameters
+                where specific_catalog = ?
+                  and specific_schema = ?
+                  and specific_name = ?
+                order by ordinal_position
+                """;
+        try (PreparedStatement statement = jdbc.prepareStatement(sql); PreparedStatement paramStatement = jdbc.prepareStatement(paramSql))
         {
-            while (rs.next())
+            statement.execute();
+            try (ResultSet rs = statement.getResultSet())
             {
-                String catalog = rs.getString(1);
-                String schema = rs.getString(2);
-                String specificName = rs.getString(3);
-                String routineName = rs.getString(4);
-                if (target != null
-                        && !targetMatches(target, catalog, schema))
+                if (rs == null)
                 {
-                    continue;
+                    return result;
                 }
-                String fullName = buildFullName(schema, routineName);
-                result.add(new JdbcSchemaObject("procedure:" + key(catalog, schema) + ":" + specificName, routineName, "procedure", null, fullName, null,
-                        Map.of(KEY_CATALOG, nullToEmpty(catalog), KEY_SCHEMA, nullToEmpty(schema))));
+                while (rs.next())
+                {
+                    String catalog = rs.getString(1);
+                    String schema = rs.getString(2);
+                    String specificName = rs.getString(3);
+                    String routineName = rs.getString(4);
+                    if (target != null
+                            && !targetMatches(target, catalog, schema))
+                    {
+                        continue;
+                    }
+                    List<JdbcSchemaObject> params = readProcedureParameters(paramStatement, catalog, schema, specificName);
+                    result.add(new JdbcSchemaObject("procedure:" + key(catalog, schema) + ":" + specificName, routineName, "procedure", params,
+                            Map.of(KEY_CATALOG, nullToEmpty(catalog), KEY_SCHEMA, nullToEmpty(schema))));
+                }
             }
         }
         return result;
+    }
+
+    private static List<JdbcSchemaObject> readProcedureParameters(PreparedStatement paramStatement, String catalog, String schema, String specificName) throws SQLException
+    {
+        paramStatement.setString(1, nullToEmpty(catalog));
+        paramStatement.setString(2, schema == null ? ""
+                : schema);
+        paramStatement.setString(3, specificName == null ? ""
+                : specificName);
+        List<JdbcSchemaObject> params = new ArrayList<>();
+        try (ResultSet prs = paramStatement.executeQuery())
+        {
+            while (prs.next())
+            {
+                String dataType = prs.getString(2);
+                String paramMode = prs.getString(3);
+                int ordinal = prs.getInt(4);
+                Map<String, Object> attrs = new LinkedHashMap<>();
+                attrs.put("type", nullToEmpty(dataType).toLowerCase());
+                attrs.put("mode", nullToEmpty(paramMode).toUpperCase());
+                attrs.put("ordinal", ordinal);
+                String paramName = prs.getString(1);
+                params.add(new JdbcSchemaObject("param:" + key(catalog, schema) + ":" + specificName + ":" + paramName, paramName, "parameter", null, Map.copyOf(attrs)));
+            }
+        }
+        return params;
     }
 
     private List<JdbcSchemaObject> readTriggers(Connection jdbc, JdbcSchemaTarget target) throws SQLException

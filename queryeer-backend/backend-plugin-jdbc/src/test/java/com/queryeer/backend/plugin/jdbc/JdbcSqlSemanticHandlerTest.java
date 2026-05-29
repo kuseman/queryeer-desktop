@@ -1,5 +1,6 @@
 package com.queryeer.backend.plugin.jdbc;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
@@ -17,6 +18,7 @@ import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 import com.queryeer.backend.core.JacksonPayloadMapper;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaNavigator;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
+import com.queryeer.backend.queryengine.sql.parser.SqlCompletionSupport;
 import com.queryeer.backend.queryengine.sql.parser.SqlHoverSupport;
 import com.queryeer.backend.queryengine.sql.parser.SqlParseContext;
 
@@ -244,6 +246,48 @@ class JdbcSqlSemanticHandlerTest
         assertNotNull(markdown);
         assertContains(markdown, "Table: db2.dbo.Users");
         assertContains(markdown, "email");
+    }
+
+    @Test
+    void extractProcedureNameBeforeCursor_returnsNull_whenOnlyExecKeyword()
+    {
+        assertNull(JdbcSqlSemanticHandler.extractProcedureNameBeforeCursor("EXEC ", new SqlCompletionSupport.SqlCompleteCursor(1, 6)));
+    }
+
+    @Test
+    void extractProcedureNameBeforeCursor_returnsNull_whenCursorOnProcedureName()
+    {
+        assertNull(JdbcSqlSemanticHandler.extractProcedureNameBeforeCursor("EXEC my_proc", new SqlCompletionSupport.SqlCompleteCursor(1, 14)));
+    }
+
+    @Test
+    void extractProcedureNameBeforeCursor_returnsNull_whenCursorOnQualifiedName()
+    {
+        assertNull(JdbcSqlSemanticHandler.extractProcedureNameBeforeCursor("EXEC dbo.my_proc", new SqlCompletionSupport.SqlCompleteCursor(1, 18)));
+    }
+
+    @Test
+    void extractProcedureNameBeforeCursor_returnsName_whenCursorPastNameWithSpace()
+    {
+        assertEquals("dbo.my_proc", JdbcSqlSemanticHandler.extractProcedureNameBeforeCursor("EXEC dbo.my_proc ", new SqlCompletionSupport.SqlCompleteCursor(1, 19)));
+    }
+
+    @Test
+    void extractProcedureNameBeforeCursor_returnsName_whenCursorPastNameWithParen()
+    {
+        assertEquals("dbo.my_proc", JdbcSqlSemanticHandler.extractProcedureNameBeforeCursor("EXEC dbo.my_proc(", new SqlCompletionSupport.SqlCompleteCursor(1, 19)));
+    }
+
+    @Test
+    void extractProcedureNameBeforeCursor_handlesCallKeyword()
+    {
+        assertEquals("my_proc", JdbcSqlSemanticHandler.extractProcedureNameBeforeCursor("CALL my_proc ", new SqlCompletionSupport.SqlCompleteCursor(1, 14)));
+    }
+
+    @Test
+    void extractProcedureNameBeforeCursor_returnsNull_whenNoKeyword()
+    {
+        assertNull(JdbcSqlSemanticHandler.extractProcedureNameBeforeCursor("SELECT * FROM ", new SqlCompletionSupport.SqlCompleteCursor(1, 15)));
     }
 
     // -- Helpers --

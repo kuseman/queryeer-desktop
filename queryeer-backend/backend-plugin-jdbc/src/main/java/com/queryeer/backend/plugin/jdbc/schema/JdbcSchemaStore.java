@@ -818,9 +818,12 @@ public final class JdbcSchemaStore
         }
     }
 
-    List<TableLookupEntry> tableNamesForCompletion(String connectionId, String selectedDatabase)
+    List<TableLookupEntry> entriesForCompletion(String connectionId, String selectedDatabase, List<String> kinds)
     {
         String normalizedSelectedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
+        String placeholders = kinds.stream()
+                .map(_ -> "?")
+                .collect(java.util.stream.Collectors.joining(","));
         try (Connection connection = open(connectionId, JdbcSchemaCrawlScope.DEEP); PreparedStatement statement = connection.prepareStatement("""
                 with recursive object_path(object_id, object_name, kind, database_name, schema_name, ordinal) as
                 (
@@ -849,26 +852,33 @@ public final class JdbcSchemaStore
                 )
                 select object_name, kind, schema_name, database_name
                 from object_path
-                where lower(kind) in ('table','view','base table')
+                where lower(kind) in (%s)
                 order by ordinal
-                """); ResultSet resultSet = statement.executeQuery())
+                """.formatted(placeholders)))
         {
-            List<TableLookupEntry> result = new ArrayList<>();
-            while (resultSet.next())
+            for (int i = 0; i < kinds.size(); i++)
             {
-                String name = resultSet.getString(1);
-                String kind = normalizeTableKind(resultSet.getString(2));
-                String schema = resultSet.getString(3);
-                String database = resultSet.getString(4);
-                if (normalizedSelectedDatabase != null
-                        && database != null
-                        && !normalizedSelectedDatabase.equals(JdbcUtils.normalizeIdentifier(database)))
-                {
-                    continue;
-                }
-                result.add(new TableLookupEntry(displayTableName(schema, name), kind, database, schema));
+                statement.setString(i + 1, kinds.get(i));
             }
-            return result;
+            try (ResultSet resultSet = statement.executeQuery())
+            {
+                List<TableLookupEntry> result = new ArrayList<>();
+                while (resultSet.next())
+                {
+                    String name = resultSet.getString(1);
+                    String kind = normalizeTableKind(resultSet.getString(2));
+                    String schema = resultSet.getString(3);
+                    String database = resultSet.getString(4);
+                    if (normalizedSelectedDatabase != null
+                            && database != null
+                            && !normalizedSelectedDatabase.equals(JdbcUtils.normalizeIdentifier(database)))
+                    {
+                        continue;
+                    }
+                    result.add(new TableLookupEntry(displayTableName(schema, name), kind, database, schema));
+                }
+                return result;
+            }
         }
         catch (SQLException e)
         {
@@ -993,6 +1003,83 @@ public final class JdbcSchemaStore
         }
     }
 
+    List<String> procedureParameterNames(String connectionId, String schemaName, String procedureName)
+    {
+        try (Connection connection = open(connectionId, JdbcSchemaCrawlScope.DEEP); PreparedStatement procStatement = connection.prepareStatement("""
+                with recursive object_path(object_id, object_name, kind, schema_name, ordinal) as
+                (
+                  select object_id
+                  ,      object_name
+                  ,      kind
+                  ,      case when lower(kind) = 'schema' then object_name else null end as schema_name
+                  ,      ordinal
+                  from schema_object
+                  where parent_object_id is null
+                  and is_deleted = false
+
+                  union all
+
+                  select child.object_id
+                  ,      child.object_name
+                  ,      child.kind
+                  ,      case when lower(child.kind) = 'schema' then child.object_name else op.schema_name end as schema_name
+                  ,      child.ordinal
+                  from schema_object child
+                  join object_path op
+                    on child.parent_object_id = op.object_id
+                  where child.is_deleted = false
+                )
+                select object_id
+                from object_path
+                where lower(kind) = 'procedure'
+                and lower(object_name) = ?
+                and (? is null or lower(schema_name) = ?)
+                order by ordinal
+                limit 1
+                """); PreparedStatement paramsStatement = connection.prepareStatement("""
+                select object_name, ordinal
+                from schema_object
+                where parent_object_id = ?
+                and lower(kind) = 'parameter'
+                and is_deleted = false
+                order by ordinal
+                """))
+        {
+            procStatement.setString(1, JdbcUtils.normalizeIdentifier(procedureName));
+            String normalizedSchema = JdbcUtils.normalizeIdentifier(schemaName);
+            procStatement.setString(2, normalizedSchema);
+            procStatement.setString(3, normalizedSchema);
+            String procObjectId;
+            try (ResultSet resultSet = procStatement.executeQuery())
+            {
+                if (!resultSet.next())
+                {
+                    return List.of();
+                }
+                procObjectId = resultSet.getString(1);
+            }
+            paramsStatement.setString(1, procObjectId);
+            try (ResultSet resultSet = paramsStatement.executeQuery())
+            {
+                List<String> params = new ArrayList<>();
+                while (resultSet.next())
+                {
+                    String paramName = resultSet.getString(1);
+                    if (paramName != null
+                            && !paramName.isBlank())
+                    {
+                        params.add(paramName);
+                    }
+                }
+                return params;
+            }
+        }
+        catch (SQLException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
     SymbolLookupEntry findSymbol(String connectionId, String rawToken, String selectedDatabase)
     {
         TableLookup lookup = parseTableLookup(rawToken);
@@ -1032,7 +1119,7 @@ public final class JdbcSchemaStore
                 )
                 select object_name, kind, schema_name, database_name
                 from object_path
-                where lower(kind) in ('table','view','base table')
+                where lower(kind) in ('table','view','base table','procedure')
                 and lower(object_name) = ?
                 and (? is null or lower(schema_name) = ?)
                 and (? is null or lower(database_name) = ?)
@@ -1489,8 +1576,15 @@ public final class JdbcSchemaStore
         {
             return "table";
         }
-        return "view".equalsIgnoreCase(kind) ? "view"
-                : "table";
+        if ("view".equalsIgnoreCase(kind))
+        {
+            return "view";
+        }
+        if ("procedure".equalsIgnoreCase(kind))
+        {
+            return "procedure";
+        }
+        return "table";
     }
 
     private static double decay(double currentScore, Instant previousUse, Instant now)

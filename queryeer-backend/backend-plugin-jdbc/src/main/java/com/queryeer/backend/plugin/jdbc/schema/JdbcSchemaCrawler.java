@@ -40,11 +40,13 @@ public final class JdbcSchemaCrawler
             JdbcSchemaTarget crawlTarget = new JdbcSchemaTarget(target.database(), target.schema());
             List<JdbcSchemaObject> tables = router.resolve(connection, "tables_folder", crawlTarget);
             List<JdbcSchemaObject> views = router.resolve(connection, "views_folder", crawlTarget);
+            List<JdbcSchemaObject> procedures = router.resolve(connection, "procedures_folder", crawlTarget);
             List<JdbcSchemaObject> expandedTables = expandTableColumns(connection, tables);
             List<JdbcSchemaObject> expandedViews = expandTableColumns(connection, views);
-            List<JdbcSchemaObject> allFetched = new ArrayList<>(expandedTables.size() + expandedViews.size());
+            List<JdbcSchemaObject> allFetched = new ArrayList<>(expandedTables.size() + expandedViews.size() + procedures.size());
             allFetched.addAll(expandedTables);
             allFetched.addAll(expandedViews);
+            allFetched.addAll(procedures);
             store.persistDeepSnapshotTarget(connection.connectionId(), target.database(), target.schema(), allFetched);
             return;
         }

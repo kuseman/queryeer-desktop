@@ -74,12 +74,21 @@ public final class SqlServerDialect implements JdbcDialect
             order by s.name, o.name
             """;
     private static final String SQL_PROCEDURES = """
-            select s.name as schema_name, o.name as object_name
+            select s.name as schema_name, o.name as object_name, o.object_id
             from sys.objects o
             join sys.schemas s
               on s.schema_id = o.schema_id
             where o.type = 'P' and o.is_ms_shipped = 0
             order by s.name, o.name
+            """;
+
+    private static final String SQL_PARAMETERS = """
+            select p.name as parameter_name, t.name as type_name, p.is_output as is_output, p.parameter_id as ordinal
+            from sys.parameters p
+            join sys.types t
+              on t.user_type_id = p.user_type_id
+            where p.object_id = ?
+            order by p.parameter_id
             """;
     private static final String SQL_TRIGGERS = """
             select s.name as schema_name, tr.name as object_name
@@ -279,7 +288,67 @@ public final class SqlServerDialect implements JdbcDialect
 
     private List<JdbcSchemaObject> resolveProcedures(JdbcConnection connection, Map<String, Object> options)
     {
-        return listObjects(connection, targetFrom(options.get(OPTION_TARGET)), SQL_PROCEDURES, "procedure");
+        JdbcSchemaTarget target = targetFrom(options.get(OPTION_TARGET));
+        String database = target != null ? trimToNull(target.database())
+                : null;
+        String schemaFilter = target != null ? trimToNull(target.schema())
+                : null;
+        List<JdbcSchemaObject> result = new ArrayList<>();
+        try (Connection conn = openForDatabase(connection, database);
+                PreparedStatement statement = conn.prepareStatement(SQL_PROCEDURES);
+                PreparedStatement paramStatement = conn.prepareStatement(SQL_PARAMETERS);
+                ResultSet rs = statement.executeQuery())
+        {
+            while (rs.next())
+            {
+                String schemaName = rs.getString("schema_name");
+                String procName = rs.getString("object_name");
+                if (schemaFilter != null
+                        && !schemaFilter.equalsIgnoreCase(schemaName))
+                {
+                    continue;
+                }
+                String fullName = schemaName + "." + procName;
+                Map<String, Object> attrs = new LinkedHashMap<>();
+                if (database != null)
+                {
+                    attrs.put(KEY_CATALOG, database);
+                }
+                attrs.put(KEY_SCHEMA, schemaName);
+                long objectId = rs.getLong("object_id");
+                List<JdbcSchemaObject> params = readProcedureParameters(paramStatement, objectId);
+                result.add(new JdbcSchemaObject("procedure:" + database + "." + schemaName + "." + procName, procName, "procedure", null, fullName, params, Map.copyOf(attrs)));
+            }
+        }
+        catch (SQLException e)
+        {
+            throw new RuntimeException("Failed to list procedures for " + database, e);
+        }
+        return result;
+    }
+
+    private static List<JdbcSchemaObject> readProcedureParameters(PreparedStatement paramStatement, long objectId) throws SQLException
+    {
+        paramStatement.setLong(1, objectId);
+        List<JdbcSchemaObject> params = new ArrayList<>();
+        try (ResultSet prs = paramStatement.executeQuery())
+        {
+            while (prs.next())
+            {
+                String typeName = prs.getString("type_name");
+                boolean isOutput = prs.getBoolean("is_output");
+                int ordinal = prs.getInt("ordinal");
+                Map<String, Object> paramAttrs = new LinkedHashMap<>();
+                paramAttrs.put("type", typeName != null ? typeName.toLowerCase()
+                        : "unknown");
+                paramAttrs.put("mode", isOutput ? "OUT"
+                        : "IN");
+                paramAttrs.put("ordinal", ordinal);
+                String paramName = prs.getString("parameter_name");
+                params.add(new JdbcSchemaObject("param:" + objectId + ":" + paramName, paramName, "parameter", null, Map.copyOf(paramAttrs)));
+            }
+        }
+        return params;
     }
 
     private List<JdbcSchemaObject> resolveTriggers(JdbcConnection connection, Map<String, Object> options)

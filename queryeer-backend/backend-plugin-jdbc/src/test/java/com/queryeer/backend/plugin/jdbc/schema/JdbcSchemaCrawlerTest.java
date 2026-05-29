@@ -35,11 +35,12 @@ class JdbcSchemaCrawlerTest
 
         doThrow(new RuntimeException("Some SQL error")).when(dialect)
                 .openSessionConnection(anyMap());
-        when(dialect.branchResolvers()).thenReturn(Map.of("tables_folder", resolver, "views_folder", resolver, "columns_folder", resolver, "indexes_folder", resolver));
+        when(dialect.branchResolvers()).thenReturn(Map.of("tables_folder", resolver, "views_folder", resolver, "procedures_folder", resolver, "columns_folder", resolver, "indexes_folder", resolver));
         when(resolver.resolveSchema(eq(connection), argThat((Map<String, Object> args) -> "tables_folder".equals(args.get("parentKind")))))
                 .thenReturn(List.of(new JdbcSchemaObject("AdventureWorks2022.Person.Address", "Address", "table", List.of(), Map.of("catalog", "AdventureWorks2022", "schema", "Person")),
                         new JdbcSchemaObject("AdventureWorks2022.HumanResources.Employee", "Employee", "table", List.of(), Map.of("catalog", "AdventureWorks2022", "schema", "HumanResources"))));
         when(resolver.resolveSchema(eq(connection), argThat((Map<String, Object> args) -> "views_folder".equals(args.get("parentKind"))))).thenReturn(List.of());
+        when(resolver.resolveSchema(eq(connection), argThat((Map<String, Object> args) -> "procedures_folder".equals(args.get("parentKind"))))).thenReturn(List.of());
 
         JdbcSchemaRouter router = new JdbcSchemaRouter(new DefaultJdbcSchemaResolver());
         JdbcSchemaCrawler crawler = new JdbcSchemaCrawler(store, router);
@@ -74,7 +75,7 @@ class JdbcSchemaCrawlerTest
 
         doThrow(new RuntimeException("Some SQL error")).when(dialect)
                 .openSessionConnection(anyMap());
-        when(dialect.branchResolvers()).thenReturn(Map.of("tables_folder", resolver, "views_folder", resolver, "columns_folder", resolver, "indexes_folder", resolver));
+        when(dialect.branchResolvers()).thenReturn(Map.of("tables_folder", resolver, "views_folder", resolver, "procedures_folder", resolver, "columns_folder", resolver, "indexes_folder", resolver));
         JdbcSchemaObject column = new JdbcSchemaObject("column:db:dbo:users:id", "id", "column", List.of(), Map.of("type", "int", "primaryKey", true));
         JdbcSchemaObject index = new JdbcSchemaObject("index:db:dbo:users:idx_name", "idx_name", "index", List.of(), Map.of("columns", "name", "unique", false));
 
@@ -82,6 +83,7 @@ class JdbcSchemaCrawlerTest
         when(resolver.resolveSchema(eq(connection), argThat((Map<String, Object> args) -> "indexes_folder".equals(args.get("parentKind"))))).thenReturn(List.of(index));
         when(resolver.resolveSchema(eq(connection), argThat((Map<String, Object> args) -> "tables_folder".equals(args.get("parentKind")))))
                 .thenReturn(List.of(new JdbcSchemaObject("table:db.dbo.users", "users", "table", List.of(), Map.of("catalog", "db", "schema", "dbo"))));
+        when(resolver.resolveSchema(eq(connection), argThat((Map<String, Object> args) -> "procedures_folder".equals(args.get("parentKind"))))).thenReturn(List.of());
 
         JdbcSchemaRouter router = new JdbcSchemaRouter(new DefaultJdbcSchemaResolver());
         JdbcSchemaCrawler crawler = new JdbcSchemaCrawler(store, router);

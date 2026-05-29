@@ -30,6 +30,11 @@ final class SqlClauseClassifier
         {
             return insertContext;
         }
+        SqlParseContext procContext = classifyProcedureCall(tokens);
+        if (procContext != null)
+        {
+            return procContext;
+        }
         ClauseState lastClause = ClauseState.NONE;
 
         for (int i = 0; i < tokens.size(); i++)
@@ -82,6 +87,20 @@ final class SqlClauseClassifier
                 .filter(token -> token.startOffset() >= cursorOffset)
                 .anyMatch(token -> token.wordEquals("FROM")
                         || token.wordEquals("JOIN"));
+    }
+
+    private static SqlParseContext classifyProcedureCall(List<SqlToken> tokens)
+    {
+        for (SqlToken token : tokens)
+        {
+            if (token.type() == SqlTokenType.WORD
+                    && (token.wordEquals("CALL")
+                            || token.wordEquals("EXEC")))
+            {
+                return SqlParseContext.PROCEDURE_CALL;
+            }
+        }
+        return null;
     }
 
     private static SqlParseContext classifyInsert(List<SqlToken> tokens)
