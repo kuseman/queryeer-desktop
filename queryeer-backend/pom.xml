@@ -2,32 +2,175 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-
     <groupId>com.queryeer.backend</groupId>
     <artifactId>queryeer-backend</artifactId>
     <version>0.9.0-SNAPSHOT</version>
     <packaging>pom</packaging>
-
-    <name>queryeer-backend</name>
+    <name>Queryeer Backend</name>
     <description>Standalone backend reactor for Queryeer Desktop</description>
+    <url>https://github.com/kuseman/queryeer-desktop</url>
 
     <properties>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <checkstyle.plugin.version>3.6.0</checkstyle.plugin.version>
-        <checkstyle.version>10.17.0</checkstyle.version>
-        <spotless.plugin.version>2.43.0</spotless.plugin.version>
-        <surefire.plugin.version>3.2.5</surefire.plugin.version>
-        <jackson.version>2.18.2</jackson.version>
-        <junit.jupiter.version>6.0.3</junit.jupiter.version>
+        <checkstyle.version>10.26.1</checkstyle.version>
+        <spotless.plugin.version>2.44.5</spotless.plugin.version>
+        <surefire.plugin.version>3.5.5</surefire.plugin.version>
+        <jackson.version>2.19.4</jackson.version>
+        <junit.jupiter.version>6.1.0</junit.jupiter.version>
         <mockito.core.version>5.23.0</mockito.core.version>
-        <maven.dependency.plugin.version>3.8.1</maven.dependency.plugin.version>
-        <maven.assembly.plugin.version>3.7.1</maven.assembly.plugin.version>
+        <maven.dependency.plugin.version>3.10.0</maven.dependency.plugin.version>
+        <maven.assembly.plugin.version>3.8.0</maven.assembly.plugin.version>
         <checkstyle.skip>false</checkstyle.skip>
         <queryeer.config.root>${project.basedir}</queryeer.config.root>
     </properties>
 
+    <issueManagement>
+        <url>https://github.com/kuseman/queryeer-desktop/issues</url>
+        <system>GitHub Issues</system>
+    </issueManagement>
+
+    <repositories>
+        <repository>
+            <id>sonatype.snapshots</id>
+            <name>Sonatype Snapshot Repository</name>
+            <url>https://central.sonatype.com/repository/maven-snapshots</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
+
+    <scm>
+        <url>https://github.com/kuseman/queryeer-desktop</url>
+        <connection>scm:git:git@github.com:kuseman/queryeer-desktop.git</connection>
+        <developerConnection>scm:git:git@github.com:kuseman/queryeer-desktop.git</developerConnection>
+        <tag>HEAD</tag>
+    </scm>
+
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <name>Marcus Henriksson</name>
+            <email>kuseman80@gmail.com</email>
+            <url>https://github.com/kuseman</url>
+        </developer>
+    </developers>
+
+    <distributionManagement>
+        <snapshotRepository>
+            <id>sonatype.snapshots</id>
+            <name>Sonatype Snapshot Repository</name>
+            <url>https://central.sonatype.com/repository/maven-snapshots</url>
+        </snapshotRepository>
+    </distributionManagement>
+
     <profiles>
+        <profile>
+            <id>release</id>
+            <activation>
+                <property>
+                    <name>performRelease</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-jar-plugin</artifactId>
+                        <version>3.4.2</version>
+                        <configuration>
+                            <archive>
+                                <manifest>
+                                    <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                                </manifest>
+                            </archive>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>3.12.0</version>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                                <configuration>
+                                    <additionalOptions>-Xdoclint:all -Xdoclint:-missing</additionalOptions>
+                                    <additionalJOptions>
+                                        <additionalJOption>-Xdoclint:all</additionalJOption>
+                                        <additionalJOption>-Xdoclint:-missing</additionalJOption>
+                                    </additionalJOptions>
+                                    <failOnError>false</failOnError>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.3.1</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.8</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                                <configuration>
+                                    <!-- This is necessary for gpg to not try to use the pinentry programs -->
+                                    <gpgArguments>
+                                        <arg>--pinentry-mode</arg>
+                                        <arg>loopback</arg>
+                                    </gpgArguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.10.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <autoPublish>true</autoPublish>
+                            <waitUntil>published</waitUntil>
+                            <deploymentName>Queryeer Desktop</deploymentName>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <profile>
             <id>checkstyle-enabled</id>
             <activation>
@@ -111,6 +254,11 @@
                     <configuration>
                         <release>${maven.compiler.release}</release>
                     </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-deploy-plugin</artifactId>
+                    <version>3.1.3</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>

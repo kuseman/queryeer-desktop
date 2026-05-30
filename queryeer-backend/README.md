@@ -12,7 +12,6 @@ Standalone Java backend reactor for Queryeer Desktop.
 - `backend-plugin-payloadbuilder`: payloadbuilder query engine plugin
 - `backend-plugin-jdbc`: JDBC query engine plugin
 - `backend-plugin-dialect-sqlserver`: SQL Server JDBC dialect plugin
-- `backend-plugin-devprobe`: external dev probe backend companion plugin
 
 ## Build
 

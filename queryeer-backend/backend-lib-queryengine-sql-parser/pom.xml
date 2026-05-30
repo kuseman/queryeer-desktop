@@ -9,15 +9,15 @@
         <version>0.9.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
+    <artifactId>backend-lib-queryengine-sql-parser</artifactId>
+    <name>Queryeer Backend SQL Parser</name>
+    <description>Tree-sitter based SQL parser library for Queryeer plugins</description>
 
     <properties>
         <tree-sitter.version>0.26.6</tree-sitter.version>
         <tree-sitter-sql.version>gh-pages-a</tree-sitter-sql.version>
         <queryeer.plugin.id>queryengine.runtime.sql-parser</queryeer.plugin.id>
     </properties>
-
-    <artifactId>backend-lib-queryengine-sql-parser</artifactId>
-    <name>backend-lib-queryengine-sql-parser</name>
 
     <dependencies>
         <dependency>

@@ -9,10 +9,11 @@
         <version>0.9.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
-
     <artifactId>backend-plugin-dialect-postgres</artifactId>
-    <name>backend-plugin-dialect-postgres</name>
+    <name>Queryeer PostgreSQL Dialect Plugin</name>
+
     <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
         <queryeer.plugin.id>queryengine.jdbc.dialect.postgres</queryeer.plugin.id>
     </properties>
 

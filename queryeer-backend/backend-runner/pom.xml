@@ -9,9 +9,12 @@
         <version>0.9.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
-
     <artifactId>backend-runner</artifactId>
-    <name>backend-runner</name>
+    <name>Queryeer Backend Runner</name>
+
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
 
     <build>
         <plugins>
