@@ -1,27 +1,49 @@
 {
   "name": "@queryeer/api",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "TypeScript API contracts for Queryeer Desktop plugins",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
-    "./backend": { "types": "./dist/contracts/backend/index.d.ts", "default": "./dist/contracts/backend/index.js" },
-    "./graph": { "types": "./dist/contracts/graph/index.d.ts", "default": "./dist/contracts/graph/index.js" },
-    "./*.js": { "types": "./dist/contracts/*.d.ts", "default": "./dist/contracts/*.js" },
-    "./*": { "types": "./dist/contracts/*.d.ts", "default": "./dist/contracts/*.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./backend": {
+      "types": "./dist/contracts/backend/index.d.ts",
+      "default": "./dist/contracts/backend/index.js"
+    },
+    "./graph": {
+      "types": "./dist/contracts/graph/index.d.ts",
+      "default": "./dist/contracts/graph/index.js"
+    },
+    "./*.js": {
+      "types": "./dist/contracts/*.d.ts",
+      "default": "./dist/contracts/*.js"
+    },
+    "./*": {
+      "types": "./dist/contracts/*.d.ts",
+      "default": "./dist/contracts/*.js"
+    }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kuseman/queryeer-desktop.git",
     "directory": "queryeer-desktop/packages/api"
   },
-  "bugs": { "url": "https://github.com/kuseman/queryeer-desktop/issues" },
+  "bugs": {
+    "url": "https://github.com/kuseman/queryeer-desktop/issues"
+  },
   "homepage": "https://github.com/kuseman/queryeer-desktop#readme",
-  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "peerDependencies": {
     "react": "^18.3.1"
   },
