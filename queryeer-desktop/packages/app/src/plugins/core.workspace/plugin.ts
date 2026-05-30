@@ -1,0 +1,84 @@
+import type { Plugin } from "@queryeer/api/plugin/Plugin";
+import { getQuickCommandService } from "../core.quickcommand/service";
+import "@queryeer/api/shell/Api";
+
+function getFileName(uri: string): string {
+  return uri.replace(/\\/g, "/").split("/").pop() ?? uri;
+}
+
+function getDisplayPath(uri: string): string {
+  if (!uri.startsWith("file://")) {
+    return uri;
+  }
+  const path = decodeURIComponent(uri.slice("file://".length));
+  // Windows drive path: /C:/… → C:\…
+  if (/^\/[A-Za-z]:\//.test(path)) {
+    return path.slice(1).replace(/\//g, "\\");
+  }
+  return path;
+}
+
+export const coreWorkspacePlugin: Plugin = {
+  manifest: {
+    id: "core.workspace",
+    name: "Core Workspace",
+    version: "0.1.0",
+    kind: "core",
+    providesCapabilities: ["workspace.session"],
+    description: "Persists and restores session state (open files, active file, layout)"
+  },
+  activate: (context) => {
+    context.quickcommand.registerProvider({
+      prefix: "#",
+      label: "Open Files",
+      order: 5,
+      getItems: (_query, ctx) =>
+        ctx.openFiles.map((file) => ({
+          id: `workspace.openFile.${file.fileId}`,
+          title: getFileName(file.uri),
+          description: getDisplayPath(file.uri),
+          action: () => {
+            context.fileMediator.setActiveFileId(file.fileId);
+          }
+        }))
+    });
+
+    context.quickcommand.registerProvider({
+      prefix: "#",
+      label: "Recent Files",
+      order: 10,
+      getItems: async (_query, ctx) => {
+        const entries = await window.appShell.getRecentFiles();
+        const openUris = new Set(ctx.openFiles.map((file) => file.uri));
+        return entries
+          .filter((entry) => !openUris.has(entry.uri))
+          .map((entry) => ({
+          id: `workspace.recentFile.${entry.uri}`,
+          title: getFileName(entry.uri),
+          description: getDisplayPath(entry.uri),
+          action: async () => {
+            await context.fileMediator.openFile(entry.uri);
+          }
+          }));
+      }
+    });
+
+    context.commands.registerCommand({
+      id: "core.quickcommand.open.files",
+      title: "Open Quick Command Files",
+      category: "Quick Command",
+      handler: () => {
+        getQuickCommandService()?.open("#");
+      }
+    });
+
+    context.keybindings.registerKeybinding({
+      id: "core.quickcommand.open.files",
+      commandId: "core.quickcommand.open.files",
+      key: "F1",
+      when: "global",
+      scope: "global",
+      order: 10
+    });
+  }
+};

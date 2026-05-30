@@ -83,13 +83,15 @@ jobs:
           echo "NEXT_SNAPSHOT=${NEXT_SNAPSHOT}" >> "$GITHUB_OUTPUT"
           echo "Releasing version: ${NEW_VERSION}, next backend snapshot: ${NEXT_SNAPSHOT}"
 
-      - name: Install desktop dependencies
+      - name: Install dependencies
         working-directory: queryeer-desktop
         run: npm ci
 
       - name: Set desktop release version
         working-directory: queryeer-desktop
-        run: npm version ${{ steps.versions.outputs.NEW_VERSION }} --no-git-tag-version --allow-same-version
+        run: |
+          npm version -w @queryeer/app ${{ steps.versions.outputs.NEW_VERSION }} --no-git-tag-version --allow-same-version
+          npm version -w @queryeer/api ${{ steps.versions.outputs.NEW_VERSION }} --no-git-tag-version --allow-same-version
 
       - name: Make Maven wrapper executable
         run: chmod +x ./queryeer-backend/mvnw
@@ -99,7 +101,7 @@ jobs:
 
       - name: Commit and tag release
         run: |
-          git add queryeer-desktop/package.json queryeer-desktop/package-lock.json queryeer-backend
+          git add queryeer-desktop/package.json queryeer-desktop/package-lock.json queryeer-desktop/packages/app/package.json queryeer-desktop/packages/api/package.json queryeer-backend
           git commit -m "release: v${{ steps.versions.outputs.NEW_VERSION }}"
           git tag v${{ steps.versions.outputs.NEW_VERSION }}
 

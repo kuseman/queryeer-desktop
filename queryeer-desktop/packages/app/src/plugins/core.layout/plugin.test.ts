@@ -1,0 +1,228 @@
+import { describe, expect, it, vi } from "vitest";
+import { coreLayoutPlugin } from "./plugin";
+import type { PluginContext } from "@queryeer/api/plugin/Plugin";
+import type { FileEntity } from "@queryeer/api/files/FileEntity";
+
+function makeFile(overrides: Partial<FileEntity> = {}): FileEntity {
+  return {
+    fileId: "f-1",
+    version: 1,
+    uri: "file:///C:/tmp/a.sql",
+    mimeType: "application/sql",
+    dirtyVsBackend: false,
+    dirtyVsDisk: false,
+    diskState: "inSync",
+    openedAt: new Date().toISOString(),
+    ...overrides
+  };
+}
+
+function createContext(file?: FileEntity) {
+  const commands = new Map<string, () => void | Promise<void>>();
+  const registerKeybinding = vi.fn();
+  const closeFile = vi.fn(async () => {});
+  const showMessage = vi.fn(async () => ({ action: "discard" }));
+  const closeActiveValuePreview = vi.fn(() => false);
+
+  const context = {
+    commands: {
+      registerCommand: (command: {
+        id: string;
+        title: string;
+        handler: () => void | Promise<void>;
+      }) => {
+        commands.set(command.id, command.handler);
+      },
+      executeCommand: vi.fn(async () => ({ commandId: "x", executed: true })),
+      canExecuteCommand: vi.fn(() => true)
+    },
+    filesystems: { registerFileSystem: vi.fn() },
+    graphNodeTypes: { registerNodeType: vi.fn(), unregisterNodeType: vi.fn(), getComponent: vi.fn(), getAll: vi.fn(() => new Map()) },
+    files: {
+      capabilities: {
+        registerCapabilities: vi.fn(),
+        registerLabel: vi.fn(),
+        registerPreferredNewFileMimeType: vi.fn(),
+        listPreferredNewFileMimeTypes: vi.fn(() => []),
+        getLabel: vi.fn(),
+        hasCapability: vi.fn(() => true),
+        listMimeTypesByCapability: vi.fn(() => []),
+        listAllMimeTypes: vi.fn(() => []),
+        registerContentCategory: vi.fn(),
+        getContentCategory: vi.fn(() => "text" as const)
+      },
+      mimeIcons: {
+        registerMimeIcon: vi.fn(),
+        getMimeIcon: vi.fn(),
+        listMimeIcons: vi.fn(() => [])
+      },
+      openFile: vi.fn(),
+      closeFile: vi.fn(),
+      getFile: vi.fn(() => file),
+      listFiles: vi.fn(() => (file ? [file] : [])),
+      updateFile: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+      registerMimeResolver: vi.fn(),
+      registerEditorResolver: vi.fn(),
+      classifyUri: vi.fn(() => "text/plain"),
+      resolveEditor: vi.fn(),
+      getEditorState: vi.fn(),
+      setEditorState: vi.fn(),
+      markDirty: vi.fn()
+    },
+    fileMediator: {
+      openFile: vi.fn(),
+      createUntitledFile: vi.fn(),
+      getUntitledCounter: vi.fn(() => 0),
+      setUntitledCounter: vi.fn(),
+      closeFile,
+      saveFile: vi.fn(),
+      setActiveFileId: vi.fn(),
+      getActiveFileId: vi.fn(() => file?.fileId ?? null),
+      setContextFileId: vi.fn(),
+      getContextFileId: vi.fn(() => null),
+      bindEngine: vi.fn(),
+      reloadFile: vi.fn(),
+      acceptExternalChange: vi.fn(),
+      discardExternalChange: vi.fn(),
+      onActiveFileChanged: vi.fn(() => () => {})
+    },
+    fileWatcher: {
+      watch: vi.fn(),
+      mutePath: vi.fn()
+    },
+    layout: {
+      registerToolbarAction: vi.fn(),
+      registerStatusItem: vi.fn(),
+      registerView: vi.fn(),
+      registerEditor: vi.fn(),
+      registerWelcome: vi.fn(),
+      registerTabContextMenu: vi.fn(),
+      registerTabHeaderStyle: vi.fn(),
+      registerTabTitle: vi.fn(),
+      registerPanel: vi.fn(),
+      setShellDefaults: vi.fn()
+    },
+    menu: { registerMenuItem: vi.fn(), rebuildMenu: vi.fn(), onRebuild: vi.fn() },
+    keybindings: { registerKeybinding },
+    dialog: {
+      showMessage,
+      showOpenDialog: vi.fn(),
+      showOpenFolder: vi.fn(),
+      showSaveDialog: vi.fn(),
+      closeActiveValuePreview
+    },
+    tooltip: { registerTooltipSection: vi.fn() },
+    fileState: { get: vi.fn(), set: vi.fn(), delete: vi.fn(), evict: vi.fn() },
+    settings: {
+      registerSettings: vi.fn(),
+      registerAdvancedRenderer: vi.fn(),
+      registerAdvancedValidator: vi.fn(),
+      listSettingsContributions: vi.fn(() => []),
+      listSettingsDefinitions: vi.fn(() => []),
+      getAdvancedRenderer: vi.fn(),
+      getAdvancedValidator: vi.fn()
+    },
+    quickcommand: { registerProvider: vi.fn() },
+    contextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
+    tableOutputContextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
+    jdbcTreeContextMenu: { registerContribution: vi.fn(), unregisterContribution: vi.fn(), getItemsForNode: vi.fn() },
+    outline: {
+      registerOutlineProvider: vi.fn(),
+      registerSupplementaryOutlineProvider: vi.fn(),
+      hasProvider: vi.fn(() => false),
+      getProvider: vi.fn(),
+      getSymbols: vi.fn()
+    },
+    editors: {
+      getActiveEditor: vi.fn(() => null),
+      onActiveEditorChanged: vi.fn(() => ({ dispose: vi.fn() }))
+    },
+    about: { registerChangelog: vi.fn() },
+    notifications: {
+      notify: vi.fn(),
+      list: vi.fn(() => []),
+      unreadCount: vi.fn(() => 0),
+      markRead: vi.fn(),
+      markAllRead: vi.fn(),
+      dismissToast: vi.fn(),
+      clear: vi.fn(),
+      clearAll: vi.fn(),
+      subscribe: vi.fn(() => () => {})
+    },
+    assistant: {
+      registerContextContribution: vi.fn(() => () => {}),
+      registerToolContribution: vi.fn(() => () => {}),
+      collectContext: vi.fn(async () => []),
+      listTools: vi.fn(() => []),
+      invokeTool: vi.fn(async () => ({ ok: false }))
+    }
+  } satisfies PluginContext;
+
+  return {
+    context,
+    commands,
+    registerKeybinding,
+    closeFile,
+    showMessage,
+    closeActiveValuePreview
+  };
+}
+
+describe("core.layout close editor", () => {
+  it("registers CmdOrCtrl+W keybinding", () => {
+    const { context, registerKeybinding } = createContext();
+    coreLayoutPlugin.activate(context);
+
+    expect(registerKeybinding).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandId: "core.closeActive",
+        key: "CmdOrCtrl+W"
+      })
+    );
+  });
+
+  it("closes active clean file without confirmation", async () => {
+    const file = makeFile({ dirtyVsDisk: false, dirtyVsBackend: false });
+    const { context, commands, closeFile, showMessage } = createContext(file);
+    coreLayoutPlugin.activate(context);
+
+    const handler = commands.get("core.closeActive");
+    expect(handler).toBeTruthy();
+    await handler?.();
+
+    expect(showMessage).not.toHaveBeenCalled();
+    expect(closeFile).toHaveBeenCalledWith(file.fileId, { discardDirty: true });
+  });
+
+  it("closes focused value preview before closing files", async () => {
+    const file = makeFile({ dirtyVsDisk: false, dirtyVsBackend: false });
+    const { context, commands, closeFile, closeActiveValuePreview } = createContext(file);
+    closeActiveValuePreview.mockReturnValueOnce(true);
+    coreLayoutPlugin.activate(context);
+
+    const handler = commands.get("core.closeActive");
+    await handler?.();
+
+    expect(closeActiveValuePreview).toHaveBeenCalledTimes(1);
+    expect(closeFile).not.toHaveBeenCalled();
+  });
+
+  it("asks confirmation for dirty file and respects cancel", async () => {
+    const file = makeFile({ uri: "untitled:Query.sql", dirtyVsDisk: true });
+    const { context, commands, closeFile, showMessage } = createContext(file);
+    showMessage.mockResolvedValueOnce({ action: "cancel" });
+    coreLayoutPlugin.activate(context);
+
+    const handler = commands.get("core.closeActive");
+    await handler?.();
+
+    expect(showMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Unsaved Changes",
+        message: expect.stringContaining("Query.sql")
+      })
+    );
+    expect(closeFile).not.toHaveBeenCalled();
+  });
+});
