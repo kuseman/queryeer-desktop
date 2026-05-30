@@ -171,7 +171,7 @@ The repository `plugins/builtin` directory is development scaffolding only. Rele
 GitHub release automation is split into two workflows:
 
 - `create-release.yml`: manually dispatched with `major`, `minor`, or `patch`. It computes the next `vX.Y.Z`, bumps desktop and backend to that release version, commits and tags the release, then moves the backend Maven reactor to the next `-SNAPSHOT` version.
-- `release.yml`: triggered by `v*` tags. It verifies the backend, builds unsigned Windows, macOS, and Linux distributions in a matrix, generates the release changelog, and publishes a real GitHub release with the platform artifacts.
+- `release.yml`: triggered by `v*` tags. It verifies the backend, builds unsigned Windows, macOS, and Linux distributions in a matrix, generates the release changelog, and publishes a real GitHub release with the platform artifacts. Manual `workflow_dispatch` runs are dry-run only and skip GitHub release publishing.
 
 Artifacts are intentionally unsigned for now. macOS downloads may be blocked by Gatekeeper until users explicitly open the app or remove quarantine; public-friendly macOS releases will require Developer ID signing and notarization later.
 
