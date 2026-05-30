@@ -185,16 +185,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 25 (dry run)
-        if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
-        uses: actions/setup-java@v4
-        with:
-          java-version: "25"
-          distribution: zulu
-          cache: maven
-
       - name: Set up JDK 25 (publish)
-        if: github.event_name == 'push'
         uses: actions/setup-java@v4
         with:
           java-version: "25"
@@ -204,11 +195,9 @@ jobs:
           server-username: MAVEN_USERNAME
           server-password: MAVEN_PASSWORD
           gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
-          gpg-passphrase: MAVEN_GPG_PASSPHRASE
         env:
           MAVEN_USERNAME: ${{ secrets.OSS_SONATYPE_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSS_SONATYPE_PASSWORD }}
-          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
 
       - name: Make Maven wrapper executable
         run: chmod +x ./queryeer-backend/mvnw
@@ -241,15 +230,17 @@ jobs:
 
       - name: Dry-run Maven Central publish
         if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
-        run: ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml -pl "${MAVEN_CENTRAL_PROJECTS}" clean deploy -DperformRelease=true -DskipTests=true -Dmaven.test.skip=true -Dgpg.skip=true -DskipPublishing=true
+        run: ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml -pl "${MAVEN_CENTRAL_PROJECTS}" clean deploy -DperformRelease=true -DskipTests=true -Dmaven.test.skip=true -DskipPublishing=true
+        env:
+          GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
 
       - name: Publish backend artifacts to Maven Central
         if: github.event_name == 'push'
-        run: ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml -pl "${MAVEN_CENTRAL_PROJECTS}" clean deploy -DperformRelease=true -DskipTests=true -Dmaven.test.skip=true -Dgpg.passphrase="${MAVEN_GPG_PASSPHRASE}"
+        run: ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml -pl "${MAVEN_CENTRAL_PROJECTS}" clean deploy -DperformRelease=true -DskipTests=true -Dmaven.test.skip=true
         env:
           MAVEN_USERNAME: ${{ secrets.OSS_SONATYPE_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSS_SONATYPE_PASSWORD }}
-          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+          GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
 
   publish-npm:
     name: Publish npm Package
