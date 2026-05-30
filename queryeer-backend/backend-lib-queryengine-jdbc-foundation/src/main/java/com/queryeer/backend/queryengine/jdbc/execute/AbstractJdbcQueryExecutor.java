@@ -38,11 +38,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.queryeer.backend.queryengine.jdbc.CancellableJdbcQueryExecutor;
 
 /**
- * Base JDBC query executor implementing the full execute/cancel/streaming lifecycle. Subclasses provide three hooks:
+ * Base JDBC query executor implementing the full execute/cancel/streaming lifecycle. Subclasses may override these hooks:
  * <ul>
- * <li>{@link #openConnection} — how to build the JDBC {@link Connection} (required)</li>
- * <li>{@link #splitStatements} — how to split the incoming SQL into individual batches (optional, default: single statement)</li>
- * <li>{@link #mapColumnValue} — how to coerce a raw column value before publishing (optional, default: identity)</li>
+ * <li>{@link #splitStatements(String)} - how to split the incoming SQL into individual batches (default: single statement)</li>
+ * <li>{@link #mapColumnValue(Object, String)} - how to coerce a raw column value before publishing (default: identity)</li>
  * </ul>
  */
 public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryExecutor

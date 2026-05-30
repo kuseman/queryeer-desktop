@@ -14,7 +14,6 @@ import java.sql.SQLException;
  * {@code DriverManager.registerDriver()}.</li>
  * <li>If the static initializer throws, fall back to reflective {@code Driver} instantiation and explicit {@code DriverManager.registerDriver(driver)}.</li>
  * </ol>
- * </p>
  *
  * <p>
  * Returns {@code false} if the driver class is not found, which is normal when the user has not placed the driver JAR in {@code libShared/}.

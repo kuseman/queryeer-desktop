@@ -4,8 +4,9 @@
   "workspaces": ["packages/*"],
   "scripts": {
     "build": "npm run -w @queryeer/app build",
+    "dist:release": "npm run -w @queryeer/app dist:release --",
     "dev": "npm run -w @queryeer/app dev",
-    "typecheck": "npm run --workspaces typecheck",
+    "typecheck": "npm run -w @queryeer/api build && npm run --workspaces typecheck",
     "lint": "npm run --workspaces lint",
     "test": "npm run -w @queryeer/api build && npm run -w @queryeer/app test",
     "test:integration": "npm run -w @queryeer/api build && npm run -w @queryeer/app test:integration"
