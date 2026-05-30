@@ -245,7 +245,6 @@ Large features in prio
 - [x] Add desktop external frontend zip source discovery + loading
 - [x] Harden duplicate plugin id handling between internal and external desktop manifests
 - [x] Remove desktop/frontend zip flow OS shell dependency (in-process zip handling for runtime + tests)
-- [x] Add backend plugin module scaffold for external dual-target dev probe package (`backend-plugin-devprobe`)
 - [x] Add scripted dev workflow for external dev probe staging/watch/run integration
 - [ ] Add compatibility checks for TS/Java contract drift
 - [ ] Add decision log for plugin discovery mechanism (ServiceLoader vs explicit scan)
@@ -282,7 +281,6 @@ No engine plugin implements `FileSessionHandler` yet — the SPI is ready, but p
 
 - Discovery direction selected: manifest-first folder/zip discovery with per-plugin classloaders.
 - Core boundary decision recorded: querying/engine/output behavior is external-plugin owned; core remains host/platform boundary.
-- Desktop boundary enforcement now uses fully external dev probe package scaffold (`plugins/dev-query-probe`) with backend companion module (`backend-plugin-devprobe`).
 - Decision pending: whether to keep built-in fallback registration after external discovery is productionized.
 - Decision pending: JSON serialization stack and strict schema validation approach.
 - Decision pending: final Java style baseline (currently Google Java Format + lightweight Checkstyle rules).

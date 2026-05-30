@@ -50,12 +50,10 @@ final class SqlServerUrlBuilder
         SqlServerAuthType authType = SqlServerAuthType.fromString(stringValue(properties, "authType"));
         switch (authType)
         {
-            case WINDOWS_NATIVE_AUTH ->
-            {
+            case WINDOWS_NATIVE_AUTH -> {
                 url.append(";integratedSecurity=true");
             }
-            case WINDOWS_NTLM_AUTH ->
-            {
+            case WINDOWS_NTLM_AUTH -> {
                 url.append(";integratedSecurity=true");
                 url.append(";authenticationScheme=NTLM");
                 String domain = stringValue(properties, "domain");
@@ -65,8 +63,7 @@ final class SqlServerUrlBuilder
                             .append(domain);
                 }
             }
-            case JAVA_KERBEROS ->
-            {
+            case JAVA_KERBEROS -> {
                 url.append(";integratedSecurity=true");
                 url.append(";authenticationScheme=JavaKerberos");
                 String jaasConfigEntry = stringValue(properties, "jaasConfigEntry");
@@ -76,9 +73,8 @@ final class SqlServerUrlBuilder
                             .append(jaasConfigEntry);
                 }
             }
-            default ->
-                    {
-                    }
+            default -> {
+            }
         }
 
         String encrypt = stringValue(properties, "encrypt");
@@ -120,8 +116,7 @@ final class SqlServerUrlBuilder
 
         switch (authType)
         {
-            case SQL_SERVER_AUTH ->
-            {
+            case SQL_SERVER_AUTH -> {
                 String username = stringValue(properties, "username");
                 String password = stringValue(properties, "password");
                 if (username != null)
@@ -133,11 +128,9 @@ final class SqlServerUrlBuilder
                     props.setProperty("password", password);
                 }
             }
-            case WINDOWS_NATIVE_AUTH ->
-                    {
-                    }
-            case WINDOWS_NTLM_AUTH ->
-            {
+            case WINDOWS_NATIVE_AUTH -> {
+            }
+            case WINDOWS_NTLM_AUTH -> {
                 String username = stringValue(properties, "username");
                 String password = stringValue(properties, "password");
                 if (username != null)
@@ -149,8 +142,7 @@ final class SqlServerUrlBuilder
                     props.setProperty("password", password);
                 }
             }
-            case JAVA_KERBEROS ->
-            {
+            case JAVA_KERBEROS -> {
                 String krb5ConfigFile = stringValue(properties, "krb5ConfigFile");
                 if (krb5ConfigFile != null)
                 {
@@ -158,8 +150,7 @@ final class SqlServerUrlBuilder
                     System.setProperty("java.security.krb5.conf", krb5ConfigFile);
                 }
             }
-            default ->
-            {
+            default -> {
                 // unknown auth type — no authentication properties set
             }
         }
