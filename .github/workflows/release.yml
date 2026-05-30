@@ -201,13 +201,13 @@ jobs:
           distribution: zulu
           cache: maven
           server-id: central
-          server-username: OSS_SONATYPE_USERNAME
-          server-password: OSS_SONATYPE_PASSWORD
+          server-username: MAVEN_USERNAME
+          server-password: MAVEN_PASSWORD
           gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
           gpg-passphrase: MAVEN_GPG_PASSPHRASE
         env:
-          OSS_SONATYPE_USERNAME: ${{ secrets.OSS_SONATYPE_USERNAME }}
-          OSS_SONATYPE_PASSWORD: ${{ secrets.OSS_SONATYPE_PASSWORD }}
+          MAVEN_USERNAME: ${{ secrets.OSS_SONATYPE_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.OSS_SONATYPE_PASSWORD }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
 
       - name: Make Maven wrapper executable
@@ -247,6 +247,8 @@ jobs:
         if: github.event_name == 'push'
         run: ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml -pl "${MAVEN_CENTRAL_PROJECTS}" clean deploy -DperformRelease=true -DskipTests=true -Dmaven.test.skip=true -Dgpg.passphrase="${MAVEN_GPG_PASSPHRASE}"
         env:
+          MAVEN_USERNAME: ${{ secrets.OSS_SONATYPE_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.OSS_SONATYPE_PASSWORD }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
 
   publish-npm:
