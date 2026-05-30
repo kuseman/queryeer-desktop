@@ -1,7 +1,7 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { OutputContributor, OutputContext } from "../../contracts/extensions/OutputExtension";
+import type { OutputContributor, OutputContext } from "../../contracts/queryengine/OutputExtension";
 
 const mocks = vi.hoisted(() => {
   const terminals: Array<{

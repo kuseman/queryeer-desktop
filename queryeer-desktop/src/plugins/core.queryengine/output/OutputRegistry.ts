@@ -1,5 +1,5 @@
-export type { OutputContext, OutputContributor, OutputExecutionStart, RowChunk } from "../../../contracts/extensions/OutputExtension";
-import type { OutputContributor, OutputExecutionStart, RowChunk } from "../../../contracts/extensions/OutputExtension";
+export type { OutputContext, OutputContributor, OutputExecutionStart, RowChunk } from "../../../contracts/queryengine/OutputExtension";
+import type { OutputContributor, OutputExecutionStart, RowChunk } from "../../../contracts/queryengine/OutputExtension";
 
 let registryInstance: OutputRegistry | undefined;
 

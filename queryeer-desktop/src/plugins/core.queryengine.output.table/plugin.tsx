@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, useImperativeHandle, forwardRef } from "react";
 import type { Plugin } from "../../contracts/plugin/Plugin";
 import { isPrimaryModifier } from "../../shared/platform-utils";
-import type { OutputContext, Column } from "../../contracts/extensions/OutputExtension";
+import type { OutputContext, Column } from "../../contracts/queryengine/OutputExtension";
 import { getOutputRegistry } from "../core.queryengine/output/OutputRegistry";
 import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistryImpl";
 import { getTableOutputContextMenuProviders } from "../../core/plugin-runtime/ExtensionRegistry";
@@ -29,7 +29,7 @@ import type {
   TableOutputContextMenuItem,
   TableOutputContextMenuProvider,
   TableOutputSelectionSnapshot,
-} from "../../contracts/extensions/TableOutputContextMenuExtension";
+} from "../../contracts/queryengine/TableOutputContextMenuExtension";
 import { ContextMenuSurface } from "../../renderer/components/ContextMenuSurface";
 import { getExpressionRuntime } from "../core.expressions/runtime";
 import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";

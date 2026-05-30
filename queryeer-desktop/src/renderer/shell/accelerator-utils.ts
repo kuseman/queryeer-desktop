@@ -1,4 +1,4 @@
-import type { KeybindingContribution } from "../../contracts/extensions/KeybindingExtension";
+import type { KeybindingContribution } from "../../contracts/commands/KeybindingExtension";
 
 export function normalizeAcceleratorForPlatform(accelerator: string, platform: string): string {
   return accelerator

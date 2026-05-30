@@ -1,16 +1,7 @@
-import type {
-  ContentCategory,
-  FilesRegistry,
-  MimeCapability
-} from "../../contracts/files/FilesRegistry";
+import type { FilesRegistry } from "../../contracts/files/FilesRegistry.js";
+import type { MimeTypeRegistration } from "../../contracts/files/MimeTypeRegistration.js";
 
-export type MimeTypeRegistration = {
-  mimeType: string;
-  label?: string;
-  extensions: string[];
-  contentCategory: ContentCategory;
-  capabilities: MimeCapability[];
-};
+export type { MimeTypeRegistration };
 
 export function createExtensionMimeResolver(
   registrations: readonly MimeTypeRegistration[]

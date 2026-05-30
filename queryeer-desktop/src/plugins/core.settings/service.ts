@@ -1,4 +1,4 @@
-import type { SettingsRegistry } from "../../contracts/extensions/SettingsExtension";
+import type { SettingsRegistry } from "../../contracts/settings/SettingsExtension";
 import { SettingsService } from "../../renderer/settings/settings-service";
 
 let coreSettingsService: SettingsService | null = null;

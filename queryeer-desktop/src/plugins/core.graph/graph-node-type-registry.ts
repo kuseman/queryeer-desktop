@@ -1,4 +1,4 @@
-import type { GraphNodeTypeComponent, GraphNodeTypeContribution, GraphNodeTypeRegistry } from "../../contracts/extensions/GraphNodeTypeExtension";
+import type { GraphNodeTypeComponent, GraphNodeTypeContribution, GraphNodeTypeRegistry } from "../../contracts/graph/GraphNodeTypeExtension";
 
 let sharedRegistry: GraphNodeTypeRegistry | null = null;
 

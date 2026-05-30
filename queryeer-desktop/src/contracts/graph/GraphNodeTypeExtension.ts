@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import type { GraphLayoutDirection, GraphVertex } from "../graph/GraphDocument.js";
+import type { GraphLayoutDirection, GraphVertex } from "./GraphDocument.js";
 
 export type GraphVertexNodeData = {
   vertex: GraphVertex;

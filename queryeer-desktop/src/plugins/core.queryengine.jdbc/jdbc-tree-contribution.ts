@@ -1,14 +1,4 @@
-import type { JdbcTreeNode } from "./jdbc-navigation-types";
-
-export type JdbcTreeNodeContributor = {
-  dialectId: string;
-  getIcon?: (kind: string, attributes: Record<string, unknown>) => string | undefined;
-  enrichChildren?: (
-    parentNode: JdbcTreeNode,
-    children: JdbcTreeNode[],
-    dialectId: string
-  ) => JdbcTreeNode[];
-};
+import type { JdbcTreeNodeContributor } from "../../contracts/queryengine/JdbcTreeContributionExtension.js";
 
 const DEFAULT_ICONS: Record<string, string> = {
   connection: "⊙",

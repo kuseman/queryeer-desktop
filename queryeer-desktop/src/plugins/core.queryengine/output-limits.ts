@@ -1,4 +1,4 @@
-import { DEFAULT_OUTPUT_LIMITS } from "../../contracts/extensions/OutputExtension";
+import { DEFAULT_OUTPUT_LIMITS } from "../../contracts/queryengine/OutputExtension";
 import { getCoreSettingsService } from "../core.settings/service";
 
 export const OUTPUT_TABLE_MAX_ROWS_SETTING_ID = "core.queryengine.output.table.maxRows";

@@ -5,7 +5,7 @@ import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { QueryExecuteOptions } from "../../contracts/backend/Types";
 import type { ContentCategory } from "../../contracts/files/FilesRegistry";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
-import type { OutputContext } from "../../contracts/extensions/OutputExtension";
+import type { OutputContext } from "../../contracts/queryengine/OutputExtension";
 import { defineStateKey } from "../../contracts/files/FileStateRegistry";
 import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistryImpl";
 import { getQueryViewStateStore } from "./QueryViewStateStore";

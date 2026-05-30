@@ -1,5 +1,5 @@
 import type { GraphLayoutDirection, GraphProperty } from "../../contracts/graph";
-import type { GraphNodeTypeProps } from "../../contracts/extensions/GraphNodeTypeExtension";
+import type { GraphNodeTypeProps } from "../../contracts/graph/GraphNodeTypeExtension";
 import { Handle, Position } from "../core.graph/graph-primitives";
 import "./SchemaTableNode.css";
 

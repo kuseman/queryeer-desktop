@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildTableActionData } from "./table-action-provider";
-import type { TableOutputContextMenuContext } from "../../contracts/extensions/TableOutputContextMenuExtension";
+import type { TableOutputContextMenuContext } from "../../contracts/queryengine/TableOutputContextMenuExtension";
 
 describe("buildTableActionData", () => {
   it("builds row data from selected cells when cellValuesByRow is not provided", () => {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { OutputContext } from "../../../contracts/extensions/OutputExtension";
+import type { OutputContext } from "../../../contracts/queryengine/OutputExtension";
 import type { PluginContext } from "../../../contracts/plugin/Plugin";
 import { GraphViewer } from "../../core.graph/GraphViewer";
 import { getOutputRegistry } from "../output/OutputRegistry";

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from "react";
-import type { SettingDefinition } from "../../../contracts/extensions/SettingsExtension";
+import type { SettingDefinition } from "../../../contracts/settings/SettingsExtension";
 import { getOutputRegistry } from "../output/OutputRegistry";
 import type { QueryShortcut, QueryShortcutsConfig, ShortcutRule } from "./shortcut-types";
 import { WhenExpressionEditor, InlineMonacoEditor } from "../../core.commands/WhenExpressionEditor";

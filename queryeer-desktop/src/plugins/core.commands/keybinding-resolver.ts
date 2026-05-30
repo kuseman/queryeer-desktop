@@ -4,7 +4,7 @@ import {
   emptyUserKeybindingsDocument,
   type UserKeybindingsDocument
 } from "../../contracts/commands/Keybindings";
-import type { KeybindingContribution } from "../../contracts/extensions/KeybindingExtension";
+import type { KeybindingContribution } from "../../contracts/commands/KeybindingExtension";
 
 export type ResolvedKeybinding = KeybindingContribution & {
   source: "default" | "user";

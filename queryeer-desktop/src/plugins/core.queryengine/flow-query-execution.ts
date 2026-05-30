@@ -1,18 +1,13 @@
+import type { CollectedResults } from "../../contracts/queryengine/QueryEngineTypes.js";
+import type { FlowNodeExecutionOutput } from "../../contracts/flow/FlowDocument.js";
 import { getQueryEngineService } from "./QueryEngineService";
-import type { CollectedResults } from "./QueryEngineService";
-
-export type FlowQueryExecutionOutput = {
-  rowsAffected?: number;
-  rows?: Array<Record<string, unknown>>;
-  preview?: string;
-};
 
 export async function executeQueryForFlow(params: {
   engineId: string;
   fileId: string;
   text: string;
   engineState?: unknown;
-}): Promise<FlowQueryExecutionOutput> {
+}): Promise<FlowNodeExecutionOutput> {
   const result = await getQueryEngineService().executeAndCollect({
     engineId: params.engineId,
     fileId: params.fileId,
@@ -22,7 +17,7 @@ export async function executeQueryForFlow(params: {
   return toFlowOutput(params.text, result);
 }
 
-function toFlowOutput(action: string, result: CollectedResults): FlowQueryExecutionOutput {
+function toFlowOutput(action: string, result: CollectedResults): FlowNodeExecutionOutput {
   const firstResultSet = result.resultSets[0];
   const rows = firstResultSet
     ? firstResultSet.rows.map((row) => toObjectRow(firstResultSet.schema.columns, row))

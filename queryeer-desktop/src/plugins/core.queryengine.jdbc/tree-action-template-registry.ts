@@ -1,12 +1,6 @@
-import type { TreeAction } from "./tree-action-types";
+import type { TreeActionTemplateContribution } from "../../contracts/settings/TreeActionTemplateContribution.js";
 
-export type TreeActionTemplateContribution = {
-  id: string;
-  title: string;
-  description?: string;
-  action: Omit<TreeAction, "id">;
-  order?: number;
-};
+export type { TreeActionTemplateContribution };
 
 const templatesById = new Map<string, TreeActionTemplateContribution>();
 const listeners = new Set<() => void>();

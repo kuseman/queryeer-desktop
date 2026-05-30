@@ -1,12 +1,6 @@
-import type { SymbolAction } from "./symbol-action-types";
+import type { SymbolActionTemplateContribution } from "../../contracts/queryengine/SymbolActionTemplateContribution.js";
 
-export type SymbolActionTemplateContribution = {
-  id: string;
-  title: string;
-  description?: string;
-  action: Omit<SymbolAction, "id">;
-  order?: number;
-};
+export type { SymbolActionTemplateContribution };
 
 const templatesById = new Map<string, SymbolActionTemplateContribution>();
 const listeners = new Set<() => void>();

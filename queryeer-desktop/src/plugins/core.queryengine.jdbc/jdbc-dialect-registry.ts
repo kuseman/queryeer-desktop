@@ -1,20 +1,7 @@
-import type { ComponentType } from "react";
-import type { SecretRefValue } from "../../contracts/security/Security";
+import type { JdbcDialectContribution, JdbcDialectConnectionFormProps } from "../../contracts/queryengine/JdbcDialectExtension.js";
 import { registerJdbcQueryPlanDialectSupport } from "../core.queryengine/query-plan/supported-dialects";
 
-export type JdbcDialectConnectionFormProps = {
-  connectionId: string;
-  properties: Record<string, unknown>;
-  password?: SecretRefValue;
-  readonly: boolean;
-  onChange: (patch: { properties?: Record<string, unknown>; password?: SecretRefValue }) => void;
-};
-
-export type JdbcDialectContribution = {
-  dialectId: string;
-  ConnectionForm?: ComponentType<JdbcDialectConnectionFormProps>;
-  supportsQueryPlan?: boolean;
-};
+export type { JdbcDialectContribution, JdbcDialectConnectionFormProps };
 
 const dialects = new Map<string, JdbcDialectContribution>();
 

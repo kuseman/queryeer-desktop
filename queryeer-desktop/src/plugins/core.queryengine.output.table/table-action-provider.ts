@@ -3,7 +3,7 @@ import type {
   TableOutputContextMenuContext,
   TableOutputContextMenuItem,
   TableOutputContextMenuProvider,
-} from "../../contracts/extensions/TableOutputContextMenuExtension";
+} from "../../contracts/queryengine/TableOutputContextMenuExtension";
 import type { TableAction, TableActionData } from "./table-action-types";
 import { getTableActionRegistry } from "./table-action-registry";
 import { getCommandContext } from "../core.commands/command-context-accessor";

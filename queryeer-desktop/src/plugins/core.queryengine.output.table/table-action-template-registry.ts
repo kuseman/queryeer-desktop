@@ -1,12 +1,6 @@
-import type { TableAction } from "./table-action-types";
+import type { TableActionTemplateContribution } from "../../contracts/settings/TableActionTemplateContribution.js";
 
-export type TableActionTemplateContribution = {
-  id: string;
-  title: string;
-  description?: string;
-  action: Omit<TableAction, "id">;
-  order?: number;
-};
+export type { TableActionTemplateContribution };
 
 const templatesById = new Map<string, TableActionTemplateContribution>();
 const listeners = new Set<() => void>();

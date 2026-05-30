@@ -1,4 +1,4 @@
-import type { OutputContext, ResultSet } from "../../contracts/extensions/OutputExtension";
+import type { OutputContext, ResultSet } from "../../contracts/queryengine/OutputExtension";
 
 export type TextOutputFormatId = "plain" | "json" | "csv";
 
