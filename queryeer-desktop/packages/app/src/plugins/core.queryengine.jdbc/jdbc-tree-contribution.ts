@@ -1,0 +1,47 @@
+import type { JdbcTreeNodeContributor } from "@queryeer/api/queryengine/JdbcTreeContributionExtension.js";
+
+const DEFAULT_ICONS: Record<string, string> = {
+  connection: "⊙",
+  databases_container: "🗄",
+  database: "⊞",
+  schemas_container: "📂",
+  schema: "○",
+  tables_folder: "▤",
+  views_folder: "◫",
+  procedures_folder: "⚙",
+  columns_folder: "▤",
+  indexes_folder: "◈",
+  constraints_folder: "🔗",
+  table: "▤",
+  view: "◫",
+  procedure: "⚙",
+  column: "▸",
+  primary_key: "🔑",
+  foreign_key: "⇒",
+  index: "◈",
+  index_column: "▸"
+};
+
+const contributors: JdbcTreeNodeContributor[] = [];
+
+export function registerJdbcTreeNodeContributor(contributor: JdbcTreeNodeContributor): void {
+  contributors.push(contributor);
+}
+
+export function getJdbcTreeNodeContributors(dialectId: string): JdbcTreeNodeContributor[] {
+  return contributors.filter((c) => c.dialectId === "*" || c.dialectId === dialectId);
+}
+
+export function getNodeIcon(
+  kind: string,
+  attributes: Record<string, unknown>,
+  dialectId: string
+): string {
+  for (const contributor of getJdbcTreeNodeContributors(dialectId)) {
+    const icon = contributor.getIcon?.(kind, attributes);
+    if (icon !== undefined) {
+      return icon;
+    }
+  }
+  return DEFAULT_ICONS[kind] ?? "•";
+}

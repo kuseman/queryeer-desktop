@@ -1,0 +1,26 @@
+{
+  "name": "@queryeer/api",
+  "version": "0.8.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./backend": { "types": "./dist/contracts/backend/index.d.ts", "default": "./dist/contracts/backend/index.js" },
+    "./graph": { "types": "./dist/contracts/graph/index.d.ts", "default": "./dist/contracts/graph/index.js" },
+    "./*.js": { "types": "./dist/contracts/*.d.ts", "default": "./dist/contracts/*.js" },
+    "./*": { "types": "./dist/contracts/*.d.ts", "default": "./dist/contracts/*.js" }
+  },
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "peerDependencies": {
+    "react": "^18.3.1"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts",
+    "clean": "Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue"
+  }
+}

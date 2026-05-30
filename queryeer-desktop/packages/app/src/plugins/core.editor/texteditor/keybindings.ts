@@ -1,0 +1,212 @@
+import type { PluginContext } from "@queryeer/api/plugin/Plugin";
+
+export function registerTextEditorKeybindings(context: PluginContext): void {
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.undo",
+    commandId: "core.editor.text.undo",
+    key: "CmdOrCtrl+Z",
+    when: "editorFocus",
+    scope: "editor",
+    order: 10
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.redo",
+    commandId: "core.editor.text.redo",
+    key: "CmdOrCtrl+Shift+Z",
+    when: "editorFocus",
+    scope: "editor",
+    order: 11
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.find",
+    commandId: "core.editor.text.find",
+    key: "CmdOrCtrl+F",
+    when: "editorFocus",
+    scope: "editor",
+    order: 30
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.findNext",
+    commandId: "core.editor.text.findNext",
+    key: "F3",
+    when: "editorFocus",
+    scope: "editor",
+    order: 31
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.findPrevious",
+    commandId: "core.editor.text.findPrevious",
+    key: "Shift+F3",
+    when: "editorFocus",
+    scope: "editor",
+    order: 32
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.closeFindWidget",
+    commandId: "core.editor.text.closeFindWidget",
+    key: "Escape",
+    when: "editorFocus",
+    scope: "editor",
+    order: 33
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.toggleComment",
+    commandId: "core.editor.text.toggleCommentLine",
+    key: "CmdOrCtrl+/",
+    when: "editorFocus",
+    scope: "editor",
+    order: 50
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.addComment",
+    commandId: "core.editor.text.addCommentLine",
+    key: "CmdOrCtrl+Alt+A",
+    when: "editorFocus",
+    scope: "editor",
+    order: 51
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.removeComment",
+    commandId: "core.editor.text.removeCommentLine",
+    key: "CmdOrCtrl+Alt+U",
+    when: "editorFocus",
+    scope: "editor",
+    order: 52
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.insertSnippet",
+    commandId: "core.editor.text.insertSnippet",
+    key: "CmdOrCtrl+Shift+Space",
+    when: "editorFocus",
+    scope: "editor",
+    order: 60
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.selectAll",
+    commandId: "core.editor.text.selectAll",
+    key: "CmdOrCtrl+A",
+    when: "editorFocus",
+    scope: "editor",
+    order: 70
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.copyLineUp",
+    commandId: "core.editor.text.copyLineUp",
+    key: "Alt+Shift+Up",
+    when: "editorFocus",
+    scope: "editor",
+    order: 80
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.copyLineDown",
+    commandId: "core.editor.text.copyLineDown",
+    key: "Alt+Shift+Down",
+    when: "editorFocus",
+    scope: "editor",
+    order: 81
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.moveLineUp",
+    commandId: "core.editor.text.moveLineUp",
+    key: "Alt+Up",
+    when: "editorFocus",
+    scope: "editor",
+    order: 82
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.moveLineDown",
+    commandId: "core.editor.text.moveLineDown",
+    key: "Alt+Down",
+    when: "editorFocus",
+    scope: "editor",
+    order: 83
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.deleteLine",
+    commandId: "core.editor.text.deleteLine",
+    key: "CmdOrCtrl+Shift+K",
+    when: "editorFocus",
+    scope: "editor",
+    order: 90
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.joinLines",
+    commandId: "core.editor.text.joinLines",
+    key: "CmdOrCtrl+J",
+    when: "editorFocus",
+    scope: "editor",
+    order: 100
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.sortAscending",
+    commandId: "core.editor.text.sortLinesAscending",
+    key: "CmdOrCtrl+Alt+Up",
+    when: "editorFocus",
+    scope: "editor",
+    order: 110
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.sortDescending",
+    commandId: "core.editor.text.sortLinesDescending",
+    key: "CmdOrCtrl+Alt+Down",
+    when: "editorFocus",
+    scope: "editor",
+    order: 111
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.trimWhitespace",
+    commandId: "core.editor.text.trimTrailingWhitespace",
+    key: "CmdOrCtrl+Alt+T",
+    when: "editorFocus",
+    scope: "editor",
+    order: 120
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.transformToUppercase",
+    commandId: "core.editor.text.transformToUppercase",
+    key: "CmdOrCtrl+Shift+U",
+    when: "editorFocus",
+    scope: "editor",
+    order: 200
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.transformToLowercase",
+    commandId: "core.editor.text.transformToLowercase",
+    key: "CmdOrCtrl+Shift+L",
+    when: "editorFocus",
+    scope: "editor",
+    order: 201
+  });
+
+  context.keybindings.registerKeybinding({
+    id: "core.editor.text.keybinding.transformToTitleCase",
+    commandId: "core.editor.text.transformToTitleCase",
+    key: "CmdOrCtrl+Shift+T",
+    when: "editorFocus",
+    scope: "editor",
+    order: 202
+  });
+
+  // Tab/Shift+Tab handled natively by Monaco for smart indentation
+}

@@ -1,0 +1,123 @@
+{
+  "name": "@queryeer/app",
+  "version": "0.8.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Queryeer Desktop",
+  "main": "out/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run --project integration",
+    "assets:icons": "node scripts/generate-icons.mjs",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "lint": "eslint . --ext .ts,.tsx",
+    "changelog:release": "node scripts/generate-changelog.mjs",
+    "backend:stage-release": "node scripts/stage-backend-release.mjs",
+    "dist": "npm run dist:release",
+    "dist:dir": "npm run dist:release -- --dir",
+    "dist:release": "node scripts/dist-release.mjs",
+    "backend:jlink": "node scripts/backend-jlink.mjs",
+    "dev:jlink": "node -e \"process.env.QUERYEER_JLINK_HOME='../.backend-jlink';require('child_process').execSync('electron-vite dev',{cwd:__dirname,stdio:'inherit',shell:true,env:{...process.env}})\""
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@dagrejs/dagre": "^3.0.0",
+    "@glideapps/glide-data-grid": "^6.0.3",
+    "@xterm/addon-fit": "^0.12.0-beta.204",
+    "@xterm/addon-search": "^0.17.0-beta.204",
+    "@xterm/addon-web-links": "^0.13.0-beta.204",
+    "@xterm/xterm": "^6.1.0-beta.204",
+    "@xyflow/react": "^12.10.2",
+    "chokidar": "^4.0.3",
+    "jszip": "^3.10.1",
+    "marked": "^4.3.0",
+    "monaco-editor": "^0.55.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "yaml": "^2.9.0",
+    "@queryeer/api": "*"
+  },
+  "devDependencies": {
+    "@types/marked": "^5.0.2",
+    "@types/node": "^22.15.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^3.2.4",
+    "electron": "^41.2.1",
+    "electron-builder": "^26.8.1",
+    "electron-devtools-installer": "^4.0.0",
+    "electron-vite": "^3.1.0",
+    "globals": "^16.0.0",
+    "jsdom": "^26.1.0",
+    "png2icons": "^2.0.1",
+    "sharp": "^0.34.5",
+    "vite": "^6.3.3",
+    "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "dompurify": "3.4.3"
+  },
+  "build": {
+    "appId": "com.queryeer.electron",
+    "productName": "Queryeer",
+    "electronVersion": "41.2.1",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "resources/**/*",
+      "package.json",
+      {
+        "from": "dist/generated",
+        "to": ".",
+        "filter": [
+          "CHANGELOG.md"
+        ]
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "dist/release-resources/backend",
+        "to": "backend"
+      },
+      {
+        "from": "dist/release-resources/plugins",
+        "to": "plugins"
+      }
+    ],
+    "win": {
+      "icon": "resources/icon.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        "nsis"
+      ]
+    },
+    "asarUnpack": [
+      "node_modules/esbuild/**",
+      "node_modules/@esbuild/**"
+    ],
+    "mac": {
+      "icon": "resources/icon.icns",
+      "strictVerify": false,
+      "target": [
+        "dmg"
+      ]
+    },
+    "linux": {
+      "icon": "resources/icon.png",
+      "target": [
+        "AppImage"
+      ]
+    }
+  }
+}

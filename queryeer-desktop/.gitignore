@@ -2,6 +2,7 @@ node_modules/
 out/
 release/
 dist/
-.DS_Store
-*.log
 *.tsbuildinfo
+*.log
+.DS_Store
+packages/api/dist/
