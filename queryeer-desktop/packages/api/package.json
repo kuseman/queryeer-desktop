@@ -1,6 +1,8 @@
 {
   "name": "@queryeer/api",
   "version": "0.8.0",
+  "description": "TypeScript API contracts for Queryeer Desktop plugins",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -12,7 +14,14 @@
     "./*": { "types": "./dist/contracts/*.d.ts", "default": "./dist/contracts/*.js" }
   },
   "files": ["dist"],
-  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kuseman/queryeer-desktop.git",
+    "directory": "queryeer-desktop/packages/api"
+  },
+  "bugs": { "url": "https://github.com/kuseman/queryeer-desktop/issues" },
+  "homepage": "https://github.com/kuseman/queryeer-desktop#readme",
+  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
   "peerDependencies": {
     "react": "^18.3.1"
   },

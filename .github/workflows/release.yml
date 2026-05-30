@@ -97,12 +97,18 @@ jobs:
           fi
           echo "QUERYEER_RELEASE_VERSION=${RELEASE_VERSION}" >> "$GITHUB_ENV"
 
-      - name: Validate desktop package version
+      - name: Validate desktop package versions
         shell: bash
         run: |
-          PACKAGE_VERSION=$(node -p "require('./queryeer-desktop/packages/app/package.json').version")
-          if [ "$PACKAGE_VERSION" != "$QUERYEER_RELEASE_VERSION" ]; then
-            echo "Desktop package version $PACKAGE_VERSION does not match release version $QUERYEER_RELEASE_VERSION."
+          APP_VERSION=$(node -p "require('./queryeer-desktop/packages/app/package.json').version")
+          API_VERSION=$(node -p "require('./queryeer-desktop/packages/api/package.json').version")
+          if [ "$APP_VERSION" != "$QUERYEER_RELEASE_VERSION" ]; then
+            echo "Desktop app package version $APP_VERSION does not match release version $QUERYEER_RELEASE_VERSION."
+            echo "Run the Create Release workflow so the version bump is committed before tagging."
+            exit 1
+          fi
+          if [ "$API_VERSION" != "$QUERYEER_RELEASE_VERSION" ]; then
+            echo "Desktop API package version $API_VERSION does not match release version $QUERYEER_RELEASE_VERSION."
             echo "Run the Create Release workflow so the version bump is committed before tagging."
             exit 1
           fi
@@ -166,10 +172,154 @@ jobs:
             !queryeer-desktop/packages/app/release/*-unpacked/**
           if-no-files-found: error
 
+  publish-maven-central:
+    name: Publish Maven Central
+    runs-on: ubuntu-latest
+    needs: backend-verify
+    permissions:
+      contents: read
+    env:
+      MAVEN_CENTRAL_BUILD_PROJECTS: :backend-core
+      MAVEN_CENTRAL_PROJECTS: .,:backend-contract,:backend-api,:backend-lib-queryengine-jdbc-foundation,:backend-lib-queryengine-sql-parser
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25 (dry run)
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
+        uses: actions/setup-java@v4
+        with:
+          java-version: "25"
+          distribution: zulu
+          cache: maven
+
+      - name: Set up JDK 25 (publish)
+        if: github.event_name == 'push'
+        uses: actions/setup-java@v4
+        with:
+          java-version: "25"
+          distribution: zulu
+          cache: maven
+          server-id: central
+          server-username: OSS_SONATYPE_USERNAME
+          server-password: OSS_SONATYPE_PASSWORD
+          gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+        env:
+          OSS_SONATYPE_USERNAME: ${{ secrets.OSS_SONATYPE_USERNAME }}
+          OSS_SONATYPE_PASSWORD: ${{ secrets.OSS_SONATYPE_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+
+      - name: Make Maven wrapper executable
+        run: chmod +x ./queryeer-backend/mvnw
+
+      - name: Set release version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          else
+            RELEASE_VERSION="${{ inputs.release_version }}"
+            if [ -z "$RELEASE_VERSION" ]; then
+              RELEASE_VERSION=$(./queryeer-backend/mvnw -q -f queryeer-backend/pom.xml -DforceStdout help:evaluate -Dexpression=project.version)
+            fi
+          fi
+          echo "QUERYEER_RELEASE_VERSION=${RELEASE_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Validate backend version
+        shell: bash
+        run: |
+          BACKEND_VERSION=$(./queryeer-backend/mvnw -q -f queryeer-backend/pom.xml -DforceStdout help:evaluate -Dexpression=project.version)
+          if [ "$BACKEND_VERSION" != "$QUERYEER_RELEASE_VERSION" ]; then
+            echo "Backend version $BACKEND_VERSION does not match release version $QUERYEER_RELEASE_VERSION."
+            echo "Run the Create Release workflow so the version bump is committed before tagging."
+            exit 1
+          fi
+
+      - name: Install Maven Central build dependencies
+        run: ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml -pl "${MAVEN_CENTRAL_BUILD_PROJECTS}" -am install -DskipTests=true -Dmaven.test.skip=true
+
+      - name: Dry-run Maven Central publish
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
+        run: ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml -pl "${MAVEN_CENTRAL_PROJECTS}" clean deploy -DperformRelease=true -DskipTests=true -Dmaven.test.skip=true -Dgpg.skip=true -DskipPublishing=true
+
+      - name: Publish backend artifacts to Maven Central
+        if: github.event_name == 'push'
+        run: ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml -pl "${MAVEN_CENTRAL_PROJECTS}" clean deploy -DperformRelease=true -DskipTests=true -Dmaven.test.skip=true -Dgpg.passphrase="${MAVEN_GPG_PASSPHRASE}"
+        env:
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+
+  publish-npm:
+    name: Publish npm Package
+    runs-on: ubuntu-latest
+    needs: backend-verify
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+          cache-dependency-path: queryeer-desktop/package-lock.json
+
+      - name: Install desktop dependencies
+        working-directory: queryeer-desktop
+        run: npm ci --no-audit --no-fund
+
+      - name: Set release version
+        working-directory: queryeer-desktop
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          else
+            RELEASE_VERSION="${{ inputs.release_version }}"
+            if [ -z "$RELEASE_VERSION" ]; then
+              RELEASE_VERSION=$(node -p "require('./packages/api/package.json').version")
+            fi
+          fi
+          echo "QUERYEER_RELEASE_VERSION=${RELEASE_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Validate npm package version
+        working-directory: queryeer-desktop
+        shell: bash
+        run: |
+          API_VERSION=$(node -p "require('./packages/api/package.json').version")
+          if [ "$API_VERSION" != "$QUERYEER_RELEASE_VERSION" ]; then
+            echo "Desktop API package version $API_VERSION does not match release version $QUERYEER_RELEASE_VERSION."
+            echo "Run the Create Release workflow so the version bump is committed before tagging."
+            exit 1
+          fi
+
+      - name: Build npm package
+        working-directory: queryeer-desktop
+        run: npm run -w @queryeer/api build
+
+      - name: Dry-run npm package publish
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
+        working-directory: queryeer-desktop
+        run: npm pack -w @queryeer/api --dry-run
+
+      - name: Publish npm package
+        if: github.event_name == 'push'
+        working-directory: queryeer-desktop
+        run: npm publish -w @queryeer/api --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
   publish:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
-    needs: build
+    needs:
+      - build
+      - publish-maven-central
+      - publish-npm
     permissions:
       contents: write
     steps:
@@ -214,4 +364,4 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
         run: |
           echo "Dry-run release workflow completed for version ${QUERYEER_RELEASE_VERSION}."
-          echo "Skipped GitHub release creation."
+          echo "Skipped Maven Central publish, npm publish, and GitHub release creation."
