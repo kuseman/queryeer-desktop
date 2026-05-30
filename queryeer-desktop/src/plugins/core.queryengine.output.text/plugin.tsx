@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Plugin } from "../../contracts/plugin/Plugin";
-import type { OutputContext } from "../../contracts/extensions/OutputExtension";
+import type { OutputContext } from "../../contracts/queryengine/OutputExtension";
 import { getOutputRegistry } from "../core.queryengine/output/OutputRegistry";
 import { getQueryOutputFormatRegistry } from "../core.queryengine/QueryOutputFormatRegistry";
 import { defineStateKey } from "../../contracts/files/FileStateRegistry";

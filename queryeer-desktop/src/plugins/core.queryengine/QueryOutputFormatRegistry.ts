@@ -1,5 +1,5 @@
-export type { OutputContext, ResultSet } from "../../contracts/extensions/OutputExtension";
-import type { OutputContext, ResultSet } from "../../contracts/extensions/OutputExtension";
+export type { OutputContext, ResultSet } from "../../contracts/queryengine/OutputExtension";
+import type { OutputContext, ResultSet } from "../../contracts/queryengine/OutputExtension";
 
 export type QueryResultFormatter = {
   id: string;

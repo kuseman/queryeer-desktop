@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_OUTPUT_LIMITS } from "../../contracts/extensions/OutputExtension";
+import { DEFAULT_OUTPUT_LIMITS } from "../../contracts/queryengine/OutputExtension";
 
 const mocks = vi.hoisted(() => ({
   getCoreSettingsServiceMock: vi.fn(),

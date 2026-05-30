@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { OutputContext } from "../../contracts/extensions/OutputExtension";
+import type { OutputContext } from "../../contracts/queryengine/OutputExtension";
 import { resolveTextOutputFormatter } from "./formatters";
 
 function makeContext(overrides: Partial<OutputContext>): OutputContext {

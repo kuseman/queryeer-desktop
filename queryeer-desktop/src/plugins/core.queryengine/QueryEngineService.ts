@@ -1,34 +1,14 @@
 import { BackendNotReadyError } from "../../contracts/backend/BackendNotReadyError";
-import type { QueryExecuteOptions } from "../../contracts/backend/Types";
+import type { QueryExecuteOptions } from "../../contracts/backend/Types.js";
+import type { Column } from "../../contracts/queryengine/OutputExtension.js";
+import type { CollectedResultSet, CollectedResults, ExecuteRequestOptions } from "../../contracts/queryengine/QueryEngineTypes.js";
 import { getCoreSecurityService } from "../core.security/service";
-import type { Column } from "../../contracts/extensions/OutputExtension";
-
-export type CollectedResultSet = {
-  schema: { columns: Column[] };
-  rows: unknown[][];
-};
-
-export type CollectedResults = {
-  resultSets: CollectedResultSet[];
-};
 
 type QueryEvent = { method: string; params: unknown };
 type QueryEventListener = (event: QueryEvent) => void;
 type GlobalQueryEventListener = (event: QueryEvent, context?: ExecuteParams) => void;
 type SimpleListener = () => void;
 
-export type ExecuteRequestOptions = {
-  /** When set, overrides the text taken from the editor. */
-  textOverride?: string;
-  /** When set, overrides the output contributor selected in the toolbar. */
-  outputIdOverride?: string;
-  /** When set, overrides the text output format (e.g. "plain", "csv", "json"). */
-  formatOverride?: string;
-  /** When set, overrides backend execution options for this execute request. */
-  optionsOverride?: QueryExecuteOptions;
-  /** When set, restricts the execute request to a specific file; other files skip it. */
-  fileIdOverride?: string;
-};
 type ExecutionContextProvider = (params: ExecuteParams) => Partial<ExecuteParams> | void;
 type EngineResolver = (params: Omit<ExecuteParams, "engineId">) => string | undefined;
 type EngineResolverEntry = {

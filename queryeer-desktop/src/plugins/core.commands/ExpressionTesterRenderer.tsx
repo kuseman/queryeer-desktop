@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import type { SettingDefinition } from "../../contracts/extensions/SettingsExtension";
+import type { SettingDefinition } from "../../contracts/settings/SettingsExtension";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { ContextValues } from "./context-values";
 import { getFilesRegistry } from "./files-registry-accessor";

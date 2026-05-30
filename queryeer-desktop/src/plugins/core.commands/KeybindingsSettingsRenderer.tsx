@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import type { SettingDefinition } from "../../contracts/extensions/SettingsExtension";
+import type { SettingDefinition } from "../../contracts/settings/SettingsExtension";
 import {
   KEYBINDINGS_SCHEMA_VERSION,
   emptyUserKeybindingsDocument,

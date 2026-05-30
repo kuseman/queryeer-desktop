@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { TextEditorComponent } from "../core.editor/texteditor/TextEditorComponent";
 import { OutputPanel } from "./output/OutputPanel";
-import type { OutputContext, OutputMessage, ResultSet, ColumnType, Column } from "../../contracts/extensions/OutputExtension";
-import { IDLE_OUTPUT_CONTEXT } from "../../contracts/extensions/OutputExtension";
-import { getQueryEngineService, type ExecuteRequestOptions } from "./QueryEngineService";
+import type { OutputContext, OutputMessage, ResultSet, ColumnType, Column } from "../../contracts/queryengine/OutputExtension";
+import { IDLE_OUTPUT_CONTEXT } from "../../contracts/queryengine/OutputExtension";
+import type { ExecuteRequestOptions } from "../../contracts/queryengine/QueryEngineTypes.js";
+import { getQueryEngineService } from "./QueryEngineService";
 import { resolveOutputMaxRows } from "./output-limits";
 import { getOutputRegistry } from "./output/OutputRegistry";
 import { getQueryOutputFormatRegistry } from "./QueryOutputFormatRegistry";

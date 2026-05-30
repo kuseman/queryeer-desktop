@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { plainFormat } from "./formats/plain";
 import { htmlFormat } from "./formats/html";
 import type { ClipboardCell, ClipboardSelection } from "./ClipboardFormat";
-import type { Column } from "../../../contracts/extensions/OutputExtension";
+import type { Column } from "../../../contracts/queryengine/OutputExtension";
 
 const ts: Column = { name: "ts", type: "datetime" };
 const msg: Column = { name: "msg", type: "string" };

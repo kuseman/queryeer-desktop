@@ -1,21 +1,4 @@
-import type { ColumnType } from "../../contracts/extensions/OutputExtension";
-
-export type TableLinkAction = {
-  kind: "preview" | "external";
-  title: string;
-  value: string;
-  mimeType?: string;
-};
-
-export type TableLinkActionContext = {
-  value: unknown;
-  columnType: ColumnType;
-};
-
-export type TableLinkActionContribution = {
-  id: string;
-  match: (context: TableLinkActionContext) => TableLinkAction | null;
-};
+import type { TableLinkAction, TableLinkActionContext, TableLinkActionContribution } from "../../contracts/queryengine/TableLinkActionExtension.js";
 
 const contributions = new Map<string, TableLinkActionContribution>();
 

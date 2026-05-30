@@ -1,4 +1,4 @@
-import type { Column } from "../../../contracts/extensions/OutputExtension";
+import type { Column } from "../../../contracts/queryengine/OutputExtension";
 
 export type ClipboardCell = {
   value: unknown;

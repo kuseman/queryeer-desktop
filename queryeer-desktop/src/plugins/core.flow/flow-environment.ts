@@ -1,20 +1,9 @@
 import { getCoreSettingsService } from "../core.settings/service";
+import type { FlowEnvironmentConfig, FlowLocalMapping } from "../../contracts/flow/FlowEnvironmentSettings.js";
+import { FLOW_ENVIRONMENTS_SETTING_ID } from "../../contracts/flow/FlowEnvironmentSettings.js";
 
-export const FLOW_ENVIRONMENTS_SETTING_ID = "core.flow.environments";
-
-export type FlowEnvironmentConfig = {
-  activeEnvironment: string;
-  environments: string[];
-  mappings: FlowLocalMapping[];
-};
-
-export type FlowLocalMapping = {
-  environment: string;
-  owner: string;
-  kind: string;
-  ref: string;
-  value: string;
-};
+export type { FlowEnvironmentConfig, FlowLocalMapping };
+export { FLOW_ENVIRONMENTS_SETTING_ID };
 
 export const DEFAULT_FLOW_ENVIRONMENT_CONFIG: FlowEnvironmentConfig = {
   activeEnvironment: "dev",

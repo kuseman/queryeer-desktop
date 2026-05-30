@@ -3,7 +3,7 @@ import type {
   AdvancedValidationResult,
   SettingDefinition,
   SettingsRegistry
-} from "../../contracts/extensions/SettingsExtension";
+} from "../../contracts/settings/SettingsExtension";
 import {
   type SettingsIndexDocument,
   type SettingsModuleDocument

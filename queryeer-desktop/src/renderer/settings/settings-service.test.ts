@@ -3,7 +3,7 @@ import type {
   AdvancedSettingsRenderer,
   AdvancedSettingsValidator,
   SettingsRegistry
-} from "../../contracts/extensions/SettingsExtension";
+} from "../../contracts/settings/SettingsExtension";
 import { SettingsService } from "./settings-service";
 
 function makeRegistry(): SettingsRegistry {

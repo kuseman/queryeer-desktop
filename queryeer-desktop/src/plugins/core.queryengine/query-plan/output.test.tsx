@@ -1,7 +1,7 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { OutputContext, OutputContributor } from "../../../contracts/extensions/OutputExtension";
+import type { OutputContext, OutputContributor } from "../../../contracts/queryengine/OutputExtension";
 import type { PluginContext } from "../../../contracts/plugin/Plugin";
 
 const outputRegistryMock = vi.hoisted(() => ({

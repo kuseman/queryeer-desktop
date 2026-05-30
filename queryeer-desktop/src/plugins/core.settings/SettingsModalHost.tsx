@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import type { SettingDefinition } from "../../contracts/extensions/SettingsExtension";
+import type { SettingDefinition } from "../../contracts/settings/SettingsExtension";
 import { PasswordFieldInput } from "./PasswordFieldInput";
 import { getCoreSettingsService } from "./service";
 import "./settings-modal.css";

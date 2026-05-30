@@ -12,12 +12,12 @@ import type {
   LayoutPanelContribution
 } from "../../contracts/extensions/LayoutExtension";
 import type { MenuItemContribution, MenuRegistry } from "../../contracts/extensions/MenuExtension";
-import type { CommandExtension } from "../../contracts/extensions/CommandExtension";
+import type { CommandExtension } from "../../contracts/commands/CommandExtension";
 import type {
   KeybindingContribution,
   KeybindingRegistry
-} from "../../contracts/extensions/KeybindingExtension";
-import type { FileSystemExtension } from "../../contracts/extensions/FileSystemExtension";
+} from "../../contracts/commands/KeybindingExtension";
+import type { FileSystemExtension } from "../../contracts/files/FileSystemExtension";
 import type { TooltipSectionContribution } from "../../contracts/extensions/TooltipExtension";
 import type {
   AdvancedSettingsRenderer,
@@ -25,7 +25,7 @@ import type {
   SettingDefinition,
   SettingsContribution,
   SettingsRegistry
-} from "../../contracts/extensions/SettingsExtension";
+} from "../../contracts/settings/SettingsExtension";
 import type { FileEntity } from "../../contracts/files/FileEntity";
 import type { FilesRegistry } from "../../contracts/files/FilesRegistry";
 import type {
@@ -48,7 +48,7 @@ import type { ContextMenuProvider, ContextMenuRegistry } from "../../contracts/e
 import type {
   TableOutputContextMenuProvider,
   TableOutputContextMenuRegistry
-} from "../../contracts/extensions/TableOutputContextMenuExtension";
+} from "../../contracts/queryengine/TableOutputContextMenuExtension";
 import type { EditorHandle, EditorRegistry, EditorRegistryHost, EditorContentRepository } from "../../contracts/editor/EditorCapability";
 import type { Disposable } from "../../contracts/editor/EditorApi";
 import type {

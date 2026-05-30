@@ -7,6 +7,7 @@ import type {
   FlowNodeExecutionStatus,
   FlowRunMode
 } from "./types";
+import type { FlowNodeRunRequest, FlowNodeRunResult, FlowNodeRunner } from "../../contracts/flow/FlowNodeRunner.js";
 import { getFlowNodeTypeContribution } from "./flow-node-type-contributions";
 
 const MOCK_FAILURE_TOKEN = "flow.fail";
@@ -17,19 +18,6 @@ type ExecuteFlowOptions = {
   nodeRunner?: FlowNodeRunner;
   onProgress?: (execution: FlowExecutionResult) => void;
 };
-
-export type FlowNodeRunRequest = {
-  fileId?: string;
-  node: FlowNode;
-  action: string;
-  ctx: Record<string, unknown>;
-};
-
-export type FlowNodeRunResult =
-  | { ok: true; output: FlowNodeExecution["output"] }
-  | { ok: false; message: string; code?: string; details?: Record<string, unknown> };
-
-export type FlowNodeRunner = (request: FlowNodeRunRequest) => Promise<FlowNodeRunResult>;
 
 export function createMockFlowNodeRunner(): FlowNodeRunner {
   return runMockNodeAction;

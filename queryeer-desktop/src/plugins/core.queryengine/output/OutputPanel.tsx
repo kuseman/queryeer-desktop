@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import type { OutputContext, OutputContributor } from "../../../contracts/extensions/OutputExtension";
+import type { OutputContext, OutputContributor } from "../../../contracts/queryengine/OutputExtension";
 import { getOutputRegistry } from "./OutputRegistry";
 
 type Props = {
