@@ -763,6 +763,27 @@ describe("BackendGateway", () => {
     vi.useRealTimers();
   });
 
+  it("keeps debug logs when log flow is disabled but drops trace", async () => {
+    const { gateway } = createGatewayWithTestTransport();
+    await gateway.start();
+
+    gateway.setTracePayloads(true);
+    gateway.setLogFlowEnabled(false);
+
+    await gateway.executeQuery({
+      queryExecutionId: "exec-log-flow",
+      engineId: "payloadbuilder",
+      fileId: "file-1",
+      text: "select 1"
+    });
+
+    const logs = gateway.getStatus().backendLogs;
+    expect(logs.some((entry) => entry.level === "debug" && entry.message.includes("queryengine.execute"))).toBe(true);
+    expect(logs.some((entry) => entry.level === "trace")).toBe(false);
+
+    await gateway.stop();
+  });
+
   it("sends settings.module.changed notification", async () => {
     const { gateway, transport } = createGatewayWithTestTransport();
     await gateway.start();

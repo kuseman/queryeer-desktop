@@ -2,6 +2,7 @@ import type {
   PayloadbuilderCatalogContribution,
   PayloadbuilderCatalogPanelProps,
   PayloadbuilderCatalogFlowMappingField,
+  PayloadbuilderCatalogRegistry,
 } from "@queryeer/api/queryengine/PayloadbuilderCatalogExtension.js";
 
 export type { PayloadbuilderCatalogContribution, PayloadbuilderCatalogPanelProps, PayloadbuilderCatalogFlowMappingField };
@@ -38,5 +39,11 @@ export function subscribePayloadbuilderCatalogContributions(listener: () => void
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
+  };
+}
+
+export function createPayloadbuilderCatalogRegistry(): PayloadbuilderCatalogRegistry {
+  return {
+    registerContribution: registerPayloadbuilderCatalogContribution
   };
 }

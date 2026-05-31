@@ -136,8 +136,11 @@ function createContext(file?: FileEntity) {
     },
     editors: {
       getActiveEditor: vi.fn(() => null),
+      setActiveEditor: vi.fn(),
       onActiveEditorChanged: vi.fn(() => ({ dispose: vi.fn() }))
     },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    components: { FrameworkEditor: vi.fn() as any },
     about: { registerChangelog: vi.fn() },
     notifications: {
       notify: vi.fn(),
@@ -156,7 +159,8 @@ function createContext(file?: FileEntity) {
       collectContext: vi.fn(async () => []),
       listTools: vi.fn(() => []),
       invokeTool: vi.fn(async () => ({ ok: false }))
-    }
+    },
+    payloadbuilderCatalog: { registerContribution: vi.fn() }
   } satisfies PluginContext;
 
   return {

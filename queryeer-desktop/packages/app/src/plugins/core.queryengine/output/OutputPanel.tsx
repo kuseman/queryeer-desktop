@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import type { OutputContext, OutputContributor } from "@queryeer/api/queryengine/OutputExtension";
 import { getOutputRegistry } from "./OutputRegistry";
+import PluginErrorBoundary from "../../core.layout/PluginErrorBoundary";
 
 type Props = {
   context: OutputContext;
@@ -184,7 +185,9 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
                 className="query-output-view"
                 style={{ display: contributor.id === selectedContributor?.id ? "block" : "none" }}
               >
-                {contributor.render(contextForPrimary(contributor))}
+                <PluginErrorBoundary pluginId={contributor.id}>
+                  {contributor.render(contextForPrimary(contributor))}
+                </PluginErrorBoundary>
               </div>
             ))
           : <div className="query-output-empty">No output view available.</div>}

@@ -1,0 +1,20 @@
+{
+  "name": "example-csv-exporter",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild module.ts --bundle --format=esm --loader:.ts=ts --loader:.tsx=tsx --outfile=dist/plugin.js",
+    "package": "npm run build && node scripts/package.cjs",
+    "typecheck": "tsc --noEmit",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "peerDependencies": {
+    "@queryeer/api": "^0.10.0"
+  },
+  "devDependencies": {
+    "@queryeer/api": "^0.10.0",
+    "esbuild": "^0.23.0",
+    "typescript": "^5.5.0"
+  }
+}

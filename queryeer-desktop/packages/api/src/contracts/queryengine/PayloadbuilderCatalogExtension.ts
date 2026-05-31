@@ -32,3 +32,7 @@ export type PayloadbuilderCatalogContribution = {
   filterPersistedProperties?: (properties: Record<string, unknown>) => Record<string, unknown>;
   resolveRuntimeProperties?: (properties: Record<string, unknown>) => Record<string, unknown>;
 };
+
+export type PayloadbuilderCatalogRegistry = {
+  registerContribution(contribution: PayloadbuilderCatalogContribution): void;
+};

@@ -1,5 +1,12 @@
+import type { FileEntity } from "../files/FileEntity.js";
 import type { OutlineSymbol } from "../extensions/OutlineExtension.js";
 import type { Disposable, TextRange } from "./EditorApi.js";
+
+export type FrameworkEditorProps = {
+  file?: FileEntity;
+  readOnly?: boolean;
+  language?: string;
+};
 
 export type OutlineCapability = {
   getSymbols(): OutlineSymbol[] | Promise<OutlineSymbol[]>;
@@ -58,6 +65,7 @@ export type EditorHandle = {
 export type EditorRegistry = {
   getActiveEditor(): EditorHandle | null;
   onActiveEditorChanged(callback: (editor: EditorHandle | null) => void): Disposable;
+  setActiveEditor(handle: EditorHandle | null): void;
 };
 
 export type EditorContentRepository = {

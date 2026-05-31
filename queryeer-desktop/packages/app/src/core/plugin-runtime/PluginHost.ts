@@ -2,7 +2,9 @@ import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import type { FileMediator } from "@queryeer/api/files/FileMediator";
 import type { FilesRegistry } from "@queryeer/api/files/FilesRegistry";
 import type { FileWatcherService } from "@queryeer/api/files/FileWatcher";
+import type { ComponentType } from "react";
 import type { Plugin, PluginContext } from "@queryeer/api/plugin/Plugin";
+import type { FrameworkEditorProps } from "@queryeer/api/editor/EditorCapability";
 import type { PluginManifestFile } from "@queryeer/api/plugin/PluginManifestFile";
 import { ExtensionRegistry } from "./ExtensionRegistry";
 import {
@@ -22,6 +24,7 @@ import { getJdbcTreeContextMenuRegistry } from "../../plugins/core.queryengine.j
 import { getGraphNodeTypeRegistry } from "../../plugins/core.graph/graph-node-type-registry";
 import { registerChangelog } from "../../plugins/core.about/about-service.js";
 import { getNotificationService } from "../../plugins/core.notification/notification-service";
+import { createPayloadbuilderCatalogRegistry } from "../../plugins/core.queryengine.payloadbuilder/catalog-contributions";
 
 export type PluginHostState = {
   startedAt: string;
@@ -42,9 +45,11 @@ export type PluginHostOptions = {
     filters?: { name: string; extensions: string[] }[];
   }) => Promise<{ canceled: boolean; filePath?: string }>;
   getCommandContextValues?: () => ContextValues;
+  frameworkEditor?: ComponentType<FrameworkEditorProps>;
 };
 
 export class PluginHost {
+  private readonly options: PluginHostOptions;
   private readonly pluginRegistry = new PluginRegistry();
   private readonly extensionRegistry: ExtensionRegistry;
   private readonly fileMediator: FileMediator;
@@ -59,6 +64,7 @@ export class PluginHost {
   };
 
   constructor(options: PluginHostOptions) {
+    this.options = options;
     this.extensionRegistry = new ExtensionRegistry(options.getCommandContextValues);
     this.fileWatcher = options.fileWatcher;
     this.fileMediator = createFileMediator({
@@ -125,7 +131,11 @@ export class PluginHost {
       graphNodeTypes: getGraphNodeTypeRegistry(),
       about: { registerChangelog },
       notifications: getNotificationService(),
-      assistant: this.extensionRegistry.createAssistantRegistry()
+      assistant: this.extensionRegistry.createAssistantRegistry(),
+      payloadbuilderCatalog: createPayloadbuilderCatalogRegistry(),
+      components: {
+        FrameworkEditor: this.options.frameworkEditor ?? (() => null) as unknown as ComponentType<FrameworkEditorProps>
+      }
     };
 
     for (const plugin of orderedPlugins) {

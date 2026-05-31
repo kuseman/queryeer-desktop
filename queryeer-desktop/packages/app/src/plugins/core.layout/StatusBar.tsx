@@ -1,5 +1,6 @@
 import type { LayoutStatusItemContribution } from "@queryeer/api/extensions/LayoutExtension";
 import type { CommandExecutionResult } from "@queryeer/api/plugin/Plugin";
+import PluginErrorBoundary from "./PluginErrorBoundary";
 
 type StatusBarProps = {
   statusItemsLeft: LayoutStatusItemContribution[];
@@ -37,7 +38,7 @@ type StatusItemContentProps = {
 
 export function StatusItemContent({ item, executeCommand, canExecuteCommand }: StatusItemContentProps) {
   if (!item.commandId) {
-    return <>{item.render()}</>;
+    return <PluginErrorBoundary pluginId={item.id}>{item.render()}</PluginErrorBoundary>;
   }
   const isDisabled = !canExecuteCommand(item.commandId);
   return (
@@ -61,7 +62,7 @@ export function StatusItemContent({ item, executeCommand, canExecuteCommand }: S
         }
       }}
     >
-      {item.render()}
+      <PluginErrorBoundary pluginId={item.id}>{item.render()}</PluginErrorBoundary>
     </span>
   );
 }

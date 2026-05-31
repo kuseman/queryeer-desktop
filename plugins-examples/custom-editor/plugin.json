@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "example.custom-editor",
+  "name": "Custom Foo Editor",
+  "version": "0.1.0",
+  "description": "A custom editor for .foo files with MIME type registration, tooltip, context menu, and outline contributions",
+  "frontend": {
+    "entryModule": "./dist/plugin.js"
+  }
+}

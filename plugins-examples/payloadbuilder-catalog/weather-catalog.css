@@ -1,0 +1,44 @@
+.weather-catalog-panel {
+  padding: 12px;
+}
+.weather-catalog-panel h4 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.weather-catalog-description {
+  margin: 0 0 12px 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.weather-catalog-description code {
+  font-size: 10px;
+  background: var(--bg-subtle);
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+.weather-catalog-field {
+  margin-bottom: 10px;
+}
+.weather-catalog-field label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.weather-catalog-field input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+  box-sizing: border-box;
+}
+.weather-catalog-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}

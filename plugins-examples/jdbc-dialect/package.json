@@ -1,0 +1,8 @@
+{
+  "name": "example-jdbc-dialect",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "package": "node scripts/package.cjs"
+  }
+}
