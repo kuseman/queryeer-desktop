@@ -180,7 +180,7 @@ jobs:
       contents: read
     env:
       MAVEN_CENTRAL_BUILD_PROJECTS: :backend-core
-      MAVEN_CENTRAL_PROJECTS: .,:backend-contract,:backend-api,:backend-lib-queryengine-jdbc-foundation,:backend-lib-queryengine-sql-parser
+      MAVEN_CENTRAL_PROJECTS: .,:backend-contract,:backend-api,:backend-lib-queryengine-jdbc-foundation,:backend-lib-queryengine-sql-parser,:backend-lib-queryengine-payloadbuilder-foundation
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

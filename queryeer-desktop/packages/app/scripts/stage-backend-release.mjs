@@ -9,6 +9,7 @@ const jlinkHome = resolve(process.env.QUERYEER_JLINK_OUTPUT ?? join(repoRoot, ".
 
 const moduleByPluginId = new Map([
   ["queryengine.runtime.jdbc-foundation", "backend-lib-queryengine-jdbc-foundation"],
+  ["queryengine.runtime.payloadbuilder-foundation", "backend-lib-queryengine-payloadbuilder-foundation"],
   ["queryengine.runtime.sql-parser", "backend-lib-queryengine-sql-parser"],
   ["queryengine.jdbc", "backend-plugin-jdbc"],
   ["queryengine.payloadbuilder", "backend-plugin-payloadbuilder"],

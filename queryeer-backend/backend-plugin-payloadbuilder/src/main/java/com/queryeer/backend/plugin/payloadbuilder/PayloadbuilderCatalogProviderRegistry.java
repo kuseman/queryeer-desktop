@@ -1,5 +1,7 @@
 package com.queryeer.backend.plugin.payloadbuilder;
 
+import static com.queryeer.backend.api.PayloadUtils.isBlank;
+
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -13,19 +15,23 @@ import com.queryeer.backend.plugin.payloadbuilder.filesystem.FilesystemCatalogPr
 import com.queryeer.backend.plugin.payloadbuilder.http.HttpCatalogProvider;
 import com.queryeer.backend.plugin.payloadbuilder.jdbc.JdbcCatalogProvider;
 import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
+import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
 
-final class PayloadbuilderCatalogProviderRegistry
+/**
+ * Registry of catalog provider contributors. Implements the foundation SPI interface so external plugins can contribute catalog providers.
+ */
+final class PayloadbuilderCatalogProviderRegistry implements com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderRegistry
 {
-    private final Map<String, PayloadbuilderCatalogProvider> builtinsByCatalogId;
-    private final Map<String, PayloadbuilderCatalogProvider> builtinsByAction;
+    private final Map<String, PayloadbuilderCatalogProviderContributor> providersByCatalogId;
+    private final Map<String, PayloadbuilderCatalogProviderContributor> providersByAction;
 
-    PayloadbuilderCatalogProviderRegistry(List<PayloadbuilderCatalogProvider> providers)
+    private PayloadbuilderCatalogProviderRegistry(List<PayloadbuilderCatalogProviderContributor> providers)
     {
-        Map<String, PayloadbuilderCatalogProvider> byCatalogId = new LinkedHashMap<>();
-        Map<String, PayloadbuilderCatalogProvider> byAction = new LinkedHashMap<>();
-        for (PayloadbuilderCatalogProvider provider : providers)
+        Map<String, PayloadbuilderCatalogProviderContributor> byCatalogId = new LinkedHashMap<>();
+        Map<String, PayloadbuilderCatalogProviderContributor> byAction = new LinkedHashMap<>();
+        for (PayloadbuilderCatalogProviderContributor provider : providers)
         {
             byCatalogId.put(provider.catalogId(), provider);
             for (String action : provider.actions())
@@ -33,44 +39,63 @@ final class PayloadbuilderCatalogProviderRegistry
                 byAction.put(action, provider);
             }
         }
-        this.builtinsByCatalogId = Map.copyOf(byCatalogId);
-        this.builtinsByAction = Map.copyOf(byAction);
+        this.providersByCatalogId = byCatalogId;
+        this.providersByAction = byAction;
     }
 
+    /** Creates the default registry with built-in providers. */
     static PayloadbuilderCatalogProviderRegistry defaults(ConfigService configService, PayloadMapper payloadMapper, JdbcRuntimeService jdbcRuntimeServices)
     {
-        return new PayloadbuilderCatalogProviderRegistry(
-                List.of(new JdbcCatalogProvider(jdbcRuntimeServices), new ElasticsearchCatalogProvider(configService, payloadMapper), new FilesystemCatalogProvider(), new HttpCatalogProvider()));
+        List<PayloadbuilderCatalogProviderContributor> builtins = List.<PayloadbuilderCatalogProviderContributor>of(new JdbcCatalogProvider(jdbcRuntimeServices),
+                new ElasticsearchCatalogProvider(configService, payloadMapper), new FilesystemCatalogProvider(), new HttpCatalogProvider());
+        return new PayloadbuilderCatalogProviderRegistry(builtins);
+    }
+
+    @Override
+    public void registerContributor(PayloadbuilderCatalogProviderContributor contributor)
+    {
+        if (contributor == null)
+        {
+            return;
+        }
+        String catalogId = contributor.catalogId();
+        if (isBlank(catalogId)
+                || providersByCatalogId.containsKey(catalogId))
+        {
+            return;
+        }
+        providersByCatalogId.put(catalogId, contributor);
+        for (String action : contributor.actions())
+        {
+            providersByAction.put(action, contributor);
+        }
     }
 
     Catalog createCatalog(String catalogId)
     {
-        PayloadbuilderCatalogProvider provider = providerByCatalogId(catalogId);
+        PayloadbuilderCatalogProviderContributor provider = providerByCatalogId(catalogId);
         return provider == null ? null
                 : provider.createCatalog();
     }
 
-    PayloadbuilderCatalogProvider getCatalogProvider(String catalogId)
+    PayloadbuilderCatalogProviderContributor getCatalogProvider(String catalogId)
     {
-        PayloadbuilderCatalogProvider provider = providerByCatalogId(catalogId);
-        return provider;
+        return providerByCatalogId(catalogId);
     }
 
     Set<String> catalogIds()
     {
-        Set<String> ids = new LinkedHashSet<>(builtinsByCatalogId.keySet());
-        return ids;
+        return new LinkedHashSet<>(providersByCatalogId.keySet());
     }
 
     Set<String> actions()
     {
-        Set<String> actions = new LinkedHashSet<>(builtinsByAction.keySet());
-        return actions;
+        return new LinkedHashSet<>(providersByAction.keySet());
     }
 
     Object invoke(String action, Object payload)
     {
-        PayloadbuilderCatalogProvider provider = providerByAction(action);
+        PayloadbuilderCatalogProviderContributor provider = providersByAction.get(action);
         if (provider == null)
         {
             return null;
@@ -78,30 +103,20 @@ final class PayloadbuilderCatalogProviderRegistry
         return provider.invoke(action, payload);
     }
 
-    private PayloadbuilderCatalogProvider providerByCatalogId(String catalogId)
+    private PayloadbuilderCatalogProviderContributor providerByCatalogId(String catalogId)
     {
-        PayloadbuilderCatalogProvider provider = builtinsByCatalogId.get(catalogId);
+        PayloadbuilderCatalogProviderContributor provider = providersByCatalogId.get(catalogId);
         if (provider != null)
         {
             return provider;
         }
-        for (Map.Entry<String, PayloadbuilderCatalogProvider> entry : builtinsByCatalogId.entrySet())
+        for (Map.Entry<String, PayloadbuilderCatalogProviderContributor> entry : providersByCatalogId.entrySet())
         {
             if (entry.getKey()
                     .equalsIgnoreCase(catalogId))
             {
                 return entry.getValue();
             }
-        }
-        return null;
-    }
-
-    private PayloadbuilderCatalogProvider providerByAction(String action)
-    {
-        PayloadbuilderCatalogProvider provider = builtinsByAction.get(action);
-        if (provider != null)
-        {
-            return provider;
         }
         return null;
     }

@@ -5,9 +5,9 @@ import java.util.Map;
 /**
  * Engine state sent into payloadbuilder query execution.
  */
-public record PayloadbuilderEngineState(PayloadbuilderCatalogState payloadbuilder)
+record PayloadbuilderEngineState(PayloadbuilderCatalogState payloadbuilder)
 {
-    public record PayloadbuilderCatalogState(String defaultCatalogAlias, String selectedEnvironmentId, Map<String, PayloadbuilderCatalogInstance> catalogs)
+    record PayloadbuilderCatalogState(String defaultCatalogAlias, String selectedEnvironmentId, Map<String, PayloadbuilderCatalogInstance> catalogs)
     {
     }
 }

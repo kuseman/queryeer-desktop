@@ -27,7 +27,7 @@ import com.queryeer.backend.api.SecuritySessionClosedException;
 import com.queryeer.backend.api.SettingsModule;
 import com.queryeer.backend.api.parse.IncrementalParseFunction;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
-import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
+import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
 import com.queryeer.backend.queryengine.sql.parser.SqlCompletionSupport;
 import com.queryeer.backend.queryengine.sql.parser.TreeSitterSqlParseFunction;
 
@@ -37,6 +37,7 @@ import se.kuseman.payloadbuilder.api.catalog.Schema;
 import se.kuseman.payloadbuilder.api.execution.Decimal;
 import se.kuseman.payloadbuilder.api.execution.EpochDateTime;
 import se.kuseman.payloadbuilder.api.execution.EpochDateTimeOffset;
+import se.kuseman.payloadbuilder.api.execution.IQuerySession;
 import se.kuseman.payloadbuilder.api.execution.ObjectVector;
 import se.kuseman.payloadbuilder.api.execution.TupleVector;
 import se.kuseman.payloadbuilder.api.execution.UTF8String;
@@ -50,7 +51,7 @@ import se.kuseman.payloadbuilder.core.execution.QuerySession;
 import se.kuseman.payloadbuilder.core.parser.Location;
 import se.kuseman.payloadbuilder.core.parser.ParseException;
 
-public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, FileSessionHandler
+final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, FileSessionHandler
 {
     static final int ROW_CHUNK_SIZE = 100;
     private static final String TYPE_STRING = "string";
@@ -80,17 +81,17 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
     private final IncrementalParseFunction parseFunction;
 
     //@formatter:off
-    public PayloadbuilderQueryEngineProvider(
+    PayloadbuilderQueryEngineProvider(
             ConfigService configService,
             PayloadMapper payloadMapper,
-            JdbcRuntimeService hdbcRuntimeService,
+            PayloadbuilderCatalogProviderRegistry catalogProviders,
             IncrementalParseSessionService parseSessions,
             IncrementalParseFunction parseFunction)
     //@formatter:on
     {
         this.configService = requireNonNull(configService, "configService");
         this.payloadMapper = requireNonNull(payloadMapper, "payloadMapper");
-        this.catalogProviders = PayloadbuilderCatalogProviderRegistry.defaults(configService, payloadMapper, requireNonNull(hdbcRuntimeService, "hdbcRuntimeService"));
+        this.catalogProviders = requireNonNull(catalogProviders, "catalogProviders");
         this.parseSessions = requireNonNull(parseSessions, "parseSessions");
         this.parseFunction = requireNonNull(parseFunction, "parseFunction");
     }
@@ -169,7 +170,7 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
                 rowCount += rowCounter.value;
             }
             outputWriter.flushMessages(publisher);
-            Map<String, PayloadbuilderCatalogProvider> providersByAlias = buildProvidersByAlias(catalogState);
+            Map<String, PayloadbuilderCatalogProviderContributor> providersByAlias = buildProvidersByAlias(catalogState);
             Object engineStatePatch = PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, catalogState, providersByAlias);
             long total = System.currentTimeMillis() - startMs;
             publisher.completed(total, rowCount, engineStatePatch);
@@ -277,12 +278,12 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
         return registry;
     }
 
-    private void injectCatalogProperties(QuerySession querySession, PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
+    private void injectCatalogProperties(IQuerySession querySession, PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
     {
         for (PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState.Instance instance : state.instancesByAlias()
                 .values())
         {
-            PayloadbuilderCatalogProvider provider = catalogProviders.getCatalogProvider(instance.catalogId());
+            PayloadbuilderCatalogProviderContributor provider = catalogProviders.getCatalogProvider(instance.catalogId());
             if (provider != null)
             {
                 provider.injectProperties(querySession, instance.alias(), instance.properties());
@@ -290,13 +291,13 @@ public final class PayloadbuilderQueryEngineProvider implements QueryEngineProvi
         }
     }
 
-    private Map<String, PayloadbuilderCatalogProvider> buildProvidersByAlias(PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
+    private Map<String, PayloadbuilderCatalogProviderContributor> buildProvidersByAlias(PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
     {
-        Map<String, PayloadbuilderCatalogProvider> result = new LinkedHashMap<>();
+        Map<String, PayloadbuilderCatalogProviderContributor> result = new LinkedHashMap<>();
         for (PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState.Instance instance : state.instancesByAlias()
                 .values())
         {
-            PayloadbuilderCatalogProvider provider = catalogProviders.getCatalogProvider(instance.catalogId());
+            PayloadbuilderCatalogProviderContributor provider = catalogProviders.getCatalogProvider(instance.catalogId());
             if (provider != null)
             {
                 result.put(instance.alias(), provider);

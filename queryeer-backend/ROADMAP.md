@@ -1,15 +1,15 @@
 # Queryeer Roadmap
 
 Bugs
-- [ ] The First time glide grid is shown in the application and the result only has 1 row that rows columns is blank UI-wise, switching file back and forth corrects it
-- [ ] Selection and scroll is not persisted in grid during switches of output tabs/active files
+- [X] The First time glide grid is shown in the application and the result only has 1 row that rows columns is blank UI-wise, switching file back and forth corrects it
+- [X] Selection and scroll is not persisted in grid during switches of output tabs/active files
 
 Large features in prio
 
-- [ ] Modularize
+- [ ] Payloadbuilder sessions are not persisted between queries which means that temp tables won't persist also set variables
+- [X] Modularize
     - Make sure all contributions have contracts and all API:s are located in a separate project
       that might end up on npmjs one day
-- [ ] Payloadbuilder sessions are not persisted between queries which means that temp tables won't persist
 - [X] Wire Payloadbuilder HTTP catalog
 - [X] Grid auto resize columns
 - [X] Create a distribution flow. Github etc.

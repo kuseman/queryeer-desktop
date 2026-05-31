@@ -1,11 +1,11 @@
 package com.queryeer.backend.plugin.payloadbuilder.filesystem;
 
-import com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderCatalogProvider;
+import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
 import se.kuseman.payloadbuilder.catalog.fs.FilesystemCatalog;
 
-public class FilesystemCatalogProvider implements PayloadbuilderCatalogProvider
+public class FilesystemCatalogProvider implements PayloadbuilderCatalogProviderContributor
 {
     private static final FilesystemCatalog CATALOG = new FilesystemCatalog();
 

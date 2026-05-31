@@ -19,11 +19,15 @@ public final class PayloadbuilderBackendPlugin implements BackendPlugin
     @Override
     public void activate(BackendPluginContext context, PluginDescriptor descriptor)
     {
-        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(context.config(), context.payloadMapper(), context.services()
-                .get(JdbcRuntimeService.class),
-                context.services()
-                        .get(IncrementalParseSessionService.class),
-                new TreeSitterSqlParseFunction());
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(context.config(), context.payloadMapper(), context.services()
+                .get(JdbcRuntimeService.class));
+
+        // Register in PluginServiceRegistry so external plugins can contribute catalogs
+        context.services()
+                .register(com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderRegistry.class, registry);
+
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(context.config(), context.payloadMapper(), registry, context.services()
+                .get(IncrementalParseSessionService.class), new TreeSitterSqlParseFunction());
         context.queryEngines()
                 .register(provider);
         context.fileSessions()

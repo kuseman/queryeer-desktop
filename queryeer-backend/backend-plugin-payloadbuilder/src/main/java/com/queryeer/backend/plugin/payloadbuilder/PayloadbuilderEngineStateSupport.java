@@ -6,7 +6,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
+import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
+
 import se.kuseman.payloadbuilder.api.catalog.ResolvedType;
+import se.kuseman.payloadbuilder.api.execution.IQuerySession;
 import se.kuseman.payloadbuilder.api.execution.ValueVector;
 import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
@@ -115,23 +118,16 @@ final class PayloadbuilderEngineStateSupport
         }
     }
 
-    static Object buildEngineStatePatch(QuerySession session, PayloadbuilderCatalogState input, Map<String, PayloadbuilderCatalogProvider> providersByAlias)
+    static Object buildEngineStatePatch(IQuerySession session, PayloadbuilderCatalogState input, Map<String, PayloadbuilderCatalogProviderContributor> providersByAlias)
     {
         Map<String, Object> catalogsPatch = new LinkedHashMap<>();
         boolean defaultAliasSwitched = !Objects.equals(input.defaultCatalogAlias, session.getDefaultCatalogAlias());
         for (PayloadbuilderCatalogState.Instance instance : input.instancesByAlias()
                 .values())
         {
-            PayloadbuilderCatalogProvider provider = providersByAlias.get(instance.alias());
-            Map<String, Object> changedProperties;
-            if (provider != null)
-            {
-                changedProperties = provider.buildCatalogPatch(session, instance.alias(), instance.properties());
-            }
-            else
-            {
-                changedProperties = PayloadbuilderCatalogProvider.compareInputProperties(session, instance.alias(), instance.properties());
-            }
+            PayloadbuilderCatalogProviderContributor provider = providersByAlias.get(instance.alias());
+            Map<String, Object> changedProperties = provider != null ? provider.buildCatalogPatch(session, instance.alias(), instance.properties())
+                    : PayloadbuilderCatalogProviderContributor.compareInputProperties(session, instance.alias(), instance.properties());
 
             if (!changedProperties.isEmpty())
             {
