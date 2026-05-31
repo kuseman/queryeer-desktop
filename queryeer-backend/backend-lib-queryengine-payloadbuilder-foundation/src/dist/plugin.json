@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "queryengine.runtime.payloadbuilder-foundation",
+  "name": "Payloadbuilder Foundation Runtime",
+  "version": "${project.version}",
+  "description": "Shared runtime classes for payloadbuilder query engine plugins.",
+  "dependencies": [],
+  "providesCapabilities": ["queryengine.runtime.payloadbuilder-foundation"],
+  "requiredCapabilities": [],
+  "backend": {
+    "entrypointClass": "com.queryeer.backend.queryengine.payloadbuilder.runtime.PayloadbuilderFoundationRuntimePlugin"
+  },
+  "runtime": {
+    "shared": {
+      "parentFirstPackagePrefixes": ["se.kuseman.payloadbuilder.api."],
+      "nativeLibraries": [],
+      "sharedArtifacts": []
+    }
+  }
+}

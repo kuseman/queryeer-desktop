@@ -20,6 +20,7 @@
         <jackson.version>2.19.4</jackson.version>
         <junit.jupiter.version>6.1.0</junit.jupiter.version>
         <mockito.core.version>5.23.0</mockito.core.version>
+        <payloadbuilder.version>1.10.1</payloadbuilder.version>
         <maven.dependency.plugin.version>3.10.0</maven.dependency.plugin.version>
         <maven.assembly.plugin.version>3.8.0</maven.assembly.plugin.version>
         <checkstyle.skip>false</checkstyle.skip>
@@ -228,6 +229,21 @@
                 <artifactId>mockito-core</artifactId>
                 <version>${mockito.core.version}</version>
             </dependency>
+            <dependency>
+                <groupId>se.kuseman.payloadbuilder</groupId>
+                <artifactId>payloadbuilder-api</artifactId>
+                <version>${payloadbuilder.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>se.kuseman.payloadbuilder</groupId>
+                <artifactId>payloadbuilder-core</artifactId>
+                <version>${payloadbuilder.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>se.kuseman.payloadbuilder</groupId>
+                <artifactId>payloadbuilder-catalog</artifactId>
+                <version>${payloadbuilder.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -236,6 +252,7 @@
         <module>backend-contract</module>
         <module>backend-core</module>
         <module>backend-lib-queryengine-jdbc-foundation</module>
+        <module>backend-lib-queryengine-payloadbuilder-foundation</module>
         <module>backend-lib-queryengine-sql-parser</module>
         <module>backend-transport-stdio</module>
         <module>backend-runner</module>

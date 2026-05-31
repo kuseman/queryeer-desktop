@@ -1,0 +1,15 @@
+package com.queryeer.backend.queryengine.payloadbuilder.runtime;
+
+import com.queryeer.backend.api.BackendPlugin;
+import com.queryeer.backend.api.BackendPluginContext;
+import com.queryeer.backend.api.PluginDescriptor;
+
+public final class PayloadbuilderFoundationRuntimePlugin implements BackendPlugin
+{
+    @Override
+    public void activate(BackendPluginContext context, PluginDescriptor descriptor)
+    {
+        context.logger()
+                .info("Activated payloadbuilder foundation runtime plugin");
+    }
+}

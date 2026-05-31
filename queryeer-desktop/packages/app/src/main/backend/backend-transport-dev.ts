@@ -22,6 +22,7 @@ export class DevBackendTransport extends StdioBackendTransportBase {
   private static readonly builtinBackendModules = [
     "backend-runner",
     "backend-lib-queryengine-jdbc-foundation",
+    "backend-lib-queryengine-payloadbuilder-foundation",
     "backend-lib-queryengine-sql-parser",
     "backend-plugin-jdbc",
     "backend-plugin-payloadbuilder",

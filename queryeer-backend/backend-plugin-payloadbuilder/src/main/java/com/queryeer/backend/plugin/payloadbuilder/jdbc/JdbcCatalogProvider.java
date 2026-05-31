@@ -6,15 +6,15 @@ import java.util.Map;
 import java.util.Objects;
 
 import com.queryeer.backend.api.PayloadUtils;
-import com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderCatalogProvider;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
 import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
+import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
+import se.kuseman.payloadbuilder.api.execution.IQuerySession;
 import se.kuseman.payloadbuilder.catalog.jdbc.JdbcCatalog;
-import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
-public final class JdbcCatalogProvider implements PayloadbuilderCatalogProvider
+public final class JdbcCatalogProvider implements PayloadbuilderCatalogProviderContributor
 {
     private static final String KEY_CONNECTION_ID = "connectionId";
     private static final String KEY_DATABASE = "database";
@@ -42,15 +42,15 @@ public final class JdbcCatalogProvider implements PayloadbuilderCatalogProvider
     }
 
     @Override
-    public Map<String, Object> buildCatalogPatch(QuerySession session, String alias, Map<String, Object> inputProperties)
+    public Map<String, Object> buildCatalogPatch(IQuerySession session, String alias, Map<String, Object> inputProperties)
     {
         // Generic input-property comparison covers database (USE database) etc.
         // The URL/driver/credentials are connection-config-derived and don't change during execution.
-        return PayloadbuilderCatalogProvider.compareInputProperties(session, alias, inputProperties);
+        return PayloadbuilderCatalogProviderContributor.compareInputProperties(session, alias, inputProperties);
     }
 
     @Override
-    public void injectProperties(QuerySession querySession, String alias, Map<String, Object> properties)
+    public void injectProperties(IQuerySession querySession, String alias, Map<String, Object> properties)
     {
         String connectionId = stringValue(properties, KEY_CONNECTION_ID);
 

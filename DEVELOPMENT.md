@@ -119,9 +119,9 @@ npm run build
 npm run test:integration
 ```
 
-### Adding a New Backend Dialect Plugin
+### Adding a New Backend Plugin
 
-When scaffolding a new backend dialect plugin, the following files/registrations are required beyond the Maven module itself:
+When scaffolding a new backend plugin, the following files/registrations are required beyond the Maven module itself:
 
 1. **Backend module `src/dist/plugin.json`** — Production manifest template (Maven-filtered)
 2. **Dev manifest** `plugins/builtin/<pluginId>/plugin.json` — Points at `target/classes` + deps
@@ -130,6 +130,7 @@ When scaffolding a new backend dialect plugin, the following files/registrations
 5. **`queryeer-desktop/src/main/backend/backend-transport-dev.ts`** — Add to `builtinBackendModules`
 6. **Desktop plugin files** under `src/plugins/<pluginId>/` — `module.ts`, `plugin.tsx`, `ConnectionForm.tsx`
 7. **Parent `pom.xml`** — Add `<module>` to the modules list
+8. **`.github/workflows/release.yml`** — If the module must be published to Maven Central (e.g. foundation libraries for external plugin authors), add its Maven coordinate to the `MAVEN_CENTRAL_PROJECTS` env var in the `publish-maven-central` job. If other modules need it as a build dependency during publish, also add it to `MAVEN_CENTRAL_BUILD_PROJECTS`.
 
 ### Plugin Discovery Modes
 

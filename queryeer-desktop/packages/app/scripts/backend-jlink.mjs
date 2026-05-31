@@ -12,6 +12,7 @@ const mvnwPath = join(backendRoot, mvnw);
 const backendModules = [
   "backend-runner",
   "backend-lib-queryengine-jdbc-foundation",
+  "backend-lib-queryengine-payloadbuilder-foundation",
   "backend-lib-queryengine-sql-parser",
   "backend-plugin-jdbc",
   "backend-plugin-payloadbuilder",

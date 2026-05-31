@@ -11,14 +11,14 @@ import java.util.Set;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.SettingsModule;
-import com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderCatalogProvider;
+import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
+import se.kuseman.payloadbuilder.api.execution.IQuerySession;
 import se.kuseman.payloadbuilder.api.execution.ValueVector;
 import se.kuseman.payloadbuilder.catalog.es.ESCatalog;
-import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
-public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalogProvider
+public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalogProviderContributor
 {
     private static final String LIST_INDICES_ACTION = "payloadbuilder.es.listIndices";
     private static final String ES_MODULE_ID = "core.queryengine.payloadbuilder.elasticsearch";
@@ -42,7 +42,7 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
     }
 
     @Override
-    public void injectProperties(QuerySession session, String alias, Map<String, Object> properties)
+    public void injectProperties(IQuerySession session, String alias, Map<String, Object> properties)
     {
         String connectionId = stringValue(properties, KEY_CONNECTION_ID);
         ElasticsearchConnection connection = getConnection(connectionId);
@@ -104,9 +104,9 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
     }
 
     @Override
-    public Map<String, Object> buildCatalogPatch(QuerySession session, String alias, Map<String, Object> inputProperties)
+    public Map<String, Object> buildCatalogPatch(IQuerySession session, String alias, Map<String, Object> inputProperties)
     {
-        Map<String, Object> changed = new LinkedHashMap<>(PayloadbuilderCatalogProvider.compareInputProperties(session, alias, inputProperties));
+        Map<String, Object> changed = new LinkedHashMap<>(PayloadbuilderCatalogProviderContributor.compareInputProperties(session, alias, inputProperties));
 
         // If the connectionId resolved to a native endpoint that the session changed during execution,
         // find which connectionId now matches the session's endpoint and report that instead.
