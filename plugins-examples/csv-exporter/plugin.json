@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "example.csv-exporter",
+  "name": "CSV Exporter",
+  "version": "0.1.0",
+  "description": "Export query result tables as CSV via the table output context menu",
+  "frontend": {
+    "entryModule": "./dist/plugin.js"
+  }
+}

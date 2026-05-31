@@ -84,7 +84,7 @@ function writeReleaseSection(lines, version, categories) {
 function generateForGithubRelease() {
   const releaseVersion = (process.env.QUERYEER_RELEASE_VERSION ?? readPackageVersion()).trim();
   const fromTag = process.env.QUERYEER_CHANGELOG_FROM_REF?.trim() || latestTagBeforeHead();
-  const categories = fromTag ? commitsBetween(fromTag) : commitsSince("");
+  const categories = fromTag ? commitsBetween(fromTag, "HEAD") : commitsSince("");
   const lines = ["# Queryeer Changelog"];
   writeReleaseSection(lines, releaseVersion, categories);
   writeChangelog(lines);

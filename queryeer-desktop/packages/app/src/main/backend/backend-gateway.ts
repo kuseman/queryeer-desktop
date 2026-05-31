@@ -725,7 +725,7 @@ export class BackendGateway {
     source: "gateway" | "transport" | "backend",
     message: string
   ): void {
-    if (!this.logFlowEnabled && level !== "info") {
+    if (!this.logFlowEnabled && level === "trace") {
       return;
     }
     this.logBuffer.append({ level, source, message: redactLogMessage(message) });

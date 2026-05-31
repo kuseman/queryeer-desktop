@@ -209,6 +209,7 @@ class EditorRegistryHostImpl implements EditorRegistryHost {
       }
     };
   }
+
 }
 
 class AssistantRegistryImpl implements AssistantRegistry {

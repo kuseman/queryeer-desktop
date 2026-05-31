@@ -61,6 +61,16 @@ jobs:
       - name: Run desktop build
         run: npm run build
 
+      - name: Build frontend example plugins
+        run: |
+          for dir in hello-world-panel custom-editor csv-exporter; do
+            echo "::group::Building $dir"
+            cd "${{ github.workspace }}/plugins-examples/$dir"
+            npm install --no-audit --no-fund --ignore-scripts
+            npm run package
+            echo "::endgroup::"
+          done
+
   backend-validation:
     name: Backend Verify
     runs-on: ubuntu-latest
@@ -75,10 +85,28 @@ jobs:
           distribution: "zulu"
           cache: maven
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
       - name: Make Maven wrapper executable
         run: chmod +x ./queryeer-backend/mvnw
 
-      - name: Run backend clean verify
-        run: ./queryeer-backend/mvnw -f queryeer-backend/pom.xml clean verify
+      - name: Run backend clean install
+        run: ./queryeer-backend/mvnw -f queryeer-backend/pom.xml clean install
+
+      - name: Build backend example plugins
+        run: |
+          for dir in jdbc-dialect payloadbuilder-catalog; do
+            echo "::group::Building $dir"
+            cd "${{ github.workspace }}/plugins-examples/$dir"
+            chmod +x backend/mvnw
+            if [ -f package.json ]; then
+              npm install --no-audit --no-fund --ignore-scripts
+            fi
+            npm run package
+            echo "::endgroup::"
+          done
 
 

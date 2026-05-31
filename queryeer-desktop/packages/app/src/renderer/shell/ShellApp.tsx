@@ -12,7 +12,7 @@ import type { CommandExecutionResult } from "@queryeer/api/plugin/Plugin";
 import "@queryeer/api/shell/Api";
 import { CoreMenuBar } from "../../plugins/core.menu/MenuBar";
 import type { RendererWorkspaceService } from "../workspace/workspace-service";
-import { Toolbar, StatusBar, Sidebar, SidebarDivider, EditorTabs, EditorPane } from "../../plugins/core.layout";
+import { Toolbar, StatusBar, Sidebar, SidebarDivider, EditorTabs, EditorPane, PluginErrorBoundary } from "../../plugins/core.layout";
 import { SettingsModalHost } from "../../plugins/core.settings/SettingsModalHost";
 import { InputDialogHost } from "../../plugins/core.dialog/InputDialogHost";
 import { MessageDialogHost } from "../../plugins/core.dialog/MessageDialogHost";
@@ -792,8 +792,15 @@ export function ShellApp({
           </div>
           <div className="shell-panel-content">
             {activePanelTab
-              ? panelTabs.find((tab) => tab.id === activePanelTab)?.render()
-              : panelTabs[0]?.render()}
+              ? (
+                <PluginErrorBoundary pluginId={activePanelTab}>
+                  {panelTabs.find((tab) => tab.id === activePanelTab)?.render()}
+                </PluginErrorBoundary>
+              ) : (
+                <PluginErrorBoundary pluginId={panelTabs[0]?.id ?? "panel"}>
+                  {panelTabs[0]?.render()}
+                </PluginErrorBoundary>
+              )}
           </div>
         </section>
       )}

@@ -1,4 +1,6 @@
 import { PluginHost } from "../../core/plugin-runtime/PluginHost";
+import { FrameworkEditor } from "../../plugins/core.editor/texteditor/FrameworkEditor";
+import { getNotificationService } from "../../plugins/core.notification/notification-service";
 import type { FileBackendSync } from "../../core/plugin-runtime/FileMediator";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import { toPluginManifestFile } from "@queryeer/api/plugin/PluginManifestFile";
@@ -33,6 +35,26 @@ import { hasActiveQueryPlanDialect } from "../../plugins/core.queryengine/query-
 
 export async function bootstrapShell() {
   const chain = createContextChain();
+
+  // Fallback scope — provides default "inactive" values for all standard when-expression
+  // variables so that getEffectiveContext() always returns them. Active scopes (editor,
+  // backend, file, etc.) override these at higher priority levels.
+  chain.register({
+    id: "defaults",
+    priority: 0,
+    context: {
+      languageId: undefined,
+      "activeFile.mimeType": undefined,
+      selectedText: "",
+      hasSelection: false,
+      hasActiveFile: false,
+      hasActiveTextEditor: false,
+      editorTextFocus: false,
+      hasActiveQueryExecutableFile: false,
+      hasActiveQueryPlanDialect: false,
+      backendHealthy: false,
+    }
+  });
 
   // Backend health context as the base workbench scope.
   const commandContext = createBackendCommandContext();
@@ -183,7 +205,8 @@ export async function bootstrapShell() {
     muteFileWatcherPath: (uri, durationMs) => fileWatcher.mutePath(uri, durationMs),
     resolveFileContent,
     showSaveDialog: (options) => window.appShell.showDialogSave(options),
-    getCommandContextValues: () => chain.getEffectiveContext()
+    getCommandContextValues: () => chain.getEffectiveContext(),
+    frameworkEditor: FrameworkEditor
   });
 
   filesRegistry = host.getFilesRegistry();
@@ -224,6 +247,13 @@ export async function bootstrapShell() {
   const externalManifests = externalFrontendPlugins.map(toPluginManifestFile);
 
   const discovery = await discoverPluginModules(externalManifests);
+  for (const err of discovery.loadErrors) {
+    getNotificationService()?.notify({
+      title: `Plugin failed to load: ${err.pluginId}`,
+      message: err.message,
+      severity: "error"
+    });
+  }
   for (const pluginModule of discovery.modules) {
     host.register(pluginModule.plugin);
   }

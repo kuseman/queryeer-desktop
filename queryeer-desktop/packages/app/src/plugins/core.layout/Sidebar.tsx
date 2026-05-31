@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { LayoutViewContribution, SidebarZone } from "@queryeer/api/extensions/LayoutExtension";
+import PluginErrorBoundary from "./PluginErrorBoundary";
 
 type SidebarProps = {
   views: LayoutViewContribution[];
@@ -203,7 +204,15 @@ function CollapsiblePanel({
           </div>
         )}
       </header>
-      {isOpen && <div className="panel-content">{view.render()}</div>}
+      {isOpen && (
+        <div className="panel-content">
+          <PluginErrorBoundary pluginId={view.id} pluginName={view.title}>
+            {view.render()}
+          </PluginErrorBoundary>
+        </div>
+      )}
     </section>
   );
 }
+
+

@@ -581,6 +581,25 @@
   outline-offset: 1px;
 }
 
+.plugin-error-boundary {
+  padding: 8px;
+  color: var(--text-2);
+  font-size: var(--ui-font-size-xs);
+}
+
+.plugin-error-boundary-title {
+  font-weight: 600;
+  color: #ef4444;
+  margin: 0 0 4px;
+}
+
+.plugin-error-boundary-message {
+  margin: 0;
+  word-break: break-all;
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  font-size: var(--ui-font-size-xs);
+}
+
 @media (max-width: 640px) {
   .shell-sidebar {
     overflow: visible;

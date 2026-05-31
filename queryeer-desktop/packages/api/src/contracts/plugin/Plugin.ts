@@ -10,8 +10,10 @@ import type { TooltipRegistry } from "../extensions/TooltipExtension.js";
 import type { SettingsRegistry } from "../settings/SettingsExtension.js";
 import type { QuickCommandRegistry } from "../extensions/QuickCommandExtension.js";
 import type { OutlineRegistry } from "../extensions/OutlineExtension.js";
-import type { EditorRegistry } from "../editor/EditorCapability.js";
+import type { ComponentType } from "react";
+import type { EditorRegistry, FrameworkEditorProps } from "../editor/EditorCapability.js";
 import type { ContextMenuRegistry } from "../extensions/ContextMenuExtension.js";
+import type { PayloadbuilderCatalogRegistry } from "../queryengine/PayloadbuilderCatalogExtension.js";
 import type { TableOutputContextMenuRegistry } from "../queryengine/TableOutputContextMenuExtension.js";
 import type { JdbcTreeContextMenuRegistry } from "../queryengine/JdbcTreeContextMenuExtension.js";
 import type { GraphNodeTypeRegistry } from "../graph/GraphNodeTypeExtension.js";
@@ -51,6 +53,10 @@ export type PluginContext = {
   about: AboutExtension;
   notifications: NotificationService;
   assistant: AssistantRegistry;
+  payloadbuilderCatalog: PayloadbuilderCatalogRegistry;
+  components: {
+    FrameworkEditor: ComponentType<FrameworkEditorProps>;
+  };
 };
 
 export type CommandExecutionResult = {

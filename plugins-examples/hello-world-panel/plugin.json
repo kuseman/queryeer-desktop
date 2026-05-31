@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "example.hello-world",
+  "name": "Hello World Panel",
+  "version": "0.1.0",
+  "description": "A minimal example plugin that adds a Hello World sidebar panel, a command, and a tooltip section",
+  "frontend": {
+    "entryModule": "./dist/plugin.js"
+  }
+}

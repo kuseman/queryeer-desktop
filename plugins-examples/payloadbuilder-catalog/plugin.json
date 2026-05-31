@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "example.payloadbuilder-catalog",
+  "name": "Fake Payloadbuilder Catalog",
+  "version": "0.1.0",
+  "description": "A Payloadbuilder catalog example contributing a fake table and table-valued function",
+  "dependencies": ["queryengine.payloadbuilder"],
+  "providesCapabilities": ["example.fake.catalog"],
+  "requiredCapabilities": ["queryengine.payloadbuilder.catalog"],
+  "backend": {
+    "entrypointClass": "com.queryeer.example.catalog.FakeCatalogBackendPlugin"
+  },
+  "frontend": {
+    "entryModule": "./dist/plugin.js"
+  }
+}

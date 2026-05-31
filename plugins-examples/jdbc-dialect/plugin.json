@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "example.jdbc-dialect",
+  "name": "Example H2 JDBC Dialect",
+  "version": "0.1.0",
+  "description": "An example JDBC dialect plugin for H2 in-memory database, demonstrating how to write a backend-only JDBC dialect plugin",
+  "dependencies": ["queryengine.jdbc"],
+  "providesCapabilities": ["example.jdbc.dialect.h2"],
+  "requiredCapabilities": ["queryengine.jdbc.connection"],
+  "backend": {
+    "entrypointClass": "com.queryeer.example.jdbc.h2.H2DialectBackendPlugin"
+  }
+}

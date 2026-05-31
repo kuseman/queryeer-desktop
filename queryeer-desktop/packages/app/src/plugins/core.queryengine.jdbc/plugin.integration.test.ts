@@ -209,11 +209,15 @@ function createContext(): PluginContext {
     },
     editors: {
       getActiveEditor: vi.fn(() => null),
+      setActiveEditor: vi.fn(),
       onActiveEditorChanged: vi.fn(() => ({ dispose: vi.fn() }))
     },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    components: { FrameworkEditor: vi.fn() as any },
     about: { registerChangelog: vi.fn() },
     notifications: createNotificationMock(),
-    assistant: createAssistantRegistryMock()
+    assistant: createAssistantRegistryMock(),
+    payloadbuilderCatalog: { registerContribution: vi.fn() }
   };
 }
 

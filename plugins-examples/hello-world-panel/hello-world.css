@@ -1,0 +1,38 @@
+.hello-world-panel {
+  padding: 16px;
+}
+.hello-world-panel h3 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.hello-world-panel p {
+  margin: 0 0 12px 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.hello-world-panel ul {
+  margin: 0 0 16px 0;
+  padding-left: 20px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+.hello-world-panel code {
+  font-size: 11px;
+  background: var(--bg-subtle);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.hello-world-panel button {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.hello-world-panel button:hover {
+  background: var(--bg-hover);
+}
