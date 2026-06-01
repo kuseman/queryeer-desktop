@@ -26,6 +26,7 @@ export * from "./contracts/plugin/ExternalFrontendPluginManifest.js";
 export * from "./contracts/plugin/Plugin.js";
 export * from "./contracts/plugin/PluginManifest.js";
 export * from "./contracts/plugin/PluginManifestFile.js";
+export * from "./contracts/plugin/PluginInventory.js";
 export * from "./contracts/plugin/PluginModule.js";
 export * from "./contracts/queryengine/JdbcDialectExtension.js";
 export * from "./contracts/queryengine/JdbcNavigationTypes.js";

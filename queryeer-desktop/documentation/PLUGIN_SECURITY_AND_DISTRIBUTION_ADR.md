@@ -67,6 +67,8 @@ Add a dedicated UI surface for:
 - Install from local ZIP.
 - Diagnostics (last load error, crash loop disabled reason).
 
+Current incremental implementation: the Plugin Manager lists managed external plugins only and supports restart-based enable/disable. Builtins are omitted. Install, uninstall, hash verification, signatures, and crash-loop auto-disable remain Phase 1 follow-up work.
+
 ### 2) Managed installation flow
 
 Install pipeline for ZIP:
@@ -80,7 +82,9 @@ Install pipeline for ZIP:
 
 ### 3) Lockfile
 
-Introduce `plugins-lock.json` under Queryeer user data.
+Introduce `plugins-lock.json` under Queryeer's user settings directory.
+
+Current incremental implementation records `id`, `name`, `version`, `enabled`, `source`, and `restartRequired`. Integrity and signing fields are reserved for the secure install pipeline.
 
 Draft shape:
 

@@ -18,6 +18,7 @@ class BackendRunnerModuleTest
         String previousSettingsPath = System.getProperty("queryeer.settings.path");
         String previousPluginsDir = System.getProperty("queryeer.plugins.dir");
         String previousSafeMode = System.getProperty("queryeer.plugins.safeMode");
+        String previousDisabledIds = System.getProperty("queryeer.plugins.disabledIds");
         try
         {
             System.setProperty("queryeer.app.dir", " C:/appdata ");
@@ -25,6 +26,7 @@ class BackendRunnerModuleTest
             System.setProperty("queryeer.settings.dir", " C:/appdata/settings ");
             System.setProperty("queryeer.settings.path", " C:/appdata/settings/core.queryengine.jdbc.json ");
             System.setProperty("queryeer.plugins.safeMode", "true");
+            System.setProperty("queryeer.plugins.disabledIds", " external.one, external.two ");
             System.clearProperty("queryeer.plugins.dir");
 
             Map<String, String> values = BackendRunnerModule.resolveConfigValues();
@@ -36,6 +38,7 @@ class BackendRunnerModuleTest
             Assertions.assertEquals(Path.of("C:/appdata", "plugins")
                     .toString(), values.get("queryeer.plugins.dir"));
             Assertions.assertEquals("true", values.get("queryeer.plugins.safeMode"));
+            Assertions.assertEquals("external.one, external.two", values.get("queryeer.plugins.disabledIds"));
         }
         finally
         {
@@ -45,7 +48,30 @@ class BackendRunnerModuleTest
             restoreProperty("queryeer.settings.path", previousSettingsPath);
             restoreProperty("queryeer.plugins.dir", previousPluginsDir);
             restoreProperty("queryeer.plugins.safeMode", previousSafeMode);
+            restoreProperty("queryeer.plugins.disabledIds", previousDisabledIds);
         }
+    }
+
+    @Test
+    void parseDisabledPluginIdsTrimsAndDeduplicatesCsv()
+    {
+        Assertions.assertEquals(List.of("external.one", "external.two"), BackendRunnerModule.parseDisabledPluginIds(" external.one, , external.two, external.one ")
+                .stream()
+                .toList());
+    }
+
+    @Test
+    void filterDisabledExternalPluginsRemovesOnlyConfiguredExternalIds()
+    {
+        DiscoveredPlugin first = discovered("external.one", Path.of("plugins", "external-one"));
+        DiscoveredPlugin second = discovered("external.two", Path.of("plugins", "external-two"));
+
+        List<DiscoveredPlugin> filtered = BackendRunnerModule.filterDisabledExternalPlugins(List.of(first, second), BackendRunnerModule.parseDisabledPluginIds("external.two"));
+
+        Assertions.assertEquals(List.of("external.one"), filtered.stream()
+                .map(plugin -> plugin.manifest()
+                        .id())
+                .toList());
     }
 
     @Test
