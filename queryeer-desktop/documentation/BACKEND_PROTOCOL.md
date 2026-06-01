@@ -853,6 +853,8 @@ Backend bootstrap configuration (desktop -> backend process env -> backend confi
 - `QUERYEER_APP_DIR` maps to `queryeer.app.dir`.
 - `QUERYEER_SETTINGS_DIR` maps to `queryeer.settings.dir`.
 - `QUERYEER_SETTINGS_PATH` maps to `queryeer.settings.path`.
+- Desktop passes `queryeer.plugins.dir` as `${queryeer.app.dir}/plugins` for per-user external plugins.
+- Desktop passes `queryeer.plugins.safeMode=true` when launched with `--safe-mode`; backend then skips external plugin activation and still loads builtins.
 
 JDBC startup preload behavior:
 
@@ -872,7 +874,7 @@ Current integration notes:
 
 - Desktop default mode remains `mock-stdio`; `QUERYEER_BACKEND_STDIO=1` enables stdio-process mode.
 - Backend builtin query engines are discovered from real `plugin.json` manifests under `plugins/builtin` in dev mode. Dev manifests point at backend module `target/classes` plus Maven-generated `target/queryeer-plugin-deps.txt` files.
-- External plugin discovery uses `QUERYEER_PLUGINS_PATH` for both backend (runner side) and frontend (desktop side).
+- External plugin discovery uses Queryeer's per-user managed plugins directory (`${queryeer.app.dir}/plugins`) for both backend (runner side) and frontend (desktop side). Builtin plugins are discovered from packaged `plugins/builtin` manifests and are not user-managed plugins.
 
 See Java transport implementation:
 

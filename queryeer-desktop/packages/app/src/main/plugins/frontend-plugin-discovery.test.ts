@@ -48,15 +48,21 @@ async function writeZipEntries(
 
 describe("discoverExternalFrontendPlugins", () => {
   afterEach(() => {
-    delete process.env.QUERYEER_PLUGINS_PATH;
     for (const root of tempRoots.splice(0, tempRoots.length)) {
       rmSync(root, { recursive: true, force: true });
     }
   });
 
+  it("returns no plugins when managed plugin directory is missing", async () => {
+    const root = resolve(createTempRoot(), "missing");
+
+    const discovered = await discoverExternalFrontendPlugins(root);
+
+    expect(discovered).toEqual([]);
+  });
+
   it("discovers frontend plugin from folder source", async () => {
     const root = createTempRoot();
-    process.env.QUERYEER_PLUGINS_PATH = root;
 
     const pluginDir = writeFolderPlugin(root, "folder-plugin", {
       schemaVersion: 1,
@@ -66,7 +72,7 @@ describe("discoverExternalFrontendPlugins", () => {
       frontend: { entryModule: "frontend/module.mjs" }
     });
 
-    const discovered = await discoverExternalFrontendPlugins();
+    const discovered = await discoverExternalFrontendPlugins(root);
 
     expect(discovered).toHaveLength(1);
     expect(discovered[0]).toMatchObject({
@@ -78,7 +84,6 @@ describe("discoverExternalFrontendPlugins", () => {
 
   it("discovers frontend plugin from zip source", async () => {
     const root = createTempRoot();
-    process.env.QUERYEER_PLUGINS_PATH = root;
 
     const zipPath = await writeZipPlugin(root, "zip-plugin.zip", {
       schemaVersion: 1,
@@ -88,7 +93,7 @@ describe("discoverExternalFrontendPlugins", () => {
       frontend: { entryModule: "frontend/module.mjs" }
     });
 
-    const discovered = await discoverExternalFrontendPlugins();
+    const discovered = await discoverExternalFrontendPlugins(root);
 
     expect(discovered).toHaveLength(1);
     expect(discovered[0]?.sourcePath).toBe(zipPath);
@@ -99,7 +104,6 @@ describe("discoverExternalFrontendPlugins", () => {
 
   it("prefers first plugin for duplicate id across sources", async () => {
     const root = createTempRoot();
-    process.env.QUERYEER_PLUGINS_PATH = root;
 
     writeFolderPlugin(root, "00-folder-plugin", {
       schemaVersion: 1,
@@ -117,7 +121,7 @@ describe("discoverExternalFrontendPlugins", () => {
       frontend: { entryModule: "frontend/module.mjs" }
     });
 
-    const discovered = await discoverExternalFrontendPlugins();
+    const discovered = await discoverExternalFrontendPlugins(root);
 
     expect(discovered).toHaveLength(1);
     expect(discovered[0]?.name).toBe("Folder First");
@@ -125,7 +129,6 @@ describe("discoverExternalFrontendPlugins", () => {
 
   it("ignores zip plugin without root manifest", async () => {
     const root = createTempRoot();
-    process.env.QUERYEER_PLUGINS_PATH = root;
 
     await writeZipEntries(root, "nested-manifest.zip", {
       "nested/plugin.json": JSON.stringify({
@@ -138,13 +141,12 @@ describe("discoverExternalFrontendPlugins", () => {
       "nested/frontend/module.mjs": "export const pluginModule = {};\n"
     });
 
-    const discovered = await discoverExternalFrontendPlugins();
+    const discovered = await discoverExternalFrontendPlugins(root);
     expect(discovered).toHaveLength(0);
   });
 
   it("ignores zip plugin with invalid manifest shape", async () => {
     const root = createTempRoot();
-    process.env.QUERYEER_PLUGINS_PATH = root;
 
     await writeZipEntries(root, "invalid-manifest.zip", {
       "plugin.json": JSON.stringify({
@@ -157,13 +159,12 @@ describe("discoverExternalFrontendPlugins", () => {
       "frontend/module.mjs": "export const pluginModule = {};\n"
     });
 
-    const discovered = await discoverExternalFrontendPlugins();
+    const discovered = await discoverExternalFrontendPlugins(root);
     expect(discovered).toHaveLength(0);
   });
 
   it("ignores zip plugin whose frontend entry escapes extraction root", async () => {
     const root = createTempRoot();
-    process.env.QUERYEER_PLUGINS_PATH = root;
 
     await writeZipEntries(root, "escape-entry.zip", {
       "plugin.json": JSON.stringify({
@@ -176,7 +177,7 @@ describe("discoverExternalFrontendPlugins", () => {
       "outside/module.mjs": "export const pluginModule = {};\n"
     });
 
-    const discovered = await discoverExternalFrontendPlugins();
+    const discovered = await discoverExternalFrontendPlugins(root);
     expect(discovered).toHaveLength(0);
   });
 });

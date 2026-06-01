@@ -59,6 +59,7 @@ This means that a normal `npm run dev` is usually enough. If Java compilation fa
 
 The backend receives Electron's user-data directory as `QUERYEER_APP_DIR` / `queryeer.app.dir`. Runtime data and user-provided native/shared libraries live there, not in the repository root:
 
+- `plugins/` for per-user external plugins
 - `libNative/` for native libraries such as `mssql-jdbc_auth-*.dll`
 - `libShared/` for shared runtime jars such as JDBC drivers when supplied outside development dependencies
 
@@ -132,16 +133,11 @@ When scaffolding a new backend plugin, the following files/registrations are req
 7. **Parent `pom.xml`** — Add `<module>` to the modules list
 8. **`.github/workflows/release.yml`** — If the module must be published to Maven Central (e.g. foundation libraries for external plugin authors), add its Maven coordinate to the `MAVEN_CENTRAL_PROJECTS` env var in the `publish-maven-central` job. If other modules need it as a build dependency during publish, also add it to `MAVEN_CENTRAL_BUILD_PROJECTS`.
 
-### Plugin Discovery Modes
+### Plugin Discovery
 
-The backend supports plugin discovery modes for development and troubleshooting:
+Queryeer always loads builtin plugins first and then per-user external plugins from the managed app-data `plugins/` directory. Builtins are platform components and are never user-disableable.
 
-- `auto`: builtin plugins by default; builtin plus external plugins when `QUERYEER_PLUGINS_PATH` is set
-- `builtin`: builtin plugins only
-- `mixed`: builtin plus external plugins
-- `external`: external plugins only, mainly for isolation/debugging
-
-Most development should use the default `auto` mode.
+Use `--safe-mode` to start with external plugin activation disabled. Safe mode still starts builtin plugins so the application can recover from a broken external plugin without losing core functionality.
 
 ### Release Flow
 

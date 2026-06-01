@@ -8,6 +8,8 @@ import { resolveBackendJvmArgs } from "./backend-jvm-options.js";
 type BackendLaunchContext = {
   appDir?: string;
   settingsDirPath: string;
+  pluginsDirPath?: string;
+  pluginsSafeMode?: boolean;
 };
 
 export type ProdBackendLaunchPaths = {
@@ -74,6 +76,12 @@ export class ProdBackendTransport extends StdioBackendTransportBase {
     const settingsDirPath = this.launchContext?.settingsDirPath ?? process.env.QUERYEER_SETTINGS_DIR;
     if (settingsDirPath) {
       jvmArgs.push(`-Dqueryeer.settings.dir=${settingsDirPath}`);
+    }
+    if (this.launchContext?.pluginsDirPath) {
+      jvmArgs.push(`-Dqueryeer.plugins.dir=${this.launchContext.pluginsDirPath}`);
+    }
+    if (this.launchContext?.pluginsSafeMode) {
+      jvmArgs.push("-Dqueryeer.plugins.safeMode=true");
     }
     jvmArgs.push(...await resolveBackendJvmArgs(settingsDirPath));
     jvmArgs.push(

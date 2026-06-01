@@ -42,4 +42,4 @@ if (f.existsSync(targetDir)) {
 f.copyFileSync("plugin.json", p.join(dir, "plugin.json"));
 
 console.log("=== Plugin ready in dist/" + name + "/ ===");
-console.log("Copy dist/" + name + "/ to QUERYEER_PLUGINS_PATH");
+console.log("Copy dist/" + name + "/ to Queryeer's managed plugins directory");

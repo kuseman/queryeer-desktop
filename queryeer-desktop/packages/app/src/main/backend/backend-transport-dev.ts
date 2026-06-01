@@ -14,6 +14,8 @@ export type DevTransportState = {
 type BackendLaunchContext = {
   appDir: string;
   settingsDirPath: string;
+  pluginsDirPath?: string;
+  pluginsSafeMode?: boolean;
 };
 
 export class DevBackendTransport extends StdioBackendTransportBase {
@@ -84,12 +86,14 @@ export class DevBackendTransport extends StdioBackendTransportBase {
     const appDirArg = appDir ? `-Dqueryeer.app.dir=${appDir}` : null;
     const settingsDirPath = this.launchContext?.settingsDirPath ?? process.env.QUERYEER_SETTINGS_DIR;
     const settingsDirArg = settingsDirPath ? `-Dqueryeer.settings.dir=${settingsDirPath}` : null;
+    const pluginsDirArg = this.launchContext?.pluginsDirPath ? `-Dqueryeer.plugins.dir=${this.launchContext.pluginsDirPath}` : null;
+    const pluginsSafeModeArg = this.launchContext?.pluginsSafeMode ? "-Dqueryeer.plugins.safeMode=true" : null;
     const backendJvmArgs = await resolveBackendJvmArgs(settingsDirPath);
     const classpath = this.resolveRunnerClasspath(repoRoot);
     const args = [
       "--enable-native-access=ALL-UNNAMED",
       ...backendJvmArgs,
-      ...[debugArgs, libNativeArg, appDirArg, settingsDirArg].filter((arg): arg is string => Boolean(arg)),
+      ...[debugArgs, libNativeArg, appDirArg, settingsDirArg, pluginsDirArg, pluginsSafeModeArg].filter((arg): arg is string => Boolean(arg)),
       "-cp",
       classpath,
       "com.queryeer.backend.runner.BackendRunnerApp"

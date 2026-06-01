@@ -12,7 +12,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -161,11 +160,26 @@ public final class BackendRunnerModule
     static Map<String, String> resolveConfigValues()
     {
         Map<String, String> values = new LinkedHashMap<>();
-        putIfPresent(values, "queryeer.app.dir", firstNonBlank(System.getProperty("queryeer.app.dir"), System.getenv("QUERYEER_APP_DIR")));
+        String appDir = firstNonBlank(System.getProperty("queryeer.app.dir"), System.getenv("QUERYEER_APP_DIR"));
+        putIfPresent(values, "queryeer.app.dir", appDir);
         putIfPresent(values, "queryeer.resources.dir", firstNonBlank(System.getProperty("queryeer.resources.dir"), System.getenv("QUERYEER_RESOURCES_DIR")));
         putIfPresent(values, "queryeer.settings.dir", firstNonBlank(System.getProperty("queryeer.settings.dir"), System.getenv("QUERYEER_SETTINGS_DIR")));
         putIfPresent(values, "queryeer.settings.path", firstNonBlank(System.getProperty("queryeer.settings.path"), System.getenv("QUERYEER_SETTINGS_PATH")));
+        String pluginsDir = firstNonBlank(System.getProperty("queryeer.plugins.dir"), defaultPluginsDir(appDir));
+        putIfPresent(values, "queryeer.plugins.dir", pluginsDir);
+        putIfPresent(values, "queryeer.plugins.safeMode", System.getProperty("queryeer.plugins.safeMode"));
         return Map.copyOf(values);
+    }
+
+    private static String defaultPluginsDir(String appDir)
+    {
+        if (appDir == null
+                || appDir.isBlank())
+        {
+            return null;
+        }
+        return Path.of(appDir.trim(), "plugins")
+                .toString();
     }
 
     private static void putIfPresent(Map<String, String> values, String key, String value)
@@ -189,31 +203,25 @@ public final class BackendRunnerModule
 
     private List<DiscoveredPlugin> discoverPlugins(PluginDiscoveryService discoveryService, BackendPlatformServices services, Path builtinsDir)
     {
-        PluginDiscoveryPlan discoveryPlan = PluginDiscoveryPlan.of(resolveDiscoveryMode(), resolvePluginPath());
-        PluginDiscoveryMode mode = discoveryPlan.effectiveMode();
+        String pluginsDir = services.config()
+                .get("queryeer.plugins.dir");
+        boolean safeMode = Boolean.parseBoolean(services.config()
+                .get("queryeer.plugins.safeMode"));
         services.logger()
-                .info(withCorrelation("Plugin discovery mode resolved to " + mode
-                                      + " (pluginPathPresent="
-                                      + discoveryPlan.pluginPath()
-                                              .isPresent()
-                                      + ")",
+                .info(withCorrelation("Plugin discovery resolved to builtins plus managed user plugins (pluginsDir=" + (pluginsDir == null
+                        || pluginsDir.isBlank() ? "not-configured"
+                                : pluginsDir) + ", safeMode=" + safeMode + ")",
                         null));
 
-        if (mode == PluginDiscoveryMode.BUILTIN)
-        {
-            return new BuiltinPluginDiscovery(discoveryService, builtinsDir).discover();
-        }
-
-        if (mode == PluginDiscoveryMode.EXTERNAL)
-        {
-            String path = discoveryPlan.requiredPathFor(PluginDiscoveryMode.EXTERNAL);
-            return discoveryService.discoverFromPath(path)
-                    .backendPlugins();
-        }
-
-        String path = discoveryPlan.requiredPathFor(PluginDiscoveryMode.MIXED);
         List<DiscoveredPlugin> builtin = new BuiltinPluginDiscovery(discoveryService, builtinsDir).discover();
-        List<DiscoveredPlugin> external = discoveryService.discoverFromPath(path)
+        if (safeMode
+                || pluginsDir == null
+                || pluginsDir.isBlank())
+        {
+            return builtin;
+        }
+
+        List<DiscoveredPlugin> external = discoveryService.discoverFromPath(pluginsDir)
                 .backendPlugins();
         return mergeDiscoveredPlugins(builtin, external);
     }
@@ -274,44 +282,12 @@ public final class BackendRunnerModule
                 String source = plugin.source() == null ? "builtin"
                         : plugin.source()
                                 .toString();
-                throw new PluginDiscoveryException("Duplicate plugin id discovered in mixed mode: " + pluginId + " (source: " + source + ")");
+                throw new PluginDiscoveryException("Duplicate external plugin id conflicts with an already discovered plugin: " + pluginId + " (source: " + source + ")");
             }
             merged.add(plugin);
         }
 
         return merged;
-    }
-
-    private Optional<String> resolvePluginPath()
-    {
-        String fromProperty = System.getProperty("queryeer.plugins.path");
-        if (fromProperty != null
-                && !fromProperty.isBlank())
-        {
-            return Optional.of(fromProperty);
-        }
-
-        String fromEnv = System.getenv("QUERYEER_PLUGINS_PATH");
-        if (fromEnv != null
-                && !fromEnv.isBlank())
-        {
-            return Optional.of(fromEnv);
-        }
-
-        return Optional.empty();
-    }
-
-    private PluginDiscoveryMode resolveDiscoveryMode()
-    {
-        String fromProperty = System.getProperty("queryeer.plugins.mode");
-        if (fromProperty != null
-                && !fromProperty.isBlank())
-        {
-            return PluginDiscoveryMode.parse(fromProperty);
-        }
-
-        String fromEnv = System.getenv("QUERYEER_PLUGINS_MODE");
-        return PluginDiscoveryMode.parse(fromEnv);
     }
 
     private RuntimeStatusResult runtimeStatusSnapshot(PluginRuntime runtime)

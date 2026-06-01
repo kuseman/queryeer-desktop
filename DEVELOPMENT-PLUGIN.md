@@ -27,7 +27,7 @@ Queryeer runs in three co-operating processes:
 ┌────────────────────────────────────────────────────┐
 │                   Electron Main                    │
 │  • Discovers external plugins from filesystem      │
-│  • Scans QUERYEER_PLUGINS_PATH for plugin.json     │
+│  • Scans userData/plugins for plugin.json          │
 │  • Manages application lifecycle, windows, menus   │
 └────────────┬───────────────────────────┬───────────┘
              │ IPC (contextBridge)       │ Stdio (NDJSON)
@@ -133,16 +133,16 @@ Capability Validation → Topological Sort → Activation
 
 **Frontend (renderer process):**
 - Internal plugins are discovered via Vite's `import.meta.glob("./*/module.ts", { eager: true })` at build time.
-- External plugins are discovered by the **Electron main process**, which scans `QUERYEER_PLUGINS_PATH` environment variable for plugin directories and `.zip` archives containing `plugin.json` with a `frontend.entryModule`.
+- External plugins are discovered by the **Electron main process**, which scans the per-user managed plugins directory for plugin directories and `.zip` archives containing `plugin.json` with a `frontend.entryModule`.
 - The renderer fetches external manifests via IPC (`window.appShell.getExternalFrontendPlugins()`), merges them with internal manifests, and loads external modules dynamically via `import()`.
 
 **Backend (JVM process):**
-- Scans the plugins directory (configurable via `queryeer.plugins.path` / `QUERYEER_PLUGINS_PATH`) for subdirectories and `.zip` archives containing `plugin.json`.
+- Always loads builtin plugins first, then scans the per-user managed plugins directory for external plugin directories and `.zip` archives containing `plugin.json`.
 - Loads the manifest, resolves the backend entrypoint class, and creates an isolated `URLClassLoader` for the plugin's classpath.
 
 ### 3.2 Validation
 
-Manifests are validated for required fields, duplicate IDs, and schema version. External plugins with IDs that collide with internal plugins are silently dropped (internal takes priority).
+Manifests are validated for required fields, duplicate IDs, and schema version. Builtin plugins take priority; external plugins with IDs that collide with builtin/internal plugins are rejected.
 
 ### 3.3 Dependency Resolution
 
@@ -268,16 +268,15 @@ export function injectStyles(): void {
 }
 ```
 
-**Build output:** `dist/` will contain a subfolder named after the plugin directory (e.g., `dist/hello-world-panel/`) with `plugin.js` (self-contained bundle) and `plugin.json` (manifest with `entryModule: "./plugin.js"` adjusted for the deployable context). Copy that subfolder to `QUERYEER_PLUGINS_PATH` and it works as-is.
+**Build output:** `dist/` will contain a subfolder named after the plugin directory (e.g., `dist/hello-world-panel/`) with `plugin.js` (self-contained bundle) and `plugin.json` (manifest with `entryModule: "./plugin.js"` adjusted for the deployable context). Copy that subfolder to Queryeer's per-user managed plugins directory and it works as-is.
 
 ### 4.7 Installation
 
-Set the `QUERYEER_PLUGINS_PATH` environment variable to point to a directory containing your plugin folder(s):
+Copy the plugin folder into Queryeer's per-user managed plugins directory:
 
 ```bash
 # Windows (PowerShell)
-$env:QUERYEER_PLUGINS_PATH = "C:\Users\me\queryeer-plugins"
-.\Queryeer.exe
+copy-item -Recurse .\dist\hello-world-panel "$env:APPDATA\queryeer-desktop\plugins\hello-world-panel"
 ```
 
 Plugin directory structure expected by the loader:
@@ -311,23 +310,13 @@ npm run build          # → dist/plugin.js
 npm run package        # → dist/ also gets plugin.json
 
 # 6. Deploy
-# Copy the entire plugin directory to QUERYEER_PLUGINS_PATH
-copy-item -Recurse .\dist\ C:\Users\me\queryeer-plugins\my-plugin\
+# Copy the entire plugin directory to Queryeer's managed plugins directory
+copy-item -Recurse .\dist\ "$env:APPDATA\queryeer-desktop\plugins\my-plugin"
 
 # 7. Launch Queryeer — the plugin is discovered and activated automatically
 ```
 
-### 4.7 Installation
-
-Set the `QUERYEER_PLUGINS_PATH` environment variable to point to a directory containing your plugin folder(s):
-
-```bash
-# Windows (PowerShell)
-$env:QUERYEER_PLUGINS_PATH = "C:\Users\me\queryeer-plugins"
-./Queryeer.exe
-
-# or package as .zip and place in the plugins directory
-```
+ZIP archives can also be placed directly in the same managed plugins directory.
 
 ---
 
@@ -683,9 +672,9 @@ The following directories are allowed by default:
 - `queryeer-desktop/packages/app/` (renderer root)
 - `queryeer-desktop/` (project root)
 - `plugins/` (built-in plugins)
-- The `QUERYEER_PLUGINS_PATH` environment variable (if set at launch time)
+- Queryeer's default per-user managed plugins directory
 
-If you set `QUERYEER_PLUGINS_PATH` to a path **after** starting the dev server, restart the dev server so Vite picks up the new allow entry.
+If you move the per-user plugins directory outside Queryeer's default app-data location, dev-mode dynamic imports are not supported until a managed plugin serving protocol is added.
 
 In **production mode** (`file://` protocol), this restriction does not apply.
 
@@ -816,14 +805,12 @@ plugins/
 **Tip:** After running `npm run package`, the output `dist/` contains a ready-to-deploy subfolder named after the plugin. Copy it directly:
 
 ```sh
-cp -r dist/my-plugin $QUERYEER_PLUGINS_PATH/my-plugin
+cp -r dist/my-plugin "<queryeer-user-data>/plugins/my-plugin"
 ```
 
-### Environment Variables
+### Managed Plugin Directory
 
-| Variable | Description |
-|----------|-------------|
-| `QUERYEER_PLUGINS_PATH` | Path to directory containing plugin folders/archives<br>**No default.** When unset, only built-in plugins (`plugins/builtin/`) are loaded. |
+External plugins are installed per user under Queryeer's managed plugins directory. On Windows this is usually `%APPDATA%\queryeer-desktop\plugins`. Builtin plugins are platform components, are loaded separately, and are not user-manageable plugins.
 
 ### Build Configuration
 
@@ -942,6 +929,6 @@ The [`plugins-examples/`](./plugins-examples/) directory in this repository cont
 | `payloadbuilder-catalog` | Full-stack | `npm install && npm run package` (builds frontend + backend) → `dist/` | Payloadbuilder catalog, `BackendPlugin`, catalog panel |
 | `jdbc-dialect` | Backend-only | `npm run package` (runs `mvn clean package`) → `dist/` | `BackendPlugin`, `JdbcDialect`, dialect registration, connection setup |
 
-Each example's `npm run package` produces `dist/<plugin-folder>/` — copy that subfolder to `QUERYEER_PLUGINS_PATH` and restart Queryeer.
+Each example's `npm run package` produces `dist/<plugin-folder>/` — copy that subfolder to Queryeer's managed plugins directory and restart Queryeer.
 
 Refer to each example's source code and inline comments for detailed implementation guidance.
