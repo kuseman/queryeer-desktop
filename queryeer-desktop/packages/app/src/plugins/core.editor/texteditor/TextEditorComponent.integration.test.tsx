@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import type { FilesRegistry } from "@queryeer/api/files/FilesRegistry";
+import type { ContextMenuProvider } from "@queryeer/api/extensions/ContextMenuExtension";
 import { preloadMonaco } from "./MonacoTextEditorApi";
 import { TextEditorComponent } from "./TextEditorComponent";
 import { TextEditorRegistry } from "./TextEditorRegistry";
@@ -24,6 +25,10 @@ type FakeEditor = {
   onDidChangeCursorSelection: (listener: (event: unknown) => void) => { dispose: () => void };
   triggerModelContentChange: (event?: { isFlush?: boolean }) => void;
   getValue: ReturnType<typeof vi.fn>;
+  getSelections: ReturnType<typeof vi.fn>;
+  setSelections: ReturnType<typeof vi.fn>;
+  getSelection: ReturnType<typeof vi.fn>;
+  getTargetAtClientPoint: ReturnType<typeof vi.fn>;
   dispose: () => void;
 };
 
@@ -44,6 +49,12 @@ vi.mock("../../core.settings/service", () => ({
   })
 }));
 
+const getContextMenuProvidersMock = vi.hoisted(() => vi.fn<() => ContextMenuProvider[]>(() => []));
+
+vi.mock("../../../core/plugin-runtime/ExtensionRegistry", () => ({
+  getContextMenuProviders: getContextMenuProvidersMock,
+}));
+
 vi.mock("monaco-editor", () => {
   let nextEditorId = 0;
 
@@ -61,6 +72,10 @@ vi.mock("monaco-editor", () => {
       setModel: vi.fn(),
       getModel: vi.fn(() => null),
       getValue: vi.fn(() => "edited from monaco"),
+      getSelections: vi.fn(() => null),
+      setSelections: vi.fn(),
+      getSelection: vi.fn(() => null),
+      getTargetAtClientPoint: vi.fn(() => ({ position: { lineNumber: 2, column: 1 } })),
       focus: vi.fn(),
       onDidDispose: (listener) => {
         disposeListeners.push(listener);
@@ -336,5 +351,208 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
     });
 
     expect(markDirtySpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("TextEditorComponent context menu: multi-cursor selection", () => {
+  let rootElement: HTMLDivElement;
+  let root: Root;
+  let registry: TextEditorRegistry;
+  let filesById: Map<string, FileEntity>;
+
+  beforeEach(async () => {
+    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    editors.length = 0;
+    settingsValues.clear();
+    settingsSubscribers.clear();
+    modelByUri.clear();
+    getContextMenuProvidersMock.mockReturnValue([]);
+    await preloadMonaco();
+
+    class ResizeObserverMock {
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    }
+    vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+
+    rootElement = document.createElement("div");
+    document.body.appendChild(rootElement);
+    root = createRoot(rootElement);
+
+    registry = new TextEditorRegistry();
+    filesById = new Map<string, FileEntity>();
+    const mockFilesRegistry: FilesRegistry = {
+      capabilities: {
+        registerCapabilities: vi.fn(),
+        registerLabel: vi.fn(),
+        registerPreferredNewFileMimeType: vi.fn(),
+        listPreferredNewFileMimeTypes: vi.fn(() => []),
+        getLabel: vi.fn(),
+        hasCapability: vi.fn(() => false),
+        listMimeTypesByCapability: vi.fn(() => []),
+        listAllMimeTypes: vi.fn(() => []),
+        registerContentCategory: vi.fn(),
+        getContentCategory: vi.fn()
+      },
+      mimeIcons: {
+        registerMimeIcon: vi.fn(),
+        getMimeIcon: vi.fn(),
+        listMimeIcons: vi.fn(() => [])
+      },
+      openFile: vi.fn(),
+      closeFile: vi.fn(),
+      getFile: (fileId: string) => filesById.get(fileId) ?? undefined,
+      listFiles: vi.fn(() => []),
+      updateFile: vi.fn(),
+      subscribe: vi.fn(),
+      registerMimeResolver: vi.fn(),
+      registerEditorResolver: vi.fn(),
+      classifyUri: vi.fn(() => "text/plain"),
+      resolveEditor: vi.fn(),
+      getEditorState: vi.fn(),
+      setEditorState: vi.fn(),
+      markDirty: vi.fn()
+    };
+    registry.setFilesRegistry(mockFilesRegistry);
+
+    (window as unknown as { appShell: unknown }).appShell = {
+      readFile: vi.fn(async () => ({ success: true, content: "select 1" }))
+    };
+  });
+
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount();
+      await flush();
+    });
+    rootElement.remove();
+    vi.unstubAllGlobals();
+  });
+
+  it("preserves multi-cursor selection on right-click", async () => {
+    const file = makeFile({ fileId: "file-mc", uri: "file:///multi-cursor.sql", dirtyVsDisk: false });
+    filesById.set(file.fileId, file);
+
+    await act(async () => {
+      root.render(<TextEditorComponent file={file} registry={registry} />);
+      await flush();
+    });
+
+    const editor = editors[0];
+    expect(editor).toBeTruthy();
+    expect(editor.setSelections).not.toHaveBeenCalled();
+
+    const selections = [
+      { selectionStartLineNumber: 1, selectionStartColumn: 1, positionLineNumber: 1, positionColumn: 10 },
+      { selectionStartLineNumber: 5, selectionStartColumn: 1, positionLineNumber: 5, positionColumn: 20 }
+    ];
+    editor.getSelections.mockReturnValue(selections);
+
+    const container = rootElement.querySelector<HTMLElement>(".text-editor-container");
+    expect(container).toBeTruthy();
+
+    await act(async () => {
+      container!.dispatchEvent(new MouseEvent("mousedown", { button: 2, buttons: 2, cancelable: true, bubbles: true }));
+      container!.dispatchEvent(new MouseEvent("contextmenu", { button: 2, clientX: 100, clientY: 200, cancelable: true, bubbles: true }));
+      await flush();
+    });
+
+    expect(editor.setSelections).toHaveBeenCalledWith(selections);
+  });
+
+  it("does not restore selection when there is only a single cursor", async () => {
+    const file = makeFile({ fileId: "file-sc", uri: "file:///single-cursor.sql", dirtyVsDisk: false });
+    filesById.set(file.fileId, file);
+
+    await act(async () => {
+      root.render(<TextEditorComponent file={file} registry={registry} />);
+      await flush();
+    });
+
+    const editor = editors[0];
+    expect(editor).toBeTruthy();
+
+    editor.getSelections.mockReturnValue([
+      { selectionStartLineNumber: 1, selectionStartColumn: 1, positionLineNumber: 1, positionColumn: 10 }
+    ]);
+
+    const container = rootElement.querySelector<HTMLElement>(".text-editor-container");
+    expect(container).toBeTruthy();
+
+    await act(async () => {
+      container!.dispatchEvent(new MouseEvent("mousedown", { button: 2, buttons: 2, cancelable: true, bubbles: true }));
+      container!.dispatchEvent(new MouseEvent("contextmenu", { button: 2, clientX: 100, clientY: 200, cancelable: true, bubbles: true }));
+      await flush();
+    });
+
+    expect(editor.setSelections).not.toHaveBeenCalled();
+  });
+
+  it("does not restore selection when there is no selection", async () => {
+    const file = makeFile({ fileId: "file-ns", uri: "file:///no-selection.sql", dirtyVsDisk: false });
+    filesById.set(file.fileId, file);
+
+    await act(async () => {
+      root.render(<TextEditorComponent file={file} registry={registry} />);
+      await flush();
+    });
+
+    const editor = editors[0];
+    expect(editor).toBeTruthy();
+
+    editor.getSelections.mockReturnValue(null);
+
+    const container = rootElement.querySelector<HTMLElement>(".text-editor-container");
+    expect(container).toBeTruthy();
+
+    await act(async () => {
+      container!.dispatchEvent(new MouseEvent("mousedown", { button: 2, buttons: 2, cancelable: true, bubbles: true }));
+      container!.dispatchEvent(new MouseEvent("contextmenu", { button: 2, clientX: 100, clientY: 200, cancelable: true, bubbles: true }));
+      await flush();
+    });
+
+    expect(editor.setSelections).not.toHaveBeenCalled();
+  });
+
+  it("passes selection to context menu providers", async () => {
+    const file = makeFile({ fileId: "file-provider", uri: "file:///provider.sql", dirtyVsDisk: false });
+    filesById.set(file.fileId, file);
+
+    const getItemsMock = vi.fn().mockResolvedValue([]);
+    getContextMenuProvidersMock.mockReturnValue([{ id: "test", getItems: getItemsMock }]);
+
+    await act(async () => {
+      root.render(<TextEditorComponent file={file} registry={registry} />);
+      await flush();
+    });
+
+    const editor = editors[0];
+    expect(editor).toBeTruthy();
+
+    editor.getSelections.mockReturnValue([
+      { selectionStartLineNumber: 2, selectionStartColumn: 3, positionLineNumber: 5, positionColumn: 7 }
+    ]);
+
+    const container = rootElement.querySelector<HTMLElement>(".text-editor-container");
+    expect(container).toBeTruthy();
+
+    await act(async () => {
+      container!.dispatchEvent(new MouseEvent("mousedown", { button: 2, buttons: 2, cancelable: true, bubbles: true }));
+      container!.dispatchEvent(new MouseEvent("contextmenu", { button: 2, clientX: 100, clientY: 200, cancelable: true, bubbles: true }));
+      await flush();
+      await flush();
+    });
+
+    expect(getItemsMock).toHaveBeenCalledTimes(1);
+    const ctx = getItemsMock.mock.calls[0][0];
+    expect(ctx.selection).toEqual({
+      startLineNumber: 2,
+      startColumn: 3,
+      endLineNumber: 5,
+      endColumn: 7
+    });
+    expect(ctx.position).toEqual({ lineNumber: 2, column: 1 });
+    expect(ctx.fileId).toBe(file.fileId);
   });
 });
