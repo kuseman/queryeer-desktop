@@ -5,6 +5,7 @@ import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import type { TextEditorRegistry } from "./TextEditorRegistry";
 import type { EditorRegistryHost } from "@queryeer/api/editor/EditorCapability";
 import type { OutlineRegistry } from "@queryeer/api/extensions/OutlineExtension";
+import type { TextRange } from "@queryeer/api/editor/EditorApi";
 import type { ContextMenuContext, ContextMenuItem } from "@queryeer/api/extensions/ContextMenuExtension";
 import { MonacoTextEditorApi } from "./MonacoTextEditorApi";
 import { getCoreSettingsService } from "../../core.settings/service";
@@ -55,7 +56,10 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; sections: ContextMenuItem[][]; loading?: boolean } | null>(null);
   const contextMenuRequestIdRef = useRef(0);
 
-  const showEditorContextMenu = useCallback((x: number, y: number, position: { lineNumber: number; column: number } | null) => {
+  // Capture multi-cursor selection before Monaco processes right-click (which collapses it)
+  const rightClickSelectionsRef = useRef<monacoType.Selection[] | null>(null);
+
+  const showEditorContextMenu = useCallback((x: number, y: number, position: { lineNumber: number; column: number } | null, savedSelections?: monacoType.Selection[] | null) => {
     const requestId = ++contextMenuRequestIdRef.current;
     const pasteFromClipboardFallback = async () => {
       const editor = editorRef.current;
@@ -116,9 +120,20 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
       return;
     }
 
+    let selectionRange: TextRange | null = null;
+    if (savedSelections && savedSelections.length > 0) {
+      const sel = savedSelections[0];
+      selectionRange = {
+        startLineNumber: sel.selectionStartLineNumber,
+        startColumn: sel.selectionStartColumn,
+        endLineNumber: sel.positionLineNumber,
+        endColumn: sel.positionColumn
+      };
+    }
+
     const ctx: ContextMenuContext = {
       position: { lineNumber: position.lineNumber, column: position.column },
-      selection: null,
+      selection: selectionRange,
       mimeType: activeFile.mimeType ?? null,
       fileId: activeFile.fileId ?? null
     };
@@ -399,9 +414,21 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
 
   // Replace Monaco's native context menu with our own React menu.
   // Built-ins are shown immediately; provider items are fetched async and added when ready.
+  //
+  // Monaco processes right-click on mousedown (collapsing multi-cursor selections).
+  // We capture the selection during the capturing phase (before Monaco) and restore it.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+
+    // Capture selection on right mousedown BEFORE Monaco processes it (capturing phase)
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button !== 2) return;
+      const editor = editorRef.current;
+      if (!editor) return;
+      rightClickSelectionsRef.current = editor.getSelections();
+    };
+    container.addEventListener("mousedown", handleMouseDown, true);
 
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault();
@@ -412,11 +439,21 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
       const editor = editorRef.current;
       const target = editor?.getTargetAtClientPoint(e.clientX, e.clientY);
       const position = target?.position;
-      showEditorContextMenu(e.clientX, e.clientY, position ?? null);
+
+      // Restore multi-cursor selection that was collapsed when Monaco processed the right-click
+      const saved = rightClickSelectionsRef.current;
+      if (saved && saved.length > 1 && editor) {
+        editor.setSelections(saved);
+      }
+
+      showEditorContextMenu(e.clientX, e.clientY, position ?? null, saved);
     };
 
     container.addEventListener("contextmenu", handleContextMenu);
-    return () => container.removeEventListener("contextmenu", handleContextMenu);
+    return () => {
+      container.removeEventListener("contextmenu", handleContextMenu);
+      container.removeEventListener("mousedown", handleMouseDown, true);
+    };
   }, [showEditorContextMenu]);
 
   return (
