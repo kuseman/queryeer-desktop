@@ -13,4 +13,4 @@ manifest.frontend.entryModule = "./plugin.js";
 f.writeFileSync(p.join(dir, "plugin.json"), JSON.stringify(manifest, null, 2));
 
 console.log("=== Plugin ready in dist/" + name + "/ ===");
-console.log("Copy dist/" + name + "/ to QUERYEER_PLUGINS_PATH");
+console.log("Copy dist/" + name + "/ to Queryeer's managed plugins directory");

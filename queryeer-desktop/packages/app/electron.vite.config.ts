@@ -1,6 +1,7 @@
 import { defineConfig } from "electron-vite";
 import react from "@vitejs/plugin-react";
-import { resolve } from "node:path";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import type { Plugin } from "vite";
 import { injectImportMapAndCspHash } from "./src/main/plugins/production-importmap.js";
 
@@ -13,13 +14,20 @@ const apiAlias = [
 const fsAllow = [
   resolve(__dirname),
   resolve(__dirname, "..", ".."),
-  resolve(__dirname, "..", "..", "..", "plugins")
+  resolve(__dirname, "..", "..", "..", "plugins"),
+  resolveDefaultManagedPluginsDir()
 ];
 
-const pluginsPath = process.env.QUERYEER_PLUGINS_PATH;
-if (pluginsPath)
-{
-  fsAllow.push(resolve(pluginsPath));
+function resolveDefaultManagedPluginsDir(): string {
+  if (process.platform === "win32") {
+    const appData = process.env.APPDATA || join(homedir(), "AppData", "Roaming");
+    return join(appData, "queryeer-desktop", "plugins");
+  }
+  if (process.platform === "darwin") {
+    return join(homedir(), "Library", "Application Support", "queryeer-desktop", "plugins");
+  }
+  const configHome = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+  return join(configHome, "queryeer-desktop", "plugins");
 }
 
 const productionImportMapPlugin: Plugin = {

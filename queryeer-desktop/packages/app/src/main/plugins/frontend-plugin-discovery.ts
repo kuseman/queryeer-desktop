@@ -19,8 +19,7 @@ const MANIFEST_FILE = "plugin.json";
 const ZIP_EXTENSION = ".zip";
 const EXTRACTION_ROOT = resolve(tmpdir(), "queryeer-desktop-frontend-plugins");
 
-export async function discoverExternalFrontendPlugins(): Promise<ExternalFrontendPluginManifest[]> {
-  const root = process.env.QUERYEER_PLUGINS_PATH;
+export async function discoverExternalFrontendPlugins(root: string): Promise<ExternalFrontendPluginManifest[]> {
   if (!root || !existsSync(root)) {
     return [];
   }

@@ -16,12 +16,16 @@ class BackendRunnerModuleTest
         String previousResourcesDir = System.getProperty("queryeer.resources.dir");
         String previousSettingsDir = System.getProperty("queryeer.settings.dir");
         String previousSettingsPath = System.getProperty("queryeer.settings.path");
+        String previousPluginsDir = System.getProperty("queryeer.plugins.dir");
+        String previousSafeMode = System.getProperty("queryeer.plugins.safeMode");
         try
         {
             System.setProperty("queryeer.app.dir", " C:/appdata ");
             System.setProperty("queryeer.resources.dir", " C:/install/resources ");
             System.setProperty("queryeer.settings.dir", " C:/appdata/settings ");
             System.setProperty("queryeer.settings.path", " C:/appdata/settings/core.queryengine.jdbc.json ");
+            System.setProperty("queryeer.plugins.safeMode", "true");
+            System.clearProperty("queryeer.plugins.dir");
 
             Map<String, String> values = BackendRunnerModule.resolveConfigValues();
 
@@ -29,6 +33,9 @@ class BackendRunnerModuleTest
             Assertions.assertEquals("C:/install/resources", values.get("queryeer.resources.dir"));
             Assertions.assertEquals("C:/appdata/settings", values.get("queryeer.settings.dir"));
             Assertions.assertEquals("C:/appdata/settings/core.queryengine.jdbc.json", values.get("queryeer.settings.path"));
+            Assertions.assertEquals(Path.of("C:/appdata", "plugins")
+                    .toString(), values.get("queryeer.plugins.dir"));
+            Assertions.assertEquals("true", values.get("queryeer.plugins.safeMode"));
         }
         finally
         {
@@ -36,6 +43,8 @@ class BackendRunnerModuleTest
             restoreProperty("queryeer.resources.dir", previousResourcesDir);
             restoreProperty("queryeer.settings.dir", previousSettingsDir);
             restoreProperty("queryeer.settings.path", previousSettingsPath);
+            restoreProperty("queryeer.plugins.dir", previousPluginsDir);
+            restoreProperty("queryeer.plugins.safeMode", previousSafeMode);
         }
     }
 
@@ -47,7 +56,7 @@ class BackendRunnerModuleTest
 
         PluginDiscoveryException error = Assertions.assertThrows(PluginDiscoveryException.class, () -> BackendRunnerModule.mergeDiscoveredPlugins(List.of(builtin), List.of(external)));
         Assertions.assertTrue(error.getMessage()
-                .contains("Duplicate plugin id discovered in mixed mode"));
+                .contains("Duplicate external plugin id conflicts"));
     }
 
     @Test

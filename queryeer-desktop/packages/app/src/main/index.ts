@@ -31,6 +31,7 @@ import { defaultSecurityDirPath, VaultStore } from "./security/vault-store.js";
 import { AssistantHttpService } from "./assistant/assistant-http-service.js";
 import { createBeforeQuitHandler } from "./app-shutdown.js";
 import { wireExpressionEvaluatorIpc } from "./expressions/expression-evaluator.js";
+import { defaultPluginsDirPath } from "./plugins/plugin-paths.js";
 
 const isDev = !app.isPackaged;
 const queryeerReleasesUrl = "https://api.github.com/repos/kuseman/queryeer-desktop/releases";
@@ -38,19 +39,37 @@ const queryeerReleasesUrl = "https://api.github.com/repos/kuseman/queryeer-deskt
 // Keep userData path stable when package name changes (e.g. @queryeer/app)
 app.setName("queryeer-desktop");
 
+function isPluginSafeMode(): boolean {
+  return process.argv.includes("--safe-mode");
+}
+
 function createBackendFactory(): BackendTransportFactory {
   const appDir = app.getPath("userData");
   const settingsDirPath = defaultSettingsDirPath(appDir);
+  const pluginsDirPath = defaultPluginsDirPath(appDir);
+  const pluginsSafeMode = isPluginSafeMode();
   if (app.isPackaged) {
     return {
       mode: "prod-jar",
-      create: (callbacks) => new ProdBackendTransport(callbacks, { appDir, settingsDirPath })
+      create: (callbacks) =>
+        new ProdBackendTransport(callbacks, {
+          appDir,
+          settingsDirPath,
+          pluginsDirPath,
+          pluginsSafeMode
+        })
     };
   }
   const devState = { dependenciesPrepared: false };
   return {
     mode: "dev-maven",
-    create: (callbacks) => new DevBackendTransport(callbacks, devState, { appDir, settingsDirPath })
+    create: (callbacks) =>
+      new DevBackendTransport(callbacks, devState, {
+        appDir,
+        settingsDirPath,
+        pluginsDirPath,
+        pluginsSafeMode
+      })
   };
 }
 
@@ -125,10 +144,14 @@ function createMainWindow(): void {
 
 app.disableHardwareAcceleration();
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const appDataDir = app.getPath("userData");
-  void mkdir(join(appDataDir, "libShared"), { recursive: true }).catch(() => {});
-  void mkdir(join(appDataDir, "libNative"), { recursive: true }).catch(() => {});
+  const pluginsDirPath = defaultPluginsDirPath(appDataDir);
+  await Promise.all([
+    mkdir(join(appDataDir, "libShared"), { recursive: true }),
+    mkdir(join(appDataDir, "libNative"), { recursive: true }),
+    mkdir(pluginsDirPath, { recursive: true })
+  ].map((operation) => operation.catch(() => undefined)));
 
   backendGateway.wireIpc();
   dialogService.wireIpc();
@@ -349,7 +372,12 @@ app.whenReady().then(() => {
     resolveSecret: (secretRef) => securityService!.resolveSecret(secretRef)
   });
   assistantHttpService.wireIpc();
-  ipcMain.handle("plugins:get-frontend-targets", async () => discoverExternalFrontendPlugins());
+  ipcMain.handle("plugins:get-frontend-targets", async () => {
+    if (isPluginSafeMode()) {
+      return [];
+    }
+    return discoverExternalFrontendPlugins(pluginsDirPath);
+  });
   ipcMain.handle("file:read", async (_event, { uri }: { uri: string }) => {
     try {
       const filePath = fileUriToPath(uri);

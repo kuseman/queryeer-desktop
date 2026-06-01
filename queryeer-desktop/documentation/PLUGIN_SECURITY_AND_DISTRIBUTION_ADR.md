@@ -16,6 +16,7 @@ Current gaps:
 2. No clear trust model for plugin integrity and publisher identity.
 3. No managed update mechanism beyond manual replacement.
 4. No persistent lock/audit file to explain exactly what was installed.
+5. External plugin discovery must be product-default behavior, not controlled by a plugin path environment variable.
 
 We want to support two distribution paths:
 
@@ -33,6 +34,14 @@ Adopt a **single security model** that applies to both installation paths, and r
 3. **Phase 3:** Mandatory publisher signatures (or strict policy mode), richer permissions, and enterprise controls.
 
 Manual ZIP install remains supported permanently. Repository support is additive.
+
+Additional runtime decisions:
+
+1. Builtin plugins are platform components. They are always loaded, never shown in the Plugin Manager, and never user-disableable.
+2. External plugins are installed per user under Queryeer's managed app-data `plugins` directory.
+3. The product has one normal discovery behavior: builtin plugins plus enabled per-user external plugins.
+4. Safe mode skips external plugin activation while keeping builtin plugins active.
+5. Initial update/remove support may require restart; hot lifecycle support is incremental.
 
 ---
 

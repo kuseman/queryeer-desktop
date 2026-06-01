@@ -426,28 +426,14 @@ public int run(InputStream input, OutputStream output) {
         new PluginDiscoveryService(objectMapper, services, classLoaderFactory);
 
     // ── Plugin discovery ──
-    PluginFactory pluginFactory = new PluginFactory();
-    PluginDiscoveryPlan discoveryPlan = PluginDiscoveryPlan.of(
-        resolveDiscoveryMode(), resolvePluginPath());
-    PluginDiscoveryMode mode = discoveryPlan.effectiveMode();
-
     PluginRuntime runtime = new PluginRuntime();
     List<DiscoveredPlugin> discoveredPlugins;
     try {
-        if (mode == PluginDiscoveryMode.BUILTIN) {
-            discoveredPlugins = new BuiltinPluginDiscovery(
-                pluginFactory, services, classLoaderFactory, builtinsDir).discover();
-        } else if (mode == PluginDiscoveryMode.EXTERNAL) {
-            String path = discoveryPlan.requiredPathFor(PluginDiscoveryMode.EXTERNAL);
-            discoveredPlugins = discoveryService.discoverFromPath(path).backendPlugins();
-        } else {
-            String path = discoveryPlan.requiredPathFor(PluginDiscoveryMode.MIXED);
-            List<DiscoveredPlugin> builtin = new BuiltinPluginDiscovery(
-                pluginFactory, services, classLoaderFactory, builtinsDir).discover();
-            List<DiscoveredPlugin> external =
-                discoveryService.discoverFromPath(path).backendPlugins();
-            discoveredPlugins = mergeDiscoveredPlugins(builtin, external);
-        }
+        List<DiscoveredPlugin> builtin = new BuiltinPluginDiscovery(
+            pluginFactory, services, classLoaderFactory, builtinsDir).discover();
+        List<DiscoveredPlugin> external =
+            discoveryService.discoverFromPath(config.get("queryeer.plugins.dir")).backendPlugins();
+        discoveredPlugins = mergeDiscoveredPlugins(builtin, external);
         for (DiscoveredPlugin discovered : discoveredPlugins) {
             runtime.register(discovered.plugin());
         }
@@ -728,7 +714,7 @@ target/
 
 | # | Test | What it verifies |
 |---|---|---|
-| 6 | `BackendRunnerModule` with `queryeer.plugins.mode=BUILTIN` | All builtins activate successfully. JDBC plugin registers its dialect registry. Dialects register themselves (including driver loading attempt). No `ClassNotFoundException` for API/contract types. No reflective `addURL` in startup path. No startup crash from missing driver JARs. |
+| 6 | `BackendRunnerModule` default startup | All builtins activate successfully before managed external plugins. JDBC plugin registers its dialect registry. Dialects register themselves (including driver loading attempt). No `ClassNotFoundException` for API/contract types. No reflective `addURL` in startup path. No startup crash from missing driver JARs. |
 
 ---
 
