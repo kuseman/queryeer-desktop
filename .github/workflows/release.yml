@@ -178,9 +178,6 @@ jobs:
     needs: backend-verify
     permissions:
       contents: read
-    env:
-      MAVEN_CENTRAL_BUILD_PROJECTS: :backend-core
-      MAVEN_CENTRAL_PROJECTS: .,:backend-contract,:backend-api,:backend-lib-queryengine-jdbc-foundation,:backend-lib-queryengine-sql-parser,:backend-lib-queryengine-payloadbuilder-foundation
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -225,18 +222,15 @@ jobs:
             exit 1
           fi
 
-      - name: Install Maven Central build dependencies
-        run: ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml -pl "${MAVEN_CENTRAL_BUILD_PROJECTS}" -am install -DskipTests=true -Dmaven.test.skip=true
-
       - name: Dry-run Maven Central publish
         if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
-        run: ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml -pl "${MAVEN_CENTRAL_PROJECTS}" clean deploy -DperformRelease=true -DskipTests=true -Dmaven.test.skip=true -DskipPublishing=true
+        run: ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml clean deploy -DperformRelease=true -DskipTests=true -Dmaven.test.skip=true -DskipPublishing=true
         env:
           GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
 
       - name: Publish backend artifacts to Maven Central
         if: github.event_name == 'push'
-        run: ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml -pl "${MAVEN_CENTRAL_PROJECTS}" clean deploy -DperformRelease=true -DskipTests=true -Dmaven.test.skip=true
+        run: ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml clean deploy -DperformRelease=true -DskipTests=true -Dmaven.test.skip=true
         env:
           MAVEN_USERNAME: ${{ secrets.OSS_SONATYPE_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSS_SONATYPE_PASSWORD }}

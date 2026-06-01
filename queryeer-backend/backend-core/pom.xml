@@ -12,7 +12,7 @@
     <name>Queryeer Backend Core</name>
 
     <properties>
-        <maven.deploy.skip>true</maven.deploy.skip>
+        <skipPublishing>true</skipPublishing>
     </properties>
 
     <dependencies>

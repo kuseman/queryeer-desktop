@@ -1,21 +1,16 @@
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import { basename, delimiter, join, resolve } from "node:path";
+import { basename, delimiter, dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { getModulesByPluginId, getBackendRoot } from "./backend-catalog.mjs";
 
-const projectRoot = resolve(import.meta.dirname, "..");
+const here = dirname(fileURLToPath(import.meta.url));
+const projectRoot = resolve(here, "..");
 const repoRoot = resolve(projectRoot, "..", "..", "..");
-const backendRoot = join(repoRoot, "queryeer-backend");
+const backendRoot = getBackendRoot();
 const stageRoot = resolve(process.env.QUERYEER_RELEASE_RESOURCES_DIR ?? join(projectRoot, "dist", "release-resources"));
 const jlinkHome = resolve(process.env.QUERYEER_JLINK_OUTPUT ?? join(repoRoot, ".backend-jlink"));
 
-const moduleByPluginId = new Map([
-  ["queryengine.runtime.jdbc-foundation", "backend-lib-queryengine-jdbc-foundation"],
-  ["queryengine.runtime.payloadbuilder-foundation", "backend-lib-queryengine-payloadbuilder-foundation"],
-  ["queryengine.runtime.sql-parser", "backend-lib-queryengine-sql-parser"],
-  ["queryengine.jdbc", "backend-plugin-jdbc"],
-  ["queryengine.payloadbuilder", "backend-plugin-payloadbuilder"],
-  ["queryengine.jdbc.dialect.sqlserver", "backend-plugin-dialect-sqlserver"],
-  ["queryengine.jdbc.dialect.postgres", "backend-plugin-dialect-postgres"]
-]);
+const moduleByPluginId = getModulesByPluginId();
 
 function fail(message) {
   console.error(message);

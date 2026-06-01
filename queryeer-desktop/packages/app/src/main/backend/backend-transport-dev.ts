@@ -22,17 +22,6 @@ type BackendLaunchContext = {
 export class DevBackendTransport extends StdioBackendTransportBase {
   public readonly mode = "dev-maven" as const;
 
-  private static readonly builtinBackendModules = [
-    "backend-runner",
-    "backend-lib-queryengine-jdbc-foundation",
-    "backend-lib-queryengine-payloadbuilder-foundation",
-    "backend-lib-queryengine-sql-parser",
-    "backend-plugin-jdbc",
-    "backend-plugin-payloadbuilder",
-    "backend-plugin-dialect-sqlserver",
-    "backend-plugin-dialect-postgres"
-  ];
-
   public constructor(
     callbacks: BackendTransportCallbacks,
     private readonly state: DevTransportState = { dependenciesPrepared: false },
@@ -65,8 +54,6 @@ export class DevBackendTransport extends StdioBackendTransportBase {
           "-q",
           "-T", "1C",
           "-f", "queryeer-backend/pom.xml",
-          "-pl", DevBackendTransport.builtinBackendModules.join(","),
-          "-am",
           "-DskipTests=true",
           "-Dspotless.check.skip=true",
           "-DcheckstyleSkip=true",

@@ -13,7 +13,7 @@
     <name>Queryeer Backend Runner</name>
 
     <properties>
-        <maven.deploy.skip>true</maven.deploy.skip>
+        <skipPublishing>true</skipPublishing>
     </properties>
 
     <build>
