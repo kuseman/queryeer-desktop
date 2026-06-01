@@ -23,9 +23,13 @@ final class PluginSourceExplorer
             for (Path child : stream)
             {
                 if (Files.isDirectory(child)
-                        || child.getFileName()
-                                .toString()
-                                .endsWith(".zip"))
+                        && Files.exists(child.resolve(PluginManifestLoader.MANIFEST_FILE)))
+                {
+                    sources.add(child);
+                }
+                else if (child.getFileName()
+                        .toString()
+                        .endsWith(".zip"))
                 {
                     sources.add(child);
                 }

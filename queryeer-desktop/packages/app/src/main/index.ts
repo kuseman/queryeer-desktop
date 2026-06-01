@@ -388,6 +388,12 @@ app.whenReady().then(async () => {
   ipcMain.handle("plugins:set-enabled", async (_event, params: { pluginId: string; enabled: boolean }) => {
     return pluginInventoryService!.setEnabled(params.pluginId, params.enabled);
   });
+  ipcMain.handle("plugins:install-from-zip", async (_event, params: { zipFilePath: string }) => {
+    return pluginInventoryService!.installFromZip(params.zipFilePath);
+  });
+  ipcMain.handle("plugins:uninstall", async (_event, params: { pluginId: string }) => {
+    return pluginInventoryService!.uninstall(params.pluginId);
+  });
   ipcMain.handle("plugins:get-frontend-targets", async () => {
     if (isPluginSafeMode()) {
       return [];

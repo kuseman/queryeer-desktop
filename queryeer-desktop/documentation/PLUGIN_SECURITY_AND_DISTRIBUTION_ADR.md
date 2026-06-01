@@ -84,7 +84,7 @@ Install pipeline for ZIP:
 
 Introduce `plugins-lock.json` under Queryeer's user settings directory.
 
-Current incremental implementation records `id`, `name`, `version`, `enabled`, `source`, and `restartRequired`. Integrity and signing fields are reserved for the secure install pipeline.
+Current incremental implementation records `id`, `name`, `version`, `enabled`, `source`, `restartRequired`, and basic install integrity metadata (`sha256` archive hash plus install timestamp). Signing policy remains follow-up work.
 
 Draft shape:
 

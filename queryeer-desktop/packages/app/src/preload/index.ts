@@ -19,8 +19,10 @@ import type {
 } from "@queryeer/api/files/FileWatcher.js";
 import type { ExternalFrontendPluginManifest } from "@queryeer/api/plugin/ExternalFrontendPluginManifest.js";
 import type {
+  ManagedPluginInstallResult,
   ManagedPluginInventory,
-  ManagedPluginSetEnabledResult
+  ManagedPluginSetEnabledResult,
+  ManagedPluginUninstallResult
 } from "@queryeer/api/plugin/PluginInventory.js";
 import type { WorkspaceSnapshot } from "@queryeer/api/workspace/WorkspaceSnapshot.js";
 import type { UserKeybindingsDocument } from "@queryeer/api/commands/Keybindings.js";
@@ -96,6 +98,8 @@ type AppShellApi = {
   getExternalFrontendPlugins: () => Promise<ExternalFrontendPluginManifest[]>;
   getPluginInventory: () => Promise<ManagedPluginInventory>;
   setPluginEnabled: (params: { pluginId: string; enabled: boolean }) => Promise<ManagedPluginSetEnabledResult>;
+  installPluginFromZip: (params: { zipFilePath: string }) => Promise<ManagedPluginInstallResult>;
+  uninstallPlugin: (params: { pluginId: string }) => Promise<ManagedPluginUninstallResult>;
   executeBackendQuery: (params: QueryExecuteParams) => Promise<QueryExecuteResult>;
   cancelBackendQuery: (params: QueryCancelParams) => Promise<QueryCancelResult>;
   invokeBackendEngine: (params: EngineInvokeParams) => Promise<EngineInvokeResult>;
@@ -266,6 +270,12 @@ const appShellApi: AppShellApi = {
   },
   setPluginEnabled: async (params) => {
     return ipcRenderer.invoke("plugins:set-enabled", params);
+  },
+  installPluginFromZip: async (params) => {
+    return ipcRenderer.invoke("plugins:install-from-zip", params);
+  },
+  uninstallPlugin: async (params) => {
+    return ipcRenderer.invoke("plugins:uninstall", params);
   },
   executeBackendQuery: async (params) => {
     return ipcRenderer.invoke("backend:execute-query", params);

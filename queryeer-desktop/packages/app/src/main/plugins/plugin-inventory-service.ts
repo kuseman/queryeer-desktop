@@ -1,11 +1,14 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, extname, join, normalize, sep } from "node:path";
 import JSZip from "jszip";
 import type {
+  ManagedPluginInstallResult,
   ManagedPluginInventory,
   ManagedPluginInventoryEntry,
   ManagedPluginSetEnabledResult,
-  ManagedPluginSourceType
+  ManagedPluginSourceType,
+  ManagedPluginUninstallResult
 } from "@queryeer/api/plugin/PluginInventory.js";
 
 type PluginManifestV1 = {
@@ -31,6 +34,13 @@ type PluginLockEntry = {
     type: ManagedPluginSourceType;
     path: string;
   };
+  installSourcePath?: string;
+  integrity?: {
+    algorithm: "sha256";
+    archiveHash: string;
+    installedAt: string;
+  };
+  uninstallPending?: boolean;
   restartRequired?: boolean;
 };
 
@@ -48,18 +58,22 @@ type DiscoveredManagedPlugin = {
 const LOCKFILE_VERSION = 1;
 const MANIFEST_FILE = "plugin.json";
 const ZIP_EXTENSION = ".zip";
+const STAGING_DIR = ".staging";
 
 export class PluginInventoryService {
   private inventory: ManagedPluginInventory;
   private lockDocument: PluginLockDocument = { version: LOCKFILE_VERSION, plugins: [] };
+  private readonly now: () => Date;
 
   public constructor(
     private readonly options: {
       pluginsDir: string;
       lockfilePath: string;
       isSafeMode: () => boolean;
+      now?: () => Date;
     }
   ) {
+    this.now = options.now ?? (() => new Date());
     this.inventory = {
       pluginsDir: options.pluginsDir,
       lockfilePath: options.lockfilePath,
@@ -94,6 +108,13 @@ export class PluginInventoryService {
         reason: `Plugin '${pluginId}' is not installed`
       };
     }
+    if (lockEntry.uninstallPending === true) {
+      return {
+        accepted: false,
+        restartRequired: true,
+        reason: `Plugin '${pluginId}' is pending uninstall and cannot be toggled`
+      };
+    }
 
     lockEntry.enabled = enabled;
     lockEntry.restartRequired = true;
@@ -107,6 +128,189 @@ export class PluginInventoryService {
     };
   }
 
+  public async installFromZip(zipFilePath: string): Promise<ManagedPluginInstallResult> {
+    if (!zipFilePath || extname(zipFilePath).toLowerCase() !== ZIP_EXTENSION) {
+      return {
+        accepted: false,
+        restartRequired: false,
+        reason: "A .zip plugin package is required"
+      };
+    }
+
+    let archive: JSZip;
+    try {
+      archive = await JSZip.loadAsync(readFileSync(zipFilePath));
+    } catch {
+      return {
+        accepted: false,
+        restartRequired: false,
+        reason: `Failed to read plugin archive '${zipFilePath}'`
+      };
+    }
+
+    const manifestFile = archive.file(MANIFEST_FILE);
+    if (!manifestFile) {
+      return {
+        accepted: false,
+        restartRequired: false,
+        reason: "Plugin archive is missing plugin.json at the archive root"
+      };
+    }
+
+    let parsedManifest: PluginManifestV1;
+    try {
+      parsedManifest = JSON.parse(await manifestFile.async("string")) as PluginManifestV1;
+    } catch {
+      return {
+        accepted: false,
+        restartRequired: false,
+        reason: "plugin.json in archive is not valid JSON"
+      };
+    }
+    if (!isValidManifest(parsedManifest)) {
+      return {
+        accepted: false,
+        restartRequired: false,
+        reason: "plugin.json is missing required fields for schemaVersion 1"
+      };
+    }
+
+    const pluginId = parsedManifest.id;
+    const archiveHash = sha256(readFileSync(zipFilePath));
+    await this.refresh();
+    const existingLockEntry = this.lockDocument.plugins.find((plugin) => plugin.id === pluginId);
+    const installDir = pluginInstallDir(this.options.pluginsDir, pluginId);
+    const stagingRoot = join(this.options.pluginsDir, STAGING_DIR);
+    const stagingDir = join(stagingRoot, `${pluginId}-${Date.now()}`);
+    const backupDir = join(stagingRoot, `${pluginId}-backup-${Date.now()}`);
+
+    try {
+      mkdirSync(stagingDir, { recursive: true });
+      await extractArchiveToDirectory(archive, stagingDir);
+      const stagedManifestPath = join(stagingDir, MANIFEST_FILE);
+      if (!existsSync(stagedManifestPath)) {
+        throw new Error("Extracted archive is missing plugin.json");
+      }
+
+      const stagedManifest = JSON.parse(readFileSync(stagedManifestPath, "utf8")) as PluginManifestV1;
+      if (!isValidManifest(stagedManifest)) {
+        throw new Error("Extracted plugin.json is invalid");
+      }
+      if (stagedManifest.id !== pluginId) {
+        throw new Error("Plugin id changed between archive read and extraction");
+      }
+
+      if (existsSync(installDir)) {
+        mkdirSync(stagingRoot, { recursive: true });
+        renameSync(installDir, backupDir);
+      } else if (existingLockEntry?.source.path && !isSamePath(existingLockEntry.source.path, installDir) && existsSync(existingLockEntry.source.path)) {
+        rmSync(existingLockEntry.source.path, { recursive: true, force: true });
+      }
+
+      renameSync(stagingDir, installDir);
+      if (existsSync(backupDir)) {
+        rmSync(backupDir, { recursive: true, force: true });
+      }
+    } catch (error) {
+      if (existsSync(backupDir) && !existsSync(installDir)) {
+        try {
+          renameSync(backupDir, installDir);
+        } catch {
+          // best effort rollback
+        }
+      }
+      rmSync(stagingDir, { recursive: true, force: true });
+      return {
+        accepted: false,
+        restartRequired: false,
+        reason: error instanceof Error ? error.message : "Failed to install plugin package"
+      };
+    }
+
+    await this.refresh();
+    const lockEntry = this.lockDocument.plugins.find((plugin) => plugin.id === pluginId);
+    if (lockEntry) {
+      lockEntry.installSourcePath = zipFilePath;
+      lockEntry.integrity = {
+        algorithm: "sha256",
+        archiveHash,
+        installedAt: this.now().toISOString()
+      };
+      lockEntry.restartRequired = true;
+      this.writeLockDocument();
+      await this.refresh();
+    }
+
+    return {
+      accepted: true,
+      restartRequired: true,
+      plugin: this.inventory.plugins.find((plugin) => plugin.id === pluginId)
+    };
+  }
+
+  public async uninstall(pluginId: string): Promise<ManagedPluginUninstallResult> {
+    await this.refresh();
+    const lockEntry = this.lockDocument.plugins.find((plugin) => plugin.id === pluginId);
+    if (!lockEntry) {
+      return {
+        accepted: false,
+        restartRequired: false,
+        reason: `Plugin '${pluginId}' is not installed`
+      };
+    }
+
+    lockEntry.enabled = false;
+    lockEntry.uninstallPending = true;
+    lockEntry.restartRequired = true;
+    this.writeLockDocument();
+    await this.refresh();
+
+    const stillPresent = this.lockDocument.plugins.some((plugin) => plugin.id === pluginId);
+
+    return {
+      accepted: true,
+      restartRequired: true,
+      removedPluginId: pluginId,
+      reason: stillPresent ? "Uninstall scheduled for restart because plugin files are in use" : undefined
+    };
+  }
+
+  private processPendingUninstalls(): void {
+    const retained: PluginLockEntry[] = [];
+    for (const lockEntry of this.lockDocument.plugins) {
+      if (lockEntry.uninstallPending !== true) {
+        retained.push(lockEntry);
+        continue;
+      }
+
+      const paths = new Set<string>([
+        pluginInstallDir(this.options.pluginsDir, lockEntry.id),
+        lockEntry.source.path
+      ]);
+      let fullyRemoved = true;
+      for (const targetPath of paths) {
+        if (!targetPath || !existsSync(targetPath)) {
+          continue;
+        }
+        try {
+          rmSync(targetPath, { recursive: true, force: true });
+        } catch {
+          fullyRemoved = false;
+        }
+      }
+
+      if (fullyRemoved) {
+        continue;
+      }
+
+      lockEntry.enabled = false;
+      lockEntry.restartRequired = true;
+      retained.push(lockEntry);
+    }
+
+    this.lockDocument.plugins = retained;
+  }
+
   private async refresh(options: { clearRestartRequired?: boolean } = {}): Promise<void> {
     mkdirSync(this.options.pluginsDir, { recursive: true });
     this.lockDocument = this.readLockDocument();
@@ -114,6 +318,10 @@ export class PluginInventoryService {
       for (const plugin of this.lockDocument.plugins) {
         plugin.restartRequired = false;
       }
+    }
+
+    if (options.clearRestartRequired) {
+      this.processPendingUninstalls();
     }
 
     const discovered = await this.discoverManagedPlugins();
@@ -167,23 +375,29 @@ export class PluginInventoryService {
           hasFrontend: false,
           hasBackend: false,
           lastError: "Plugin source is no longer present",
-          restartRequired: lockEntry.restartRequired === true
+          restartRequired: lockEntry.restartRequired === true,
+          uninstallPending: lockEntry.uninstallPending === true,
+          integrity: lockEntry.integrity,
+          installSourcePath: lockEntry.installSourcePath
         });
         continue;
       }
 
       plugins.push({
-        id: discoveredPlugin.id,
-        name: discoveredPlugin.name,
-        version: discoveredPlugin.version,
-        enabled: lockEntry.enabled,
-        sourcePath: discoveredPlugin.sourcePath,
-        sourceType: discoveredPlugin.sourceType,
-        status: duplicates.has(discoveredPlugin.id) ? "invalid" : "available",
-        hasFrontend: discoveredPlugin.hasFrontend,
-        hasBackend: discoveredPlugin.hasBackend,
-        lastError: duplicates.has(discoveredPlugin.id) ? "Duplicate plugin id discovered in managed plugins directory" : discoveredPlugin.lastError,
-        restartRequired: lockEntry.restartRequired === true
+          id: discoveredPlugin.id,
+          name: discoveredPlugin.name,
+          version: discoveredPlugin.version,
+          enabled: lockEntry.enabled,
+          sourcePath: discoveredPlugin.sourcePath,
+          sourceType: discoveredPlugin.sourceType,
+          status: duplicates.has(discoveredPlugin.id) ? "invalid" : "available",
+          hasFrontend: discoveredPlugin.hasFrontend,
+          hasBackend: discoveredPlugin.hasBackend,
+          lastError: duplicates.has(discoveredPlugin.id) ? "Duplicate plugin id discovered in managed plugins directory" : discoveredPlugin.lastError,
+          restartRequired: lockEntry.restartRequired === true,
+          uninstallPending: lockEntry.uninstallPending === true,
+          integrity: lockEntry.integrity,
+          installSourcePath: lockEntry.installSourcePath
       });
     }
 
@@ -301,15 +515,26 @@ function isValidManifest(parsed: PluginManifestV1): parsed is Required<Pick<Plug
 
 function isLockEntry(value: unknown): value is PluginLockEntry {
   const candidate = value as Partial<PluginLockEntry>;
+  const integrity = candidate.integrity as Partial<PluginLockEntry["integrity"]> | undefined;
+  const integrityValid =
+    integrity === undefined ||
+    (integrity.algorithm === "sha256" &&
+      typeof integrity.archiveHash === "string" &&
+      integrity.archiveHash.length > 0 &&
+      typeof integrity.installedAt === "string" &&
+      integrity.installedAt.length > 0);
   return (
     typeof candidate.id === "string" &&
     candidate.id.length > 0 &&
     typeof candidate.name === "string" &&
     typeof candidate.version === "string" &&
     typeof candidate.enabled === "boolean" &&
+    (candidate.uninstallPending === undefined || typeof candidate.uninstallPending === "boolean") &&
     candidate.source != null &&
     (candidate.source.type === "folder" || candidate.source.type === "zip") &&
-    typeof candidate.source.path === "string"
+    typeof candidate.source.path === "string" &&
+    (candidate.installSourcePath === undefined || typeof candidate.installSourcePath === "string") &&
+    integrityValid
   );
 }
 
@@ -319,4 +544,51 @@ export function defaultPluginsLockfilePath(settingsDirPath: string): string {
 
 export function managedPluginDisplayPath(entry: ManagedPluginInventoryEntry): string {
   return entry.sourceType === "zip" ? basename(entry.sourcePath) : entry.sourcePath;
+}
+
+function pluginInstallDir(pluginsDir: string, pluginId: string): string {
+  return join(pluginsDir, toPluginFolderName(normalizePluginId(pluginId)));
+}
+
+function normalizePluginId(pluginId: string): string {
+  const trimmed = pluginId.trim();
+  if (process.platform === "win32") {
+    return trimmed.toLowerCase();
+  }
+  return trimmed;
+}
+
+function isSamePath(left: string, right: string): boolean {
+  if (process.platform === "win32") {
+    return normalize(left).toLowerCase() === normalize(right).toLowerCase();
+  }
+  return normalize(left) === normalize(right);
+}
+
+function toPluginFolderName(pluginId: string): string {
+  return pluginId.replace(/[\\/:*?"<>|]/g, "_");
+}
+
+async function extractArchiveToDirectory(archive: JSZip, destinationDir: string): Promise<void> {
+  const entries = Object.values(archive.files).sort((left, right) => left.name.localeCompare(right.name));
+  const normalizedDestination = normalize(destinationDir);
+  for (const entry of entries) {
+    if (entry.dir) {
+      mkdirSync(join(destinationDir, entry.name), { recursive: true });
+      continue;
+    }
+
+    const outputPath = join(destinationDir, normalize(entry.name));
+    const normalizedOutputPath = normalize(outputPath);
+    if (normalizedOutputPath !== normalizedDestination && !normalizedOutputPath.startsWith(normalizedDestination + sep)) {
+      throw new Error(`Archive entry escapes destination directory: ${entry.name}`);
+    }
+
+    mkdirSync(dirname(normalizedOutputPath), { recursive: true });
+    writeFileSync(normalizedOutputPath, await entry.async("nodebuffer"));
+  }
+}
+
+function sha256(content: Buffer): string {
+  return createHash("sha256").update(content).digest("hex");
 }

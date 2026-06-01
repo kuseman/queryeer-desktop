@@ -55,6 +55,7 @@ type InventoryState = {
   loading: boolean;
   error: string | null;
   updatingPluginId: string | null;
+  installing: boolean;
 };
 
 export function PluginManagerEditor() {
@@ -62,7 +63,8 @@ export function PluginManagerEditor() {
     inventory: null,
     loading: true,
     error: null,
-    updatingPluginId: null
+    updatingPluginId: null,
+    installing: false
   });
 
   const loadInventory = async () => {
@@ -108,6 +110,60 @@ export function PluginManagerEditor() {
     }
   };
 
+  const handleInstall = async () => {
+    const selection = await window.appShell.showDialogOpen({
+      title: "Install Plugin ZIP",
+      filters: [{ name: "Plugin ZIP", extensions: ["zip"] }],
+      multiSelections: false
+    });
+    const zipFilePath = selection.filePaths[0];
+    if (selection.canceled || !zipFilePath) {
+      return;
+    }
+
+    setState((current) => ({ ...current, installing: true, error: null }));
+    try {
+      const result = await window.appShell.installPluginFromZip({ zipFilePath });
+      if (!result.accepted) {
+        setState((current) => ({
+          ...current,
+          installing: false,
+          error: result.reason ?? `Plugin ZIP could not be installed: ${zipFilePath}`
+        }));
+        return;
+      }
+      await loadInventory();
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        installing: false,
+        error: error instanceof Error ? error.message : String(error)
+      }));
+    }
+  };
+
+  const handleUninstall = async (pluginId: string) => {
+    setState((current) => ({ ...current, updatingPluginId: pluginId, error: null }));
+    try {
+      const result = await window.appShell.uninstallPlugin({ pluginId });
+      if (!result.accepted) {
+        setState((current) => ({
+          ...current,
+          updatingPluginId: null,
+          error: result.reason ?? `Plugin '${pluginId}' could not be uninstalled`
+        }));
+        return;
+      }
+      await loadInventory();
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        updatingPluginId: null,
+        error: error instanceof Error ? error.message : String(error)
+      }));
+    }
+  };
+
   const inventory = state.inventory;
   const plugins = inventory?.plugins ?? [];
   const restartRequired = plugins.some((plugin) => plugin.restartRequired);
@@ -119,12 +175,17 @@ export function PluginManagerEditor() {
           <p className="plugin-manager-eyebrow">Managed external plugins</p>
           <h2>Plugin Manager</h2>
           <p>
-            Enable or disable user-installed plugins. Built-in plugins are always active and are not listed here.
+            Install, disable, or remove user-installed plugins. Built-in plugins are always active and are not listed here.
           </p>
         </div>
-        <button type="button" className="plugin-manager-refresh" onClick={() => void loadInventory()} disabled={state.loading}>
-          Refresh
-        </button>
+        <div className="plugin-manager-header-actions">
+          <button type="button" className="plugin-manager-refresh" onClick={() => void loadInventory()} disabled={state.loading}>
+            Refresh
+          </button>
+          <button type="button" className="plugin-manager-refresh" onClick={() => void handleInstall()} disabled={state.installing || state.loading}>
+            {state.installing ? "Installing..." : "Install ZIP"}
+          </button>
+        </div>
       </header>
 
       {state.error && <div className="plugin-manager-alert plugin-manager-alert-error">{state.error}</div>}
@@ -164,6 +225,7 @@ export function PluginManagerEditor() {
               plugin={plugin}
               updating={state.updatingPluginId === plugin.id}
               onToggle={() => void handleToggle(plugin)}
+              onUninstall={() => void handleUninstall(plugin.id)}
             />
           ))}
         </div>
@@ -175,13 +237,16 @@ export function PluginManagerEditor() {
 function PluginInventoryCard({
   plugin,
   updating,
-  onToggle
+  onToggle,
+  onUninstall
 }: {
   plugin: ManagedPluginInventoryEntry;
   updating: boolean;
   onToggle: () => void;
+  onUninstall: () => void;
 }) {
   const canToggle = plugin.status !== "missing";
+  const pendingUninstall = plugin.uninstallPending === true;
 
   return (
     <article className={`plugin-manager-card plugin-manager-card-${plugin.status}`}>
@@ -195,6 +260,7 @@ function PluginInventoryCard({
             {plugin.enabled ? "Enabled" : "Disabled"}
           </span>
           <span>{statusLabel(plugin)}</span>
+          {pendingUninstall && <span className="plugin-manager-badge-restart">Pending uninstall</span>}
           {plugin.restartRequired && <span className="plugin-manager-badge-restart">Restart required</span>}
         </div>
       </div>
@@ -215,18 +281,40 @@ function PluginInventoryCard({
           <dt>Source</dt>
           <dd>{plugin.sourcePath}</dd>
         </div>
+        {plugin.installSourcePath && (
+          <div>
+            <dt>Installed from</dt>
+            <dd>{plugin.installSourcePath}</dd>
+          </div>
+        )}
+        {plugin.integrity && (
+          <div>
+            <dt>Integrity</dt>
+            <dd>{plugin.integrity.algorithm}:{plugin.integrity.archiveHash}</dd>
+          </div>
+        )}
+        {plugin.integrity?.installedAt && (
+          <div>
+            <dt>Installed at</dt>
+            <dd>{plugin.integrity.installedAt}</dd>
+          </div>
+        )}
       </dl>
       {plugin.lastError && <p className="plugin-manager-error-text">{plugin.lastError}</p>}
       <div className="plugin-manager-card-actions">
         <button type="button" onClick={onToggle} disabled={!canToggle || updating}>
           {updating ? "Updating..." : plugin.enabled ? "Disable" : "Enable"}
         </button>
+        {!pendingUninstall && <button type="button" onClick={onUninstall} disabled={updating}>Uninstall</button>}
       </div>
     </article>
   );
 }
 
 function statusLabel(plugin: ManagedPluginInventoryEntry): string {
+  if (plugin.uninstallPending) {
+    return "Uninstall queued";
+  }
   if (plugin.status === "available") {
     return "Available";
   }
