@@ -1,0 +1,227 @@
+.plugin-manager-editor {
+  --plugin-manager-surface: var(--surface-overlay-weak);
+  --plugin-manager-surface-strong: var(--surface-overlay-soft);
+  --plugin-manager-card-bg: linear-gradient(145deg, var(--bg-2), var(--bg-1));
+  --plugin-manager-warning-text: var(--state-log-warn, var(--warning));
+
+  height: 100%;
+  overflow: auto;
+  padding: 20px;
+}
+
+.plugin-manager-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.plugin-manager-header h2 {
+  margin: 2px 0 6px;
+  font-size: 24px;
+  color: var(--text-0);
+}
+
+.plugin-manager-header p {
+  margin: 0;
+  color: var(--text-1);
+}
+
+.plugin-manager-eyebrow {
+  margin: 0;
+  color: var(--accent-muted);
+  font-size: var(--ui-font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.plugin-manager-refresh,
+.plugin-manager-card-actions button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-2);
+  color: var(--text-0);
+  cursor: pointer;
+  padding: 7px 11px;
+}
+
+.plugin-manager-refresh:hover:not(:disabled),
+.plugin-manager-card-actions button:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--bg-3);
+}
+
+.plugin-manager-refresh:disabled,
+.plugin-manager-card-actions button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.plugin-manager-alert {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+}
+
+.plugin-manager-alert-error {
+  border-color: color-mix(in srgb, var(--state-error) 45%, var(--border));
+  color: var(--state-error-soft);
+  background: color-mix(in srgb, var(--state-error) 12%, transparent);
+}
+
+.plugin-manager-alert-warning {
+  border-color: color-mix(in srgb, var(--warning) 45%, var(--border));
+  color: var(--plugin-manager-warning-text);
+  background: var(--state-warning-soft);
+}
+
+.plugin-manager-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.plugin-manager-meta > div {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--plugin-manager-surface);
+  padding: 10px 12px;
+}
+
+.plugin-manager-meta span {
+  display: block;
+  color: var(--text-1);
+  font-size: var(--ui-font-size-xs);
+  margin-bottom: 5px;
+}
+
+.plugin-manager-meta code {
+  color: var(--text-0);
+  overflow-wrap: anywhere;
+}
+
+.plugin-manager-empty {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: var(--plugin-manager-surface);
+  color: var(--text-1);
+  padding: 24px;
+  text-align: center;
+}
+
+.plugin-manager-list {
+  display: grid;
+  gap: 12px;
+}
+
+.plugin-manager-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--plugin-manager-card-bg);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--bg-0) 42%, transparent);
+  padding: 14px;
+}
+
+.plugin-manager-card-invalid,
+.plugin-manager-card-missing {
+  border-color: color-mix(in srgb, var(--warning) 42%, var(--border));
+}
+
+.plugin-manager-card-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.plugin-manager-card h3 {
+  margin: 0 0 3px;
+  color: var(--text-0);
+  font-size: 16px;
+}
+
+.plugin-manager-plugin-id {
+  margin: 0;
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: var(--ui-font-size-xs);
+}
+
+.plugin-manager-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.plugin-manager-badges span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--plugin-manager-surface-strong);
+  color: var(--text-1);
+  font-size: var(--ui-font-size-xs);
+  padding: 3px 8px;
+}
+
+.plugin-manager-badges .plugin-manager-badge-enabled {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+  color: var(--state-success-soft);
+  background: var(--state-success-bg);
+}
+
+.plugin-manager-badges .plugin-manager-badge-disabled {
+  color: var(--text-2);
+}
+
+.plugin-manager-badges .plugin-manager-badge-restart {
+  border-color: color-mix(in srgb, var(--warning) 45%, var(--border));
+  color: var(--plugin-manager-warning-text);
+}
+
+.plugin-manager-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.plugin-manager-details div {
+  min-width: 0;
+}
+
+.plugin-manager-details dt {
+  color: var(--text-1);
+  font-size: var(--ui-font-size-xs);
+  margin-bottom: 3px;
+}
+
+.plugin-manager-details dd {
+  margin: 0;
+  color: var(--text-0);
+  overflow-wrap: anywhere;
+}
+
+.plugin-manager-error-text {
+  color: var(--plugin-manager-warning-text);
+  margin: 0 0 12px;
+}
+
+.plugin-manager-card-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 720px) {
+  .plugin-manager-header,
+  .plugin-manager-card-main {
+    flex-direction: column;
+  }
+
+  .plugin-manager-badges {
+    justify-content: flex-start;
+  }
+}

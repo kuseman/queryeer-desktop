@@ -10,6 +10,7 @@ type BackendLaunchContext = {
   settingsDirPath: string;
   pluginsDirPath?: string;
   pluginsSafeMode?: boolean;
+  getDisabledPluginIds?: () => string[];
 };
 
 export type ProdBackendLaunchPaths = {
@@ -82,6 +83,10 @@ export class ProdBackendTransport extends StdioBackendTransportBase {
     }
     if (this.launchContext?.pluginsSafeMode) {
       jvmArgs.push("-Dqueryeer.plugins.safeMode=true");
+    }
+    const disabledPluginIds = this.launchContext?.getDisabledPluginIds?.() ?? [];
+    if (disabledPluginIds.length > 0) {
+      jvmArgs.push(`-Dqueryeer.plugins.disabledIds=${disabledPluginIds.join(",")}`);
     }
     jvmArgs.push(...await resolveBackendJvmArgs(settingsDirPath));
     jvmArgs.push(

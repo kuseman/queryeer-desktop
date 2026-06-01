@@ -32,6 +32,7 @@ import { AssistantHttpService } from "./assistant/assistant-http-service.js";
 import { createBeforeQuitHandler } from "./app-shutdown.js";
 import { wireExpressionEvaluatorIpc } from "./expressions/expression-evaluator.js";
 import { defaultPluginsDirPath } from "./plugins/plugin-paths.js";
+import { defaultPluginsLockfilePath, PluginInventoryService } from "./plugins/plugin-inventory-service.js";
 
 const isDev = !app.isPackaged;
 const queryeerReleasesUrl = "https://api.github.com/repos/kuseman/queryeer-desktop/releases";
@@ -56,7 +57,8 @@ function createBackendFactory(): BackendTransportFactory {
           appDir,
           settingsDirPath,
           pluginsDirPath,
-          pluginsSafeMode
+          pluginsSafeMode,
+          getDisabledPluginIds: () => pluginInventoryService?.getDisabledPluginIds() ?? []
         })
     };
   }
@@ -68,7 +70,8 @@ function createBackendFactory(): BackendTransportFactory {
         appDir,
         settingsDirPath,
         pluginsDirPath,
-        pluginsSafeMode
+        pluginsSafeMode,
+        getDisabledPluginIds: () => pluginInventoryService?.getDisabledPluginIds() ?? []
       })
   };
 }
@@ -90,6 +93,7 @@ let backupStore: BackupStore | null = null;
 let queryExportStore: QueryExportStore | null = null;
 let recentFilesStore: RecentFilesStore | null = null;
 let securityService: SecurityService | null = null;
+let pluginInventoryService: PluginInventoryService | null = null;
 let mainWindow: BrowserWindow | null = null;
 
 const beforeQuitHandler = createBeforeQuitHandler({
@@ -146,8 +150,10 @@ app.disableHardwareAcceleration();
 
 app.whenReady().then(async () => {
   const appDataDir = app.getPath("userData");
+  const settingsDirPath = defaultSettingsDirPath(appDataDir);
   const pluginsDirPath = defaultPluginsDirPath(appDataDir);
   await Promise.all([
+    mkdir(settingsDirPath, { recursive: true }),
     mkdir(join(appDataDir, "libShared"), { recursive: true }),
     mkdir(join(appDataDir, "libNative"), { recursive: true }),
     mkdir(pluginsDirPath, { recursive: true })
@@ -335,7 +341,7 @@ app.whenReady().then(async () => {
   });
   keybindingsStore.wireIpc();
   settingsStore = new SettingsStore({
-    settingsDirPath: defaultSettingsDirPath(app.getPath("userData"))
+    settingsDirPath
   });
   settingsStore.wireIpc();
   backupStore = new BackupStore({
@@ -372,11 +378,23 @@ app.whenReady().then(async () => {
     resolveSecret: (secretRef) => securityService!.resolveSecret(secretRef)
   });
   assistantHttpService.wireIpc();
+  pluginInventoryService = new PluginInventoryService({
+    pluginsDir: pluginsDirPath,
+    lockfilePath: defaultPluginsLockfilePath(settingsDirPath),
+    isSafeMode: isPluginSafeMode
+  });
+  await pluginInventoryService.initialize();
+  ipcMain.handle("plugins:get-inventory", async () => pluginInventoryService!.getInventory());
+  ipcMain.handle("plugins:set-enabled", async (_event, params: { pluginId: string; enabled: boolean }) => {
+    return pluginInventoryService!.setEnabled(params.pluginId, params.enabled);
+  });
   ipcMain.handle("plugins:get-frontend-targets", async () => {
     if (isPluginSafeMode()) {
       return [];
     }
-    return discoverExternalFrontendPlugins(pluginsDirPath);
+    const inventory = await pluginInventoryService!.getInventory();
+    const enabledPluginIds = new Set(inventory.plugins.filter((plugin) => plugin.enabled).map((plugin) => plugin.id));
+    return (await discoverExternalFrontendPlugins(pluginsDirPath)).filter((plugin) => enabledPluginIds.has(plugin.id));
   });
   ipcMain.handle("file:read", async (_event, { uri }: { uri: string }) => {
     try {

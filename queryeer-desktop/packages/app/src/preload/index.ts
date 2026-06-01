@@ -18,6 +18,10 @@ import type {
   FileWatcherWatchOptions
 } from "@queryeer/api/files/FileWatcher.js";
 import type { ExternalFrontendPluginManifest } from "@queryeer/api/plugin/ExternalFrontendPluginManifest.js";
+import type {
+  ManagedPluginInventory,
+  ManagedPluginSetEnabledResult
+} from "@queryeer/api/plugin/PluginInventory.js";
 import type { WorkspaceSnapshot } from "@queryeer/api/workspace/WorkspaceSnapshot.js";
 import type { UserKeybindingsDocument } from "@queryeer/api/commands/Keybindings.js";
 import type {
@@ -90,6 +94,8 @@ type AppShellApi = {
   fetchQueryeerReleases: () => Promise<{ ok: boolean; releases: unknown }>;
   fetchBackendPluginChangelogs: () => Promise<{ plugins: Array<{ pluginId: string; pluginName: string; version: string; changelog: string }> }>;
   getExternalFrontendPlugins: () => Promise<ExternalFrontendPluginManifest[]>;
+  getPluginInventory: () => Promise<ManagedPluginInventory>;
+  setPluginEnabled: (params: { pluginId: string; enabled: boolean }) => Promise<ManagedPluginSetEnabledResult>;
   executeBackendQuery: (params: QueryExecuteParams) => Promise<QueryExecuteResult>;
   cancelBackendQuery: (params: QueryCancelParams) => Promise<QueryCancelResult>;
   invokeBackendEngine: (params: EngineInvokeParams) => Promise<EngineInvokeResult>;
@@ -254,6 +260,12 @@ const appShellApi: AppShellApi = {
   },
   getExternalFrontendPlugins: async () => {
     return ipcRenderer.invoke("plugins:get-frontend-targets");
+  },
+  getPluginInventory: async () => {
+    return ipcRenderer.invoke("plugins:get-inventory");
+  },
+  setPluginEnabled: async (params) => {
+    return ipcRenderer.invoke("plugins:set-enabled", params);
   },
   executeBackendQuery: async (params) => {
     return ipcRenderer.invoke("backend:execute-query", params);

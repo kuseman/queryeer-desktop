@@ -812,6 +812,10 @@ cp -r dist/my-plugin "<queryeer-user-data>/plugins/my-plugin"
 
 External plugins are installed per user under Queryeer's managed plugins directory. On Windows this is usually `%APPDATA%\queryeer-desktop\plugins`. Builtin plugins are platform components, are loaded separately, and are not user-manageable plugins.
 
+Queryeer maintains `%APPDATA%\queryeer-desktop\settings\plugins-lock.json` next to the other settings files. The lockfile records discovered external plugin IDs, versions, source paths, enablement, and whether a restart is required after an enable/disable change.
+
+Use **Tools -> Plugins** to open the Plugin Manager. The current UI lists external plugins only, shows missing/invalid entries, and toggles enablement for the next app restart. Builtin plugins are intentionally absent from this UI and cannot be disabled.
+
 ### Build Configuration
 
 #### `package.json`

@@ -4,6 +4,7 @@ import type { QueryExecuteOptions } from "../backend/Types.js";
 import type { WorkspaceSnapshot } from "../workspace/WorkspaceSnapshot.js";
 import type { UserKeybindingsDocument } from "../commands/Keybindings.js";
 import type { ExternalFrontendPluginManifest } from "../plugin/ExternalFrontendPluginManifest.js";
+import type { ManagedPluginInventory, ManagedPluginSetEnabledResult } from "../plugin/PluginInventory.js";
 import type { FileWatcherEvent } from "../files/FileWatcher.js";
 import type {
   SettingsIndexDocument,
@@ -42,6 +43,8 @@ export interface ShellApi {
   fetchQueryeerReleases: () => Promise<{ ok: boolean; releases: unknown }>;
   fetchBackendPluginChangelogs: () => Promise<{ plugins: Array<{ pluginId: string; pluginName: string; version: string; changelog: string }> }>;
   getExternalFrontendPlugins: () => Promise<ExternalFrontendPluginManifest[]>;
+  getPluginInventory: () => Promise<ManagedPluginInventory>;
+  setPluginEnabled: (params: { pluginId: string; enabled: boolean }) => Promise<ManagedPluginSetEnabledResult>;
   executeBackendQuery: (params: {
     queryExecutionId: string;
     engineId: string;

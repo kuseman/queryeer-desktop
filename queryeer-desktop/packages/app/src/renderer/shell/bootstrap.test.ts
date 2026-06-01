@@ -138,7 +138,9 @@ describe("bootstrapShell diagnostics wiring", () => {
       getAboutMetadata: async () => ({ appVersion: "0.1.0", electronVersion: "41.0.0", chromiumVersion: "126.0.0", nodeVersion: "20.0.0", platform: "win32", arch: "x64" }),
       getDesktopChangelog: async () => null,
       fetchQueryeerReleases: async () => ({ ok: true, releases: [] }),
-      fetchBackendPluginChangelogs: async () => ({ plugins: [] })
+      fetchBackendPluginChangelogs: async () => ({ plugins: [] }),
+      getPluginInventory: async () => ({ pluginsDir: "", lockfilePath: "", safeMode: false, plugins: [] }),
+      setPluginEnabled: async () => ({ accepted: true, restartRequired: true })
     };
 
     (discoverPluginModules as MockedDiscovery).mockResolvedValue({

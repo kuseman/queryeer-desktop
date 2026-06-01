@@ -1,9 +1,12 @@
 package com.queryeer.backend.runner;
 
+import static com.queryeer.backend.api.PayloadUtils.isBlank;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -15,7 +18,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
+import com.queryeer.backend.api.BackendPlugin;
+import com.queryeer.backend.api.PluginDescriptor;
 import com.queryeer.backend.contract.runtime.RuntimePluginState;
 import com.queryeer.backend.contract.runtime.RuntimePluginStatus;
 import com.queryeer.backend.contract.runtime.RuntimeStatusResult;
@@ -83,10 +89,10 @@ public final class BackendRunnerModule
         }
 
         long startedAt = System.currentTimeMillis();
-        java.util.Map<String, com.queryeer.backend.api.PluginDescriptor> descriptorMap = runtime.plugins()
+        Map<String, PluginDescriptor> descriptorMap = runtime.plugins()
                 .stream()
-                .collect(java.util.stream.Collectors.toMap(plugin -> plugin.descriptor()
-                        .id(), com.queryeer.backend.api.BackendPlugin::descriptor));
+                .collect(Collectors.toMap(plugin -> plugin.descriptor()
+                        .id(), BackendPlugin::descriptor));
         StdioTransportModule.RunningTransport transportServer = new StdioTransportModule().create(input, output, MapperUtils.MAPPER, services.queryEngines(), services.fileRegistryView(),
                 services.events(), () -> runtimeStatusSnapshot(runtime), startedAt, services.config(), securitySession, services.changelogRegistry(), descriptorMap::get);
         System.err.println(withCorrelation("Queryeer backend runner started (stdio mode).", null));
@@ -168,13 +174,13 @@ public final class BackendRunnerModule
         String pluginsDir = firstNonBlank(System.getProperty("queryeer.plugins.dir"), defaultPluginsDir(appDir));
         putIfPresent(values, "queryeer.plugins.dir", pluginsDir);
         putIfPresent(values, "queryeer.plugins.safeMode", System.getProperty("queryeer.plugins.safeMode"));
+        putIfPresent(values, "queryeer.plugins.disabledIds", System.getProperty("queryeer.plugins.disabledIds"));
         return Map.copyOf(values);
     }
 
     private static String defaultPluginsDir(String appDir)
     {
-        if (appDir == null
-                || appDir.isBlank())
+        if (isBlank(appDir))
         {
             return null;
         }
@@ -184,8 +190,7 @@ public final class BackendRunnerModule
 
     private static void putIfPresent(Map<String, String> values, String key, String value)
     {
-        if (value != null
-                && !value.isBlank())
+        if (!isBlank(value))
         {
             values.put(key, value.trim());
         }
@@ -193,8 +198,7 @@ public final class BackendRunnerModule
 
     private static String firstNonBlank(String first, String second)
     {
-        if (first != null
-                && !first.isBlank())
+        if (!isBlank(first))
         {
             return first;
         }
@@ -207,23 +211,55 @@ public final class BackendRunnerModule
                 .get("queryeer.plugins.dir");
         boolean safeMode = Boolean.parseBoolean(services.config()
                 .get("queryeer.plugins.safeMode"));
+        Set<String> disabledPluginIds = parseDisabledPluginIds(services.config()
+                .get("queryeer.plugins.disabledIds"));
         services.logger()
                 .info(withCorrelation("Plugin discovery resolved to builtins plus managed user plugins (pluginsDir=" + (pluginsDir == null
                         || pluginsDir.isBlank() ? "not-configured"
-                                : pluginsDir) + ", safeMode=" + safeMode + ")",
+                                : pluginsDir) + ", safeMode=" + safeMode + ", disabledExternalPlugins=" + disabledPluginIds.size() + ")",
                         null));
 
         List<DiscoveredPlugin> builtin = new BuiltinPluginDiscovery(discoveryService, builtinsDir).discover();
         if (safeMode
-                || pluginsDir == null
-                || pluginsDir.isBlank())
+                || isBlank(pluginsDir))
         {
             return builtin;
         }
 
         List<DiscoveredPlugin> external = discoveryService.discoverFromPath(pluginsDir)
                 .backendPlugins();
+        external = filterDisabledExternalPlugins(external, disabledPluginIds);
         return mergeDiscoveredPlugins(builtin, external);
+    }
+
+    static Set<String> parseDisabledPluginIds(String value)
+    {
+        Set<String> disabled = new LinkedHashSet<>();
+        if (isBlank(value))
+        {
+            return disabled;
+        }
+        for (String item : value.split(","))
+        {
+            String pluginId = item.trim();
+            if (!pluginId.isBlank())
+            {
+                disabled.add(pluginId);
+            }
+        }
+        return disabled;
+    }
+
+    static List<DiscoveredPlugin> filterDisabledExternalPlugins(List<DiscoveredPlugin> plugins, Set<String> disabledPluginIds)
+    {
+        if (disabledPluginIds.isEmpty())
+        {
+            return plugins;
+        }
+        return plugins.stream()
+                .filter(plugin -> !disabledPluginIds.contains(plugin.manifest()
+                        .id()))
+                .toList();
     }
 
     private List<PluginRuntimeContributionCollector.ManifestSource> loadBuiltinManifests(Path builtinsDir)
@@ -247,7 +283,7 @@ public final class BackendRunnerModule
 
         Path appBuiltinsDir = appDir.resolve("plugins")
                 .resolve("builtin");
-        if (java.nio.file.Files.isDirectory(appBuiltinsDir))
+        if (Files.isDirectory(appBuiltinsDir))
         {
             return appBuiltinsDir;
         }
@@ -255,7 +291,7 @@ public final class BackendRunnerModule
         Path workingDirBuiltinsDir = Path.of("plugins", "builtin")
                 .toAbsolutePath()
                 .normalize();
-        if (java.nio.file.Files.isDirectory(workingDirBuiltinsDir))
+        if (Files.isDirectory(workingDirBuiltinsDir))
         {
             return workingDirBuiltinsDir;
         }
