@@ -14,6 +14,13 @@ export type ManagedPluginInventoryEntry = {
   hasBackend: boolean;
   lastError?: string;
   restartRequired?: boolean;
+  uninstallPending?: boolean;
+  integrity?: {
+    algorithm: "sha256";
+    archiveHash: string;
+    installedAt: string;
+  };
+  installSourcePath?: string;
 };
 
 export type ManagedPluginInventory = {
@@ -27,5 +34,19 @@ export type ManagedPluginSetEnabledResult = {
   accepted: boolean;
   restartRequired: boolean;
   plugin?: ManagedPluginInventoryEntry;
+  reason?: string;
+};
+
+export type ManagedPluginInstallResult = {
+  accepted: boolean;
+  restartRequired: boolean;
+  plugin?: ManagedPluginInventoryEntry;
+  reason?: string;
+};
+
+export type ManagedPluginUninstallResult = {
+  accepted: boolean;
+  restartRequired: boolean;
+  removedPluginId?: string;
   reason?: string;
 };

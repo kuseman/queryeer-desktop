@@ -51,6 +51,8 @@ describe("core.plugins plugin", () => {
   let root: Root;
   let getPluginInventory: ReturnType<typeof vi.fn>;
   let setPluginEnabled: ReturnType<typeof vi.fn>;
+  let installPluginFromZip: ReturnType<typeof vi.fn>;
+  let uninstallPlugin: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -77,9 +79,17 @@ describe("core.plugins plugin", () => {
       ]
     }));
     setPluginEnabled = vi.fn(async () => ({ accepted: true, restartRequired: true }));
+    installPluginFromZip = vi.fn(async () => ({ accepted: true, restartRequired: true }));
+    uninstallPlugin = vi.fn(async () => ({ accepted: true, restartRequired: true, removedPluginId: "external.one" }));
     Object.defineProperty(window, "appShell", {
       configurable: true,
-      value: { getPluginInventory, setPluginEnabled }
+      value: {
+        getPluginInventory,
+        setPluginEnabled,
+        installPluginFromZip,
+        uninstallPlugin,
+        showDialogOpen: vi.fn(async () => ({ canceled: true, filePaths: [] }))
+      }
     });
   });
 
@@ -137,5 +147,47 @@ describe("core.plugins plugin", () => {
     });
 
     expect(setPluginEnabled).toHaveBeenCalledWith({ pluginId: "external.one", enabled: false });
+  });
+
+  it("installs from zip and supports uninstall", async () => {
+    const showDialogOpen = vi.fn(async () => ({ canceled: false, filePaths: ["C:/downloads/external-one.zip"] }));
+    Object.defineProperty(window, "appShell", {
+      configurable: true,
+      value: {
+        getPluginInventory,
+        setPluginEnabled,
+        installPluginFromZip,
+        uninstallPlugin,
+        showDialogOpen
+      }
+    });
+
+    await act(async () => {
+      root.render(<PluginManagerEditor />);
+      await Promise.resolve();
+    });
+
+    const installButton = Array.from(rootElement.querySelectorAll("button")).find((button) => button.textContent === "Install ZIP");
+    expect(installButton).toBeDefined();
+
+    await act(async () => {
+      installButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(showDialogOpen).toHaveBeenCalled();
+    expect(installPluginFromZip).toHaveBeenCalledWith({ zipFilePath: "C:/downloads/external-one.zip" });
+
+    const uninstallButton = Array.from(rootElement.querySelectorAll("button")).find((button) => button.textContent === "Uninstall");
+    expect(uninstallButton).toBeDefined();
+
+    await act(async () => {
+      uninstallButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(uninstallPlugin).toHaveBeenCalledWith({ pluginId: "external.one" });
   });
 });

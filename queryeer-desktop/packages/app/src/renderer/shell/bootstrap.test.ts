@@ -140,7 +140,9 @@ describe("bootstrapShell diagnostics wiring", () => {
       fetchQueryeerReleases: async () => ({ ok: true, releases: [] }),
       fetchBackendPluginChangelogs: async () => ({ plugins: [] }),
       getPluginInventory: async () => ({ pluginsDir: "", lockfilePath: "", safeMode: false, plugins: [] }),
-      setPluginEnabled: async () => ({ accepted: true, restartRequired: true })
+      setPluginEnabled: async () => ({ accepted: true, restartRequired: true }),
+      installPluginFromZip: async () => ({ accepted: true, restartRequired: true }),
+      uninstallPlugin: async () => ({ accepted: true, restartRequired: true })
     };
 
     (discoverPluginModules as MockedDiscovery).mockResolvedValue({

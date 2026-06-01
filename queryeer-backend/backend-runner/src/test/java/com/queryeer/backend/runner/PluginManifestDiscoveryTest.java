@@ -70,6 +70,32 @@ class PluginManifestDiscoveryTest
     }
 
     @Test
+    void ignoresNonPluginFoldersDuringSourceDiscovery() throws IOException
+    {
+        Path pluginsDir = tempDir.resolve("plugins");
+        Path stagingFolder = pluginsDir.resolve(".staging");
+        Path pluginFolder = pluginsDir.resolve("example-plugin");
+        Files.createDirectories(stagingFolder);
+        Files.createDirectories(pluginFolder);
+        Files.writeString(pluginFolder.resolve("plugin.json"), """
+                {
+                  "schemaVersion": 1,
+                  "id": "example.plugin",
+                  "name": "Example Plugin",
+                  "version": "1.0.0",
+                  "backend": {
+                    "entrypointClass": "com.example.DoesNotMatter"
+                  }
+                }
+                """, StandardCharsets.UTF_8);
+
+        PluginSourceExplorer explorer = new PluginSourceExplorer();
+        List<Path> sources = explorer.discoverPluginSources(pluginsDir);
+
+        Assertions.assertEquals(List.of(pluginFolder), sources);
+    }
+
+    @Test
     void throwsForDuplicatePluginIdsAcrossSources() throws IOException
     {
         Path pluginsDir = tempDir.resolve("plugins");

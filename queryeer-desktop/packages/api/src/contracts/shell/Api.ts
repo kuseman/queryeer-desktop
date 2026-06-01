@@ -4,7 +4,12 @@ import type { QueryExecuteOptions } from "../backend/Types.js";
 import type { WorkspaceSnapshot } from "../workspace/WorkspaceSnapshot.js";
 import type { UserKeybindingsDocument } from "../commands/Keybindings.js";
 import type { ExternalFrontendPluginManifest } from "../plugin/ExternalFrontendPluginManifest.js";
-import type { ManagedPluginInventory, ManagedPluginSetEnabledResult } from "../plugin/PluginInventory.js";
+import type {
+  ManagedPluginInstallResult,
+  ManagedPluginInventory,
+  ManagedPluginSetEnabledResult,
+  ManagedPluginUninstallResult
+} from "../plugin/PluginInventory.js";
 import type { FileWatcherEvent } from "../files/FileWatcher.js";
 import type {
   SettingsIndexDocument,
@@ -45,6 +50,8 @@ export interface ShellApi {
   getExternalFrontendPlugins: () => Promise<ExternalFrontendPluginManifest[]>;
   getPluginInventory: () => Promise<ManagedPluginInventory>;
   setPluginEnabled: (params: { pluginId: string; enabled: boolean }) => Promise<ManagedPluginSetEnabledResult>;
+  installPluginFromZip: (params: { zipFilePath: string }) => Promise<ManagedPluginInstallResult>;
+  uninstallPlugin: (params: { pluginId: string }) => Promise<ManagedPluginUninstallResult>;
   executeBackendQuery: (params: {
     queryExecutionId: string;
     engineId: string;

@@ -17,6 +17,12 @@
   margin-bottom: 16px;
 }
 
+.plugin-manager-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .plugin-manager-header h2 {
   margin: 2px 0 6px;
   font-size: 24px;
@@ -213,12 +219,17 @@
 .plugin-manager-card-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
 }
 
 @media (max-width: 720px) {
   .plugin-manager-header,
   .plugin-manager-card-main {
     flex-direction: column;
+  }
+
+  .plugin-manager-header-actions {
+    width: 100%;
   }
 
   .plugin-manager-badges {
