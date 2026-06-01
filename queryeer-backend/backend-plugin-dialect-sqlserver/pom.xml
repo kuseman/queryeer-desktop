@@ -13,7 +13,7 @@
     <name>Queryeer SQL Server Dialect Plugin</name>
 
     <properties>
-        <maven.deploy.skip>true</maven.deploy.skip>
+        <skipPublishing>true</skipPublishing>
         <queryeer.plugin.id>queryengine.jdbc.dialect.sqlserver</queryeer.plugin.id>
     </properties>
 

@@ -12,7 +12,7 @@
     <name>Queryeer Payloadbuilder Plugin</name>
 
     <properties>
-        <maven.deploy.skip>true</maven.deploy.skip>
+        <skipPublishing>true</skipPublishing>
         <queryeer.plugin.id>queryengine.payloadbuilder</queryeer.plugin.id>
     </properties>
 

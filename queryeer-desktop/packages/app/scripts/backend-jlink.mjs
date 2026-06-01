@@ -9,17 +9,6 @@ const jlinkOutput = resolve(process.env.QUERYEER_JLINK_OUTPUT ?? join(repoRoot, 
 const mvnw = process.platform === "win32" ? "mvnw.cmd" : "mvnw";
 const mvnwPath = join(backendRoot, mvnw);
 
-const backendModules = [
-  "backend-runner",
-  "backend-lib-queryengine-jdbc-foundation",
-  "backend-lib-queryengine-payloadbuilder-foundation",
-  "backend-lib-queryengine-sql-parser",
-  "backend-plugin-jdbc",
-  "backend-plugin-payloadbuilder",
-  "backend-plugin-dialect-sqlserver",
-  "backend-plugin-dialect-postgres"
-];
-
 function run(label, cmd, opts = {}) {
   console.log(`\n[${label}]`);
   console.log(`  ${cmd}`);
@@ -36,8 +25,6 @@ async function main() {
     `"${mvnwPath}"`,
     "-q", "-T", "1C",
     "-f", `"${join(backendRoot, "pom.xml")}"`,
-    "-pl", backendModules.join(","),
-    "-am",
     "-DskipTests=true",
     "-Dspotless.check.skip=true",
     "-DcheckstyleSkip=true",

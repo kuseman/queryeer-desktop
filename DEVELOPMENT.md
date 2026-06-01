@@ -76,7 +76,7 @@ Run the full backend verification from the repository root:
 Fast backend preparation without tests/checkstyle:
 
 ```bash
-./mvnw -f pom.xml -pl backend-runner,backend-lib-queryengine-jdbc-foundation,backend-lib-queryengine-sql-parser,backend-plugin-jdbc,backend-plugin-payloadbuilder,backend-plugin-dialect-sqlserver -am -DskipTests=true -DcheckstyleSkip=true install
+./mvnw -f pom.xml -DskipTests=true -DcheckstyleSkip=true install
 ```
 
 On PowerShell, prefer `-DcheckstyleSkip=true` to avoid quoting dotted Maven properties. If using Maven's native checkstyle property, quote it:
@@ -126,12 +126,11 @@ When scaffolding a new backend plugin, the following files/registrations are req
 
 1. **Backend module `src/dist/plugin.json`** — Production manifest template (Maven-filtered)
 2. **Dev manifest** `plugins/builtin/<pluginId>/plugin.json` — Points at `target/classes` + deps
-3. **`queryeer-desktop/scripts/backend-jlink.mjs`** — Add module to `backendModules` array
-4. **`queryeer-desktop/scripts/stage-backend-release.mjs`** — Add to `moduleByPluginId` map
-5. **`queryeer-desktop/src/main/backend/backend-transport-dev.ts`** — Add to `builtinBackendModules`
-6. **Desktop plugin files** under `src/plugins/<pluginId>/` — `module.ts`, `plugin.tsx`, `ConnectionForm.tsx`
-7. **Parent `pom.xml`** — Add `<module>` to the modules list
-8. **`.github/workflows/release.yml`** — If the module must be published to Maven Central (e.g. foundation libraries for external plugin authors), add its Maven coordinate to the `MAVEN_CENTRAL_PROJECTS` env var in the `publish-maven-central` job. If other modules need it as a build dependency during publish, also add it to `MAVEN_CENTRAL_BUILD_PROJECTS`.
+3. **Desktop plugin files** under `src/plugins/<pluginId>/` — `module.ts`, `plugin.tsx`, `ConnectionForm.tsx`
+4. **Parent `queryeer-backend/pom.xml`** — Add `<module>` to the modules list
+5. **`pom.xml` plugin id + central publish skip** — In the new module's pom, set `<queryeer.plugin.id>` so it ships as a builtin plugin, and `<skipPublishing>true</skipPublishing>` so the `central-publishing-maven-plugin` does not publish it to Maven Central (only foundation libraries intended for external plugin authors should omit the skip and be eligible for Central). The skip is per-module and is checked since 0.9.0 of the central plugin.
+
+The jlink, dev-mode, and stage-release scripts plus the GitHub Actions publish job all derive their module sets from the parent pom, so no separate list updates are needed there.
 
 ### Plugin Discovery
 
