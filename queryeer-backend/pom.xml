@@ -20,7 +20,7 @@
         <jackson.version>2.19.4</jackson.version>
         <junit.jupiter.version>6.1.0</junit.jupiter.version>
         <mockito.core.version>5.23.0</mockito.core.version>
-        <payloadbuilder.version>1.10.1</payloadbuilder.version>
+        <payloadbuilder.version>1.12.0</payloadbuilder.version>
         <maven.dependency.plugin.version>3.10.0</maven.dependency.plugin.version>
         <maven.assembly.plugin.version>3.8.0</maven.assembly.plugin.version>
         <checkstyle.skip>false</checkstyle.skip>

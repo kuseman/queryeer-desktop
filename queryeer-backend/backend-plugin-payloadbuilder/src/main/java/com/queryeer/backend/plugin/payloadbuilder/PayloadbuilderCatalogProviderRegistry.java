@@ -14,6 +14,7 @@ import com.queryeer.backend.plugin.payloadbuilder.elasticsearch.ElasticsearchCat
 import com.queryeer.backend.plugin.payloadbuilder.filesystem.FilesystemCatalogProvider;
 import com.queryeer.backend.plugin.payloadbuilder.http.HttpCatalogProvider;
 import com.queryeer.backend.plugin.payloadbuilder.jdbc.JdbcCatalogProvider;
+import com.queryeer.backend.plugin.payloadbuilder.kafka.KafkaCatalogProvider;
 import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
 import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
 
@@ -47,7 +48,7 @@ final class PayloadbuilderCatalogProviderRegistry implements com.queryeer.backen
     static PayloadbuilderCatalogProviderRegistry defaults(ConfigService configService, PayloadMapper payloadMapper, JdbcRuntimeService jdbcRuntimeServices)
     {
         List<PayloadbuilderCatalogProviderContributor> builtins = List.<PayloadbuilderCatalogProviderContributor>of(new JdbcCatalogProvider(jdbcRuntimeServices),
-                new ElasticsearchCatalogProvider(configService, payloadMapper), new FilesystemCatalogProvider(), new HttpCatalogProvider());
+                new ElasticsearchCatalogProvider(configService, payloadMapper), new KafkaCatalogProvider(configService, payloadMapper), new FilesystemCatalogProvider(), new HttpCatalogProvider());
         return new PayloadbuilderCatalogProviderRegistry(builtins);
     }
 
