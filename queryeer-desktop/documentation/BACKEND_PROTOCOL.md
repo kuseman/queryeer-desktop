@@ -528,8 +528,8 @@ Success result:
 ```json
 {
   "result": {
-    "actions": ["engine.capabilities", "payloadbuilder.es.listIndices"],
-    "catalogIds": ["jdbc", "elasticsearch", "filesystem", "http"]
+    "actions": ["engine.capabilities", "payloadbuilder.es.listIndices", "payloadbuilder.kafka.listTopics"],
+    "catalogIds": ["jdbc", "elasticsearch", "kafka", "filesystem", "http"]
   },
   "features": ["rows", "plan"],
   "artifacts": [

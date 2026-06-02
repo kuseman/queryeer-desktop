@@ -563,6 +563,28 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
             return d.getZonedDateTime();
         }
 
+        // Recurse into Map/Iterable containers: a literal-typed column with a Map/List/Set value lands here, and payloadbuilder-internal
+        // types (UTF8String/Decimal/EpochDateTime/EpochDateTimeOffset) inside those containers would otherwise reach Jackson unchanged. The
+        // transport mapper is in a different classloader and cannot resolve those types, so the row-level normalizer must reach every leaf.
+        if (value instanceof Map<?, ?> map)
+        {
+            Map<Object, Object> result = new LinkedHashMap<>(map.size());
+            for (Map.Entry<?, ?> entry : map.entrySet())
+            {
+                result.put(entry.getKey(), normalizeAnyValue(entry.getValue()));
+            }
+            return result;
+        }
+        if (value instanceof Iterable<?> iterable)
+        {
+            List<Object> result = new ArrayList<>();
+            for (Object element : iterable)
+            {
+                result.add(normalizeAnyValue(element));
+            }
+            return result;
+        }
+
         // NOTE! We need to check ValueVector last since UTF8String/Decimal/EpochDateTime/EpochDateTimeOffset implements that interface
         if (value instanceof ValueVector v)
         {
@@ -746,5 +768,4 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
     private record EnvironmentVariable(String key, String value, Object secretRef)
     {
     }
-
 }
