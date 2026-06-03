@@ -42,6 +42,9 @@ type PluginLockEntry = {
   };
   uninstallPending?: boolean;
   restartRequired?: boolean;
+  installPending?: {
+    stagingDir: string;
+  };
 };
 
 type DiscoveredManagedPlugin = {
@@ -202,7 +205,15 @@ export class PluginInventoryService {
 
       if (existsSync(installDir)) {
         mkdirSync(stagingRoot, { recursive: true });
-        renameSync(installDir, backupDir);
+        try {
+          renameSync(installDir, backupDir);
+        } catch {
+          // Plugin directory is locked (JVM has files open, typically on Windows).
+          // Defer the swap to restart following the same pattern as uninstallPending.
+          return await this.schedulePendingInstall(
+            pluginId, parsedManifest, stagingDir, zipFilePath, archiveHash
+          );
+        }
       } else if (existingLockEntry?.source.path && !isSamePath(existingLockEntry.source.path, installDir) && existsSync(existingLockEntry.source.path)) {
         rmSync(existingLockEntry.source.path, { recursive: true, force: true });
       }
@@ -248,6 +259,66 @@ export class PluginInventoryService {
     };
   }
 
+  private async schedulePendingInstall(
+    pluginId: string,
+    manifest: PluginManifestV1,
+    stagingDir: string,
+    zipFilePath: string,
+    archiveHash: string
+  ): Promise<ManagedPluginInstallResult> {
+    await this.refresh();
+    const lockEntry = this.lockDocument.plugins.find((p) => p.id === pluginId);
+    const installDir = pluginInstallDir(this.options.pluginsDir, pluginId);
+
+    // Clean up any previous pending staging directory for this plugin
+    if (lockEntry?.installPending?.stagingDir && existsSync(lockEntry.installPending.stagingDir)) {
+      try {
+        rmSync(lockEntry.installPending.stagingDir, { recursive: true, force: true });
+      } catch {
+        // best effort cleanup
+      }
+    }
+
+    const { name: pluginName, version: pluginVersion } = manifest as Required<Pick<PluginManifestV1, "name" | "version">>;
+
+    if (lockEntry) {
+      lockEntry.version = pluginVersion;
+      lockEntry.installSourcePath = zipFilePath;
+      lockEntry.integrity = {
+        algorithm: "sha256",
+        archiveHash,
+        installedAt: this.now().toISOString()
+      };
+      lockEntry.restartRequired = true;
+      lockEntry.installPending = { stagingDir };
+    } else {
+      this.lockDocument.plugins.push({
+        id: pluginId,
+        name: pluginName,
+        version: pluginVersion,
+        enabled: true,
+        source: { type: "folder", path: installDir },
+        installSourcePath: zipFilePath,
+        integrity: {
+          algorithm: "sha256",
+          archiveHash,
+          installedAt: this.now().toISOString()
+        },
+        restartRequired: true,
+        installPending: { stagingDir }
+      });
+    }
+
+    this.writeLockDocument();
+    await this.refresh();
+
+    return {
+      accepted: true,
+      restartRequired: true,
+      plugin: this.inventory.plugins.find((p) => p.id === pluginId)
+    };
+  }
+
   public async uninstall(pluginId: string): Promise<ManagedPluginUninstallResult> {
     await this.refresh();
     const lockEntry = this.lockDocument.plugins.find((plugin) => plugin.id === pluginId);
@@ -273,6 +344,46 @@ export class PluginInventoryService {
       removedPluginId: pluginId,
       reason: stillPresent ? "Uninstall scheduled for restart because plugin files are in use" : undefined
     };
+  }
+
+  private processPendingInstalls(): void {
+    const stagingRoot = join(this.options.pluginsDir, STAGING_DIR);
+    for (const lockEntry of this.lockDocument.plugins) {
+      const pending = lockEntry.installPending;
+      if (!pending || typeof pending.stagingDir !== "string") {
+        continue;
+      }
+
+      if (!existsSync(pending.stagingDir)) {
+        // Staging directory is gone — nothing to apply
+        delete lockEntry.installPending;
+        continue;
+      }
+
+      const installDir = pluginInstallDir(this.options.pluginsDir, lockEntry.id);
+      const backupDir = join(stagingRoot, `${lockEntry.id}-backup-${Date.now()}`);
+
+      try {
+        if (existsSync(installDir)) {
+          renameSync(installDir, backupDir);
+        }
+        renameSync(pending.stagingDir, installDir);
+        if (existsSync(backupDir)) {
+          rmSync(backupDir, { recursive: true, force: true });
+        }
+        delete lockEntry.installPending;
+      } catch {
+        // Still can't apply — keep pending for next restart
+        // Rollback backup if we managed the first rename
+        if (existsSync(backupDir) && !existsSync(installDir)) {
+          try {
+            renameSync(backupDir, installDir);
+          } catch {
+            // best effort rollback
+          }
+        }
+      }
+    }
   }
 
   private processPendingUninstalls(): void {
@@ -321,6 +432,7 @@ export class PluginInventoryService {
     }
 
     if (options.clearRestartRequired) {
+      this.processPendingInstalls();
       this.processPendingUninstalls();
     }
 
@@ -530,6 +642,8 @@ function isLockEntry(value: unknown): value is PluginLockEntry {
     typeof candidate.version === "string" &&
     typeof candidate.enabled === "boolean" &&
     (candidate.uninstallPending === undefined || typeof candidate.uninstallPending === "boolean") &&
+    (candidate.installPending === undefined ||
+      (typeof candidate.installPending.stagingDir === "string" && candidate.installPending.stagingDir.length > 0)) &&
     candidate.source != null &&
     (candidate.source.type === "folder" || candidate.source.type === "zip") &&
     typeof candidate.source.path === "string" &&
