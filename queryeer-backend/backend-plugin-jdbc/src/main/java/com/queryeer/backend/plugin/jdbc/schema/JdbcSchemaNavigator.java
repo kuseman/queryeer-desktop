@@ -23,6 +23,14 @@ public final class JdbcSchemaNavigator
         }
     }
 
+    public record ObjectDetail(JdbcSchemaObject object, String database, String schema)
+    {
+    }
+
+    public record ColumnDetail(JdbcSchemaObject column, String tableName, String tableKind, String database, String schema)
+    {
+    }
+
     private final DefaultJdbcConnections connections;
     private final JdbcSchemaStore schemaStore;
     private final JdbcSchemaRouter router;
@@ -252,7 +260,7 @@ public final class JdbcSchemaNavigator
         // Try DEEP cache first
         JdbcSchemaStore.SymbolLookupEntry cached = schemaStore.findSymbol(connectionId, rawToken, selectedDatabase);
         Map<String, Object> result = cached != null ? symbolResult(cached.kind(), cached.name(), cached.fullName(), cached.detail(), cached.database(), cached.schema(), cached.objectName())
-                : findSymbolInSchema(loadCachedSnapshot(connectionId), rawToken, normalizedDatabase);
+                : null;
         if (result != null)
         {
             return result;
@@ -286,6 +294,27 @@ public final class JdbcSchemaNavigator
         {
             return null;
         }
+    }
+
+    public ObjectDetail tableDetail(String connectionId, String rawTableName, String selectedDatabase)
+    {
+        JdbcSchemaStore.ObjectDetail detail = schemaStore.objectDetail(connectionId, rawTableName, selectedDatabase, List.of("table", "view", "base table"));
+        return detail == null ? null
+                : new ObjectDetail(detail.object(), detail.database(), detail.schema());
+    }
+
+    public ObjectDetail procedureDetail(String connectionId, String rawProcedureName, String selectedDatabase)
+    {
+        JdbcSchemaStore.ObjectDetail detail = schemaStore.objectDetail(connectionId, rawProcedureName, selectedDatabase, List.of("procedure"));
+        return detail == null ? null
+                : new ObjectDetail(detail.object(), detail.database(), detail.schema());
+    }
+
+    public ColumnDetail columnDetail(String connectionId, String columnName, String selectedDatabase)
+    {
+        JdbcSchemaStore.ColumnDetail detail = schemaStore.columnDetail(connectionId, columnName, selectedDatabase);
+        return detail == null ? null
+                : new ColumnDetail(detail.column(), detail.tableName(), detail.tableKind(), detail.database(), detail.schema());
     }
 
     private List<JdbcSchemaObject> loadSnapshotForLookup(String connectionId, String selectedDatabase, String normalizedSelectedDatabase)
@@ -326,11 +355,6 @@ public final class JdbcSchemaNavigator
     public List<JdbcSchemaObject> loadDeepSnapshot(String connectionId)
     {
         return schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP);
-    }
-
-    private List<JdbcSchemaObject> loadCachedSnapshot(String connectionId)
-    {
-        return loadDeepSnapshot(connectionId);
     }
 
     private static Map<String, Object> findSymbolInSchema(List<JdbcSchemaObject> snapshot, String rawToken, String normalizedDatabase)

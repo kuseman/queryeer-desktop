@@ -239,6 +239,54 @@ class JdbcBackendPluginTest
                 .contains("SYMBOL_LIVE_TARGET"));
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    void sqlHoverResolvesTableFromSchemaStore() throws Exception
+    {
+        QueryEngineProvider provider = activateAndGetProvider();
+        String jdbcUrl = "jdbc:h2:mem:test_symbol;DB_CLOSE_DELAY=-1";
+
+        try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
+        {
+            statement.execute("create table if not exists hover_target(id int, name varchar(20))");
+        }
+
+        provider.invoke(null, "jdbc.schema.refresh", Map.of("connectionId", "jdbc-symbol", "scope", "deep", "target", Map.of("schema", "PUBLIC")));
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.hover",
+                Map.of("text", "SELECT * FROM PUBLIC.HOVER_TARGET", "cursor", Map.of("line", 1, "column", 22), "connectionId", "jdbc-symbol"));
+
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals("TABLE_REFERENCE", result.get("context"));
+        Assertions.assertTrue(result.toString()
+                .contains("HOVER_TARGET"));
+        Assertions.assertTrue(result.toString()
+                .contains("ID"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void sqlHoverResolvesQualifiedAliasColumnFromSchemaStore() throws Exception
+    {
+        QueryEngineProvider provider = activateAndGetProvider();
+        String jdbcUrl = "jdbc:h2:mem:test_symbol;DB_CLOSE_DELAY=-1";
+
+        try (Connection connection = DriverManager.getConnection(jdbcUrl); Statement statement = connection.createStatement())
+        {
+            statement.execute("create table if not exists hover_target(id int, name varchar(20))");
+        }
+
+        provider.invoke(null, "jdbc.schema.refresh", Map.of("connectionId", "jdbc-symbol", "scope", "deep", "target", Map.of("schema", "PUBLIC")));
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.hover",
+                Map.of("text", "SELECT h.ID FROM PUBLIC.HOVER_TARGET h", "cursor", Map.of("line", 1, "column", 10), "connectionId", "jdbc-symbol"));
+
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals("COLUMN_REFERENCE", result.get("context"));
+        Assertions.assertTrue(result.toString()
+                .contains("HOVER_TARGET.ID"));
+    }
+
     @Test
     void executeResolvesPasswordFromSecretRefMapInStoredConnection()
     {

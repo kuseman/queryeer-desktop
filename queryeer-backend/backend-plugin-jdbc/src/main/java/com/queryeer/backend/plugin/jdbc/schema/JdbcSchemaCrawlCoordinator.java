@@ -2,8 +2,13 @@ package com.queryeer.backend.plugin.jdbc.schema;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.queryeer.backend.api.LoggerService;
 import com.queryeer.backend.api.SecuritySessionClosedException;
@@ -14,6 +19,8 @@ import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaTarget;
 
 public final class JdbcSchemaCrawlCoordinator
 {
+    private static final long USAGE_THROTTLE_MS = TimeUnit.SECONDS.toMillis(30);
+
     private final DefaultJdbcConnections connections;
     private final JdbcSchemaCrawler crawler;
     private final JdbcSchemaStore store;
@@ -21,6 +28,7 @@ public final class JdbcSchemaCrawlCoordinator
     private final LoggerService logger;
     private final JdbcConnectionHealth connectionHealth;
     private final Executor usageExecutor;
+    private final Map<String, Long> lastUsageAtMsByKey = new ConcurrentHashMap<>();
 
     public JdbcSchemaCrawlCoordinator(DefaultJdbcConnections connections, JdbcSchemaCrawler crawler, JdbcSchemaStore store, JdbcSchemaCrawlPolicy policy, LoggerService logger,
             JdbcConnectionHealth connectionHealth)
@@ -67,6 +75,10 @@ public final class JdbcSchemaCrawlCoordinator
         {
             return;
         }
+        if (!shouldRecordUsage(connectionId, database, System.currentTimeMillis()))
+        {
+            return;
+        }
         String cid = connectionId;
         String db = database;
         usageExecutor.execute(() ->
@@ -89,6 +101,26 @@ public final class JdbcSchemaCrawlCoordinator
                 logger.warn("Schema usage recording failed: " + e.getMessage());
             }
         });
+    }
+
+    private boolean shouldRecordUsage(String connectionId, String database, long nowMs)
+    {
+        String key = connectionId + "\u0000"
+                     + (database == null ? ""
+                             : database.trim()
+                                     .toLowerCase(Locale.ROOT));
+        AtomicBoolean accepted = new AtomicBoolean(false);
+        lastUsageAtMsByKey.compute(key, (_, previous) ->
+        {
+            if (previous == null
+                    || nowMs - previous >= USAGE_THROTTLE_MS)
+            {
+                accepted.set(true);
+                return nowMs;
+            }
+            return previous;
+        });
+        return accepted.get();
     }
 
     public List<JdbcSchemaObject> refreshNow(String connectionId, JdbcSchemaCrawlScope scope, JdbcSchemaTarget target)

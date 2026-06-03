@@ -3,6 +3,9 @@ package com.queryeer.backend.plugin.jdbc;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -33,7 +36,12 @@ class JdbcSqlSemanticHandlerTest
     void setUp()
     {
         schemaNavigator = mock(JdbcSchemaNavigator.class);
-        when(schemaNavigator.loadDeepSnapshot(CONN_ID)).thenReturn(buildMultiDbSnapshot());
+        List<JdbcSchemaObject> snapshot = buildMultiDbSnapshot();
+        when(schemaNavigator.tableDetail(eq(CONN_ID), anyString(), nullable(String.class)))
+                .thenAnswer(invocation -> findObjectDetail(snapshot, invocation.getArgument(1), invocation.getArgument(2), "table", "view", "base table"));
+        when(schemaNavigator.procedureDetail(eq(CONN_ID), anyString(), nullable(String.class)))
+                .thenAnswer(invocation -> findObjectDetail(snapshot, invocation.getArgument(1), invocation.getArgument(2), "procedure"));
+        when(schemaNavigator.columnDetail(eq(CONN_ID), anyString(), nullable(String.class))).thenAnswer(invocation -> findColumnDetail(snapshot, invocation.getArgument(1), invocation.getArgument(2)));
 
         handler = new JdbcSqlSemanticHandler(mock(PayloadMapper.class), mock(IncrementalParseSessionService.class), "test-engine", schemaNavigator, mock(JdbcConnectionUsageListener.class),
                 Function.identity());
@@ -358,5 +366,164 @@ class JdbcSqlSemanticHandlerTest
         JdbcSchemaObject db1WithSales = new JdbcSchemaObject("db:db1_v2", "db1", "database", List.of(salesSchema), null);
 
         return List.of(db1, db2, db1WithSales);
+    }
+
+    private static JdbcSchemaNavigator.ObjectDetail findObjectDetail(List<JdbcSchemaObject> snapshot, String rawName, String selectedDatabase, String... kinds)
+    {
+        Lookup lookup = parseLookup(rawName);
+        if (lookup.name() == null)
+        {
+            return null;
+        }
+        String database = lookup.database() != null ? lookup.database()
+                : JdbcUtils.normalizeIdentifier(selectedDatabase);
+        return findObjectDetail(snapshot, new Path(null, null), lookup.name(), lookup.schema(), database, List.of(kinds));
+    }
+
+    private static JdbcSchemaNavigator.ObjectDetail findObjectDetail(List<JdbcSchemaObject> nodes, Path path, String name, String schema, String database, List<String> kinds)
+    {
+        for (JdbcSchemaObject node : nodes)
+        {
+            String kind = node.kind();
+            Path nextPath = path;
+            if ("database".equalsIgnoreCase(kind))
+            {
+                nextPath = new Path(node.name(), path.schema());
+            }
+            else if ("schema".equalsIgnoreCase(kind))
+            {
+                nextPath = new Path(path.database(), node.name());
+            }
+            if (kinds.stream()
+                    .anyMatch(k -> k.equalsIgnoreCase(kind))
+                    && node.name() != null
+                    && node.name()
+                            .equalsIgnoreCase(name))
+            {
+                if (database != null
+                        && nextPath.database() != null
+                        && !database.equals(JdbcUtils.normalizeIdentifier(nextPath.database())))
+                {
+                    // Keep searching.
+                }
+                else if (schema != null
+                        && nextPath.schema() != null
+                        && !schema.equals(JdbcUtils.normalizeIdentifier(nextPath.schema())))
+                {
+                    // Keep searching.
+                }
+                else
+                {
+                    return new JdbcSchemaNavigator.ObjectDetail(node, nextPath.database(), nextPath.schema());
+                }
+            }
+            if (node.children() != null)
+            {
+                JdbcSchemaNavigator.ObjectDetail found = findObjectDetail(node.children(), nextPath, name, schema, database, kinds);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static JdbcSchemaNavigator.ColumnDetail findColumnDetail(List<JdbcSchemaObject> snapshot, String columnName, String selectedDatabase)
+    {
+        String normalizedColumn = JdbcUtils.normalizeIdentifier(columnName);
+        String normalizedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
+        return findColumnDetail(snapshot, new Path(null, null), normalizedColumn, normalizedDatabase);
+    }
+
+    private static JdbcSchemaNavigator.ColumnDetail findColumnDetail(List<JdbcSchemaObject> nodes, Path path, String columnName, String database)
+    {
+        for (JdbcSchemaObject node : nodes)
+        {
+            String kind = node.kind();
+            Path nextPath = path;
+            if ("database".equalsIgnoreCase(kind))
+            {
+                nextPath = new Path(node.name(), path.schema());
+            }
+            else if ("schema".equalsIgnoreCase(kind))
+            {
+                nextPath = new Path(path.database(), node.name());
+            }
+            if (("table".equalsIgnoreCase(kind)
+                    || "view".equalsIgnoreCase(kind))
+                    && (database == null
+                            || nextPath.database() == null
+                            || database.equals(JdbcUtils.normalizeIdentifier(nextPath.database()))))
+            {
+                for (JdbcSchemaObject column : columns(node))
+                {
+                    if (column.name() != null
+                            && JdbcUtils.normalizeIdentifier(column.name())
+                                    .equals(columnName))
+                    {
+                        return new JdbcSchemaNavigator.ColumnDetail(column, node.name(), kind, nextPath.database(), nextPath.schema());
+                    }
+                }
+            }
+            if (node.children() != null)
+            {
+                JdbcSchemaNavigator.ColumnDetail found = findColumnDetail(node.children(), nextPath, columnName, database);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static List<JdbcSchemaObject> columns(JdbcSchemaObject table)
+    {
+        if (table.children() == null)
+        {
+            return List.of();
+        }
+        java.util.ArrayList<JdbcSchemaObject> result = new java.util.ArrayList<>();
+        for (JdbcSchemaObject child : table.children())
+        {
+            if ("column".equalsIgnoreCase(child.kind()))
+            {
+                result.add(child);
+            }
+            else if ("columns_folder".equalsIgnoreCase(child.kind())
+                    && child.children() != null)
+            {
+                result.addAll(columns(child));
+            }
+        }
+        return result;
+    }
+
+    private static Lookup parseLookup(String value)
+    {
+        String normalized = JdbcUtils.normalizeIdentifier(value);
+        if (normalized == null)
+        {
+            return new Lookup(null, null, null);
+        }
+        String[] parts = normalized.split("\\.");
+        if (parts.length >= 3)
+        {
+            return new Lookup(parts[parts.length - 3], parts[parts.length - 2], parts[parts.length - 1]);
+        }
+        if (parts.length == 2)
+        {
+            return new Lookup(null, parts[0], parts[1]);
+        }
+        return new Lookup(null, null, parts[0]);
+    }
+
+    private record Lookup(String database, String schema, String name)
+    {
+    }
+
+    private record Path(String database, String schema)
+    {
     }
 }

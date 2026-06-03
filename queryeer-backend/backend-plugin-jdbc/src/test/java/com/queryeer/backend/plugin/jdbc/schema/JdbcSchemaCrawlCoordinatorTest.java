@@ -43,6 +43,23 @@ class JdbcSchemaCrawlCoordinatorTest
     }
 
     @Test
+    void onUsageThrottlesRepeatedEventsForSameConnectionAndDatabase()
+    {
+        DefaultJdbcConnections connections = mock(DefaultJdbcConnections.class);
+        JdbcSchemaCrawler crawler = mock(JdbcSchemaCrawler.class);
+        JdbcSchemaStore store = mock(JdbcSchemaStore.class);
+        JdbcSchemaCrawlPolicy policy = mock(JdbcSchemaCrawlPolicy.class);
+        LoggerService logger = mock(LoggerService.class);
+        JdbcSchemaCrawlCoordinator coordinator = new JdbcSchemaCrawlCoordinator(connections, crawler, store, policy, logger, health(), Runnable::run);
+
+        coordinator.onUsage("jdbc-1", "db1");
+        coordinator.onUsage("jdbc-1", "db1");
+
+        verify(store, times(1)).recordUsage(eq("jdbc-1"), eq(JdbcSchemaCrawlScope.TOP), any(Instant.class));
+        verify(store, times(1)).recordUsage(eq("jdbc-1"), eq(JdbcSchemaCrawlScope.DEEP), eq("db1"), any(Instant.class));
+    }
+
+    @Test
     void onUsageImmediatelyCrawlsDueTopAndSelectedDatabaseDeep()
     {
         DefaultJdbcConnections connections = mock(DefaultJdbcConnections.class);

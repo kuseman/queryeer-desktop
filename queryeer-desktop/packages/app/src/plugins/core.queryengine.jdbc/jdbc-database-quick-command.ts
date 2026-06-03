@@ -5,6 +5,8 @@ import { getConfiguredJdbcConnections } from "./jdbc-settings";
 import { getJdbcDatabaseCache } from "./jdbc-database-cache";
 import { writeJdbcContextMetadata } from "./jdbc-metadata";
 
+const DATABASE_LOAD_TIMEOUT_MS = 500;
+
 export function createJdbcDatabaseQuickCommandProvider(
   context: Pick<PluginContext, "fileMediator" | "files" | "editors">
 ): QuickCommandProvider {
@@ -29,8 +31,8 @@ export function createJdbcDatabaseQuickCommandProvider(
       const cache = getJdbcDatabaseCache();
 
       // Use cached data first (instant). For connections without fresh data,
-      // trigger load with a short timeout — broken connections fail fast after
-      // the first attempt (60s failure cooldown in the cache).
+      // wait briefly for the local schema cache, but do not let H2/cache
+      // contention make opening the command palette feel stuck.
       const results = await Promise.all(
         connections.map(async (conn) => {
           // Instant hit?
@@ -38,10 +40,11 @@ export function createJdbcDatabaseQuickCommandProvider(
           if (cached !== undefined) {
             return { connectionId: conn.connectionId, title: conn.title ?? conn.connectionId, databases: cached };
           }
-          // Race load against 5s timeout to avoid blocking on unreachable servers
+          // Race load against a short timeout. The cache load continues in the
+          // background and will be used the next time items are resolved.
           const databases = await Promise.race([
-            cache.load(conn.connectionId),
-            new Promise<string[]>((resolve) => setTimeout(() => resolve([]), 5000))
+            cache.load(conn.connectionId).then((loaded) => loaded as string[] | null),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), DATABASE_LOAD_TIMEOUT_MS))
           ]);
           return { connectionId: conn.connectionId, title: conn.title ?? conn.connectionId, databases };
         })
@@ -49,6 +52,9 @@ export function createJdbcDatabaseQuickCommandProvider(
 
       const items: QuickCommandItem[] = [];
       for (const result of results) {
+        if (result.databases === null) {
+          continue;
+        }
         const connColor = connections.find((c) => c.connectionId === result.connectionId)?.color;
         if (result.databases.length === 0) {
           items.push({

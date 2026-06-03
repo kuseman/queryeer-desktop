@@ -444,18 +444,11 @@ final class JdbcSqlSemanticHandler
 
         recordUsage(connectionId, selectedDatabase);
 
-        List<JdbcSchemaObject> snapshot = schemaNavigator.loadDeepSnapshot(connectionId);
-        if (snapshot == null
-                || snapshot.isEmpty())
-        {
-            return null;
-        }
-
         List<Map<String, Object>> contents = new ArrayList<>();
 
         if (context == SqlParseContext.TABLE_REFERENCE)
         {
-            String tableMarkdown = buildTableHoverMarkdown(snapshot, token, aliases, selectedDatabase);
+            String tableMarkdown = buildTableHoverMarkdown(connectionId, token, aliases, selectedDatabase);
             if (tableMarkdown == null)
             {
                 return null;
@@ -464,7 +457,7 @@ final class JdbcSqlSemanticHandler
         }
         else if (context == SqlParseContext.PROCEDURE_CALL)
         {
-            String procMarkdown = buildProcedureHoverMarkdown(snapshot, token, aliases, selectedDatabase);
+            String procMarkdown = buildProcedureHoverMarkdown(connectionId, token, aliases, selectedDatabase);
             if (procMarkdown == null)
             {
                 return null;
@@ -473,7 +466,7 @@ final class JdbcSqlSemanticHandler
         }
         else if (context == SqlParseContext.COLUMN_REFERENCE)
         {
-            String columnMarkdown = buildColumnHoverMarkdown(snapshot, token, aliases, selectedDatabase);
+            String columnMarkdown = buildColumnHoverMarkdown(connectionId, token, aliases, selectedDatabase);
             if (columnMarkdown == null)
             {
                 return null;
@@ -492,27 +485,21 @@ final class JdbcSqlSemanticHandler
 
     // -- Markdown builders --
 
-    private static String buildTableHoverMarkdown(List<JdbcSchemaObject> snapshot, String token, Map<String, String> aliases, String selectedDatabase)
+    private String buildTableHoverMarkdown(String connectionId, String token, Map<String, String> aliases, String selectedDatabase)
     {
         String tableName = aliases.getOrDefault(token.toLowerCase(), token);
-        QualifiedTable lookup = parseQualifiedTable(tableName);
-
-        TableMatch tableMatch = findTableMatch(snapshot, lookup.name(), lookup.schema(), lookup.database() != null ? lookup.database()
-                : selectedDatabase);
-        JdbcSchemaObject tableNode = tableMatch != null ? tableMatch.node()
-                : null;
-        if (tableNode == null)
+        JdbcSchemaNavigator.ObjectDetail tableDetail = schemaNavigator.tableDetail(connectionId, tableName, selectedDatabase);
+        if (tableDetail == null)
         {
             return null;
         }
-
-        String displayName = tableDisplayName(tableMatch, tableName);
+        String displayName = objectDisplayName(tableDetail, tableName);
         StringBuilder md = new StringBuilder();
         md.append("**Table: " + displayName + "**\n\n");
         md.append("| Column | Type | Nullable | Key |\n");
         md.append("|---|---|---|---|\n");
 
-        for (JdbcSchemaObject child : tableColumns(tableNode))
+        for (JdbcSchemaObject child : tableColumns(tableDetail.object()))
         {
             Map<String, Object> attrs = child.attributes() != null ? child.attributes()
                     : Map.of();
@@ -529,20 +516,16 @@ final class JdbcSqlSemanticHandler
         return md.toString();
     }
 
-    private static String buildProcedureHoverMarkdown(List<JdbcSchemaObject> snapshot, String token, Map<String, String> aliases, String selectedDatabase)
+    private String buildProcedureHoverMarkdown(String connectionId, String token, Map<String, String> aliases, String selectedDatabase)
     {
         String procName = aliases.getOrDefault(token.toLowerCase(), token);
-        QualifiedTable lookup = parseQualifiedTable(procName);
-        String normalizedSelectedDb = JdbcUtils.normalizeIdentifier(lookup.database() != null ? lookup.database()
-                : selectedDatabase);
-        TableMatch procMatch = findProcedureInSnapshot(snapshot, new NodePath(null, null), lookup.name(), lookup.schema(), normalizedSelectedDb);
-        JdbcSchemaObject procNode = procMatch != null ? procMatch.node()
-                : null;
-        if (procNode == null)
+        JdbcSchemaNavigator.ObjectDetail procDetail = schemaNavigator.procedureDetail(connectionId, procName, selectedDatabase);
+        if (procDetail == null)
         {
             return null;
         }
-        String displayName = tableDisplayName(procMatch, procName);
+        JdbcSchemaObject procNode = procDetail.object();
+        String displayName = objectDisplayName(procDetail, procName);
         StringBuilder md = new StringBuilder();
         md.append("**Procedure: " + displayName + "**\n\n");
         List<JdbcSchemaObject> params = procedureParameters(procNode);
@@ -566,88 +549,6 @@ final class JdbcSqlSemanticHandler
             md.append("*No parameters defined*\n");
         }
         return md.toString();
-    }
-
-    private static TableMatch findProcedureInSnapshot(List<JdbcSchemaObject> nodes, NodePath path, String lookupName, String lookupSchema, String normalizedSelectedDb)
-    {
-        for (JdbcSchemaObject node : nodes)
-        {
-            String kind = trimToNull(node.kind());
-            if (kind == null)
-            {
-                continue;
-            }
-            NodePath nextPath = path;
-            if (kind.endsWith("_container")
-                    || kind.endsWith("_folder"))
-            {
-                // fall through
-            }
-            else if ("database".equalsIgnoreCase(kind))
-            {
-                nextPath = new NodePath(node.name(), path.schema());
-            }
-            else if ("schema".equalsIgnoreCase(kind))
-            {
-                nextPath = new NodePath(path.database(), node.name());
-            }
-            if ("procedure".equalsIgnoreCase(kind))
-            {
-                if (node.name() != null
-                        && node.name()
-                                .equalsIgnoreCase(lookupName))
-                {
-                    if (normalizedSelectedDb != null
-                            && nextPath.database() != null)
-                    {
-                        String normalizedNodeDb = JdbcUtils.normalizeIdentifier(nextPath.database());
-                        if (!normalizedSelectedDb.equals(normalizedNodeDb))
-                        {
-                            List<JdbcSchemaObject> children = node.children();
-                            if (children != null
-                                    && !children.isEmpty())
-                            {
-                                TableMatch found = findProcedureInSnapshot(children, nextPath, lookupName, lookupSchema, normalizedSelectedDb);
-                                if (found != null)
-                                {
-                                    return found;
-                                }
-                            }
-                            continue;
-                        }
-                    }
-                    if (lookupSchema != null
-                            && nextPath.schema() != null
-                            && !nextPath.schema()
-                                    .equalsIgnoreCase(lookupSchema))
-                    {
-                        List<JdbcSchemaObject> children = node.children();
-                        if (children != null
-                                && !children.isEmpty())
-                        {
-                            TableMatch found = findProcedureInSnapshot(children, nextPath, lookupName, lookupSchema, normalizedSelectedDb);
-                            if (found != null)
-                            {
-                                return found;
-                            }
-                        }
-                        continue;
-                    }
-                    return new TableMatch(node, nextPath);
-                }
-            }
-            List<JdbcSchemaObject> children = node.children();
-            if (children != null
-                    && !children.isEmpty())
-            {
-                TableMatch found = findProcedureInSnapshot(children, nextPath, lookupName, lookupSchema, normalizedSelectedDb);
-                if (found != null)
-                {
-                    return found;
-                }
-            }
-        }
-        return null;
     }
 
     private static List<JdbcSchemaObject> procedureParameters(JdbcSchemaObject procNode)
@@ -680,7 +581,7 @@ final class JdbcSqlSemanticHandler
         return result;
     }
 
-    private static String buildColumnHoverMarkdown(List<JdbcSchemaObject> snapshot, String token, Map<String, String> aliases, String selectedDatabase)
+    private String buildColumnHoverMarkdown(String connectionId, String token, Map<String, String> aliases, String selectedDatabase)
     {
         int dotIndex = token.lastIndexOf('.');
         String colName;
@@ -702,56 +603,56 @@ final class JdbcSqlSemanticHandler
             return null;
         }
 
-        TableMatch tableMatch = null;
         JdbcSchemaObject tableNode = null;
         String resolvedTableName = null;
 
         if (qualifier != null)
         {
             String tableName = aliases.getOrDefault(qualifier.toLowerCase(), qualifier);
-            QualifiedTable lookup = parseQualifiedTable(tableName);
-            tableMatch = findTableMatch(snapshot, lookup.name(), lookup.schema(), lookup.database() != null ? lookup.database()
-                    : selectedDatabase);
-            tableNode = tableMatch != null ? tableMatch.node()
+            JdbcSchemaNavigator.ObjectDetail tableDetail = schemaNavigator.tableDetail(connectionId, tableName, selectedDatabase);
+            tableNode = tableDetail != null ? tableDetail.object()
                     : null;
-            resolvedTableName = tableMatch != null ? tableDisplayName(tableMatch, tableName)
-                    : tableName;
+            resolvedTableName = tableDetail != null ? objectDisplayName(tableDetail, tableName)
+                    : null;
         }
         else
         {
-            List<TableMatch> candidateMatches;
             if (aliases.isEmpty())
             {
-                candidateMatches = flattenTableMatchesInDatabase(snapshot, selectedDatabase);
-            }
-            else
-            {
-                Map<String, TableMatch> matchesByTable = new LinkedHashMap<>();
-                for (String tableName : aliases.values())
+                JdbcSchemaNavigator.ColumnDetail columnDetail = schemaNavigator.columnDetail(connectionId, colName, selectedDatabase);
+                if (columnDetail == null)
                 {
-                    QualifiedTable lookup = parseQualifiedTable(tableName);
-                    TableMatch match = findTableMatch(snapshot, lookup.name(), lookup.schema(), lookup.database() != null ? lookup.database()
-                            : selectedDatabase);
-                    if (match != null)
-                    {
-                        matchesByTable.putIfAbsent(tableDisplayName(match, tableName).toLowerCase(), match);
-                    }
+                    return null;
                 }
-                candidateMatches = List.copyOf(matchesByTable.values());
+                Map<String, Object> attrs = columnDetail.column()
+                        .attributes() != null ? columnDetail.column()
+                                .attributes()
+                                : Map.of();
+                return buildColumnMarkdown(displayColumnName(columnDetail), columnDetail.column(), attrs);
             }
 
-            for (TableMatch candidateMatch : candidateMatches)
+            Map<String, String> tableToAlias = new LinkedHashMap<>();
+            for (Map.Entry<String, String> entry : aliases.entrySet())
             {
-                JdbcSchemaObject candidateTable = candidateMatch.node();
+                tableToAlias.putIfAbsent(entry.getValue(), entry.getKey());
+            }
+
+            for (String tableName : tableToAlias.keySet())
+            {
+                JdbcSchemaNavigator.ObjectDetail tableDetail = schemaNavigator.tableDetail(connectionId, tableName, selectedDatabase);
+                if (tableDetail == null)
+                {
+                    continue;
+                }
+                JdbcSchemaObject candidateTable = tableDetail.object();
                 for (JdbcSchemaObject child : tableColumns(candidateTable))
                 {
                     if (child.name() != null
                             && child.name()
                                     .equalsIgnoreCase(colName))
                     {
-                        tableMatch = candidateMatch;
                         tableNode = candidateTable;
-                        resolvedTableName = tableDisplayName(candidateMatch, candidateTable.name());
+                        resolvedTableName = objectDisplayName(tableDetail, tableName);
                         break;
                     }
                 }
@@ -788,6 +689,11 @@ final class JdbcSqlSemanticHandler
         String displayName = (resolvedTableName != null ? resolvedTableName
                 : "?") + "." + columnNode.name();
 
+        return buildColumnMarkdown(displayName, columnNode, attrs);
+    }
+
+    private static String buildColumnMarkdown(String displayName, JdbcSchemaObject columnNode, Map<String, Object> attrs)
+    {
         StringBuilder md = new StringBuilder();
         md.append("**Column: " + displayName + "**\n\n");
         md.append("- Type: `" + formatType(attrs) + "`\n");
@@ -831,35 +737,44 @@ final class JdbcSqlSemanticHandler
         return type;
     }
 
-    private static String tableDisplayName(TableMatch tableMatch, String fallback)
+    private static String objectDisplayName(JdbcSchemaNavigator.ObjectDetail detail, String fallback)
     {
-        JdbcSchemaObject tableNode = tableMatch.node();
-        if (tableNode.fullName() != null
-                && !tableNode.fullName()
-                        .equals(tableNode.name()))
+        JdbcSchemaObject object = detail.object();
+        if (object.fullName() != null
+                && !object.fullName()
+                        .equals(object.name()))
         {
-            return tableNode.fullName();
+            return object.fullName();
         }
-        if (tableMatch.path()
-                .database() != null
-                && tableMatch.path()
-                        .schema() != null)
+        return displayFullName(detail.database(), detail.schema(), object.name(), fallback);
+    }
+
+    private static String displayColumnName(JdbcSchemaNavigator.ColumnDetail detail)
+    {
+        String tableName = displayFullName(detail.database(), detail.schema(), detail.tableName(), detail.tableName());
+        return tableName + "."
+               + detail.column()
+                       .name();
+    }
+
+    private static String displayFullName(String database, String schema, String name, String fallback)
+    {
+        if (name == null
+                || name.isBlank())
         {
-            return tableMatch.path()
-                    .database()
-                   + "."
-                   + tableMatch.path()
-                           .schema()
-                   + "."
-                   + tableNode.name();
+            return fallback;
         }
-        if (tableMatch.path()
-                .schema() != null)
+        if (database != null
+                && !database.isBlank()
+                && schema != null
+                && !schema.isBlank())
         {
-            return tableMatch.path()
-                    .schema()
-                   + "."
-                   + tableNode.name();
+            return database + "." + schema + "." + name;
+        }
+        if (schema != null
+                && !schema.isBlank())
+        {
+            return schema + "." + name;
         }
         return fallback;
     }
@@ -909,195 +824,6 @@ final class JdbcSqlSemanticHandler
             }
         }
         return result;
-    }
-
-    // -- Snapshot tree helpers --
-
-    private static List<TableMatch> flattenTableMatchesInDatabase(List<JdbcSchemaObject> nodes, String selectedDatabase)
-    {
-        List<TableMatch> tables = new ArrayList<>();
-        String normalizedSelectedDb = JdbcUtils.normalizeIdentifier(selectedDatabase);
-        flattenTablesRecursive(nodes, new NodePath(null, null), normalizedSelectedDb, tables);
-        return tables;
-    }
-
-    private static void flattenTablesRecursive(List<JdbcSchemaObject> nodes, NodePath path, String normalizedSelectedDb, List<TableMatch> target)
-    {
-        for (JdbcSchemaObject node : nodes)
-        {
-            String kind = trimToNull(node.kind());
-            if (kind == null)
-            {
-                continue;
-            }
-
-            NodePath nextPath = path;
-            if (kind.endsWith("_container")
-                    || kind.endsWith("_folder"))
-            {
-                // fall through to children recursion
-            }
-            else if ("database".equalsIgnoreCase(kind))
-            {
-                nextPath = new NodePath(node.name(), path.schema());
-            }
-            else if ("schema".equalsIgnoreCase(kind))
-            {
-                nextPath = new NodePath(path.database(), node.name());
-            }
-
-            if ("table".equalsIgnoreCase(kind)
-                    || "view".equalsIgnoreCase(kind))
-            {
-                if (normalizedSelectedDb != null
-                        && nextPath.database() != null)
-                {
-                    String normalizedNodeDb = JdbcUtils.normalizeIdentifier(nextPath.database());
-                    if (!normalizedSelectedDb.equals(normalizedNodeDb))
-                    {
-                        List<JdbcSchemaObject> children = node.children();
-                        if (children != null
-                                && !children.isEmpty())
-                        {
-                            flattenTablesRecursive(children, nextPath, normalizedSelectedDb, target);
-                        }
-                        continue;
-                    }
-                }
-                target.add(new TableMatch(node, nextPath));
-            }
-
-            List<JdbcSchemaObject> children = node.children();
-            if (children != null
-                    && !children.isEmpty())
-            {
-                flattenTablesRecursive(children, nextPath, normalizedSelectedDb, target);
-            }
-        }
-    }
-
-    private static TableMatch findTableMatch(List<JdbcSchemaObject> nodes, String lookupName, String lookupSchema, String selectedDatabase)
-    {
-        return findTableInSnapshotRecursive(nodes, new NodePath(null, null), lookupName, lookupSchema, selectedDatabase);
-    }
-
-    private static TableMatch findTableInSnapshotRecursive(List<JdbcSchemaObject> nodes, NodePath path, String lookupName, String lookupSchema, String selectedDatabase)
-    {
-        String normalizedSelectedDb = JdbcUtils.normalizeIdentifier(selectedDatabase);
-        for (JdbcSchemaObject node : nodes)
-        {
-            String kind = trimToNull(node.kind());
-            if (kind == null)
-            {
-                continue;
-            }
-
-            NodePath nextPath = path;
-            if (kind.endsWith("_container")
-                    || kind.endsWith("_folder"))
-            {
-                // fall through to children recursion
-            }
-            else if ("database".equalsIgnoreCase(kind))
-            {
-                nextPath = new NodePath(node.name(), path.schema());
-            }
-            else if ("schema".equalsIgnoreCase(kind))
-            {
-                nextPath = new NodePath(path.database(), node.name());
-            }
-
-            if ("table".equalsIgnoreCase(kind)
-                    || "view".equalsIgnoreCase(kind))
-            {
-                if (node.name() != null
-                        && node.name()
-                                .equalsIgnoreCase(lookupName))
-                {
-                    if (normalizedSelectedDb != null
-                            && nextPath.database() != null)
-                    {
-                        String normalizedNodeDb = JdbcUtils.normalizeIdentifier(nextPath.database());
-                        if (!normalizedSelectedDb.equals(normalizedNodeDb))
-                        {
-                            List<JdbcSchemaObject> children = node.children();
-                            if (children != null
-                                    && !children.isEmpty())
-                            {
-                                TableMatch found = findTableInSnapshotRecursive(children, nextPath, lookupName, lookupSchema, selectedDatabase);
-                                if (found != null)
-                                {
-                                    return found;
-                                }
-                            }
-                            continue;
-                        }
-                    }
-
-                    if (lookupSchema != null
-                            && nextPath.schema() != null
-                            && !nextPath.schema()
-                                    .equalsIgnoreCase(lookupSchema))
-                    {
-                        List<JdbcSchemaObject> children = node.children();
-                        if (children != null
-                                && !children.isEmpty())
-                        {
-                            TableMatch found = findTableInSnapshotRecursive(children, nextPath, lookupName, lookupSchema, selectedDatabase);
-                            if (found != null)
-                            {
-                                return found;
-                            }
-                        }
-                        continue;
-                    }
-                    return new TableMatch(node, nextPath);
-                }
-            }
-
-            List<JdbcSchemaObject> children = node.children();
-            if (children != null
-                    && !children.isEmpty())
-            {
-                TableMatch found = findTableInSnapshotRecursive(children, nextPath, lookupName, lookupSchema, selectedDatabase);
-                if (found != null)
-                {
-                    return found;
-                }
-            }
-        }
-        return null;
-    }
-
-    private record TableMatch(JdbcSchemaObject node, NodePath path)
-    {
-    }
-
-    private record NodePath(String database, String schema)
-    {
-    }
-
-    private static QualifiedTable parseQualifiedTable(String value)
-    {
-        String normalized = JdbcUtils.normalizeIdentifier(value);
-        if (normalized == null)
-        {
-            return new QualifiedTable(null, null, null);
-        }
-        String[] parts = normalized.split("\\.");
-        if (parts.length >= 3)
-        {
-            return new QualifiedTable(parts[parts.length - 3], parts[parts.length - 2], parts[parts.length - 1]);
-        }
-        if (parts.length == 2)
-        {
-            return new QualifiedTable(null, parts[0], parts[1]);
-        }
-        return new QualifiedTable(null, null, parts[0]);
-    }
-
-    private record QualifiedTable(String database, String schema, String name)
-    {
     }
 
     // -- Internal helpers --
