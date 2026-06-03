@@ -471,10 +471,10 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
         if (token.cancelled) { onDone(); return; }
         if (batchStart > endRow) { onDone(); return; }
         const batchEnd = Math.min(batchStart + FIND_BATCH, endRow + 1);
-        const rawRows = getRowsRangeRef.current(batchStart, batchEnd);
         for (let r = batchStart; r < batchEnd; r++) {
-          const rawRow = rawRows[r - batchStart] as unknown[] | undefined;
-          if (!rawRow) continue;
+          const rowData = getRowDataRef.current(r);
+          if (!rowData || !Array.isArray(rowData.__values)) continue;
+          const rawRow = rowData.__values;
           const cStart = r === batchStart ? batchStartCol : 0;
           const cLast = r === endRow ? endCol : numCols - 1;
           for (let c = cStart; c <= cLast; c++) {
@@ -522,10 +522,10 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
         if (token.cancelled) { onDone(); return; }
         if (batchUpper < endRow) { onDone(); return; }
         const batchLower = Math.max(endRow, batchUpper - FIND_BATCH + 1);
-        const rawRows = getRowsRangeRef.current(batchLower, batchUpper + 1);
         for (let r = batchUpper; r >= batchLower; r--) {
-          const rawRow = rawRows[r - batchLower] as unknown[] | undefined;
-          if (!rawRow) continue;
+          const rowData = getRowDataRef.current(r);
+          if (!rowData || !Array.isArray(rowData.__values)) continue;
+          const rawRow = rowData.__values;
           const cStart = r === batchUpper ? batchUpperCol : numCols - 1;
           const cLast = r === endRow ? endCol : 0;
           for (let c = cStart; c >= cLast; c--) {

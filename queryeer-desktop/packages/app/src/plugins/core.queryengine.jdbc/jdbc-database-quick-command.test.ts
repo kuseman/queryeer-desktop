@@ -144,6 +144,22 @@ describe("createJdbcDatabaseQuickCommandProvider", () => {
     expect(items[1]?.title).toBe("DB Beta / — no databases —");
   });
 
+  it("does not block while uncached database loads are still pending", async () => {
+    mocks.invokeMock.mockImplementation(() => new Promise(() => {}));
+
+    const provider = createJdbcDatabaseQuickCommandProvider(makeContext());
+    const promise = provider.getItems("", {
+      activeFile: makeFile(),
+      openFiles: [makeFile()]
+    });
+
+    await vi.advanceTimersByTimeAsync(500);
+    const items = await promise;
+
+    expect(items).toHaveLength(0);
+    expect(mocks.invokeMock).toHaveBeenCalledTimes(2);
+  });
+
   it("binds engine and sets editor state when a database item is selected", async () => {
     mocks.invokeMock.mockImplementation(async (req: unknown) => {
       const payload = (req as { payload?: { connectionId: string } }).payload;

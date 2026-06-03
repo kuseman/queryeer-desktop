@@ -757,9 +757,10 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
         handleSetActive(targetIndex);
       }
     } else {
+      const resultSets = context.resultSets;
       const rsIndex = isStacked
-        ? (activeStackedResultSetIndex ?? context.resultSets[0]?.resultSetIndex ?? 0)
-        : (context.resultSets[clampedIndex]?.resultSetIndex ?? 0);
+        ? (activeStackedResultSetIndex ?? resultSets[0]?.resultSetIndex ?? 0)
+        : (resultSets[clampedIndex]?.resultSetIndex ?? 0);
       const handle = lazySearchHandles.current.get(rsIndex);
       if (!handle || !searchText) return;
       const seq = ++lazyFindSeqRef.current;
@@ -768,7 +769,36 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
         : null;
       handle.findNext(from).then(match => {
         if (lazyFindSeqRef.current !== seq) return;
-        setCurrentActiveLazy(match ? { resultSetIndex: rsIndex, ...match } : null);
+        // Non-wrapped match in current set: accept directly
+        if (match && (!from || match.row > from.row || (match.row === from.row && match.col > from.col))) {
+          setCurrentActiveLazy({ resultSetIndex: rsIndex, ...match });
+          return;
+        }
+        // Wrapped or no match: scan forward through remaining result sets
+        const startIdx = resultSets.findIndex(rs => rs.resultSetIndex === rsIndex);
+        if (startIdx < 0) { setCurrentActiveLazy(null); return; }
+        const tryNextRs = (offset: number) => {
+          if (lazyFindSeqRef.current !== seq) return;
+          const idx = (startIdx + 1 + offset) % resultSets.length;
+          if (idx === startIdx) { setCurrentActiveLazy(null); return; }
+          const nextRsIndex = resultSets[idx].resultSetIndex;
+          const nextHandle = lazySearchHandles.current.get(nextRsIndex);
+          if (!nextHandle) { tryNextRs(offset + 1); return; }
+          nextHandle.findNext(null).then(nextMatch => {
+            if (lazyFindSeqRef.current !== seq) return;
+            if (nextMatch) {
+              setCurrentActiveLazy({ resultSetIndex: nextRsIndex, ...nextMatch });
+              if (isStacked) {
+                scrollToStackedResultSet(nextRsIndex);
+              } else if (idx !== clampedIndex) {
+                handleSetActive(idx);
+              }
+            } else {
+              tryNextRs(offset + 1);
+            }
+          });
+        };
+        tryNextRs(0);
       });
     }
   }, [searchMarkAll, allMatches, currentMatchIndex, context.resultSets, isStacked, clampedIndex, handleSetActive, scrollToStackedResultSet, activeStackedResultSetIndex, currentActiveLazy, searchText]);
@@ -786,9 +816,10 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
         handleSetActive(targetIndex);
       }
     } else {
+      const resultSets = context.resultSets;
       const rsIndex = isStacked
-        ? (activeStackedResultSetIndex ?? context.resultSets[0]?.resultSetIndex ?? 0)
-        : (context.resultSets[clampedIndex]?.resultSetIndex ?? 0);
+        ? (activeStackedResultSetIndex ?? resultSets[0]?.resultSetIndex ?? 0)
+        : (resultSets[clampedIndex]?.resultSetIndex ?? 0);
       const handle = lazySearchHandles.current.get(rsIndex);
       if (!handle || !searchText) return;
       const seq = ++lazyFindSeqRef.current;
@@ -797,7 +828,36 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
         : null;
       handle.findPrev(from).then(match => {
         if (lazyFindSeqRef.current !== seq) return;
-        setCurrentActiveLazy(match ? { resultSetIndex: rsIndex, ...match } : null);
+        // Non-wrapped match in current set: accept directly
+        if (match && (!from || match.row < from.row || (match.row === from.row && match.col < from.col))) {
+          setCurrentActiveLazy({ resultSetIndex: rsIndex, ...match });
+          return;
+        }
+        // Wrapped or no match: scan backward through remaining result sets
+        const startIdx = resultSets.findIndex(rs => rs.resultSetIndex === rsIndex);
+        if (startIdx < 0) { setCurrentActiveLazy(null); return; }
+        const tryPrevRs = (offset: number) => {
+          if (lazyFindSeqRef.current !== seq) return;
+          const idx = (startIdx - 1 - offset + resultSets.length) % resultSets.length;
+          if (idx === startIdx) { setCurrentActiveLazy(null); return; }
+          const prevRsIndex = resultSets[idx].resultSetIndex;
+          const prevHandle = lazySearchHandles.current.get(prevRsIndex);
+          if (!prevHandle) { tryPrevRs(offset + 1); return; }
+          prevHandle.findPrev(null).then(prevMatch => {
+            if (lazyFindSeqRef.current !== seq) return;
+            if (prevMatch) {
+              setCurrentActiveLazy({ resultSetIndex: prevRsIndex, ...prevMatch });
+              if (isStacked) {
+                scrollToStackedResultSet(prevRsIndex);
+              } else if (idx !== clampedIndex) {
+                handleSetActive(idx);
+              }
+            } else {
+              tryPrevRs(offset + 1);
+            }
+          });
+        };
+        tryPrevRs(0);
       });
     }
   }, [searchMarkAll, allMatches, currentMatchIndex, context.resultSets, isStacked, clampedIndex, handleSetActive, scrollToStackedResultSet, activeStackedResultSetIndex, currentActiveLazy, searchText]);

@@ -222,6 +222,38 @@ class JdbcSchemaStoreTest
     }
 
     @Test
+    void objectDetail_ReturnsTargetTableSubtree(@TempDir Path tempDir)
+    {
+        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
+        store.persistSnapshot("conn-1", JdbcSchemaCrawlScope.DEEP, lookupSnapshot());
+
+        JdbcSchemaStore.ObjectDetail detail = store.objectDetail("conn-1", "dbo.orders", "sales", List.of("table", "view", "base table"));
+
+        Assertions.assertNotNull(detail);
+        Assertions.assertEquals("sales", detail.database());
+        Assertions.assertEquals("dbo", detail.schema());
+        Assertions.assertEquals("orders", detail.object()
+                .name());
+        Assertions.assertNotNull(findObject(List.of(detail.object()), "column:sales:dbo:orders:amount"));
+    }
+
+    @Test
+    void columnDetail_FiltersBySelectedDatabase(@TempDir Path tempDir)
+    {
+        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
+        store.persistSnapshot("conn-1", JdbcSchemaCrawlScope.DEEP, lookupSnapshot());
+
+        JdbcSchemaStore.ColumnDetail detail = store.columnDetail("conn-1", "id", "hr");
+
+        Assertions.assertNotNull(detail);
+        Assertions.assertEquals("employees", detail.tableName());
+        Assertions.assertEquals("hr", detail.database());
+        Assertions.assertEquals("hr", detail.schema());
+        Assertions.assertEquals("id", detail.column()
+                .name());
+    }
+
+    @Test
     void findSymbol_HonorsSchemaAndSelectedDatabase(@TempDir Path tempDir)
     {
         JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());

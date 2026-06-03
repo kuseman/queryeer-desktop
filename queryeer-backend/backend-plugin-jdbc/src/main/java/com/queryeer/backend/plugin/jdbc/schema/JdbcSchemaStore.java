@@ -285,7 +285,7 @@ public final class JdbcSchemaStore
                                            .toLowerCase());
         Path dbPath = baseDir.resolve(fileName + ".mv.db");
         String url = "jdbc:h2:file:" + baseDir.resolve(fileName)
-                .toAbsolutePath() + ";MODE=PostgreSQL;AUTO_SERVER=TRUE";
+                .toAbsolutePath() + ";MODE=PostgreSQL";
 
         // If this file was previously detected as corrupted, delete it upfront
         if (CORRUPTED_FILES.remove(dbPath))
@@ -423,7 +423,7 @@ public final class JdbcSchemaStore
             }
             // Use the same URL parameters as open() to avoid metadata mismatches
             String url = "jdbc:h2:file:" + baseDir.resolve(fileName)
-                    .toAbsolutePath() + ";MODE=PostgreSQL;AUTO_SERVER=TRUE";
+                    .toAbsolutePath() + ";MODE=PostgreSQL";
             try (Connection connection = DriverManager.getConnection(url); Statement statement = connection.createStatement())
             {
                 statement.execute("SHUTDOWN COMPACT");
@@ -650,14 +650,14 @@ public final class JdbcSchemaStore
                 select object_id
                 from schema_object
                 where parent_object_id is null
-                and lower(kind) = 'database'
-                and lower(object_name) = lower(?)
+                and kind = 'database'
+                and lower(object_name) = ?
                 and is_deleted = false
                 order by ordinal
                 limit 1
                 """))
         {
-            statement.setString(1, database);
+            statement.setString(1, database.toLowerCase());
             try (ResultSet resultSet = statement.executeQuery())
             {
                 return resultSet.next() ? resultSet.getString(1)
@@ -672,15 +672,15 @@ public final class JdbcSchemaStore
                 select object_id
                 from schema_object
                 where parent_object_id = ?
-                and lower(kind) = 'schema'
-                and lower(object_name) = lower(?)
+                and kind = 'schema'
+                and lower(object_name) = ?
                 and is_deleted = false
                 order by ordinal
                 limit 1
                 """))
         {
             statement.setString(1, databaseObjectId);
-            statement.setString(2, schema);
+            statement.setString(2, schema.toLowerCase());
             try (ResultSet resultSet = statement.executeQuery())
             {
                 return resultSet.next() ? resultSet.getString(1)
@@ -821,64 +821,20 @@ public final class JdbcSchemaStore
     List<TableLookupEntry> entriesForCompletion(String connectionId, String selectedDatabase, List<String> kinds)
     {
         String normalizedSelectedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
-        String placeholders = kinds.stream()
-                .map(_ -> "?")
-                .collect(java.util.stream.Collectors.joining(","));
-        try (Connection connection = open(connectionId, JdbcSchemaCrawlScope.DEEP); PreparedStatement statement = connection.prepareStatement("""
-                with recursive object_path(object_id, object_name, kind, database_name, schema_name, ordinal) as
-                (
-                  select object_id
-                  ,      object_name
-                  ,      kind
-                  ,      case when lower(kind) = 'database' then object_name else null end as database_name
-                  ,      case when lower(kind) = 'schema' then object_name else null end as schema_name
-                  ,      ordinal
-                  from schema_object
-                  where parent_object_id is null
-                  and is_deleted = false
-
-                  union all
-
-                  select child.object_id
-                  ,      child.object_name
-                  ,      child.kind
-                  ,      case when lower(child.kind) = 'database' then child.object_name else op.database_name end as database_name
-                  ,      case when lower(child.kind) = 'schema' then child.object_name else op.schema_name end as schema_name
-                  ,      child.ordinal
-                  from schema_object child
-                  join object_path op
-                    on child.parent_object_id = op.object_id
-                  where child.is_deleted = false
-                )
-                select object_name, kind, schema_name, database_name
-                from object_path
-                where lower(kind) in (%s)
-                order by ordinal
-                """.formatted(placeholders)))
+        try (Connection connection = open(connectionId, JdbcSchemaCrawlScope.DEEP))
         {
-            for (int i = 0; i < kinds.size(); i++)
+            List<TableLookupEntry> result = new ArrayList<>();
+            for (ObjectLookupEntry entry : objectLookupEntries(connection, kinds, null))
             {
-                statement.setString(i + 1, kinds.get(i));
-            }
-            try (ResultSet resultSet = statement.executeQuery())
-            {
-                List<TableLookupEntry> result = new ArrayList<>();
-                while (resultSet.next())
+                if (normalizedSelectedDatabase != null
+                        && entry.database() != null
+                        && !normalizedSelectedDatabase.equals(JdbcUtils.normalizeIdentifier(entry.database())))
                 {
-                    String name = resultSet.getString(1);
-                    String kind = normalizeTableKind(resultSet.getString(2));
-                    String schema = resultSet.getString(3);
-                    String database = resultSet.getString(4);
-                    if (normalizedSelectedDatabase != null
-                            && database != null
-                            && !normalizedSelectedDatabase.equals(JdbcUtils.normalizeIdentifier(database)))
-                    {
-                        continue;
-                    }
-                    result.add(new TableLookupEntry(displayTableName(schema, name), kind, database, schema));
+                    continue;
                 }
-                return result;
+                result.add(new TableLookupEntry(displayTableName(entry.schema(), entry.name()), normalizeTableKind(entry.kind()), entry.database(), entry.schema()));
             }
+            return result;
         }
         catch (SQLException e)
         {
@@ -896,43 +852,7 @@ public final class JdbcSchemaStore
         }
 
         String normalizedSelectedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
-        try (Connection connection = open(connectionId, JdbcSchemaCrawlScope.DEEP); PreparedStatement tableStatement = connection.prepareStatement("""
-                with recursive object_path(object_id, object_name, kind, parent_object_id, database_name, schema_name, ordinal) as
-                (
-                  select object_id
-                  ,      object_name
-                  ,      kind
-                  ,      parent_object_id
-                  ,      case when lower(kind) = 'database' then object_name else null end as database_name
-                  ,      case when lower(kind) = 'schema' then object_name else null end as schema_name
-                  ,      ordinal
-                  from schema_object
-                  where parent_object_id is null
-                  and is_deleted = false
-
-                  union all
-
-                  select child.object_id
-                  ,      child.object_name
-                  ,      child.kind
-                  ,      child.parent_object_id
-                  ,      case when lower(child.kind) = 'database' then child.object_name else op.database_name end as database_name
-                  ,      case when lower(child.kind) = 'schema' then child.object_name else op.schema_name end as schema_name
-                  ,      child.ordinal
-                  from schema_object child
-                  join object_path op
-                    on child.parent_object_id = op.object_id
-                  where child.is_deleted = false
-                )
-                select object_id
-                from object_path
-                where lower(kind) in ('table','view','base table')
-                and lower(object_name) = ?
-                and (? is null or lower(schema_name) = ?)
-                and (? is null or lower(database_name) = ?)
-                order by ordinal
-                limit 1
-                """); PreparedStatement columnsStatement = connection.prepareStatement("""
+        try (Connection connection = open(connectionId, JdbcSchemaCrawlScope.DEEP); PreparedStatement columnsStatement = connection.prepareStatement("""
                 with recursive table_descendants(object_id, object_name, kind, ordinal) as
                 (
                   select object_id, object_name, kind, ordinal
@@ -950,7 +870,7 @@ public final class JdbcSchemaStore
                 )
                 select object_name
                 from table_descendants
-                where lower(kind) = 'column'
+                where kind = 'column'
                 order by ordinal
                 """))
         {
@@ -959,27 +879,15 @@ public final class JdbcSchemaStore
                 TableLookup lookup = parseTableLookup(tableName);
                 String normalizedDatabase = lookup.normalizedDatabase() != null ? lookup.normalizedDatabase()
                         : normalizedSelectedDatabase;
-                String tableObjectId = null;
-                tableStatement.setString(1, lookup.normalizedName());
-                tableStatement.setString(2, lookup.normalizedSchema());
-                tableStatement.setString(3, lookup.normalizedSchema());
-                tableStatement.setString(4, normalizedDatabase);
-                tableStatement.setString(5, normalizedDatabase);
-                try (ResultSet resultSet = tableStatement.executeQuery())
-                {
-                    if (resultSet.next())
-                    {
-                        tableObjectId = resultSet.getString(1);
-                    }
-                }
+                ObjectLookupEntry table = firstMatchingObject(connection, lookup, normalizedDatabase, List.of("table", "view", "base table"));
 
-                if (tableObjectId == null)
+                if (table == null)
                 {
                     result.put(tableName, List.of());
                     continue;
                 }
 
-                columnsStatement.setString(1, tableObjectId);
+                columnsStatement.setString(1, table.objectId());
                 try (ResultSet resultSet = columnsStatement.executeQuery())
                 {
                     List<String> columns = new ArrayList<>();
@@ -1011,7 +919,7 @@ public final class JdbcSchemaStore
                   select object_id
                   ,      object_name
                   ,      kind
-                  ,      case when lower(kind) = 'schema' then object_name else null end as schema_name
+                  ,      case when kind = 'schema' then object_name else null end as schema_name
                   ,      ordinal
                   from schema_object
                   where parent_object_id is null
@@ -1022,7 +930,7 @@ public final class JdbcSchemaStore
                   select child.object_id
                   ,      child.object_name
                   ,      child.kind
-                  ,      case when lower(child.kind) = 'schema' then child.object_name else op.schema_name end as schema_name
+                  ,      case when child.kind = 'schema' then child.object_name else op.schema_name end as schema_name
                   ,      child.ordinal
                   from schema_object child
                   join object_path op
@@ -1031,7 +939,7 @@ public final class JdbcSchemaStore
                 )
                 select object_id
                 from object_path
-                where lower(kind) = 'procedure'
+                where kind = 'procedure'
                 and lower(object_name) = ?
                 and (? is null or lower(schema_name) = ?)
                 order by ordinal
@@ -1040,7 +948,7 @@ public final class JdbcSchemaStore
                 select object_name, ordinal
                 from schema_object
                 where parent_object_id = ?
-                and lower(kind) = 'parameter'
+                and kind = 'parameter'
                 and is_deleted = false
                 order by ordinal
                 """))
@@ -1091,63 +999,318 @@ public final class JdbcSchemaStore
         String normalizedSelectedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
         String normalizedDatabase = lookup.normalizedDatabase() != null ? lookup.normalizedDatabase()
                 : normalizedSelectedDatabase;
+        try (Connection connection = open(connectionId, JdbcSchemaCrawlScope.DEEP))
+        {
+            ObjectLookupEntry entry = firstMatchingObject(connection, lookup, normalizedDatabase, List.of("table", "view", "base table", "procedure"));
+            if (entry == null)
+            {
+                return null;
+            }
+            String kind = normalizeTableKind(entry.kind());
+            return new SymbolLookupEntry(kind, displayTableName(entry.schema(), entry.name()), displayFullTableName(entry.database(), entry.schema(), entry.name()), kind.toUpperCase(),
+                    entry.database(), entry.schema(), entry.name());
+        }
+        catch (SQLException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    ObjectDetail objectDetail(String connectionId, String rawToken, String selectedDatabase, List<String> kinds)
+    {
+        TableLookup lookup = parseTableLookup(rawToken);
+        if (lookup.normalizedName() == null)
+        {
+            return null;
+        }
+
+        String normalizedSelectedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
+        String normalizedDatabase = lookup.normalizedDatabase() != null ? lookup.normalizedDatabase()
+                : normalizedSelectedDatabase;
+        try (Connection connection = open(connectionId, JdbcSchemaCrawlScope.DEEP))
+        {
+            ObjectLookupEntry entry = firstMatchingObject(connection, lookup, normalizedDatabase, kinds);
+            if (entry == null)
+            {
+                return null;
+            }
+            JdbcSchemaObject object = loadObjectTree(connection, entry.objectId());
+            return object == null ? null
+                    : new ObjectDetail(object, entry.database(), entry.schema());
+        }
+        catch (SQLException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    ColumnDetail columnDetail(String connectionId, String columnName, String selectedDatabase)
+    {
+        String normalizedColumn = JdbcUtils.normalizeIdentifier(columnName);
+        if (normalizedColumn == null)
+        {
+            return null;
+        }
+        String normalizedSelectedDatabase = JdbcUtils.normalizeIdentifier(selectedDatabase);
         try (Connection connection = open(connectionId, JdbcSchemaCrawlScope.DEEP); PreparedStatement statement = connection.prepareStatement("""
-                with recursive object_path(object_id, object_name, kind, database_name, schema_name, ordinal) as
-                (
-                  select object_id
-                  ,      object_name
-                  ,      kind
-                  ,      case when lower(kind) = 'database' then object_name else null end as database_name
-                  ,      case when lower(kind) = 'schema' then object_name else null end as schema_name
-                  ,      ordinal
-                  from schema_object
-                  where parent_object_id is null
-                  and is_deleted = false
-
-                  union all
-
-                  select child.object_id
-                  ,      child.object_name
-                  ,      child.kind
-                  ,      case when lower(child.kind) = 'database' then child.object_name else op.database_name end as database_name
-                  ,      case when lower(child.kind) = 'schema' then child.object_name else op.schema_name end as schema_name
-                  ,      child.ordinal
-                  from schema_object child
-                  join object_path op
-                    on child.parent_object_id = op.object_id
-                  where child.is_deleted = false
-                )
-                select object_name, kind, schema_name, database_name
-                from object_path
-                where lower(kind) in ('table','view','base table','procedure')
+                select object_id, parent_object_id, object_name, attributes_json
+                from schema_object
+                where kind = 'column'
                 and lower(object_name) = ?
-                and (? is null or lower(schema_name) = ?)
-                and (? is null or lower(database_name) = ?)
+                and is_deleted = false
                 order by ordinal
-                limit 1
                 """))
         {
-            statement.setString(1, lookup.normalizedName());
-            statement.setString(2, lookup.normalizedSchema());
-            statement.setString(3, lookup.normalizedSchema());
-            statement.setString(4, normalizedDatabase);
-            statement.setString(5, normalizedDatabase);
+            statement.setString(1, normalizedColumn);
             try (ResultSet resultSet = statement.executeQuery())
             {
-                if (!resultSet.next())
+                while (resultSet.next())
                 {
-                    return null;
+                    ColumnOwner owner = columnOwner(connection, resultSet.getString(2));
+                    if (owner == null)
+                    {
+                        continue;
+                    }
+                    String database = owner.database();
+                    if (normalizedSelectedDatabase != null
+                            && database != null
+                            && !normalizedSelectedDatabase.equals(JdbcUtils.normalizeIdentifier(database)))
+                    {
+                        continue;
+                    }
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> attrs = getIfNull(mapper.parseJson(resultSet.getString(4), Map.class), Map.of());
+                    JdbcSchemaObject column = new JdbcSchemaObject(resultSet.getString(1), resultSet.getString(3), "column", List.of(), attrs);
+                    return new ColumnDetail(column, owner.tableName(), normalizeTableKind(owner.tableKind()), database, owner.schema());
                 }
-                String name = resultSet.getString(1);
-                String kind = normalizeTableKind(resultSet.getString(2));
-                String schema = resultSet.getString(3);
-                String database = resultSet.getString(4);
-                return new SymbolLookupEntry(kind, displayTableName(schema, name), displayFullTableName(database, schema, name), kind.toUpperCase(), database, schema, name);
+                return null;
             }
         }
         catch (SQLException e)
         {
             throw new RuntimeException(e);
+        }
+    }
+
+    private ObjectLookupEntry firstMatchingObject(Connection connection, TableLookup lookup, String normalizedDatabase, List<String> kinds) throws SQLException
+    {
+        for (ObjectLookupEntry entry : objectLookupEntries(connection, kinds, lookup.normalizedName()))
+        {
+            if (lookup.normalizedSchema() != null
+                    && entry.schema() != null
+                    && !lookup.normalizedSchema()
+                            .equals(JdbcUtils.normalizeIdentifier(entry.schema())))
+            {
+                continue;
+            }
+            if (normalizedDatabase != null
+                    && entry.database() != null
+                    && !normalizedDatabase.equals(JdbcUtils.normalizeIdentifier(entry.database())))
+            {
+                continue;
+            }
+            return entry;
+        }
+        return null;
+    }
+
+    private List<ObjectLookupEntry> objectLookupEntries(Connection connection, List<String> kinds, String normalizedObjectName) throws SQLException
+    {
+        if (kinds == null
+                || kinds.isEmpty())
+        {
+            return List.of();
+        }
+        String placeholders = kinds.stream()
+                .map(_ -> "?")
+                .collect(java.util.stream.Collectors.joining(","));
+        String objectNamePredicate = normalizedObjectName == null ? ""
+                : "and lower(object_name) = ?";
+        String sql = """
+                select object_id, parent_object_id, object_name, kind, attributes_json
+                from schema_object
+                where kind in (%s)
+                and is_deleted = false
+                %s
+                order by ordinal
+                """.formatted(placeholders, objectNamePredicate);
+        try (PreparedStatement statement = connection.prepareStatement(sql))
+        {
+            int index = 1;
+            for (String kind : kinds)
+            {
+                statement.setString(index++, kind);
+            }
+            if (normalizedObjectName != null)
+            {
+                statement.setString(index, normalizedObjectName);
+            }
+            try (ResultSet resultSet = statement.executeQuery())
+            {
+                List<ObjectLookupEntry> result = new ArrayList<>();
+                while (resultSet.next())
+                {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> attrs = getIfNull(mapper.parseJson(resultSet.getString(5), Map.class), Map.of());
+                    ObjectPath path = objectPath(connection, resultSet.getString(2), attrs);
+                    result.add(new ObjectLookupEntry(resultSet.getString(1), resultSet.getString(3), resultSet.getString(4), path.database(), path.schema()));
+                }
+                return result;
+            }
+        }
+    }
+
+    private ObjectPath objectPath(Connection connection, String parentObjectId, Map<String, Object> attributes) throws SQLException
+    {
+        String database = firstString(attributes.get("database"), attributes.get("catalog"));
+        String schema = firstString(attributes.get("schema"));
+        if ((database != null
+                && schema != null)
+                || parentObjectId == null)
+        {
+            return new ObjectPath(database, schema);
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                select parent_object_id, object_name, kind, attributes_json
+                from schema_object
+                where object_id = ?
+                and is_deleted = false
+                """))
+        {
+            String currentParentObjectId = parentObjectId;
+            while (currentParentObjectId != null
+                    && (database == null
+                            || schema == null))
+            {
+                statement.setString(1, currentParentObjectId);
+                try (ResultSet resultSet = statement.executeQuery())
+                {
+                    if (!resultSet.next())
+                    {
+                        break;
+                    }
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> parentAttrs = getIfNull(mapper.parseJson(resultSet.getString(4), Map.class), Map.of());
+                    database = database != null ? database
+                            : firstString(parentAttrs.get("database"), parentAttrs.get("catalog"));
+                    schema = schema != null ? schema
+                            : firstString(parentAttrs.get("schema"));
+                    String kind = resultSet.getString(3);
+                    if (database == null
+                            && "database".equals(kind))
+                    {
+                        database = resultSet.getString(2);
+                    }
+                    else if (schema == null
+                            && "schema".equals(kind))
+                    {
+                        schema = resultSet.getString(2);
+                    }
+                    currentParentObjectId = resultSet.getString(1);
+                }
+            }
+            return new ObjectPath(database, schema);
+        }
+    }
+
+    private ColumnOwner columnOwner(Connection connection, String parentObjectId) throws SQLException
+    {
+        if (parentObjectId == null)
+        {
+            return null;
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                select object_id, parent_object_id, object_name, kind, attributes_json
+                from schema_object
+                where object_id = ?
+                and is_deleted = false
+                """))
+        {
+            String currentParentObjectId = parentObjectId;
+            while (currentParentObjectId != null)
+            {
+                statement.setString(1, currentParentObjectId);
+                try (ResultSet resultSet = statement.executeQuery())
+                {
+                    if (!resultSet.next())
+                    {
+                        return null;
+                    }
+                    String kind = resultSet.getString(4);
+                    if ("table".equals(kind)
+                            || "view".equals(kind)
+                            || "base table".equals(kind))
+                    {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> attrs = getIfNull(mapper.parseJson(resultSet.getString(5), Map.class), Map.of());
+                        ObjectPath path = objectPath(connection, resultSet.getString(2), attrs);
+                        return new ColumnOwner(resultSet.getString(3), kind, path.database(), path.schema());
+                    }
+                    currentParentObjectId = resultSet.getString(2);
+                }
+            }
+            return null;
+        }
+    }
+
+    private static String firstString(Object... values)
+    {
+        for (Object value : values)
+        {
+            String string = stringValue(value);
+            if (string != null)
+            {
+                return string;
+            }
+        }
+        return null;
+    }
+
+    private JdbcSchemaObject loadObjectTree(Connection connection, String objectId) throws SQLException
+    {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                with recursive object_tree(object_id, parent_object_id, object_name, kind, attributes_json, ordinal) as
+                (
+                  select object_id
+                  ,      cast(null as varchar(600))
+                  ,      object_name
+                  ,      kind
+                  ,      attributes_json
+                  ,      ordinal
+                  from schema_object
+                  where object_id = ?
+                  and is_deleted = false
+
+                  union all
+
+                  select child.object_id
+                  ,      child.parent_object_id
+                  ,      child.object_name
+                  ,      child.kind
+                  ,      child.attributes_json
+                  ,      child.ordinal
+                  from schema_object child
+                  join object_tree ot
+                    on child.parent_object_id = ot.object_id
+                  where child.is_deleted = false
+                )
+                select object_id, parent_object_id, object_name, kind, attributes_json
+                from object_tree
+                order by ordinal
+                """))
+        {
+            statement.setString(1, objectId);
+            try (ResultSet resultSet = statement.executeQuery())
+            {
+                List<Row> rows = new ArrayList<>();
+                while (resultSet.next())
+                {
+                    rows.add(new Row(resultSet.getString(1), resultSet.getString(2), resultSet.getString(3), resultSet.getString(4), resultSet.getString(5)));
+                }
+                List<JdbcSchemaObject> roots = mapRows(rows);
+                return roots.isEmpty() ? null
+                        : roots.get(0);
+            }
         }
     }
 
@@ -1437,6 +1600,26 @@ public final class JdbcSchemaStore
     }
 
     record SymbolLookupEntry(String kind, String name, String fullName, String detail, String database, String schema, String objectName)
+    {
+    }
+
+    record ObjectDetail(JdbcSchemaObject object, String database, String schema)
+    {
+    }
+
+    record ColumnDetail(JdbcSchemaObject column, String tableName, String tableKind, String database, String schema)
+    {
+    }
+
+    private record ObjectLookupEntry(String objectId, String name, String kind, String database, String schema)
+    {
+    }
+
+    private record ObjectPath(String database, String schema)
+    {
+    }
+
+    private record ColumnOwner(String tableName, String tableKind, String database, String schema)
     {
     }
 
