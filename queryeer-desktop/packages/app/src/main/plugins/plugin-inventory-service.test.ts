@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -266,5 +266,110 @@ describe("PluginInventoryService", () => {
     const restarted = createService();
     await restarted.initialize();
     expect((await restarted.getInventory()).plugins).toEqual([]);
+  });
+
+  it("applies pending install on restart when staging directory exists", async () => {
+    // Seed an install dir with v1.0.0
+    const installDir = writeFolderPlugin("external.pending", {
+      schemaVersion: 1,
+      id: "external.pending",
+      name: "External Pending",
+      version: "1.0.0",
+      frontend: { entryModule: "frontend/module.mjs" }
+    });
+
+    // Create staging dir with v2.0.0 (simulating a deferred install)
+    const stagingRoot = join(pluginsDir, ".staging");
+    const stagingDir = join(stagingRoot, "external.pending-staging");
+    mkdirSync(stagingDir, { recursive: true });
+    writeFileSync(
+      join(stagingDir, "plugin.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "external.pending",
+        name: "External Pending",
+        version: "2.0.0",
+        frontend: { entryModule: "frontend/module.mjs" }
+      }),
+      "utf8"
+    );
+    mkdirSync(join(stagingDir, "frontend"), { recursive: true });
+    writeFileSync(join(stagingDir, "frontend", "module.mjs"), "export const v = '2.0.0'\n");
+
+    // Seed lockfile with installPending referencing stagingDir
+    mkdirSync(dirname(lockfilePath), { recursive: true });
+    writeFileSync(
+      lockfilePath,
+      JSON.stringify({
+        version: 1,
+        plugins: [
+          {
+            id: "external.pending",
+            name: "External Pending",
+            version: "1.0.0",
+            enabled: true,
+            source: { type: "folder", path: installDir },
+            installSourcePath: "old.zip",
+            integrity: { algorithm: "sha256", archiveHash: "old", installedAt: "2026-01-01T00:00:00.000Z" },
+            restartRequired: true,
+            installPending: { stagingDir }
+          }
+        ]
+      }),
+      "utf8"
+    );
+
+    // Simulate restart — create new service and initialize
+    const restarted = createService();
+    await restarted.initialize();
+
+    // installDir should now contain v2.0.0 files
+    const stagedManifest = JSON.parse(readFileSync(join(installDir, "plugin.json"), "utf8"));
+    expect(stagedManifest.version).toBe("2.0.0");
+
+    // Staging directory should be gone
+    expect(existsSync(stagingDir)).toBe(false);
+
+    // Version should be 2.0.0 in inventory
+    const inventory = await restarted.getInventory();
+    expect(inventory.plugins).toHaveLength(1);
+    expect(inventory.plugins[0]).toMatchObject({
+      id: "external.pending",
+      version: "2.0.0",
+      restartRequired: false
+    });
+
+    // Lockfile should no longer have installPending
+    const lockfile = JSON.parse(readFileSync(lockfilePath, "utf8"));
+    expect(lockfile.plugins[0].installPending).toBeUndefined();
+  });
+
+  it("cleans up installPending with missing staging directory on restart", async () => {
+    mkdirSync(dirname(lockfilePath), { recursive: true });
+    writeFileSync(
+      lockfilePath,
+      JSON.stringify({
+        version: 1,
+        plugins: [
+          {
+            id: "external.missing-staging",
+            name: "External Missing Staging",
+            version: "1.0.0",
+            enabled: true,
+            source: { type: "folder", path: join(pluginsDir, "external.missing-staging") },
+            restartRequired: true,
+            installPending: { stagingDir: join(pluginsDir, ".staging", "nonexistent") }
+          }
+        ]
+      }),
+      "utf8"
+    );
+
+    const restarted = createService();
+    await restarted.initialize();
+
+    const lockfile = JSON.parse(readFileSync(lockfilePath, "utf8"));
+    expect(lockfile.plugins[0].installPending).toBeUndefined();
+    expect(lockfile.plugins[0].restartRequired).toBe(false);
   });
 });
