@@ -2,7 +2,6 @@
 
 [![Desktop CI](https://github.com/kuseman/queryeer-desktop/actions/workflows/queryeer-desktop-ci.yml/badge.svg)](https://github.com/kuseman/queryeer-desktop/actions/workflows/queryeer-desktop-ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)
 
 **Queryeer** is a modern, cross-platform desktop query tool that lets you explore, query, and visualize data across multiple database engines — all from one unified interface.
 

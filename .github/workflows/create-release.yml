@@ -99,6 +99,11 @@ jobs:
       - name: Set backend release version
         run: ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml versions:set -DnewVersion=${{ steps.versions.outputs.NEW_VERSION }} -DgenerateBackupPoms=false
 
+      - name: Set SCM tag to release version
+        shell: bash
+        run: |
+          sed -i "s|<tag>HEAD</tag>|<tag>v${{ steps.versions.outputs.NEW_VERSION }}</tag>|" queryeer-backend/pom.xml
+
       - name: Commit and tag release
         run: |
           git add queryeer-desktop/package.json queryeer-desktop/package-lock.json queryeer-desktop/packages/app/package.json queryeer-desktop/packages/api/package.json queryeer-backend
@@ -114,6 +119,11 @@ jobs:
           sed -i "s|<queryeer.version>[0-9.]\\+-SNAPSHOT</queryeer.version>|<queryeer.version>${{ steps.versions.outputs.NEXT_SNAPSHOT }}</queryeer.version>|g" \
             plugins-examples/jdbc-dialect/backend/pom.xml \
             plugins-examples/payloadbuilder-catalog/backend/pom.xml
+
+      - name: Reset SCM tag back to HEAD
+        shell: bash
+        run: |
+          sed -i "s|<tag>v${{ steps.versions.outputs.NEW_VERSION }}</tag>|<tag>HEAD</tag>|" queryeer-backend/pom.xml
 
       - name: Commit next backend snapshot
         run: |
