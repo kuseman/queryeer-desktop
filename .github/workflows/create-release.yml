@@ -108,9 +108,17 @@ jobs:
       - name: Set backend next snapshot version
         run: ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml versions:set -DnewVersion=${{ steps.versions.outputs.NEXT_SNAPSHOT }} -DgenerateBackupPoms=false
 
+      - name: Update example plugin POMs to next snapshot
+        shell: bash
+        run: |
+          sed -i "s|<queryeer.version>[0-9.]\\+-SNAPSHOT</queryeer.version>|<queryeer.version>${{ steps.versions.outputs.NEXT_SNAPSHOT }}</queryeer.version>|g" \
+            plugins-examples/jdbc-dialect/backend/pom.xml \
+            plugins-examples/payloadbuilder-catalog/backend/pom.xml
+
       - name: Commit next backend snapshot
         run: |
           git add queryeer-backend
+          git add plugins-examples
           git commit -m "chore: prepare for next development iteration"
 
       - name: Push commits and release tag
