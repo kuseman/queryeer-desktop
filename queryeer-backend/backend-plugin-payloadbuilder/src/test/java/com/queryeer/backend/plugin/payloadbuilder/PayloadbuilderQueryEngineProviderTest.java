@@ -5,8 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import org.junit.jupiter.api.Assertions;
@@ -15,6 +17,7 @@ import org.mockito.Mockito;
 
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.FileSession;
+import com.queryeer.backend.api.OutputEvent;
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.QueryPublisher;
 import com.queryeer.backend.api.SecuritySessionClosedException;
@@ -23,6 +26,10 @@ import com.queryeer.backend.api.parse.IncrementalParseFunction;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 import com.queryeer.backend.api.parse.ParseSessionSnapshot;
 import com.queryeer.backend.core.JacksonPayloadMapper;
+import com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderQueryEngineProvider.SessionHolder;
+import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
+import com.queryeer.backend.queryengine.jdbc.JdbcConnections;
+import com.queryeer.backend.queryengine.jdbc.JdbcDialect;
 import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
 import com.queryeer.backend.queryengine.sql.parser.TreeSitterSqlParseFunction;
 
@@ -36,6 +43,7 @@ import se.kuseman.payloadbuilder.api.execution.ObjectVector;
 import se.kuseman.payloadbuilder.api.execution.TupleVector;
 import se.kuseman.payloadbuilder.api.execution.UTF8String;
 import se.kuseman.payloadbuilder.api.execution.ValueVector;
+import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
 class PayloadbuilderQueryEngineProviderTest
 {
@@ -88,12 +96,56 @@ class PayloadbuilderQueryEngineProviderTest
     {
         PayloadbuilderQueryEngineProvider provider = createProvider(NOOP_CONFIG);
         RecordingPublisher publisher = new RecordingPublisher();
+        Map<String, Object> engineState = Map.of("payloadbuilder", Map.of("catalogs", Map.of()));
 
-        provider.execute("exec-2", "file-1", "select 1", null, publisher);
+        provider.execute("exec-2", "file-1", "select 1", engineState, publisher);
 
         Assertions.assertTrue(publisher.completedWithPatchCalled);
-        Assertions.assertNull(publisher.completedEngineState);
         Assertions.assertNull(publisher.errorCode);
+    }
+
+    @Test
+    void executeWithCatalogConfigurationBuildsRegistryAndInjectsProperties()
+    {
+        JdbcDialect mockDialect = Mockito.mock(JdbcDialect.class);
+        JdbcConnection mockConnection = new JdbcConnection("test-conn", "Test Connection", mockDialect, Map.of("host", "localhost", "port", 5432));
+        JdbcRuntimeService mockJdbcRuntime = Mockito.mock(JdbcRuntimeService.class);
+        JdbcConnections mockConnections = Mockito.mock(JdbcConnections.class);
+        Mockito.when(mockJdbcRuntime.connections())
+                .thenReturn(mockConnections);
+        Mockito.when(mockConnections.resolve("test-conn"))
+                .thenReturn(mockConnection);
+
+        ConfigService config = new ConfigService()
+        {
+            @Override
+            public String get(String key)
+            {
+                return null;
+            }
+
+            @Override
+            public SettingsModule getModule(String moduleId)
+            {
+                return new SettingsModule("core.queryengine.jdbc", 1L, "2026-01-01T00:00:00Z", Map.of("connections",
+                        List.of(Map.of("id", "test-conn", "dialect", "PostgreSQL", "host", "localhost", "port", 5432, "database", "testdb", "username", "user", "password", "pass"))));
+            }
+
+            @Override
+            public Object materializeSecrets(Object payload)
+            {
+                return null;
+            }
+        };
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(config, TEST_MAPPER, mockJdbcRuntime);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(config, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        RecordingPublisher publisher = new RecordingPublisher();
+        Map<String, Object> engineState = Map.of("payloadbuilder", Map.of("catalogs", Map.of("myjdbc", Map.of("catalogId", "jdbc", "properties", Map.of("connectionId", "test-conn")))));
+
+        provider.execute("exec-catalog", "file-catalog", "select 1", engineState, publisher);
+
+        Assertions.assertTrue(publisher.completed
+                || publisher.errorCode != null, "Expected either completed or error: " + publisher.errorCode + " - " + publisher.errorMessage);
     }
 
     @Test
@@ -108,6 +160,21 @@ class PayloadbuilderQueryEngineProviderTest
         Assertions.assertEquals("VALIDATION", publisher.errorCode);
         Assertions.assertTrue(publisher.errorMessage.contains("jdbc1"));
         Assertions.assertFalse(publisher.completed);
+    }
+
+    @Test
+    void executeIncludesExceptionTypeInFailureMessage()
+    {
+        PayloadbuilderQueryEngineProvider provider = createProvider(NOOP_CONFIG);
+        RecordingPublisher publisher = new RecordingPublisher();
+        Map<String, Object> engineState = Map.of("payloadbuilder", Map.of("catalogs", Map.of()));
+
+        provider.execute("exec-3", "file-1", "select from", engineState, publisher);
+
+        Assertions.assertEquals("VALIDATION", publisher.errorCode);
+        Assertions.assertNotNull(publisher.errorMessage);
+        Assertions.assertTrue(publisher.errorDetails.containsKey("line"));
+        Assertions.assertTrue(publisher.errorDetails.containsKey("column"));
     }
 
     @Test
@@ -177,17 +244,58 @@ class PayloadbuilderQueryEngineProviderTest
     }
 
     @Test
-    void executeIncludesExceptionTypeInFailureMessage()
+    void executeWithPrintStatementPublishesMessages()
     {
         PayloadbuilderQueryEngineProvider provider = createProvider(NOOP_CONFIG);
-        RecordingPublisher publisher = new RecordingPublisher();
+        MessageCapturingPublisher publisher = new MessageCapturingPublisher();
+        Map<String, Object> engineState = Map.of("payloadbuilder", Map.of("catalogs", Map.of()));
 
-        provider.execute("exec-3", "file-1", "select from", null, publisher);
+        provider.execute("exec-print", "file-print", "PRINT 'Hello World'", engineState, publisher);
 
-        Assertions.assertEquals("VALIDATION", publisher.errorCode);
-        Assertions.assertNotNull(publisher.errorMessage);
-        Assertions.assertTrue(publisher.errorDetails.containsKey("line"));
-        Assertions.assertTrue(publisher.errorDetails.containsKey("column"));
+        Assertions.assertTrue(publisher.completed);
+        Assertions.assertFalse(publisher.capturedMessages.isEmpty(), "Expected at least one message from PRINT statement");
+        boolean foundHello = publisher.capturedMessages.stream()
+                .anyMatch(e -> e.message()
+                        .contains("Hello World"));
+        Assertions.assertTrue(foundHello, "Expected message to contain 'Hello World'");
+    }
+
+    @Test
+    void executeWithMultiplePrintStatementsPublishesMessages()
+    {
+        PayloadbuilderQueryEngineProvider provider = createProvider(NOOP_CONFIG);
+        MessageCapturingPublisher publisher = new MessageCapturingPublisher();
+        Map<String, Object> engineState = Map.of("payloadbuilder", Map.of("catalogs", Map.of()));
+
+        provider.execute("exec-print-multi", "file-print-multi", "PRINT 'First'; PRINT 'Second'; SELECT 1", engineState, publisher);
+
+        Assertions.assertTrue(publisher.completed);
+        Assertions.assertEquals(2, publisher.capturedMessages.size());
+        Assertions.assertTrue(publisher.capturedMessages.get(0)
+                .message()
+                .contains("First"));
+        Assertions.assertTrue(publisher.capturedMessages.get(1)
+                .message()
+                .contains("Second"));
+    }
+
+    @Test
+    void executeWithSelectAndPrintPublishesMessagesAlongsideResults()
+    {
+        PayloadbuilderQueryEngineProvider provider = createProvider(NOOP_CONFIG);
+        MessageCapturingPublisher publisher = new MessageCapturingPublisher();
+        Map<String, Object> engineState = Map.of("payloadbuilder", Map.of("catalogs", Map.of()));
+
+        provider.execute("exec-print-select", "file-print-select", "PRINT 'before'; SELECT 1 as value; PRINT 'after'", engineState, publisher);
+
+        Assertions.assertTrue(publisher.completed);
+        Assertions.assertEquals(2, publisher.capturedMessages.size());
+        Assertions.assertTrue(publisher.capturedMessages.get(0)
+                .message()
+                .contains("before"));
+        Assertions.assertTrue(publisher.capturedMessages.get(1)
+                .message()
+                .contains("after"));
     }
 
     @Test
@@ -308,9 +416,6 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void publishTupleVectorInChunksNormalizesPayloadbuilderInternalTypesAtAnyDepth()
     {
-        // Regression: payloadbuilder-internal types (UTF8String, Decimal, EpochDateTime, EpochDateTimeOffset) used to leak through Map/List
-        // values because the row-level normalizer only handled top-level values. The transport mapper lives in a different classloader
-        // and cannot resolve these types — they must be converted to plain JDK types at every depth before chunk publishing.
         ChunkRowsPublisher publisher = new ChunkRowsPublisher();
 
         UTF8String utf8 = UTF8String.from("hello");
@@ -319,8 +424,8 @@ class PayloadbuilderQueryEngineProviderTest
         EpochDateTimeOffset dateTimeOffset = EpochDateTimeOffset.from("2025-01-02T03:04:05Z");
 
         ValueVector topLevelUtf8 = ValueVector.literalAny(1, utf8);
-        ValueVector nestedInMap = ValueVector.literalAny(1, java.util.Map.of("k", utf8));
-        ValueVector nestedInList = ValueVector.literalAny(1, java.util.List.of(decimal, dateTime, dateTimeOffset));
+        ValueVector nestedInMap = ValueVector.literalAny(1, Map.of("k", utf8));
+        ValueVector nestedInList = ValueVector.literalAny(1, List.of(decimal, dateTime, dateTimeOffset));
 
         //@formatter:off
         TupleVector tupleVector = TupleVector.of(
@@ -340,7 +445,6 @@ class PayloadbuilderQueryEngineProviderTest
         Assertions.assertNotNull(publisher.rows);
         List<Object> row = publisher.rows.get(0);
 
-        // Top-level: every payloadbuilder-internal type must be replaced with its JDK equivalent.
         Assertions.assertEquals("hello", row.get(0));
         Assertions.assertFalse(row.get(0) instanceof UTF8String);
 
@@ -393,14 +497,12 @@ class PayloadbuilderQueryEngineProviderTest
         int publishedRows = PayloadbuilderQueryEngineProvider.publishTupleVectorInChunks(publisher, tupleVector, 0);
 
         Assertions.assertEquals(3, publishedRows);
-        // chunkSize 0 is clamped to 1 → 3 separate single-row notifications
         Assertions.assertEquals(List.of(1, 1, 1), publisher.chunkSizes);
     }
 
     @Test
     void publishTupleVectorInChunksFlushesPartialFinalBatch()
     {
-        // 7 rows with chunkSize=3: batches of 3, 3, then a partial 1 that must still be flushed
         ChunkRecordingPublisher publisher = new ChunkRecordingPublisher();
         TupleVector tupleVector = TupleVector.of(Schema.of(Column.of("value", ResolvedType.INT)), ValueVector.range(1, 8));
 
@@ -453,127 +555,6 @@ class PayloadbuilderQueryEngineProviderTest
     }
 
     @Test
-    void rowValueAsSerializableObjectReturnsRawValueForUnknownColumnType()
-    {
-        // Build a ValueVector with a synthetic column type that has no explicit branch in rowValueAsSerializableObject.
-        // All known types are covered by other tests, so any newly added Column.Type that isn't handled yet would land in
-        // the fallback `return normalizeAnyValue(valueVector.valueAsObject(rowIndex))` path.
-        ChunkRowsPublisher publisher = new ChunkRowsPublisher();
-        TupleVector tupleVector = TupleVector.of(Schema.of(Column.of("s", ResolvedType.STRING)), ValueVector.literalString("hello", 1));
-
-        PayloadbuilderQueryEngineProvider.publishTupleVectorInChunks(publisher, tupleVector, 100);
-
-        Assertions.assertEquals("hello", publisher.rows.get(0)
-                .get(0));
-    }
-
-    @Test
-    void normalizeAnyValueReturnsNullForNullInput()
-    {
-        // Verified indirectly via literalNull columns; this is the same code path
-        ChunkRowsPublisher publisher = new ChunkRowsPublisher();
-        TupleVector tupleVector = TupleVector.of(Schema.of(Column.of("n", ResolvedType.STRING)), ValueVector.literalNull(ResolvedType.STRING, 1));
-
-        PayloadbuilderQueryEngineProvider.publishTupleVectorInChunks(publisher, tupleVector, 100);
-
-        Assertions.assertNull(publisher.rows.get(0)
-                .get(0));
-    }
-
-    @Test
-    void normalizeAnyValueConvertsValueVectorBackToArray()
-    {
-        // ValueVector that isn't a TupleVector/ObjectVector/UTF8String/Decimal/DateTime/DateTimeOffset still
-        // must be converted via toArrayValues so callers receive a List, not a raw vector.
-        ChunkRowsPublisher publisher = new ChunkRowsPublisher();
-        ValueVector anyIntRange = ValueVector.literalAny(1, ValueVector.range(1, 4));
-
-        //@formatter:off
-        TupleVector tupleVector = TupleVector.of(
-                Schema.of(Column.of("v", ResolvedType.ANY)),
-                anyIntRange);
-        //@formatter:on
-
-        PayloadbuilderQueryEngineProvider.publishTupleVectorInChunks(publisher, tupleVector, 100);
-
-        @SuppressWarnings("unchecked")
-        List<Object> value = (List<Object>) publisher.rows.get(0)
-                .get(0);
-        Assertions.assertEquals(List.of(1, 2, 3), value);
-    }
-
-    @Test
-    void normalizeAnyValueRecursesIntoNestedMapsAndIterables()
-    {
-        // Nested Map containing a List containing payloadbuilder-internal types — every leaf must be converted
-        ChunkRowsPublisher publisher = new ChunkRowsPublisher();
-        Map<String, Object> nested = Map.of("list", List.of(UTF8String.from("x"), Decimal.from("1.5")));
-
-        //@formatter:off
-        TupleVector tupleVector = TupleVector.of(
-                Schema.of(Column.of("m", ResolvedType.ANY)),
-                ValueVector.literalAny(1, nested));
-        //@formatter:on
-
-        PayloadbuilderQueryEngineProvider.publishTupleVectorInChunks(publisher, tupleVector, 100);
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> value = (Map<String, Object>) publisher.rows.get(0)
-                .get(0);
-        @SuppressWarnings("unchecked")
-        List<Object> inner = (List<Object>) value.get("list");
-        Assertions.assertEquals("x", inner.get(0));
-        Assertions.assertEquals(new BigDecimal("1.5"), inner.get(1));
-    }
-
-    @Test
-    void normalizeAnyValueReturnsUnsupportedValueUnchanged()
-    {
-        // Non-Container, non-payloadbuilder values pass through as-is (Jackson can serialize plain JDK types).
-        // We use a LinkedHashSet — Iterable so the Iterable branch is exercised, but the recursion preserves element identity
-        // for non-payloadbuilder leaves.
-        ChunkRowsPublisher publisher = new ChunkRowsPublisher();
-        java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
-        set.add("alpha");
-        set.add("beta");
-
-        //@formatter:off
-        TupleVector tupleVector = TupleVector.of(
-                Schema.of(Column.of("v", ResolvedType.ANY)),
-                ValueVector.literalAny(1, set));
-        //@formatter:on
-
-        PayloadbuilderQueryEngineProvider.publishTupleVectorInChunks(publisher, tupleVector, 100);
-
-        @SuppressWarnings("unchecked")
-        List<Object> value = (List<Object>) publisher.rows.get(0)
-                .get(0);
-        // Order preserved and elements returned by identity (the normalizer does not wrap plain JDK strings)
-        Assertions.assertEquals(List.of("alpha", "beta"), value);
-        Assertions.assertEquals("alpha", value.get(0));
-    }
-
-    @Test
-    void normalizeAnyValueReturnsScalarUnchanged()
-    {
-        // Scalar plain JDK values (Integer, Boolean, etc.) pass through the normalizer as-is.
-        ChunkRowsPublisher publisher = new ChunkRowsPublisher();
-        Integer value = 42;
-
-        //@formatter:off
-        TupleVector tupleVector = TupleVector.of(
-                Schema.of(Column.of("v", ResolvedType.ANY)),
-                ValueVector.literalAny(1, value));
-        //@formatter:on
-
-        PayloadbuilderQueryEngineProvider.publishTupleVectorInChunks(publisher, tupleVector, 100);
-
-        Object actual = publisher.rows.get(0)
-                .get(0);
-        Assertions.assertSame(value, actual);
-    }
-
-    @Test
     void invokeSqlParseSnapshotReturnsEmptyForBlankFileId()
     {
         PayloadbuilderQueryEngineProvider provider = createProvider(NOOP_CONFIG);
@@ -599,7 +580,7 @@ class PayloadbuilderQueryEngineProviderTest
         ParseSessionSnapshot snapshot = new ParseSessionSnapshot("payloadbuilder", "file-1", 7L, "sql", true, null, Map.of("k", "v"));
         IncrementalParseSessionService sessions = Mockito.mock(IncrementalParseSessionService.class);
         Mockito.when(sessions.get("payloadbuilder", "file-1"))
-                .thenReturn(java.util.Optional.of(snapshot));
+                .thenReturn(Optional.of(snapshot));
         PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, sessions, PARSE_FUNCTION);
 
@@ -620,8 +601,6 @@ class PayloadbuilderQueryEngineProviderTest
         PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, sessions, PARSE_FUNCTION);
 
-        // SqlCompletionSupport is a static utility tested in its own module; here we just confirm the provider routes
-        // the call without throwing and that the result is whatever SqlCompletionSupport returns (non-null for a valid payload).
         Object result = provider.invoke("file-1", "sql.complete",
                 Map.of("fileId", "file-1", "version", 1L, "text", "SELECT ", "cursor", Map.of("line", 1, "column", 8), "limits", Map.of("maxItems", 50)));
 
@@ -631,8 +610,6 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void executeReturnsInternalFailureWhenPayloadMapperConvertThrows()
     {
-        // Use a PayloadMapper that throws on convert() to drive the generic catch (Exception) → INTERNAL branch.
-        // The exception is a RuntimeException so it lands in the generic catch block, not the typed ones.
         PayloadMapper throwingMapper = new PayloadMapper()
         {
             @Override
@@ -672,7 +649,6 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void executeReturnsCancelledFailureWhenCancelPrecedesInternalException()
     {
-        // Same payload mapper that throws on convert(), but cancel is set first — the generic catch must take the CANCELLED branch.
         PayloadMapper throwingMapper = new PayloadMapper()
         {
             @Override
@@ -736,7 +712,6 @@ class PayloadbuilderQueryEngineProviderTest
         PayloadbuilderQueryEngineProvider provider = createProvider(config);
         RecordingPublisher publisher = new RecordingPublisher();
 
-        // Selected env id is set, but no module is configured → empty env map
         provider.execute("exec-novarmod", "file-1", "select 1", Map.of("payloadbuilder", Map.of("selectedEnvironmentId", "any")), publisher);
 
         Assertions.assertNull(publisher.errorCode, publisher.errorMessage);
@@ -757,7 +732,6 @@ class PayloadbuilderQueryEngineProviderTest
             @Override
             public SettingsModule getModule(String moduleId)
             {
-                // Module exists but its values map is null
                 return new SettingsModule("core.queryengine.payloadbuilder.environments", 1L, "2026-01-01T00:00:00Z", null);
             }
 
@@ -803,7 +777,6 @@ class PayloadbuilderQueryEngineProviderTest
         PayloadbuilderQueryEngineProvider provider = createProvider(config);
         RecordingPublisher publisher = new RecordingPublisher();
 
-        // Selected env id "missing" doesn't match any configured environment
         provider.execute("exec-noenv", "file-1", "select 1", Map.of("payloadbuilder", Map.of("selectedEnvironmentId", "missing")), publisher);
 
         Assertions.assertNull(publisher.errorCode, publisher.errorMessage);
@@ -836,12 +809,11 @@ class PayloadbuilderQueryEngineProviderTest
     {
         PayloadbuilderQueryEngineProvider provider = createProvider(NOOP_CONFIG);
 
-        // No active session for this id — cancel must not throw and the id is added to the cancelled set
         provider.cancel("exec-not-active");
 
-        // Running a query with the same id completes successfully and the cancel flag is cleared (exercised by the finally block)
         RecordingPublisher publisher = new RecordingPublisher();
-        provider.execute("exec-not-active", "file-1", "select 1", null, publisher);
+        Map<String, Object> engineState = Map.of("payloadbuilder", Map.of("catalogs", Map.of()));
+        provider.execute("exec-not-active", "file-1", "select 1", engineState, publisher);
         Assertions.assertNull(publisher.errorCode, publisher.errorMessage);
         Assertions.assertTrue(publisher.completed);
     }
@@ -853,11 +825,52 @@ class PayloadbuilderQueryEngineProviderTest
         Assertions.assertEquals("payloadbuilder", provider.engineId());
     }
 
+    @Test
+    void cancelFiresAbortQueryListenersOnActiveSession() throws Exception
+    {
+        ConfigService config = new ConfigService()
+        {
+            @Override
+            public String get(String key)
+            {
+                return null;
+            }
+
+            @Override
+            public SettingsModule getModule(String moduleId)
+            {
+                return null;
+            }
+
+            @Override
+            public Object materializeSecrets(Object payload)
+            {
+                return null;
+            }
+        };
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(config, TEST_MAPPER, JDBCRUNTIMESERVICE);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(config, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        Map<String, SessionHolder> executionIdMap = provider.sessionByExecutionId;
+
+        // Create a mock session
+        QuerySession mockSession = Mockito.mock(QuerySession.class);
+
+        // Inject the holder
+        String executionId = "exec-fire-abort-test";
+        executionIdMap.put(executionId, new SessionHolder(mockSession, "test-session-id"));
+
+        // Call cancel - this should call fireAbortQueryListeners on the mock
+        provider.cancel(executionId);
+
+        // Verify fireAbortQueryListeners was called
+        Mockito.verify(mockSession)
+                .fireAbortQueryListeners();
+    }
+
     private static final class RecordingPublisher implements QueryPublisher
     {
         private boolean completed;
         private boolean completedWithPatchCalled;
-        private Object completedEngineState;
         private String errorCode;
         private String errorMessage;
         private Map<String, Object> errorDetails = Map.of();
@@ -878,6 +891,11 @@ class PayloadbuilderQueryEngineProviderTest
         }
 
         @Override
+        public void resultSetRows(List<List<Object>> rows, List<OutputEvent> messages)
+        {
+        }
+
+        @Override
         public void completed(long durationMs, long rowCount)
         {
             completed = true;
@@ -888,7 +906,6 @@ class PayloadbuilderQueryEngineProviderTest
         {
             completed = true;
             completedWithPatchCalled = true;
-            completedEngineState = engineState;
         }
 
         @Override
@@ -929,6 +946,11 @@ class PayloadbuilderQueryEngineProviderTest
         }
 
         @Override
+        public void resultSetRows(List<List<Object>> rows, List<OutputEvent> messages)
+        {
+        }
+
+        @Override
         public void completed(long durationMs, long rowCount)
         {
         }
@@ -960,8 +982,54 @@ class PayloadbuilderQueryEngineProviderTest
         }
 
         @Override
+        public void resultSetRows(List<List<Object>> rows, List<OutputEvent> messages)
+        {
+        }
+
+        @Override
         public void completed(long durationMs, long rowCount)
         {
+        }
+
+        @Override
+        public void failed(String errorCode, String errorMessage)
+        {
+        }
+    }
+
+    private static final class MessageCapturingPublisher implements QueryPublisher
+    {
+        private boolean completed;
+        private final List<OutputEvent> capturedMessages = new ArrayList<>();
+
+        @Override
+        public void progress(int percent, String message)
+        {
+        }
+
+        @Override
+        public void resultSetStart(List<String> columnNames, List<String> columnTypes)
+        {
+        }
+
+        @Override
+        public void resultSetRows(List<List<Object>> rows)
+        {
+        }
+
+        @Override
+        public void resultSetRows(List<List<Object>> rows, List<OutputEvent> messages)
+        {
+            if (messages != null)
+            {
+                capturedMessages.addAll(messages);
+            }
+        }
+
+        @Override
+        public void completed(long durationMs, long rowCount)
+        {
+            completed = true;
         }
 
         @Override

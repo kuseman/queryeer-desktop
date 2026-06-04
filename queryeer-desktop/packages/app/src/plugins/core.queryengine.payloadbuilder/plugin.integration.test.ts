@@ -1005,6 +1005,45 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
     expect(mocks.applyEngineStatePatchMock).not.toHaveBeenCalled();
   });
 
+  it("updates sessionId metadata on completed payloadbuilder event", () => {
+    const context = createContext();
+    coreQueryEnginePayloadbuilderPlugin.activate(context);
+
+    const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+      | ((
+          event: { method: string; params?: { engineState?: unknown } },
+          executeContext?: { engineId?: string; fileId?: string }
+        ) => void)
+      | undefined;
+    expect(listener).toBeTypeOf("function");
+
+    const updateFileMock = context.files.updateFile as ReturnType<typeof vi.fn>;
+    updateFileMock.mockClear();
+
+    listener?.(
+      {
+        method: "queryengine.completed",
+        params: {
+          engineState: {
+            payloadbuilder: {
+              sessionId: "1"
+            }
+          }
+        }
+      },
+      { engineId: "payloadbuilder", fileId: "file-1" }
+    );
+
+    expect(updateFileMock).toHaveBeenCalledWith(
+      "file-1",
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          "core.queryengine.payloadbuilder.sessionId": "1"
+        })
+      })
+    );
+  });
+
   it("adapts catalog instance setting with newly contributed catalogs", async () => {
     const context = createContext();
     const setValueMock = vi.fn(async () => ({ ok: true }));

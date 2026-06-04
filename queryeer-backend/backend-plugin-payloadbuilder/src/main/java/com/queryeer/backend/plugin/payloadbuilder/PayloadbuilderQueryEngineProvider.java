@@ -3,6 +3,7 @@ package com.queryeer.backend.plugin.payloadbuilder;
 import static java.util.Objects.requireNonNull;
 
 import java.io.Writer;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -10,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.lang3.ObjectUtils;
 
@@ -33,6 +35,7 @@ import com.queryeer.backend.queryengine.sql.parser.TreeSitterSqlParseFunction;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
 import se.kuseman.payloadbuilder.api.catalog.Column;
+import se.kuseman.payloadbuilder.api.catalog.ResolvedType;
 import se.kuseman.payloadbuilder.api.catalog.Schema;
 import se.kuseman.payloadbuilder.api.execution.Decimal;
 import se.kuseman.payloadbuilder.api.execution.EpochDateTime;
@@ -67,13 +70,16 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
     private static final String TYPE_ARRAY = "array";
     private static final String TYPE_TABLE = "table";
     private static final String TYPE_ANY = "any";
+    private static final String METADATA_KEY_EXECUTION_TIME = "Execution Time";
     private static final String ENV_MODULE_ID = "core.queryengine.payloadbuilder.environments";
     private static final String ENV_VALUES_KEY = "core.queryengine.payloadbuilder.environments.values";
 
     /** Shared generic cache between all sessions. Catalogs can store information that is reused. */
     private static final InMemoryGenericCache GENERIC_CACHE = new InMemoryGenericCache("QuerySession", true);
+    private final AtomicLong sessionCounter = new AtomicLong(0);
     private final Set<String> cancelledExecutionIds = ConcurrentHashMap.newKeySet();
-    private final Map<String, QuerySession> activeSessions = new ConcurrentHashMap<>();
+    private final Map<String, SessionHolder> sessionByFileId = new ConcurrentHashMap<>();
+    final Map<String, SessionHolder> sessionByExecutionId = new ConcurrentHashMap<>();
     private final ConfigService configService;
     private final PayloadbuilderCatalogProviderRegistry catalogProviders;
     private final PayloadMapper payloadMapper;
@@ -107,20 +113,34 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
     {
         long startMs = System.currentTimeMillis();
         QuerySession session = null;
+        String sessionId = null;
         AccumulatingOutputWriter outputWriter = new AccumulatingOutputWriter();
+        PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState catalogState = null;
         try
         {
             PayloadbuilderEngineState typedState = payloadMapper.convert(engineState, PayloadbuilderEngineState.class);
-            PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState catalogState = PayloadbuilderEngineStateSupport.parse(typedState);
+            if (typedState == null)
+            {
+                throw new IllegalArgumentException("Engine state is required");
+            }
+            catalogState = PayloadbuilderEngineStateSupport.parse(typedState);
             CatalogRegistry catalogRegistry = buildCatalogRegistry(catalogState);
-            Map<String, Object> variables = resolveEnvironmentVariables(catalogState.selectedEnvironmentId());
-            session = new QuerySession(catalogRegistry, variables);
-            session.setGenericCache(GENERIC_CACHE);
 
+            SessionHolder holder = sessionByFileId.computeIfAbsent(fileId, _ ->
+            {
+                String newSessionId = String.valueOf(sessionCounter.incrementAndGet());
+                QuerySession newSession = new QuerySession(catalogRegistry, Map.of());
+                newSession.setGenericCache(GENERIC_CACHE);
+                return new SessionHolder(newSession, newSessionId);
+            });
+            session = holder.session;
+            sessionId = holder.sessionId;
+
+            injectEnvironmentVariables(session, catalogState.selectedEnvironmentId());
             injectCatalogProperties(session, catalogState);
 
             session.setAbortSupplier(() -> cancelledExecutionIds.contains(queryExecutionId));
-            activeSessions.put(queryExecutionId, session);
+            sessionByExecutionId.put(queryExecutionId, holder);
 
             PayloadbuilderEngineStateSupport.applyToSession(session, catalogState);
 
@@ -154,8 +174,10 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
                         if (!started)
                         {
                             started = true;
+                            Map<String, String> metadata = Map.of(METADATA_KEY_EXECUTION_TIME, LocalDateTime.now()
+                                    .toString());
                             Schema schema = tupleVector.getSchema();
-                            publisher.resultSetStart(toColumnNames(schema), toColumnTypes(schema));
+                            publisher.resultSetStart(toColumnNames(schema), toColumnTypes(schema), metadata);
                         }
 
                         if (tupleVector == null
@@ -171,7 +193,7 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
             }
             outputWriter.flushMessages(publisher);
             Map<String, PayloadbuilderCatalogProviderContributor> providersByAlias = buildProvidersByAlias(catalogState);
-            Object engineStatePatch = PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, catalogState, providersByAlias);
+            Object engineStatePatch = PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, catalogState, providersByAlias, sessionId);
             long total = System.currentTimeMillis() - startMs;
             publisher.completed(total, rowCount, engineStatePatch);
         }
@@ -204,9 +226,10 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
         finally
         {
             cancelledExecutionIds.remove(queryExecutionId);
-            if (session != null)
+            sessionByExecutionId.remove(queryExecutionId);
+            if (catalogState != null)
             {
-                activeSessions.remove(queryExecutionId);
+                removeEnvironmentVariables(session, catalogState.selectedEnvironmentId());
             }
         }
     }
@@ -349,6 +372,29 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
         return result;
     }
 
+    private void injectEnvironmentVariables(QuerySession session, String selectedEnvironmentId)
+    {
+        Map<String, Object> variables = resolveEnvironmentVariables(selectedEnvironmentId);
+        Map<String, ValueVector> sessionVariables = session.getVariables();
+        for (Map.Entry<String, Object> entry : variables.entrySet())
+        {
+            ValueVector vector = entry.getValue() == null ? ValueVector.literalNull(ResolvedType.ANY, 1)
+                    : ValueVector.literalAny(1, entry.getValue());
+            sessionVariables.put(entry.getKey()
+                    .toLowerCase(), vector);
+        }
+    }
+
+    private void removeEnvironmentVariables(QuerySession session, String selectedEnvironmentId)
+    {
+        Map<String, Object> variables = resolveEnvironmentVariables(selectedEnvironmentId);
+        Map<String, ValueVector> sessionVariables = session.getVariables();
+        for (String key : variables.keySet())
+        {
+            sessionVariables.remove(key.toLowerCase());
+        }
+    }
+
     private List<String> mergeActions()
     {
         List<String> actions = new ArrayList<>();
@@ -375,6 +421,7 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
     public void onClose(FileSession session)
     {
         parseSessions.close(engineId(), session.fileId());
+        sessionByFileId.remove(session.fileId());
     }
 
     static int publishTupleVectorInChunks(QueryPublisher publisher, TupleVector tupleVector, int chunkSize)
@@ -681,10 +728,10 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
     public void cancel(String queryExecutionId)
     {
         cancelledExecutionIds.add(queryExecutionId);
-        QuerySession session = activeSessions.get(queryExecutionId);
-        if (session != null)
+        SessionHolder holder = sessionByExecutionId.get(queryExecutionId);
+        if (holder != null)
         {
-            session.fireAbortQueryListeners();
+            holder.session.fireAbortQueryListeners();
         }
     }
 
@@ -767,5 +814,14 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
 
     private record EnvironmentVariable(String key, String value, Object secretRef)
     {
+    }
+
+    record SessionHolder(QuerySession session, String sessionId)
+    {
+        SessionHolder
+        {
+            requireNonNull(session);
+            requireNonNull(sessionId);
+        }
     }
 }
