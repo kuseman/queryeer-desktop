@@ -271,6 +271,7 @@ Behavior:
 - `options.dialectOptions` is an optional dialect-owned settings bag. For SQL Server, `sqlserverPlanXmlOutput` may be `suppress` or `include` to control whether raw ShowPlan XML result sets are also streamed as row output alongside graph artifacts.
 - Payloadbuilder engine state may include `payloadbuilder.defaultCatalogAlias` to request session default catalog alias.
 - Payloadbuilder engine state may include `payloadbuilder.selectedEnvironmentId`. Backend reads environment variables from settings module `core.queryengine.payloadbuilder.environments` (`core.queryengine.payloadbuilder.environments.json`) and injects them into the query session as runtime variables before execution.
+- Payloadbuilder maintains a persistent `QuerySession` per file. Sessions persist across queries within the same file, allowing variables and temp tables to be maintained. Environment variables are re-resolved and reset on each query execution to keep them in sync with the current environment selection. The session is cleaned up when the file is closed. If the selected environment changes, the session is recreated to avoid stale variable values. After execution, the backend reflects the current session counter in `queryengine.completed.engineState.payloadbuilder.sessionId` so the UI can display the session identifier in the tab title (e.g., `(1) filename.plbsql`).
 - JDBC engine state carries `connectionId`, optional `database`, and optional `sessionId`. When `database` is present, the backend switches the JDBC connection to that catalog (via dialect-specific `setCatalog`/`setSchema`) before executing statements. After execution, the backend reflects the current database back in `queryengine.completed.engineState.database` and the active RDBMS session in `queryengine.completed.engineState.sessionId` so the UI stays synchronized.
 
 ## 5.4 `queryengine.cancel`
@@ -497,6 +498,7 @@ Rules:
   },
   "engineState": {
     "payloadbuilder": {
+      "sessionId": "1",
       "catalogs": {
         "jdbc1": {
           "properties": {

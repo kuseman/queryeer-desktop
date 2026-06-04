@@ -118,7 +118,7 @@ final class PayloadbuilderEngineStateSupport
         }
     }
 
-    static Object buildEngineStatePatch(IQuerySession session, PayloadbuilderCatalogState input, Map<String, PayloadbuilderCatalogProviderContributor> providersByAlias)
+    static Object buildEngineStatePatch(IQuerySession session, PayloadbuilderCatalogState input, Map<String, PayloadbuilderCatalogProviderContributor> providersByAlias, String sessionId)
     {
         Map<String, Object> catalogsPatch = new LinkedHashMap<>();
         boolean defaultAliasSwitched = !Objects.equals(input.defaultCatalogAlias, session.getDefaultCatalogAlias());
@@ -138,18 +138,17 @@ final class PayloadbuilderEngineStateSupport
             }
         }
 
-        if (catalogsPatch.isEmpty()
-                && !defaultAliasSwitched)
-        {
-            return null;
-        }
-
         Map<String, Object> payloadbuilderPatch = new LinkedHashMap<>();
-        payloadbuilderPatch.put(KEY_CATALOGS, catalogsPatch);
+        if (!catalogsPatch.isEmpty())
+        {
+            payloadbuilderPatch.put(KEY_CATALOGS, catalogsPatch);
+        }
         if (defaultAliasSwitched)
         {
             payloadbuilderPatch.put(KEY_DEFAULT_CATALOGALIAS, session.getDefaultCatalogAlias());
         }
+        payloadbuilderPatch.put("sessionId", sessionId);
+
         Map<String, Object> root = new LinkedHashMap<>();
         root.put(KEY_PAYLOADBUILDER, payloadbuilderPatch);
         return root;

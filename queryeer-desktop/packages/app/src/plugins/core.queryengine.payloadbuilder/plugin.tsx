@@ -28,6 +28,8 @@ import {
 import { LetterPIcon } from "./LetterPIcon";
 import { registerPayloadbuilderFlowNodeContribution } from "./flow-node-contribution";
 
+const PLB_SESSION_ID_METADATA_KEY = "core.queryengine.payloadbuilder.sessionId";
+
 export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
   manifest: {
     id: "core.queryengine.payloadbuilder",
@@ -214,6 +216,21 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
       void adaptCatalogInstancesSettings(service);
     });
 
+    context.layout.registerTabTitle({
+      id: "core.queryengine.payloadbuilder.tabTitle.session",
+      order: 20,
+      render: ({ file, hasCapability }) => {
+        if (!hasCapability("queryexecutable") || file.mimeType !== "application/plbsql") {
+          return null;
+        }
+        const sessionId = file.metadata?.[PLB_SESSION_ID_METADATA_KEY];
+        if (typeof sessionId !== "string" || sessionId.length === 0) {
+          return null;
+        }
+        return { prefix: `(${sessionId}) ` };
+      }
+    });
+
     context.layout.registerView({
       id: "core.queryengine.payloadbuilder.catalogs",
       title: "Payloadbuilder",
@@ -267,8 +284,11 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
         return;
       }
       const catalogStore = getPayloadbuilderCatalogStore();
+      const es = params.engineState as Record<string, unknown> | null;
+      const pbState = es?.payloadbuilder as Record<string, unknown> | null;
+      const sessionId = typeof pbState?.sessionId === "string" ? pbState.sessionId : undefined;
       catalogStore.applyEngineStatePatch(executeContext.fileId, params.engineState);
-      syncPayloadbuilderMetadata(executeContext.fileId, context.files, catalogStore);
+      syncPayloadbuilderMetadata(executeContext.fileId, context.files, catalogStore, sessionId);
     });
 
     const catalogStore = getPayloadbuilderCatalogStore();
@@ -302,13 +322,18 @@ const PLB_CTX_DEFAULT_CATALOG = "core.queryengine.payloadbuilder.defaultCatalogA
 function syncPayloadbuilderMetadata(
   fileId: string,
   files: FilesRegistry,
-  catalogStore: PayloadbuilderCatalogStore
+  catalogStore: PayloadbuilderCatalogStore,
+  sessionId?: string
 ): void {
   const file = files.getFile(fileId);
   if (!file) return;
 
   const meta = catalogStore.getCatalogMeta(fileId);
   const metadata = { ...(file.metadata ?? {}) };
+
+  if (sessionId !== undefined && sessionId.length > 0) {
+    metadata[PLB_SESSION_ID_METADATA_KEY] = sessionId;
+  }
 
   // If the catalog store has no data for this file (all fields empty/default),
   // preserve existing metadata, e.g. from a cloned file, instead of clearing it.

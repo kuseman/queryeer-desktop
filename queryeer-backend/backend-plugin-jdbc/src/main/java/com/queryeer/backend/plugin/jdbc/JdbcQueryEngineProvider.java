@@ -8,6 +8,7 @@ import static com.queryeer.backend.plugin.jdbc.JdbcUtils.rollbackAndClose;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -213,6 +214,8 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             {
                 resultSetMeta.put("Database", state.database());
             }
+            resultSetMeta.put("Execution Time", LocalDateTime.now()
+                    .toString());
             Connection sessionConnection = acquire(fileId, resolved);
             JdbcQueryRequest request = new JdbcQueryRequest(queryExecutionId, fileId, text, resolved.connectionId(), resolved.properties(), sessionConnection, state.database(), resolved.dialect(),
                     options);
