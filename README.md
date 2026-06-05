@@ -11,7 +11,7 @@
 
 ## Hero
 
-> ![Queryeer Screenshot](docs/screenshots/hero.png)
+> ![Queryeer Screenshot](documentation/screenshots/hero.png)
 
 ---
 
@@ -20,7 +20,7 @@
 ###  Multi-Engine Query Editor
 Write and execute queries in **SQL** and **Payloadbuilder** — a powerful cross-source query language — all with Monaco Editor-powered syntax highlighting, auto-completion, and hover information.
 
-> ![SQL Editor](docs/screenshots/sql-editor.png)
+> ![SQL Editor](documentation/screenshots/sql-editor.png)
 
 ###  Connect to Any Database
 Built-in **JDBC support** for SQL Server, PostgreSQL, MySQL, H2, and generic JDBC connections. Manage connections, browse database schemas (tables, columns, indexes, procedures), and execute queries with dialect-aware features.
@@ -29,22 +29,22 @@ Built-in **JDBC support** for SQL Server, PostgreSQL, MySQL, H2, and generic JDB
 - Windows Integrated Authentication support
 - Connection health monitoring and schema caching
 
-> ![JDBC Navigation Tree](docs/screenshots/jdbc-tree.png)
+> ![JDBC Navigation Tree](documentation/screenshots/jdbc-tree.png)
 
-###  Cross-Source Queries with Payloadbuilder
+###  Cross-Source Queries with [Payloadbuilder](https://github.com/kuseman/payloadbuilder)
 Query across **JDBC databases, Elasticsearch indices, HTTP APIs, and filesystem files** — all within a single query. Payloadbuilder catalogs let you configure and combine disparate data sources seamlessly.
 
-> ![Payloadbuilder](docs/screenshots/payloadbuilder.png)
+> ![Payloadbuilder](documentation/screenshots/payloadbuilder.png)
 
 ### ⚡ High-Performance Results Grid
 Results are displayed in a blazing-fast data grid ([Glide Data Grid](https://glideapps.github.io/glide-data-grid/)) supporting large result sets, copy-to-clipboard, and extensible cell actions.
 
-> ![Results Grid](docs/screenshots/results-grid.png)
+> ![Results Grid](documentation/screenshots/results-grid.png)
 
 ###  Query Plan Visualization
 Visualize query execution plans as interactive graphs. SQL Server ShowPlans are automatically converted to flow diagrams using React Flow.
 
-> ![Query Plan](docs/screenshots/query-plan.png)
+> ![Query Plan](documentation/screenshots/query-plan.png)
 
 ###  VS Code-Inspired Interface
 A familiar, extensible shell layout with:
@@ -93,12 +93,16 @@ npm run dev
 
 ## Documentation
 
-- [Architecture Decision Records](queryeer-desktop/documentation/)
-- [Backend Protocol Specification](queryeer-desktop/documentation/BACKEND_PROTOCOL.md)
-- [Security & Vault Guide](queryeer-desktop/documentation/SECURITY_README.md)
+- [Architecture Decision Records](documentation/)
+- [Backend Protocol Specification](documentation/BACKEND_PROTOCOL.md)
+- [Security & Vault Guide](documentation/SECURITY_README.md)
 - [macOS Gatekeeper Guide](MACOS.md) — bypass unsigned app blocking
 
 ---
+
+## Collaboration
+
+Contributions are welcome. Report bugs and suggest features via [GitHub Issues](https://github.com/kuseman/queryeer-desktop/issues). For code changes, open a pull request — keep changes focused and include a clear description of the problem and solution.
 
 ## License
 

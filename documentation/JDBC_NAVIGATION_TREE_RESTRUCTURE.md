@@ -239,7 +239,7 @@ Dialect-introduced kinds use `*_container` / `*_folder` / plain naming as approp
 
 | File | Change |
 |---|---|
-| `documentation/BACKEND_PROTOCOL.md` | Document new tree structure, fetch protocol, and treeBranches API |
+| `BACKEND_PROTOCOL.md` | Document new tree structure, fetch protocol, and treeBranches API |
 
 ## Execution phases
 

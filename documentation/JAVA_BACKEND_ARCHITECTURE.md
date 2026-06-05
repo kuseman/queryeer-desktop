@@ -56,7 +56,7 @@ Contains protocol DTOs and shared message models:
 - error models and codes
 - handshake and capability models
 
-Should align 1:1 with `queryeer-desktop/documentation/BACKEND_PROTOCOL.md`.
+Should align 1:1 with `documentation/BACKEND_PROTOCOL.md`.
 
 ## 3.3 `backend-core`
 

@@ -173,5 +173,5 @@ Artifacts are intentionally unsigned for now. macOS downloads may be blocked by 
 
 ## Documentation
 
-- [Architecture Decision Records](queryeer-desktop/documentation/)
-- [Backend Protocol](queryeer-desktop/documentation/BACKEND_PROTOCOL.md)
+- [Architecture Decision Records](documentation/)
+- [Backend Protocol](documentation/BACKEND_PROTOCOL.md)
