@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import { Terminal } from "@xterm/xterm";
 import { isPrimaryModifier } from "../../shared/platform-utils";
 import { FitAddon } from "@xterm/addon-fit";
-import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 
@@ -75,6 +74,44 @@ function renderLinesWithFlowControl(
   writeNext();
 }
 
+function searchBuffer(
+  terminal: Terminal,
+  regex: RegExp
+): Array<{ row: number; col: number; length: number }> {
+  const buffer = terminal.buffer.active;
+  const matches: Array<{ row: number; col: number; length: number }> = [];
+
+  let flatString = "";
+  const rowOffsets: number[] = [];
+
+  for (let row = 0; row < buffer.length; row++) {
+    const line = buffer.getLine(row);
+    if (!line) break;
+    rowOffsets.push(flatString.length);
+    flatString += line.translateToString(true);
+  }
+
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(flatString)) !== null) {
+    const offset = m.index;
+    let lo = 0;
+    let hi = rowOffsets.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (rowOffsets[mid] <= offset) {
+        lo = mid;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    const row = lo;
+    matches.push({ row, col: offset - rowOffsets[row], length: m[0].length });
+    if (!regex.global) break;
+  }
+
+  return matches;
+}
+
 export type XtermTextConsoleProps = {
   lines: string[];
   classNamePrefix: string;
@@ -104,7 +141,6 @@ export function XtermTextConsole({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const searchAddonRef = useRef<SearchAddon | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [searchText, setSearchText] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -115,6 +151,8 @@ export function XtermTextConsole({
   const scrollLineRef = useRef(initialScrollLine);
   const renderRevisionRef = useRef(0);
   const lastRenderedSnapshotRef = useRef<string>("");
+  const currentMatchIndexRef = useRef(-1);
+  const currentSearchTextRef = useRef("");
   const onLinkActivateRef = useRef(onLinkActivate);
 
   useEffect(() => {
@@ -137,7 +175,6 @@ export function XtermTextConsole({
       theme: resolveXtermTheme()
     });
     const fitAddon = new FitAddon();
-    const searchAddon = new SearchAddon();
     const webLinksAddon = new WebLinksAddon((_event, uri) => {
       onLinkActivateRef.current?.(uri);
       if (uri.startsWith("editor://")) {
@@ -146,7 +183,6 @@ export function XtermTextConsole({
       window.open(uri, "_blank", "noopener,noreferrer");
     });
     terminal.loadAddon(fitAddon);
-    terminal.loadAddon(searchAddon);
     terminal.loadAddon(webLinksAddon);
     const editorLinkDisposable =
       typeof terminal.registerLinkProvider === "function"
@@ -209,14 +245,12 @@ export function XtermTextConsole({
     fitAddon.fit();
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
-    searchAddonRef.current = searchAddon;
 
     return () => {
       terminal.dispose();
       editorLinkDisposable?.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
-      searchAddonRef.current = null;
     };
   }, [fontFamily, fontSize, scrollback]);
 
@@ -338,32 +372,107 @@ export function XtermTextConsole({
     return () => clearTimeout(timer);
   }, [searchOpen]);
 
-  const searchOptions = useMemo(() => ({
-    incremental: false,
-    caseSensitive: searchCaseSensitive,
-    regex: searchRegex,
-    wholeWord: searchWholeWord
-  }), [searchCaseSensitive, searchRegex, searchWholeWord]);
+  const buildSearchRegex = useCallback((text: string): RegExp | null => {
+    try {
+      let pattern = text;
+      if (!searchRegex) {
+        pattern = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      }
+      if (searchWholeWord) {
+        pattern = `\\b${pattern}\\b`;
+      }
+      const flags = searchCaseSensitive ? "g" : "gi";
+      return new RegExp(pattern, flags);
+    } catch {
+      return null;
+    }
+  }, [searchRegex, searchCaseSensitive, searchWholeWord]);
 
-  const handleFindNext = () => {
-    if (!searchText) return;
-    searchAddonRef.current?.findNext(searchText, searchOptions);
-  };
+  const findAllMatches = useCallback((text: string): Array<{ row: number; col: number; length: number }> => {
+    const terminal = terminalRef.current;
+    if (!terminal || !text) return [];
 
-  const handleFindPrev = () => {
+    const regex = buildSearchRegex(text);
+    if (!regex) return [];
+
+    return searchBuffer(terminal, regex);
+  }, [buildSearchRegex]);
+
+  const matchesRef = useRef<Array<{ row: number; col: number; length: number }>>([]);
+
+  const navigateToMatch = useCallback((match: { row: number; col: number; length: number }) => {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    terminal.select(match.col, match.row, match.length);
+    terminal.scrollToLine(match.row);
+  }, []);
+
+  function findStartIndex(matches: Array<{ row: number; col: number }>): number {
+    const terminal = terminalRef.current;
+    if (!terminal || matches.length === 0) return 0;
+    const sel = terminal.getSelectionPosition();
+    if (sel) {
+      const anchorRow = sel.start.y - 1;
+      const anchorCol = sel.start.x - 1;
+      for (let i = 0; i < matches.length; i++) {
+        const m = matches[i];
+        if (m.row > anchorRow || (m.row === anchorRow && m.col >= anchorCol)) {
+          return i;
+        }
+      }
+      return 0;
+    }
+    const viewportTop = terminal.buffer.active.viewportY;
+    for (let i = 0; i < matches.length; i++) {
+      if (matches[i].row >= viewportTop) {
+        return i;
+      }
+    }
+    return 0;
+  }
+
+  const handleFindNext = useCallback(() => {
     if (!searchText) return;
-    searchAddonRef.current?.findPrevious(searchText, searchOptions);
-  };
+    currentSearchTextRef.current = searchText;
+    const matches = matchesRef.current;
+    if (matches.length === 0) return;
+
+    const currentIdx = currentMatchIndexRef.current;
+    const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % matches.length : 0;
+    const match = matches[nextIdx];
+    currentMatchIndexRef.current = nextIdx;
+    navigateToMatch(match);
+  }, [searchText, navigateToMatch]);
+
+  const handleFindPrev = useCallback(() => {
+    if (!searchText) return;
+    currentSearchTextRef.current = searchText;
+    const matches = matchesRef.current;
+    if (matches.length === 0) return;
+
+    const currentIdx = currentMatchIndexRef.current;
+    const prevIdx = currentIdx >= 0 ? (currentIdx - 1 + matches.length) % matches.length : matches.length - 1;
+    const match = matches[prevIdx];
+    currentMatchIndexRef.current = prevIdx;
+    navigateToMatch(match);
+  }, [searchText, navigateToMatch]);
 
   useEffect(() => {
-    if (!searchText) return;
-    searchAddonRef.current?.findNext(searchText, {
-      incremental: true,
-      caseSensitive: searchCaseSensitive,
-      regex: searchRegex,
-      wholeWord: searchWholeWord
-    });
-  }, [searchText, searchCaseSensitive, searchRegex, searchWholeWord]);
+    if (!searchText) {
+      matchesRef.current = [];
+      currentMatchIndexRef.current = -1;
+      return;
+    }
+    currentSearchTextRef.current = searchText;
+    const matches = findAllMatches(searchText);
+    matchesRef.current = matches;
+    currentMatchIndexRef.current = -1;
+    if (matches.length > 0) {
+      const startIndex = findStartIndex(matches);
+      currentMatchIndexRef.current = startIndex;
+      navigateToMatch(matches[startIndex]);
+    }
+  }, [searchText, searchCaseSensitive, searchRegex, searchWholeWord, findAllMatches, navigateToMatch]);
 
   useEffect(() => {
     const terminal = terminalRef.current;
@@ -413,9 +522,9 @@ export function XtermTextConsole({
               }
             }}
           />
-          <button type="button" onClick={handleFindPrev} disabled={!searchText}>Prev</button>
-          <button type="button" onClick={handleFindNext} disabled={!searchText}>Next</button>
-          <label>
+          <button type="button" title="Previous match (Shift+Enter)" onClick={handleFindPrev} disabled={!searchText}>Prev</button>
+          <button type="button" title="Next match (Enter)" onClick={handleFindNext} disabled={!searchText}>Next</button>
+          <label title="Case sensitive">
             <input
               type="checkbox"
               checked={searchCaseSensitive}
@@ -423,7 +532,7 @@ export function XtermTextConsole({
             />
             Aa
           </label>
-          <label>
+          <label title="Use regular expression">
             <input
               type="checkbox"
               checked={searchRegex}
@@ -431,7 +540,7 @@ export function XtermTextConsole({
             />
             .*
           </label>
-          <label>
+          <label title="Match whole word only">
             <input
               type="checkbox"
               checked={searchWholeWord}
@@ -441,6 +550,7 @@ export function XtermTextConsole({
           </label>
           <button
             type="button"
+            title="Close (Esc)"
             onClick={() => {
               setSearchOpen(false);
               terminalRef.current?.focus();

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { TextEditorComponent } from "../core.editor/texteditor/TextEditorComponent";
 import { OutputPanel } from "./output/OutputPanel";
+import { QueryEditorStatusBar } from "./output/QueryEditorStatusBar";
 import type { OutputContext, OutputMessage, ResultSet, ColumnType, Column } from "@queryeer/api/queryengine/OutputExtension";
 import { IDLE_OUTPUT_CONTEXT } from "@queryeer/api/queryengine/OutputExtension";
 import type { ExecuteRequestOptions } from "@queryeer/api/queryengine/QueryEngineTypes.js";
@@ -859,6 +860,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
           />
         </div>
       </div>
+      <QueryEditorStatusBar outputContext={outputContext} file={file} />
     </div>
   );
 }

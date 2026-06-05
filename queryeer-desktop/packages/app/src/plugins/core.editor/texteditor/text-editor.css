@@ -88,3 +88,9 @@
   text-decoration-thickness: 1px;
   cursor: pointer;
 }
+
+.newline-glyph::after {
+  content: "\00a4\00b6";
+  opacity: 0.5;
+  font-size: 0.85em;
+}

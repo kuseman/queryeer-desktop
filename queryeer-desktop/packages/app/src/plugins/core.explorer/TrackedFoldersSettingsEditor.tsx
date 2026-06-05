@@ -1,6 +1,7 @@
 type TrackedFolder = {
   uri: string;
   name: string;
+  label?: string;
   filterRegex: string;
 };
 
@@ -22,11 +23,12 @@ function toTrackedFolders(value: unknown): TrackedFolder[] {
     const record = item as Record<string, unknown>;
     const uri = typeof record.uri === "string" ? record.uri : "";
     const name = typeof record.name === "string" ? record.name : "";
+    const label = typeof record.label === "string" && record.label.trim().length > 0 ? record.label.trim() : undefined;
     const filterRegex = typeof record.filterRegex === "string" ? record.filterRegex : "";
     if (!uri || !name) {
       continue;
     }
-    next.push({ uri, name, filterRegex });
+    next.push({ uri, name, label, filterRegex });
   }
   return next;
 }
@@ -47,6 +49,7 @@ export function TrackedFoldersSettingsEditor({
       <div className="settings-advanced-hint">Example regex: <code>\.(sql|plbsql)$</code></div>
       <div className="settings-advanced-row settings-advanced-head">
         <span>Folder</span>
+        <span>Display name</span>
         <span>Regex filter</span>
         <span>Action</span>
       </div>
@@ -56,6 +59,17 @@ export function TrackedFoldersSettingsEditor({
             <div className="settings-advanced-folder-name">{row.name}</div>
             <div className="settings-advanced-folder-uri">{row.uri}</div>
           </div>
+          <input
+            type="text"
+            value={row.label ?? ""}
+            placeholder={row.name}
+            disabled={readonly}
+            onChange={(event) => {
+              const next = [...rows];
+              next[index] = { ...row, label: event.target.value || undefined };
+              setValue(next);
+            }}
+          />
           <input
             type="text"
             value={row.filterRegex}

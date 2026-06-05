@@ -124,6 +124,16 @@ export const coreEditorPlugin: Plugin = {
           ]
         },
         {
+          id: "core.editor.texteditor.renderNewline",
+          moduleId: "core.editor.texteditor",
+          title: "Render Newline Characters",
+          description: "Shows a ¶ glyph at the end of each line. (Monaco 0.56+ will have a native built-in version of this.)",
+          sectionPath: ["Editor", "Appearance"],
+          tags: ["newline", "control", "invisible"],
+          type: "boolean",
+          defaultValue: false
+        },
+        {
           id: "core.editor.texteditor.cursorBlinking",
           moduleId: "core.editor.texteditor",
           title: "Cursor Blinking",

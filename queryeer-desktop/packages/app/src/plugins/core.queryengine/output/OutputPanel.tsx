@@ -119,24 +119,6 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
   const rawExportPaths = limitedSets.map((rs) => rs.exportPath).filter(Boolean) as string[];
   const exportPaths = [...new Set(rawExportPaths)] as string[];
   const isExportPending = limitedSets.length > 0 && rawExportPaths.length < limitedSets.length;
-  const [nowMs, setNowMs] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (context.state !== "running" || context.executionStartedAtMs == null) {
-      return;
-    }
-    const timer = setInterval(() => {
-      setNowMs(Date.now());
-    }, 500);
-    return () => clearInterval(timer);
-  }, [context.state, context.executionStartedAtMs]);
-
-  const elapsedMs = context.state === "running" && context.executionStartedAtMs != null
-    ? Math.max(0, nowMs - context.executionStartedAtMs)
-    : (context.metrics?.durationMs ?? null);
-  const rowCount = context.state === "completed"
-    ? (context.metrics?.rowCount ?? context.fetchedRowCount)
-    : context.fetchedRowCount;
 
   if (contributors.length === 0) {
     return <div className="query-output-panel query-output-empty">No output views registered.</div>;
@@ -193,12 +175,6 @@ export function OutputPanel({ context, selectedPrimaryId, onSelectPrimary, onExp
           : <div className="query-output-empty">No output view available.</div>}
       </div>
 
-      <div className="query-output-status-bar">
-        <span>State: {context.state}</span>
-        <span>Rows fetched: {Math.max(0, rowCount).toLocaleString()}</span>
-        <span>Elapsed: {elapsedMs != null ? `${elapsedMs}ms` : "-"}</span>
-        {context.progress?.message && <span>{context.progress.message}</span>}
-      </div>
     </div>
   );
 }

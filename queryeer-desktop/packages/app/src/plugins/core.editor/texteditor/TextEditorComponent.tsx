@@ -55,6 +55,8 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; sections: ContextMenuItem[][]; loading?: boolean } | null>(null);
   const contextMenuRequestIdRef = useRef(0);
+  const newlineDecorationsRef = useRef<monacoType.editor.IEditorDecorationsCollection | null>(null);
+  const updateNewlineDecorationsRef = useRef<() => void>(() => {});
 
   // Capture multi-cursor selection before Monaco processes right-click (which collapses it)
   const rightClickSelectionsRef = useRef<monacoType.Selection[] | null>(null);
@@ -149,6 +151,45 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
     });
   }, []);
 
+  const updateNewlineDecorations = useCallback(() => {
+    const settingsService = getCoreSettingsService();
+    if (!settingsService) {
+      return;
+    }
+    const enabled = settingsService.getValue("core.editor.texteditor.renderNewline") === true;
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+    const model = editor.getModel();
+    if (!model) {
+      return;
+    }
+    if (!enabled) {
+      newlineDecorationsRef.current?.clear();
+      return;
+    }
+    const monaco = monacoModuleInstance;
+    if (!monaco) {
+      return;
+    }
+    const lineCount = model.getLineCount();
+    const decorations: monacoType.editor.IModelDeltaDecoration[] = [];
+    for (let line = 1; line <= lineCount; line++) {
+      decorations.push({
+        range: new monaco.Range(line, model.getLineMaxColumn(line), line, model.getLineMaxColumn(line)),
+        options: {
+          afterContentClassName: "newline-glyph"
+        }
+      });
+    }
+    if (!newlineDecorationsRef.current) {
+      newlineDecorationsRef.current = editor.createDecorationsCollection(decorations);
+    } else {
+      newlineDecorationsRef.current.set(decorations);
+    }
+  }, []);
+
   const applyEditorSettings = useCallback(() => {
     const editor = editorRef.current;
     if (!editor) {
@@ -163,7 +204,11 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
     editor.updateOptions(buildMonacoUpdateOptions(settingsService));
     const model = editor.getModel();
     model?.updateOptions(buildMonacoModelUpdateOptions(settingsService));
-  }, []);
+    updateNewlineDecorations();
+  }, [updateNewlineDecorations]);
+
+  // Keep ref in sync so it can be called from closures that don't have it in deps
+  updateNewlineDecorationsRef.current = updateNewlineDecorations;
 
   const initEditorOnce = useCallback(async (fileToLoad: FileEntity | undefined) => {
     if (initStartedRef.current || editorRef.current) {
@@ -337,6 +382,7 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
 
     let dirtyTimer: ReturnType<typeof setTimeout> | null = null;
     api.onDidChangeModelContent((event) => {
+      updateNewlineDecorationsRef.current();
       if (event.isFlush) {
         return;
       }
@@ -387,6 +433,8 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
       mountedRef.current = false;
       initStartedRef.current = false;
       initGenerationRef.current += 1;
+      newlineDecorationsRef.current?.clear();
+      newlineDecorationsRef.current = null;
       if (editorRef.current) {
         const disposedViewState = apiRef.current?.getViewState();
         registry.captureActiveViewState(disposedViewState);

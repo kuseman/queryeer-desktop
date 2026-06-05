@@ -28,6 +28,7 @@ import { filterToolbarActions } from "./toolbar-action-filter";
 import { inflateDottedKeys } from "./context-value-flatten";
 import { subscribeOpenPanelRequests } from "./layout-panel-events";
 import { subscribeFocusSidebarViewRequests } from "./layout-sidebar-events";
+import { subscribeToggleZoneRequests } from "./layout-zone-events";
 import { getOutlineRegistry } from "../../core/plugin-runtime/ExtensionRegistry";
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../../plugins/core.settings/service";
 import { getKeybindingLabel } from "../../plugins/core.commands/keybinding-label-accessor";
@@ -406,6 +407,12 @@ export function ShellApp({
   }, []);
 
   useEffect(() => {
+    return subscribeToggleZoneRequests((zone) => {
+      toggleZone(zone);
+    });
+  }, [toggleZone]);
+
+  useEffect(() => {
     return subscribeFocusSidebarViewRequests((request) => {
       const requestedZone = request.zone
         ?? (request.viewId
@@ -670,7 +677,6 @@ export function ShellApp({
         <Toolbar
           toolbarActions={toolbarActions}
           visibleZones={visibleZones}
-          onToggleZone={toggleZone}
           canExecuteCommand={canExecuteCommand}
           executeCommand={executeCommand}
           getCommandTitle={getCommandTitle}

@@ -12,7 +12,6 @@ import { memo, useEffect, useState } from "react";
 type ToolbarProps = {
   toolbarActions: LayoutToolbarContribution[];
   visibleZones: ReadonlySet<LayoutZone>;
-  onToggleZone: (zone: LayoutZone) => void;
   canExecuteCommand: (commandId: string) => boolean;
   executeCommand: (commandId: string) => Promise<CommandExecutionResult>;
   getCommandTitle: (commandId: string) => string | undefined;
@@ -29,7 +28,6 @@ const zoneToggleByCommand: Record<string, LayoutZone | undefined> = {
 function ToolbarComponent({
   toolbarActions,
   visibleZones,
-  onToggleZone,
   canExecuteCommand,
   executeCommand,
   getCommandTitle,
@@ -162,8 +160,7 @@ function ToolbarComponent({
     }
 
     const zoneToggle = zoneToggleByCommand[action.commandId];
-    const isZoneToggle = zoneToggle !== undefined;
-    const isDisabled = isZoneToggle ? false : !canExecuteCommand(action.commandId);
+    const isDisabled = !canExecuteCommand(action.commandId);
     const label = action.title ?? getCommandTitle(action.commandId);
     const accelerator = getCommandAccelerator(action.commandId);
     const tooltip = label ? (accelerator ? `${label} (${accelerator})` : label) : undefined;
@@ -183,11 +180,6 @@ function ToolbarComponent({
         }}
         onClick={() => {
           if (isDisabled) {
-            return;
-          }
-          const zoneToggle = zoneToggleByCommand[action.commandId];
-          if (zoneToggle) {
-            onToggleZone(zoneToggle);
             return;
           }
           void executeCommand(action.commandId);
