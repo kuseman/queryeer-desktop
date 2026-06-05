@@ -35,7 +35,6 @@ describe("Toolbar", () => {
         <Toolbar
           toolbarActions={actions}
           visibleZones={new Set(["mainArea"])}
-          onToggleZone={vi.fn()}
           canExecuteCommand={(commandId) => commandId !== "cmd.two"}
           executeCommand={vi.fn(async () => ({ commandId: "", executed: true }))}
           getCommandTitle={() => undefined}
@@ -57,7 +56,6 @@ describe("Toolbar", () => {
       { id: "estimated-plan", commandId: "cmd.estimatedPlan", icon: "file-open", title: "Estimated Plan" }
     ];
     const visibleZones: ReadonlySet<LayoutZone> = new Set(["mainArea"]);
-    const onToggleZone = vi.fn();
     const executeCommand = vi.fn(async () => ({ commandId: "cmd.estimatedPlan", executed: true as const }));
     const getCommandTitle = () => undefined;
     const getCommandAccelerator = () => undefined;
@@ -69,7 +67,6 @@ describe("Toolbar", () => {
         <Toolbar
           toolbarActions={actions}
           visibleZones={visibleZones}
-          onToggleZone={onToggleZone}
           canExecuteCommand={canExecuteCommand}
           executeCommand={executeCommand}
           getCommandTitle={getCommandTitle}
@@ -100,7 +97,6 @@ describe("Toolbar", () => {
         <Toolbar
           toolbarActions={[{ id: "open", commandId: "core.files.open", icon: "file-open", title: "Open File" }]}
           visibleZones={new Set(["mainArea"])}
-          onToggleZone={vi.fn()}
           canExecuteCommand={() => true}
           executeCommand={executeCommand}
           getCommandTitle={(commandId) => (commandId === "core.files.open" ? "Open File" : undefined)}
@@ -126,7 +122,6 @@ describe("Toolbar", () => {
         <Toolbar
           toolbarActions={[{ id: "open", commandId: "core.files.open", icon: "file-open", title: "Open File" }]}
           visibleZones={new Set(["mainArea"])}
-          onToggleZone={vi.fn()}
           canExecuteCommand={() => true}
           executeCommand={vi.fn(async () => ({ commandId: "core.files.open", executed: true }))}
           getCommandTitle={() => "Open File"}
@@ -165,7 +160,6 @@ describe("Toolbar", () => {
             }
           ]}
           visibleZones={new Set(["mainArea"])}
-          onToggleZone={vi.fn()}
           canExecuteCommand={() => true}
           executeCommand={vi.fn(async () => ({ commandId: "noop", executed: true }))}
           getCommandTitle={() => undefined}
@@ -202,7 +196,6 @@ describe("Toolbar", () => {
             }
           ]}
           visibleZones={new Set(["mainArea"])}
-          onToggleZone={vi.fn()}
           canExecuteCommand={() => true}
           executeCommand={vi.fn(async () => ({ commandId: "noop", executed: true }))}
           getCommandTitle={() => undefined}
@@ -233,7 +226,6 @@ describe("Toolbar", () => {
             }
           ]}
           visibleZones={new Set(["mainArea"])}
-          onToggleZone={vi.fn()}
           canExecuteCommand={() => true}
           executeCommand={vi.fn(async () => ({ commandId: "noop", executed: true }))}
           getCommandTitle={() => undefined}

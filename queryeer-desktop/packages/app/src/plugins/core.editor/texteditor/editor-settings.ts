@@ -58,6 +58,7 @@ export type ResolvedEditorSettings = {
   cursorBlinking: CursorBlinkingMode;
   formatOnSave: boolean;
   acceptSuggestionOnEnter: AcceptSuggestionOnEnterMode;
+  renderNewline: boolean;
 };
 
 export function resolveEditorSettings(reader: SettingsReader | null): ResolvedEditorSettings {
@@ -86,7 +87,8 @@ export function resolveEditorSettings(reader: SettingsReader | null): ResolvedEd
       "on",
       "off",
       "smart"
-    ])
+    ]),
+    renderNewline: readBoolean(reader, "core.editor.texteditor.renderNewline", false)
   };
 }
 

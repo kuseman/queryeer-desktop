@@ -34,6 +34,7 @@ export * from "./contracts/queryengine/JdbcTreeContributionExtension.js";
 export * from "./contracts/queryengine/JdbcTreeContextMenuExtension.js";
 export * from "./contracts/queryengine/OutputExtension.js";
 export * from "./contracts/queryengine/PayloadbuilderCatalogExtension.js";
+export * from "./contracts/queryengine/QueryEditorStatusExtension.js";
 export * from "./contracts/queryengine/QueryEngineTypes.js";
 export * from "./contracts/queryengine/SymbolActionTemplateContribution.js";
 export * from "./contracts/queryengine/SymbolActionTypes.js";

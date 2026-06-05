@@ -44,12 +44,13 @@ export class ExplorerStore {
     }
   }
 
-  public addFolder(uri: string, name: string, filterRegex: string): void {
+  public addFolder(uri: string, name: string, filterRegex: string, label?: string): void {
     const folderId = `folder-${Date.now().toString(36)}-${this.state.folders.length}`;
     const folder: ExplorerFolder = {
       id: folderId,
       uri,
       name,
+      label,
       filterRegex
     };
 
@@ -72,7 +73,7 @@ export class ExplorerStore {
     this.emit();
   }
 
-  public replaceFolders(folders: Array<{ uri: string; name: string; filterRegex: string }>): void {
+  public replaceFolders(folders: Array<{ uri: string; name: string; label?: string; filterRegex: string }>): void {
     const nextFolders: ExplorerFolder[] = [];
     const treeNodes = new Map<string, ExplorerTreeNode>();
     const expandedFolders = new Set<string>();
@@ -82,6 +83,7 @@ export class ExplorerStore {
         id: folderId,
         uri: folder.uri,
         name: folder.name,
+        label: folder.label,
         filterRegex: folder.filterRegex
       });
       treeNodes.set(folderId, {

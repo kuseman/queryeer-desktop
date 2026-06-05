@@ -35,6 +35,8 @@ import { registerJdbcFlowNodeContribution } from "./flow-node-contribution";
 import { buildSchemaGraph } from "./jdbc-schema-graph-builder";
 import { SchemaTableNode } from "./SchemaTableNode";
 import { GRAPH_DOCUMENT_MIME_TYPE, GRAPH_DOCUMENT_EXTENSION } from "../core.graph/constants";
+import { registerQueryEditorStatusItem } from "@queryeer/api/queryengine/QueryEditorStatusExtension";
+import { JdbcConnectionStatus } from "./JdbcConnectionStatus";
 
 const JDBC_SESSION_ID_METADATA_KEY = "core.queryengine.jdbc.sessionId";
 const JDBC_SESSION_CONNECTION_TITLE_KEY = "core.queryengine.jdbc.sessionConnection";
@@ -683,8 +685,15 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       }
     });
 
-    context.tooltip.registerTooltipSection({
-      id: "core.queryengine.jdbc.tooltip.database",
+    registerQueryEditorStatusItem({
+      id: "core.queryengine.jdbc.connectionStatus",
+      alignment: "right",
+      order: 100,
+      render: ({ file }) => <JdbcConnectionStatus file={file} />
+    });
+
+        context.tooltip.registerTooltipSection({
+          id: "core.queryengine.jdbc.tooltip.database",
       order: 24,
       render: ({ file }) => {
         if (file.engineBinding?.engineId !== "jdbc") {

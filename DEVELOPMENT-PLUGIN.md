@@ -688,14 +688,26 @@ import { useCallback } from "react";
 
 Vite resolves these to its pre-bundled dependencies — the **same React instance** used by the host.
 
-### 8.1.3 Production Mode: Blob-URL Rewriting
+### 8.1.3 Production Mode: Import Map
 
-In **production mode** (`file://`), bare specifiers cannot be resolved by the browser. The app handles this automatically:
+In **production mode** (`file://`), bare specifiers cannot be resolved by the browser because the module is loaded directly via `import("file:///...")` — it does not go through Vite's transform pipeline. The app handles this with a browser-native **import map** injected into the HTML at build time.
 
-1. The renderer exposes React via `globalThis.__queryeerExternals`
-2. The plugin loader in `discovery.ts` fetches the plugin module text
-3. Bare `import` statements for known modules (`react`, `react-dom/client`) are rewritten to `const { ... } = globalThis.__queryeerExternals["..."]`
-4. The rewritten module is loaded from a `blob:` URL
+The build generates separate entry chunks for each shared library (`external-react.js`, `external-react-dom.js`, etc.) that re-export the host's React instances. The import map tells the browser how to resolve bare specifiers to these chunks:
+
+```html
+<script type="importmap">
+{
+  "imports": {
+    "react":                 "./assets/external-react.js",
+    "react/jsx-runtime":     "./assets/external-react-jsx-runtime.js",
+    "react-dom":             "./assets/external-react-dom.js",
+    "react-dom/client":      "./assets/external-react-dom-client.js"
+  }
+}
+</script>
+```
+
+When a plugin module contains `import { createRoot } from "react-dom/client"`, the browser resolves it to `./assets/external-react-dom-client.js`, which re-exports `createRoot` and `hydrateRoot` from the host's `react-dom/client`.
 
 No action is required from plugin authors — this works transparently.
 

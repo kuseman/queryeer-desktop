@@ -22,6 +22,7 @@ type IndexedExplorerFile = {
 type PersistedTrackedFolder = {
   uri: string;
   name: string;
+  label?: string;
   filterRegex: string;
 };
 
@@ -72,6 +73,7 @@ function toPersistedFolders(value: unknown): PersistedTrackedFolder[] {
     const record = item as Record<string, unknown>;
     const uri = typeof record.uri === "string" ? record.uri : "";
     const name = typeof record.name === "string" ? record.name : "";
+    const label = typeof record.label === "string" && record.label.trim().length > 0 ? record.label.trim() : undefined;
     const filterRegex =
       typeof record.filterRegex === "string" && record.filterRegex.length > 0
         ? record.filterRegex
@@ -79,7 +81,7 @@ function toPersistedFolders(value: unknown): PersistedTrackedFolder[] {
     if (!uri || !name) {
       continue;
     }
-    next.push({ uri, name, filterRegex });
+    next.push({ uri, name, label, filterRegex });
   }
   return next;
 }
@@ -238,6 +240,7 @@ export const coreExplorerPlugin: Plugin = {
       const payload = store.getFolders().map((folder) => ({
         uri: folder.uri,
         name: folder.name,
+        label: folder.label,
         filterRegex: folder.filterRegex
       }));
       await settings.setValue(TRACKED_FOLDERS_SETTING_ID, payload);
@@ -407,7 +410,7 @@ export const coreExplorerPlugin: Plugin = {
         return items.slice(0, 2_000).map((item) => ({
           id: `explorer.file.${item.uri}`,
           title: fileNameFromUri(item.uri),
-          description: `${item.folderName} - ${filePathFromUri(item.uri)}`,
+          description: filePathFromUri(item.uri),
           action: async () => {
             await context.fileMediator.openFile(item.uri, { openIntent: "edit" });
           }
@@ -452,7 +455,20 @@ export const coreExplorerPlugin: Plugin = {
           return;
         }
 
-        store.addFolder(uri, name, selectedRegex);
+        let displayLabel: string | undefined;
+        const labelInput = context.dialog.showInputDialog;
+        if (labelInput) {
+          const input = await labelInput({
+            title: "Display Name",
+            message: `Optional display name for "${name}" folder (leave blank to use the folder name)`,
+            placeholder: name
+          });
+          if (!input.canceled && input.value?.trim()) {
+            displayLabel = input.value.trim();
+          }
+        }
+
+        store.addFolder(uri, name, selectedRegex, displayLabel);
         await persistFolders();
       }
     });

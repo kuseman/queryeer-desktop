@@ -1,5 +1,6 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
 import { confirmCloseDirtyFile } from "../../renderer/shell/close-file-guard";
+import { requestToggleZone } from "../../renderer/shell/layout-zone-events";
 import { fileUriToPath } from "@queryeer/api/files/Resolvers";
 import { getCoreSettingsService } from "../core.settings/service";
 import { closeAboutDialog, isAboutDialogOpen } from "../core.about/about-service";
@@ -77,9 +78,27 @@ export const coreLayoutPlugin: Plugin = {
     });
 
     context.commands.registerCommand({
+      id: "core.layout.togglePrimarySidebar",
+      title: "Toggle Primary Sidebar",
+      handler: async () => {
+        requestToggleZone("primarySidebar");
+      }
+    });
+
+    context.commands.registerCommand({
+      id: "core.layout.toggleSecondarySidebar",
+      title: "Toggle Secondary Sidebar",
+      handler: async () => {
+        requestToggleZone("secondarySidebar");
+      }
+    });
+
+    context.commands.registerCommand({
       id: "core.layout.togglePanel",
       title: "Toggle Panel",
-      handler: async () => {}
+      handler: async () => {
+        requestToggleZone("panel");
+      }
     });
 
     context.keybindings.registerKeybinding({
@@ -89,6 +108,15 @@ export const coreLayoutPlugin: Plugin = {
       when: "global",
       scope: "global",
       order: 850
+    });
+
+    context.keybindings.registerKeybinding({
+      id: "core.layout.keybinding.togglePrimarySidebar",
+      commandId: "core.layout.togglePrimarySidebar",
+      key: "CtrlOrCmd+B",
+      when: "global",
+      scope: "global",
+      order: 100
     });
 
     context.layout.setShellDefaults({

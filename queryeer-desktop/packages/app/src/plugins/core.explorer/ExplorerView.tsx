@@ -464,9 +464,10 @@ export function ExplorerView({ context, filesRegistry, store, readDir }: Explore
             onRemoveFolder={(folderId) => {
               void (async () => {
                 const folder = store.getFolders().find((item) => item.id === folderId);
+                const displayName = folder?.label || folder?.name || "this folder";
                 const result = await context.dialog.showMessage({
                   title: "Remove Folder",
-                  message: `Are you sure you want to remove "${folder?.name ?? "this folder"}" from Explorer?`,
+                  message: `Are you sure you want to remove "${displayName}" from Explorer?`,
                   severity: "warning",
                   options: [
                     { label: "Remove", value: "remove" },
@@ -622,7 +623,7 @@ function FolderTreeItem({
       >
         <span className={`explorer-chevron ${isExpanded ? "expanded" : ""}`}>▶</span>
         <span className="explorer-folder-icon">📁</span>
-        <span className="explorer-folder-name">{folder.name}</span>
+        <span className="explorer-folder-name">{folder.label || folder.name}</span>
         {canRemove && (
           <button
             type="button"
@@ -645,7 +646,7 @@ function FolderTreeItem({
               return (
                 <FolderTreeItem
                   key={node.id}
-                  folder={{ id: node.id, uri: node.uri, name: node.name, filterRegex: folder.filterRegex }}
+                  folder={{ id: node.id, uri: node.uri, name: node.name, label: undefined, filterRegex: folder.filterRegex }}
                   store={store}
                   openFiles={openFiles}
                   activeFileId={activeFileId}
