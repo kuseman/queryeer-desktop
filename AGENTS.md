@@ -14,7 +14,7 @@ If contract shapes are changed, the agent MUST update both sides in the same ses
 
 and then update:
 
-- `queryeer-desktop/documentation/BACKEND_PROTOCOL.md`
+- `documentation/BACKEND_PROTOCOL.md`
 
 ## Validation expectation per session
 

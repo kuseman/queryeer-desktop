@@ -427,7 +427,7 @@ Mandatory cross-repo contract rule if future work changes backend-facing protoco
 
 - Update TypeScript contracts in `queryeer-desktop/src/contracts/backend/*`.
 - Update Java contracts in `queryeer-backend/backend-contract/*`.
-- Update protocol documentation in `queryeer-desktop/documentation/BACKEND_PROTOCOL.md`.
+- Update protocol documentation in `documentation/BACKEND_PROTOCOL.md`.
 - Current flow work should not require these updates because it reuses existing `queryengine.execute` contracts.
 
 ## Open decisions

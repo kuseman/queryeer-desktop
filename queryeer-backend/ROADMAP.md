@@ -273,7 +273,7 @@ The Java backend's `file.*` protocol surface and `FileRegistry`/`FileSessionHand
 - `core.files` plugin owns the renderer `FileRegistry` + `FileMediator`.
 - `core.fileWatcher` plugin runs chokidar in Electron main with dedup + ref-count + active per-URI mute timers.
 - `core.workspace` plugin persists session to `<userData>/workspace.json` (atomic, debounced); autosaves dirty buffers to `<userData>/backups/`; detects surviving backups on restart (crash recovery API).
-- See `queryeer-desktop/documentation/{FILE_ENTITY_MODEL,CORE_FILE_WATCHER_MODEL,CORE_WORKSPACE_MODEL,PROCESS_BOUNDARIES}.md`.
+- See `documentation/{FILE_ENTITY_MODEL,CORE_FILE_WATCHER_MODEL,CORE_WORKSPACE_MODEL,PROCESS_BOUNDARIES}.md`.
 
 No engine plugin implements `FileSessionHandler` yet — the SPI is ready, but parse-tree reuse is deferred until an editor + output plugin land to drive real query flow.
 

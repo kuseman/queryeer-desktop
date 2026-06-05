@@ -306,7 +306,7 @@ engineState: {
 
 | File | Change |
 |------|--------|
-| `documentation/BACKEND_PROTOCOL.md` | Document new params shapes; remove `file.bind` |
+| `BACKEND_PROTOCOL.md` | Document new params shapes; remove `file.bind` |
 
 ### Test Files to Update/Add
 
