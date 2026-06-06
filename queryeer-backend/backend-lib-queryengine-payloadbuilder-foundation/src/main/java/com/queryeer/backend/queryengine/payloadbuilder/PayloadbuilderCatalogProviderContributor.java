@@ -52,6 +52,12 @@ public interface PayloadbuilderCatalogProviderContributor
         return null;
     }
 
+    /** Optional SQL editor services (completion, hover, symbol resolution) for this catalog provider. */
+    default PayloadbuilderCatalogSqlEditorServices editorServices()
+    {
+        return PayloadbuilderCatalogSqlEditorServices.NONE;
+    }
+
     /** Inject properties for this catalog / alias combo before query execution. Implementations should call {@code session.setCatalogProperty(...)} as needed. */
     default void injectProperties(IQuerySession session, String alias, Map<String, Object> properties)
     {

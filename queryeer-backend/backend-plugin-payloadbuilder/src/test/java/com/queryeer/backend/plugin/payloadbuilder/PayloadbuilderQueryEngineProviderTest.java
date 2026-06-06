@@ -30,32 +30,49 @@ import com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderQueryEngineProvi
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnections;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialect;
+import com.queryeer.backend.queryengine.jdbc.JdbcDialectMetadata;
 import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
+import com.queryeer.backend.queryengine.jdbc.JdbcSqlEditorServices;
+import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
+import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogSqlEditorServices;
 import com.queryeer.backend.queryengine.sql.parser.TreeSitterSqlParseFunction;
 
+import se.kuseman.payloadbuilder.api.QualifiedName;
+import se.kuseman.payloadbuilder.api.catalog.Catalog;
 import se.kuseman.payloadbuilder.api.catalog.Column;
+import se.kuseman.payloadbuilder.api.catalog.DatasourceData;
+import se.kuseman.payloadbuilder.api.catalog.FunctionInfo;
+import se.kuseman.payloadbuilder.api.catalog.IDatasource;
+import se.kuseman.payloadbuilder.api.catalog.Option;
 import se.kuseman.payloadbuilder.api.catalog.ResolvedType;
 import se.kuseman.payloadbuilder.api.catalog.Schema;
+import se.kuseman.payloadbuilder.api.catalog.TableFunctionInfo;
+import se.kuseman.payloadbuilder.api.catalog.TableSchema;
 import se.kuseman.payloadbuilder.api.execution.Decimal;
 import se.kuseman.payloadbuilder.api.execution.EpochDateTime;
 import se.kuseman.payloadbuilder.api.execution.EpochDateTimeOffset;
+import se.kuseman.payloadbuilder.api.execution.IExecutionContext;
+import se.kuseman.payloadbuilder.api.execution.IQuerySession;
 import se.kuseman.payloadbuilder.api.execution.ObjectVector;
+import se.kuseman.payloadbuilder.api.execution.TupleIterator;
 import se.kuseman.payloadbuilder.api.execution.TupleVector;
 import se.kuseman.payloadbuilder.api.execution.UTF8String;
 import se.kuseman.payloadbuilder.api.execution.ValueVector;
+import se.kuseman.payloadbuilder.api.expression.IExpression;
 import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
 class PayloadbuilderQueryEngineProviderTest
 {
     private static final ConfigService NOOP_CONFIG = _ -> null;
     private static final JdbcRuntimeService JDBCRUNTIMESERVICE = Mockito.mock(JdbcRuntimeService.class);
+    private static final JdbcSqlEditorServices JDBC_SQL_EDITOR_SERVICES = Mockito.mock(JdbcSqlEditorServices.class);
     private static final PayloadMapper TEST_MAPPER = new JacksonPayloadMapper();
     private static final IncrementalParseSessionService PARSE_SESSIONS = Mockito.mock(IncrementalParseSessionService.class);
     private static final IncrementalParseFunction PARSE_FUNCTION = Mockito.mock(IncrementalParseFunction.class);
 
     private static PayloadbuilderQueryEngineProvider createProvider(ConfigService config)
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(config, TEST_MAPPER, JDBCRUNTIMESERVICE);
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(config, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         return new PayloadbuilderQueryEngineProvider(config, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
     }
 
@@ -69,7 +86,8 @@ class PayloadbuilderQueryEngineProviderTest
 
         Assertions.assertTrue(result instanceof Map);
         Map<?, ?> asMap = (Map<?, ?>) result;
-        Assertions.assertEquals(Set.of("engine.capabilities", "sql.parse.snapshot", "sql.complete", "payloadbuilder.es.listIndices", "payloadbuilder.kafka.listTopics"),
+        Assertions.assertEquals(
+                Set.of("engine.capabilities", "sql.parse.snapshot", "sql.complete", "sql.hover", "sql.symbolAtPosition", "payloadbuilder.es.listIndices", "payloadbuilder.kafka.listTopics"),
                 Set.copyOf((List<String>) asMap.get("actions")));
         Assertions.assertEquals(Set.of("jdbc", "elasticsearch", "kafka", "filesystem", "http"), Set.copyOf((Set<String>) asMap.get("catalogIds")));
     }
@@ -137,7 +155,7 @@ class PayloadbuilderQueryEngineProviderTest
                 return null;
             }
         };
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(config, TEST_MAPPER, mockJdbcRuntime);
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(config, TEST_MAPPER, mockJdbcRuntime, JDBC_SQL_EDITOR_SERVICES);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(config, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
         RecordingPublisher publisher = new RecordingPublisher();
         Map<String, Object> engineState = Map.of("payloadbuilder", Map.of("catalogs", Map.of("myjdbc", Map.of("catalogId", "jdbc", "properties", Map.of("connectionId", "test-conn")))));
@@ -581,7 +599,7 @@ class PayloadbuilderQueryEngineProviderTest
         IncrementalParseSessionService sessions = Mockito.mock(IncrementalParseSessionService.class);
         Mockito.when(sessions.get("payloadbuilder", "file-1"))
                 .thenReturn(Optional.of(snapshot));
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE);
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, sessions, PARSE_FUNCTION);
 
         Object result = provider.invoke("file-1", "sql.parse.snapshot", null);
@@ -598,13 +616,463 @@ class PayloadbuilderQueryEngineProviderTest
     void invokeSqlCompleteDelegatesToSqlCompletionSupport()
     {
         IncrementalParseSessionService sessions = Mockito.mock(IncrementalParseSessionService.class);
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE);
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, sessions, PARSE_FUNCTION);
 
         Object result = provider.invoke("file-1", "sql.complete",
                 Map.of("fileId", "file-1", "version", 1L, "text", "SELECT ", "cursor", Map.of("line", 1, "column", 8), "limits", Map.of("maxItems", 50)));
 
         Assertions.assertNotNull(result);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlCompleteIncludesOptedInPayloadbuilderCatalogTables()
+    {
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new TestSemanticCatalogProvider(true));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete",
+                Map.of("fileId", "file-1", "version", 1L, "text", "SELECT * FROM ", "engineState", semanticEngineState(), "cursor", Map.of("line", 1, "column", 15), "limits", Map.of("maxItems", 50)));
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+        Assertions.assertTrue(items.stream()
+                .anyMatch(item -> "products".equals(item.get("label"))
+                        && "table".equals(item.get("kind"))));
+        Assertions.assertTrue(items.stream()
+                .anyMatch(item -> "products_by_category".equals(item.get("label"))
+                        && "function".equals(item.get("kind"))));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlCompleteIncludesOptedInPayloadbuilderCatalogColumns()
+    {
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new TestSemanticCatalogProvider(true));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete", Map.of("fileId", "file-1", "version", 1L, "text", "SELECT p. FROM products p", "engineState",
+                semanticEngineState(), "cursor", Map.of("line", 1, "column", 10), "limits", Map.of("maxItems", 50)));
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+        Assertions.assertTrue(items.stream()
+                .anyMatch(item -> "p.id".equals(item.get("label"))
+                        && "column".equals(item.get("kind"))));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlCompleteUsesExplicitCatalogPrefixForSystemTableCatalogTables()
+    {
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new TestSemanticCatalogProvider(true));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        String text = "SELECT * FROM sem#pro";
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete", Map.of("fileId", "file-1", "version", 1L, "text", text, "engineState",
+                semanticEngineStateWithoutDefault(), "cursor", Map.of("line", 1, "column", text.length() + 1), "limits", Map.of("maxItems", 50)));
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+        Map<String, Object> product = items.stream()
+                .filter(item -> "products".equals(item.get("label")))
+                .findFirst()
+                .orElseThrow();
+        Assertions.assertEquals("products", product.get("insertText"));
+        Map<String, Object> replaceRange = (Map<String, Object>) product.get("replaceRange");
+        Assertions.assertEquals(text.indexOf("pro") + 1, replaceRange.get("startColumn"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlCompleteUsesExplicitCatalogPrefixForSystemTableCatalogColumns()
+    {
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new TestSemanticCatalogProvider(true));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        String text = "SELECT * FROM sem#products p WHERE p.";
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete", Map.of("fileId", "file-1", "version", 1L, "text", text, "engineState",
+                semanticEngineStateWithoutDefault(), "cursor", Map.of("line", 1, "column", text.length() + 1), "limits", Map.of("maxItems", 50)));
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+        Assertions.assertTrue(items.stream()
+                .anyMatch(item -> "p.id".equals(item.get("label"))
+                        && "column".equals(item.get("kind"))));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlCompleteDoesNotQualifyColumnsForCatalogQualifiedUnaliasedSystemTable()
+    {
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new TestSemanticCatalogProvider(true));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        String text = "SELECT * FROM sem#products WHERE ";
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete", Map.of("fileId", "file-1", "version", 1L, "text", text, "engineState", semanticEngineState(),
+                "cursor", Map.of("line", 1, "column", text.length() + 1), "limits", Map.of("maxItems", 50)));
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+        Assertions.assertTrue(items.stream()
+                .anyMatch(item -> "id".equals(item.get("label"))
+                        && "id".equals(item.get("insertText"))));
+        Assertions.assertFalse(items.stream()
+                .anyMatch(item -> String.valueOf(item.get("label"))
+                        .startsWith("sem#products.")));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlHoverDoesNotQualifyColumnForCatalogQualifiedUnaliasedSystemTable()
+    {
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new TestSemanticCatalogProvider(true));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        String text = "SELECT * FROM sem#products WHERE id = 1";
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.hover",
+                Map.of("fileId", "file-1", "text", text, "engineState", semanticEngineState(), "cursor", Map.of("line", 1, "column", text.indexOf("id") + 2)));
+
+        List<Map<String, Object>> contents = (List<Map<String, Object>>) result.get("contents");
+        String value = String.valueOf(contents.get(0)
+                .get("value"));
+        Assertions.assertTrue(value.contains("Payloadbuilder Column: id"), value);
+        Assertions.assertFalse(value.contains("sem#products.id"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlHoverUsesExplicitCatalogPrefixForSystemTableCatalogTable()
+    {
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new TestSemanticCatalogProvider(true));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        String text = "SELECT * FROM sem#products";
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.hover",
+                Map.of("fileId", "file-1", "text", text, "engineState", semanticEngineStateWithoutDefault(), "cursor", Map.of("line", 1, "column", text.indexOf("products") + 2)));
+
+        List<Map<String, Object>> contents = (List<Map<String, Object>>) result.get("contents");
+        String value = String.valueOf(contents.get(0)
+                .get("value"));
+        Assertions.assertTrue(value.contains("Payloadbuilder Table: sem#products"), value);
+        Assertions.assertTrue(value.contains("| id | int |"), value);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlCompleteResolvesCatalogFromAliasReference()
+    {
+        JdbcSqlEditorServices jdbcSqlEditorServices = Mockito.mock(JdbcSqlEditorServices.class);
+        Mockito.when(jdbcSqlEditorServices.complete(Mockito.any()))
+                .thenReturn(List.of(new JdbcSqlEditorServices.CompletionItem("id", "column", "JDBC column", null, "id", "plain", "jdbc.schema")));
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
+        Map<String, Object> engineState = Map.of("payloadbuilder",
+                Map.of("defaultCatalogAlias", "jdbc", "catalogs", Map.of("jdbc", Map.of("catalogId", "jdbc", "properties", Map.of("connectionId", "conn-1", "database", "appdb")))));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete", Map.of("fileId", "file-1", "version", 1L, "text",
+                "SELECT * FROM jdbc#dbo.Article_ListPage lp WHERE lp.", "engineState", engineState, "cursor", Map.of("line", 1, "column", 52), "limits", Map.of("maxItems", 50)));
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+        Assertions.assertFalse(items.isEmpty());
+        Mockito.verify(jdbcSqlEditorServices)
+                .complete(Mockito.argThat(request -> "conn-1".equals(request.connectionId())
+                        && "appdb".equals(request.database())
+                        && "COLUMN_REFERENCE".equals(request.sqlContext())
+                        && "lp".equals(request.prefix())));
+    }
+
+    @Test
+    void normalizeAliasesStripsCatalogPrefixFromBothKeysAndValues()
+    {
+        Map<String, String> result = PayloadbuilderCatalogSqlEditorServices.normalizeAliases(Map.of("jdbc#dbo.tableA", "jdbc#dbo.tableA"));
+        Assertions.assertEquals(Map.of("dbo.tableA", "dbo.tableA"), result);
+    }
+
+    @Test
+    void normalizeAliasesHandlesExplicitAliases()
+    {
+        Map<String, String> result = PayloadbuilderCatalogSqlEditorServices.normalizeAliases(Map.of("t", "jdbc#dbo.tableA"));
+        Assertions.assertEquals(Map.of("t", "dbo.tableA", "dbo.tableA", "t"), result);
+    }
+
+    @Test
+    void normalizeAliasesDoesNotDuplicateTableNames()
+    {
+        Map<String, String> result = PayloadbuilderCatalogSqlEditorServices.normalizeAliases(Map.of("jdbc#dbo.tableA", "jdbc#dbo.tableA"));
+        long distinctValues = result.values()
+                .stream()
+                .distinct()
+                .count();
+        Assertions.assertEquals(1, distinctValues);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlCompleteWithAliasLessTableCompletesColumnsInWhereClause()
+    {
+        JdbcSqlEditorServices jdbcSqlEditorServices = Mockito.mock(JdbcSqlEditorServices.class);
+        Mockito.when(jdbcSqlEditorServices.complete(Mockito.any()))
+                .thenReturn(List.of(new JdbcSqlEditorServices.CompletionItem("jdbc.col1", "column", "jdbc.col1", null, "jdbc.col1", "plain", "jdbc.schema")));
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
+        Map<String, Object> engineState = Map.of("payloadbuilder",
+                Map.of("defaultCatalogAlias", "jdbc", "catalogs", Map.of("jdbc", Map.of("catalogId", "jdbc", "properties", Map.of("connectionId", "conn-1", "database", "appdb")))));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        String text = "SELECT * FROM jdbc#dbo.Article_ListPage WHERE ";
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete",
+                Map.of("fileId", "file-1", "version", 1L, "text", text, "engineState", engineState, "cursor", Map.of("line", 1, "column", text.length() + 1), "limits", Map.of("maxItems", 50)));
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+        Assertions.assertTrue(items.stream()
+                .anyMatch(item -> "col1".equals(item.get("label"))
+                        && "col1".equals(item.get("insertText"))));
+        Assertions.assertFalse(items.stream()
+                .anyMatch(item -> String.valueOf(item.get("label"))
+                        .startsWith("jdbc.")));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlCompleteRoutesUnqualifiedJdbcColumnsFromCatalogQualifiedRelationWithoutDefault()
+    {
+        JdbcSqlEditorServices jdbcSqlEditorServices = Mockito.mock(JdbcSqlEditorServices.class);
+        Mockito.when(jdbcSqlEditorServices.complete(Mockito.any()))
+                .thenReturn(List.of(new JdbcSqlEditorServices.CompletionItem("id", "column", "JDBC column", null, "id", "plain", "jdbc.schema")));
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
+        Map<String, Object> engineState = jdbcCatalogEngineStateWithoutDefault();
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        String text = "SELECT * FROM jdbc#dbo.Article_ListPage WHERE ";
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete",
+                Map.of("fileId", "file-1", "version", 1L, "text", text, "engineState", engineState, "cursor", Map.of("line", 1, "column", text.length() + 1), "limits", Map.of("maxItems", 50)));
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+        Assertions.assertTrue(items.stream()
+                .anyMatch(item -> "id".equals(item.get("label"))));
+        Mockito.verify(jdbcSqlEditorServices)
+                .complete(Mockito.argThat(request -> "conn-1".equals(request.connectionId())
+                        && "COLUMN_REFERENCE".equals(request.sqlContext())
+                        && "".equals(request.prefix())
+                        && "dbo.Article_ListPage".equals(request.aliases()
+                                .get("dbo.article_listpage"))));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlHoverRoutesUnqualifiedJdbcColumnFromCatalogQualifiedRelationWithoutDefault()
+    {
+        JdbcSqlEditorServices jdbcSqlEditorServices = Mockito.mock(JdbcSqlEditorServices.class);
+        Mockito.when(jdbcSqlEditorServices.hover(Mockito.any()))
+                .thenReturn(new JdbcSqlEditorServices.Hover("**Column: id**"));
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
+        Map<String, Object> engineState = jdbcCatalogEngineStateWithoutDefault();
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        String text = "SELECT * FROM jdbc#dbo.Article_ListPage WHERE id = 1";
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.hover",
+                Map.of("fileId", "file-1", "text", text, "engineState", engineState, "cursor", Map.of("line", 1, "column", text.indexOf("id") + 2)));
+
+        List<Map<String, Object>> contents = (List<Map<String, Object>>) result.get("contents");
+        Assertions.assertTrue(String.valueOf(contents.get(0)
+                .get("value"))
+                .contains("Column: id"));
+        Mockito.verify(jdbcSqlEditorServices)
+                .hover(Mockito.argThat(request -> "conn-1".equals(request.connectionId())
+                        && "COLUMN_REFERENCE".equals(request.sqlContext())
+                        && "id".equals(request.token())
+                        && "dbo.Article_ListPage".equals(request.aliases()
+                                .get("dbo.article_listpage"))));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlCompletePreservesExplicitAliasThatEqualsCatalogAlias()
+    {
+        JdbcSqlEditorServices jdbcSqlEditorServices = Mockito.mock(JdbcSqlEditorServices.class);
+        Mockito.when(jdbcSqlEditorServices.complete(Mockito.any()))
+                .thenReturn(List.of(new JdbcSqlEditorServices.CompletionItem("jdbc.col1", "column", "jdbc.col1", null, "jdbc.col1", "plain", "jdbc.schema")));
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
+        Map<String, Object> engineState = Map.of("payloadbuilder",
+                Map.of("defaultCatalogAlias", "jdbc", "catalogs", Map.of("jdbc", Map.of("catalogId", "jdbc", "properties", Map.of("connectionId", "conn-1", "database", "appdb")))));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        String text = "SELECT * FROM jdbc#dbo.Article_ListPage jdbc WHERE jdbc.";
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete",
+                Map.of("fileId", "file-1", "version", 1L, "text", text, "engineState", engineState, "cursor", Map.of("line", 1, "column", text.length() + 1), "limits", Map.of("maxItems", 50)));
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+        Assertions.assertTrue(items.stream()
+                .anyMatch(item -> "jdbc.col1".equals(item.get("label"))
+                        && "jdbc.col1".equals(item.get("insertText"))));
+        Mockito.verify(jdbcSqlEditorServices)
+                .complete(Mockito.argThat(request -> "jdbc.".equals(request.prefix())
+                        && "dbo.Article_ListPage".equals(request.aliases()
+                                .get("jdbc"))));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlCompleteDoesNotUseCatalogThatHasNotOptedIn()
+    {
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new TestSemanticCatalogProvider(false));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete", Map.of("fileId", "file-1", "version", 1L, "text", "SELECT * FROM pro", "engineState",
+                semanticEngineState(), "cursor", Map.of("line", 1, "column", 18), "limits", Map.of("maxItems", 50)));
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+        Assertions.assertFalse(items.stream()
+                .anyMatch(item -> "products".equals(item.get("label"))));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlSemanticActionsUseSharedJdbcSqlEditorServicesForJdbcCatalog()
+    {
+        JdbcSqlEditorServices jdbcSqlEditorServices = Mockito.mock(JdbcSqlEditorServices.class);
+        Mockito.when(jdbcSqlEditorServices.complete(Mockito.any()))
+                .thenReturn(List.of(new JdbcSqlEditorServices.CompletionItem("orders", "table", "JDBC table", null, "orders", "plain", "jdbc.schema")));
+        Mockito.when(jdbcSqlEditorServices.hover(Mockito.any()))
+                .thenReturn(new JdbcSqlEditorServices.Hover("**Table: PUBLIC.ORDERS**"));
+        Mockito.when(jdbcSqlEditorServices.symbolAtPosition(Mockito.any()))
+                .thenReturn(new JdbcSqlEditorServices.Symbol("table", "PUBLIC.ORDERS", "APPDB.PUBLIC.ORDERS", "TABLE", Map.of("name", "ORDERS")));
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        Map<String, Object> engineState = jdbcCatalogEngineState();
+
+        Map<String, Object> complete = (Map<String, Object>) provider.invoke("file-1", "sql.complete",
+                Map.of("fileId", "file-1", "version", 1L, "text", "SELECT * FROM ord", "engineState", engineState, "cursor", Map.of("line", 1, "column", 18), "limits", Map.of("maxItems", 50)));
+        List<Map<String, Object>> items = (List<Map<String, Object>>) complete.get("items");
+        Assertions.assertTrue(items.stream()
+                .anyMatch(item -> "orders".equals(item.get("label"))
+                        && "jdbc1".equals(item.get("source"))));
+
+        Map<String, Object> hover = (Map<String, Object>) provider.invoke("file-1", "sql.hover",
+                Map.of("fileId", "file-1", "text", "SELECT * FROM orders", "engineState", engineState, "cursor", Map.of("line", 1, "column", 18)));
+        Assertions.assertTrue(String.valueOf(hover.get("contents"))
+                .contains("PUBLIC.ORDERS"));
+
+        Map<String, Object> symbol = (Map<String, Object>) provider.invoke("file-1", "sql.symbolAtPosition",
+                Map.of("fileId", "file-1", "text", "SELECT * FROM orders", "engineState", engineState, "cursor", Map.of("line", 1, "column", 18)));
+        Assertions.assertEquals("table", symbol.get("kind"));
+        Map<String, Object> attributes = (Map<String, Object>) symbol.get("attributes");
+        Assertions.assertEquals("jdbc1", attributes.get("catalogAlias"));
+
+        Mockito.verify(jdbcSqlEditorServices)
+                .complete(Mockito.argThat(request -> "conn-1".equals(request.connectionId())
+                        && "appdb".equals(request.database())
+                        && "TABLE_REFERENCE".equals(request.sqlContext())
+                        && "ord".equals(request.prefix())));
+        Mockito.verify(jdbcSqlEditorServices)
+                .hover(Mockito.argThat(request -> "conn-1".equals(request.connectionId())
+                        && "appdb".equals(request.database())
+                        && "orders".equals(request.token())));
+        Mockito.verify(jdbcSqlEditorServices)
+                .symbolAtPosition(Mockito.argThat(request -> "conn-1".equals(request.connectionId())
+                        && "appdb".equals(request.database())
+                        && "orders".equals(request.token())));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlHoverAndSymbolStripCatalogDotPrefixWhenNotExplicitAlias()
+    {
+        JdbcSqlEditorServices jdbcSqlEditorServices = Mockito.mock(JdbcSqlEditorServices.class);
+        Mockito.when(jdbcSqlEditorServices.hover(Mockito.any()))
+                .thenReturn(new JdbcSqlEditorServices.Hover("jdbc.col1"));
+        Mockito.when(jdbcSqlEditorServices.symbolAtPosition(Mockito.any()))
+                .thenReturn(new JdbcSqlEditorServices.Symbol("column", "jdbc.col1", "jdbc.dbo.orders.col1", "jdbc.column", Map.of("name", "COL1")));
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        Map<String, Object> engineState = Map.of("payloadbuilder",
+                Map.of("defaultCatalogAlias", "jdbc", "catalogs", Map.of("jdbc", Map.of("catalogId", "jdbc", "properties", Map.of("connectionId", "conn-1", "database", "appdb")))));
+
+        Map<String, Object> hover = (Map<String, Object>) provider.invoke("file-1", "sql.hover",
+                Map.of("fileId", "file-1", "text", "SELECT * FROM orders", "engineState", engineState, "cursor", Map.of("line", 1, "column", 18)));
+        List<Map<String, Object>> contents = (List<Map<String, Object>>) hover.get("contents");
+        Assertions.assertEquals("col1", contents.get(0)
+                .get("value"));
+
+        Map<String, Object> symbol = (Map<String, Object>) provider.invoke("file-1", "sql.symbolAtPosition",
+                Map.of("fileId", "file-1", "text", "SELECT * FROM orders", "engineState", engineState, "cursor", Map.of("line", 1, "column", 18)));
+        Assertions.assertEquals("col1", symbol.get("name"));
+        Assertions.assertEquals("dbo.orders.col1", symbol.get("fullName"));
+        Assertions.assertEquals("column", symbol.get("detail"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlCompleteExtractsCatalogAliasFromFromClauseAndRoutesToCorrectRuntime()
+    {
+        JdbcSqlEditorServices jdbcSqlEditorServices = Mockito.mock(JdbcSqlEditorServices.class);
+        Mockito.when(jdbcSqlEditorServices.complete(Mockito.any()))
+                .thenReturn(List.of(new JdbcSqlEditorServices.CompletionItem("order_id", "column", "JDBC column", null, "order_id", "plain", "jdbc.schema")));
+        Map<String, Object> engineState = Map.of("payloadbuilder",
+                Map.of("defaultCatalogAlias", "myalias", "catalogs", Map.of("myalias", Map.of("catalogId", "jdbc", "properties", Map.of("connectionId", "conn-1", "database", "appdb")))));
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete", Map.of("fileId", "file-1", "version", 1L, "text", "SELECT * FROM myalias#orders WHERE myalias.or",
+                "engineState", engineState, "cursor", Map.of("line", 1, "column", 50), "limits", Map.of("maxItems", 50)));
+        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+        Assertions.assertFalse(items.isEmpty());
+
+        Mockito.verify(jdbcSqlEditorServices)
+                .complete(Mockito.argThat(request ->
+                {
+                    if (!"conn-1".equals(request.connectionId()))
+                    {
+                        return false;
+                    }
+                    if (!"appdb".equals(request.database()))
+                    {
+                        return false;
+                    }
+                    // Handler routes to the "myalias" catalog runtime, then the JDBC adapter strips the catalog qualifier from the prefix before delegation.
+                    Map<String, String> aliases = request.aliases();
+                    String ordersAlias = aliases.get("orders");
+                    String myaliasAlias = aliases.get("myalias");
+                    return "or".equals(request.prefix())
+                            && "myalias".equals(ordersAlias)
+                            && "orders".equals(myaliasAlias);
+                }));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlHoverUsesOptedInPayloadbuilderCatalog()
+    {
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new TestSemanticCatalogProvider(true));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.hover",
+                Map.of("fileId", "file-1", "text", "SELECT * FROM products", "engineState", semanticEngineState(), "cursor", Map.of("line", 1, "column", 18)));
+
+        List<Map<String, Object>> contents = (List<Map<String, Object>>) result.get("contents");
+        Assertions.assertTrue(String.valueOf(contents.get(0)
+                .get("value"))
+                .contains("Payloadbuilder Table"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlSymbolAtPositionUsesOptedInPayloadbuilderCatalog()
+    {
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new TestSemanticCatalogProvider(true));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.symbolAtPosition",
+                Map.of("fileId", "file-1", "text", "SELECT * FROM products", "engineState", semanticEngineState(), "cursor", Map.of("line", 1, "column", 18)));
+
+        Assertions.assertEquals("table", result.get("kind"));
+        Assertions.assertEquals("products", result.get("name"));
     }
 
     @Test
@@ -636,7 +1104,7 @@ class PayloadbuilderQueryEngineProviderTest
                 return "{}";
             }
         };
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, throwingMapper, JDBCRUNTIMESERVICE);
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, throwingMapper, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, throwingMapper, registry, PARSE_SESSIONS, PARSE_FUNCTION);
         RecordingPublisher publisher = new RecordingPublisher();
 
@@ -675,7 +1143,7 @@ class PayloadbuilderQueryEngineProviderTest
                 return "{}";
             }
         };
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, throwingMapper, JDBCRUNTIMESERVICE);
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, throwingMapper, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, throwingMapper, registry, PARSE_SESSIONS, PARSE_FUNCTION);
         RecordingPublisher publisher = new RecordingPublisher();
 
@@ -787,7 +1255,7 @@ class PayloadbuilderQueryEngineProviderTest
     void onOpenOnChangeOnCloseDelegateToParseSessionService()
     {
         IncrementalParseSessionService sessions = Mockito.mock(IncrementalParseSessionService.class);
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE);
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, sessions, PARSE_FUNCTION);
         FileSession session = new FileSession("file-1", java.net.URI.create("file:///tmp.sql"), "text/sql", "jdbc", "jdbc-1", 1L);
 
@@ -848,7 +1316,7 @@ class PayloadbuilderQueryEngineProviderTest
                 return null;
             }
         };
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(config, TEST_MAPPER, JDBCRUNTIMESERVICE);
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(config, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(config, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
         Map<String, SessionHolder> executionIdMap = provider.sessionByExecutionId;
 
@@ -865,6 +1333,166 @@ class PayloadbuilderQueryEngineProviderTest
         // Verify fireAbortQueryListeners was called
         Mockito.verify(mockSession)
                 .fireAbortQueryListeners();
+    }
+
+    private static Map<String, Object> semanticEngineState()
+    {
+        return Map.of("payloadbuilder", Map.of("defaultCatalogAlias", "sem", "catalogs", Map.of("sem", Map.of("catalogId", TestSemanticCatalog.CATALOG_ID, "properties", Map.of()))));
+    }
+
+    private static Map<String, Object> semanticEngineStateWithoutDefault()
+    {
+        return Map.of("payloadbuilder", Map.of("catalogs", Map.of("sem", Map.of("catalogId", TestSemanticCatalog.CATALOG_ID, "properties", Map.of()))));
+    }
+
+    private static Map<String, Object> jdbcCatalogEngineState()
+    {
+        return Map.of("payloadbuilder",
+                Map.of("defaultCatalogAlias", "jdbc1", "catalogs", Map.of("jdbc1", Map.of("catalogId", "jdbc", "properties", Map.of("connectionId", "conn-1", "database", "appdb")))));
+    }
+
+    private static Map<String, Object> jdbcCatalogEngineStateWithoutDefault()
+    {
+        return Map.of("payloadbuilder", Map.of("catalogs", Map.of("jdbc", Map.of("catalogId", "jdbc", "properties", Map.of("connectionId", "conn-1", "database", "appdb")))));
+    }
+
+    private static JdbcRuntimeService jdbcRuntimeServiceFor(String connectionId)
+    {
+        JdbcDialect dialect = Mockito.mock(JdbcDialect.class);
+        Mockito.when(dialect.metadata())
+                .thenReturn(new JdbcDialectMetadata("jdbc", "JDBC", null, "", "org.h2.Driver"));
+        Mockito.when(dialect.buildUrl(Mockito.any()))
+                .thenReturn("jdbc:h2:mem:test");
+        JdbcConnection connection = new JdbcConnection(connectionId, "Test connection", dialect, Map.of());
+        JdbcConnections connections = Mockito.mock(JdbcConnections.class);
+        Mockito.when(connections.resolve(connectionId))
+                .thenReturn(connection);
+        JdbcRuntimeService runtimeService = Mockito.mock(JdbcRuntimeService.class);
+        Mockito.when(runtimeService.connections())
+                .thenReturn(connections);
+        return runtimeService;
+    }
+
+    private record TestSemanticCatalogProvider(boolean optIn) implements PayloadbuilderCatalogProviderContributor
+    {
+        @Override
+        public String catalogId()
+        {
+            return TestSemanticCatalog.CATALOG_ID;
+        }
+
+        @Override
+        public Catalog createCatalog()
+        {
+            return new TestSemanticCatalog();
+        }
+
+        @Override
+        public PayloadbuilderCatalogSqlEditorServices editorServices()
+        {
+            return optIn ? PayloadbuilderSystemTableSqlEditorServices.INSTANCE
+                    : PayloadbuilderCatalogSqlEditorServices.NONE;
+        }
+    }
+
+    private static final class TestSemanticCatalog extends Catalog
+    {
+        private static final String CATALOG_ID = "test.semantic";
+        private static final String PRODUCTS_TABLE = "products";
+        private static final String PRODUCTS_BY_CATEGORY_FUNCTION = "products_by_category";
+        private static final Schema PRODUCTS_SCHEMA = Schema.of(Column.of("id", ResolvedType.INT), Column.of("name", ResolvedType.STRING), Column.of("category", ResolvedType.STRING));
+
+        TestSemanticCatalog()
+        {
+            super(CATALOG_ID);
+            registerFunction(new ProductsByCategoryFunction());
+        }
+
+        @Override
+        public TableSchema getSystemTableSchema(IQuerySession session, String catalogAlias, QualifiedName table)
+        {
+            String systemTable = table.getLast();
+            if (SYS_TABLES.equalsIgnoreCase(systemTable))
+            {
+                return new TableSchema(Schema.of(Column.of(SYS_TABLES_NAME, Column.Type.String)));
+            }
+            if (SYS_COLUMNS.equalsIgnoreCase(systemTable))
+            {
+                return new TableSchema(Schema.of(Column.of(SYS_COLUMNS_TABLE, Column.Type.String), Column.of(SYS_COLUMNS_NAME, Column.Type.String), Column.of("type", Column.Type.String)));
+            }
+            if (SYS_FUNCTIONS.equalsIgnoreCase(systemTable))
+            {
+                return new TableSchema(SYS_FUNCTIONS_SCHEMA);
+            }
+            return TableSchema.EMPTY;
+        }
+
+        @Override
+        public IDatasource getSystemTableDataSource(IQuerySession session, String catalogAlias, QualifiedName table, DatasourceData data)
+        {
+            String systemTable = table.getLast();
+            if (SYS_TABLES.equalsIgnoreCase(systemTable))
+            {
+                Schema schema = Schema.of(Column.of(SYS_TABLES_NAME, Column.Type.String));
+                return _ -> TupleIterator.singleton(new se.kuseman.payloadbuilder.api.execution.ObjectTupleVector(schema, 1, (_, _) -> PRODUCTS_TABLE));
+            }
+            if (SYS_COLUMNS.equalsIgnoreCase(systemTable))
+            {
+                Schema schema = Schema.of(Column.of(SYS_COLUMNS_TABLE, Column.Type.String), Column.of(SYS_COLUMNS_NAME, Column.Type.String), Column.of("type", Column.Type.String));
+                return _ -> TupleIterator.singleton(new se.kuseman.payloadbuilder.api.execution.ObjectTupleVector(schema, PRODUCTS_SCHEMA.getSize(), (row, col) ->
+                {
+                    Column column = PRODUCTS_SCHEMA.getColumns()
+                            .get(row);
+                    return switch (col)
+                    {
+                        case 0 -> PRODUCTS_TABLE;
+                        case 1 -> column.getName();
+                        case 2 -> column.getType()
+                                .getType()
+                                .name()
+                                .toLowerCase();
+                        default -> null;
+                    };
+                }));
+            }
+            if (SYS_FUNCTIONS.equalsIgnoreCase(systemTable))
+            {
+                return _ -> TupleIterator.singleton(getFunctionsTupleVector(SYS_FUNCTIONS_SCHEMA));
+            }
+            return _ -> TupleIterator.EMPTY;
+        }
+
+        private static final class ProductsByCategoryFunction extends TableFunctionInfo
+        {
+            ProductsByCategoryFunction()
+            {
+                super(PRODUCTS_BY_CATEGORY_FUNCTION);
+            }
+
+            @Override
+            public String getDescription()
+            {
+                return "Returns products by category";
+            }
+
+            @Override
+            public FunctionInfo.Arity arity()
+            {
+                return new FunctionInfo.Arity(1, 1);
+            }
+
+            @Override
+            public Schema getSchema(IExecutionContext context, String catalogAlias, List<IExpression> arguments, List<Option> options)
+            {
+                return PRODUCTS_SCHEMA;
+            }
+
+            @Override
+            public TupleIterator execute(IExecutionContext context, String catalogAlias, List<IExpression> arguments, FunctionData functionData)
+            {
+                return TupleIterator.EMPTY;
+            }
+        }
     }
 
     private static final class RecordingPublisher implements QueryPublisher

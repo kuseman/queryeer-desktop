@@ -16,6 +16,7 @@ import com.queryeer.backend.plugin.payloadbuilder.http.HttpCatalogProvider;
 import com.queryeer.backend.plugin.payloadbuilder.jdbc.JdbcCatalogProvider;
 import com.queryeer.backend.plugin.payloadbuilder.kafka.KafkaCatalogProvider;
 import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
+import com.queryeer.backend.queryengine.jdbc.JdbcSqlEditorServices;
 import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
@@ -45,9 +46,9 @@ final class PayloadbuilderCatalogProviderRegistry implements com.queryeer.backen
     }
 
     /** Creates the default registry with built-in providers. */
-    static PayloadbuilderCatalogProviderRegistry defaults(ConfigService configService, PayloadMapper payloadMapper, JdbcRuntimeService jdbcRuntimeServices)
+    static PayloadbuilderCatalogProviderRegistry defaults(ConfigService configService, PayloadMapper payloadMapper, JdbcRuntimeService jdbcRuntimeServices, JdbcSqlEditorServices jdbcSqlEditorServices)
     {
-        List<PayloadbuilderCatalogProviderContributor> builtins = List.<PayloadbuilderCatalogProviderContributor>of(new JdbcCatalogProvider(jdbcRuntimeServices),
+        List<PayloadbuilderCatalogProviderContributor> builtins = List.<PayloadbuilderCatalogProviderContributor>of(new JdbcCatalogProvider(jdbcRuntimeServices, jdbcSqlEditorServices),
                 new ElasticsearchCatalogProvider(configService, payloadMapper), new KafkaCatalogProvider(configService, payloadMapper), new FilesystemCatalogProvider(), new HttpCatalogProvider());
         return new PayloadbuilderCatalogProviderRegistry(builtins);
     }

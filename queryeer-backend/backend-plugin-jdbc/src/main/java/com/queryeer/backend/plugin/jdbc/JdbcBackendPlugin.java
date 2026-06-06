@@ -21,6 +21,7 @@ import com.queryeer.backend.queryengine.jdbc.DefaultJdbcDialectRegistry;
 import com.queryeer.backend.queryengine.jdbc.DefaultJdbcRuntimeService;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
 import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
+import com.queryeer.backend.queryengine.jdbc.JdbcSqlEditorServices;
 import com.queryeer.backend.queryengine.sql.parser.TreeSitterSqlParseFunction;
 
 public final class JdbcBackendPlugin implements BackendPlugin
@@ -54,7 +55,6 @@ public final class JdbcBackendPlugin implements BackendPlugin
         JdbcSchemaCrawlCoordinator crawlCoordinator = new JdbcSchemaCrawlCoordinator(connections, schemaCrawler, schemaStore, new JdbcSchemaCrawlPolicy(), context.logger(), connectionHealth);
         long idleTimeoutMs = parseDurationMs(context.config(), IDLE_TIMEOUT_KEY, DEFAULT_IDLE_TIMEOUT_MS);
         long reaperIntervalMs = parseDurationMs(context.config(), REAPER_INTERVAL_KEY, Math.max(1_000L, Math.min(idleTimeoutMs, TimeUnit.MINUTES.toMillis(5))));
-        long schemaCrawlIntervalMs = parseDurationMs(context.config(), SCHEMA_CRAWL_INTERVAL_KEY, TimeUnit.MINUTES.toMillis(5));
         IncrementalParseSessionService parseSessions = context.services()
                 .get(IncrementalParseSessionService.class);
         if (parseSessions == null)
@@ -63,7 +63,10 @@ public final class JdbcBackendPlugin implements BackendPlugin
         }
         JdbcQueryEngineProvider provider = new JdbcQueryEngineProvider(registry, connections, idleTimeoutMs, crawlCoordinator::onUsage, schemaStore, crawlCoordinator, context.payloadMapper(), router,
                 connectionHealth, parseSessions, new TreeSitterSqlParseFunction());
+        context.services()
+                .register(JdbcSqlEditorServices.class, provider.editorServices());
 
+        long schemaCrawlIntervalMs = parseDurationMs(context.config(), SCHEMA_CRAWL_INTERVAL_KEY, TimeUnit.MINUTES.toMillis(5));
         context.scheduler()
                 .schedule("jdbc.file-session-reaper", () -> startReaperThread(provider, reaperIntervalMs));
         context.scheduler()

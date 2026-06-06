@@ -15,13 +15,14 @@ import java.util.function.Function;
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaNavigator;
+import com.queryeer.backend.queryengine.jdbc.JdbcSqlEditorServices;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 import com.queryeer.backend.queryengine.sql.parser.SqlCompletionSupport;
 import com.queryeer.backend.queryengine.sql.parser.SqlHoverSupport;
 import com.queryeer.backend.queryengine.sql.parser.SqlParseContext;
 
 /** Handles SQL semantic operations (completion, hover, symbol lookup) against H2 schema snapshots. */
-final class JdbcSqlSemanticHandler
+final class JdbcSqlSemanticHandler implements JdbcSqlEditorServices
 {
     private final PayloadMapper payloadMapper;
     private final IncrementalParseSessionService parseSessions;
@@ -43,14 +44,14 @@ final class JdbcSqlSemanticHandler
 
     // -- Completion --
 
-    Object complete(String fileId, Object payload)
+    Object completeInvoke(String fileId, Object payload)
     {
         return SqlCompletionSupport.complete(payloadMapper, parseSessions, engineId, fileId, payload, this::semanticCompletions);
     }
 
     // -- Hover --
 
-    Object hover(String fileId, Object payload)
+    Object hoverInvoke(String fileId, Object payload)
     {
         return SqlHoverSupport.hover(payloadMapper, parseSessions, engineId, fileId, payload, this::semanticHover);
     }
@@ -79,8 +80,28 @@ final class JdbcSqlSemanticHandler
             return null;
         }
         String selectedDatabase = trimToNull(params.database());
+        JdbcSqlEditorServices.Symbol symbol = symbolAtPosition(new JdbcSqlEditorServices.SymbolRequest(connectionId, selectedDatabase, params.text(), null, token, params.cursor()
+                .line(),
+                params.cursor()
+                        .column(),
+                Map.of()));
+        return toSymbolMap(symbol);
+    }
+
+    @Override
+    public Symbol symbolAtPosition(SymbolRequest request)
+    {
+        if (request == null
+                || isBlank(request.token())
+                || isBlank(request.connectionId()))
+        {
+            return null;
+        }
+
+        String connectionId = trimToNull(request.connectionId());
+        String selectedDatabase = trimToNull(request.database());
         recordUsage(connectionId, selectedDatabase);
-        return schemaNavigator.findSymbol(connectionId, token, selectedDatabase);
+        return fromSymbolMap(schemaNavigator.findSymbol(connectionId, request.token(), selectedDatabase));
     }
 
     // -- Parse snapshot --
@@ -115,12 +136,45 @@ final class JdbcSqlSemanticHandler
         String selectedDatabase = payload == null ? null
                 : trimToNull(payload.database());
 
+        return complete(new JdbcSqlEditorServices.CompletionRequest(connectionId, selectedDatabase, payload == null ? null
+                : payload.text(), context.name(), prefix, replaceStartColumn, cursor.line(), cursor.column(), maxItems, aliases)).stream()
+                .map(item -> toCompletionMap(item, cursor, replaceStartColumn))
+                .filter(map -> !map.isEmpty())
+                .toList();
+    }
+
+    @Override
+    public List<CompletionItem> complete(CompletionRequest request)
+    {
+        if (request == null)
+        {
+            return List.of();
+        }
+        SqlParseContext context = parseContext(request.sqlContext());
+        if (context == SqlParseContext.OTHER)
+        {
+            return List.of();
+        }
+        String connectionId = trimToNull(request.connectionId());
+        if (connectionId == null)
+        {
+            return List.of();
+        }
+        int maxItems = Math.max(0, request.maxItems());
+        if (maxItems == 0)
+        {
+            return List.of();
+        }
+        String selectedDatabase = trimToNull(request.database());
+        String prefix = request.prefix() == null ? ""
+                : request.prefix();
+        SqlCompletionSupport.SqlCompleteCursor cursor = new SqlCompletionSupport.SqlCompleteCursor(request.line(), request.column());
+
         recordUsage(connectionId, selectedDatabase);
 
         if (context == SqlParseContext.PROCEDURE_CALL)
         {
-            String text = payload != null ? payload.text()
-                    : null;
+            String text = request.text();
             String procName = null;
             boolean insideParams = isInsideProcedureParameterList(text, cursor);
             if (!insideParams)
@@ -156,8 +210,7 @@ final class JdbcSqlSemanticHandler
                         .filter(name -> seen.add(name.toLowerCase()))
                         .sorted(String.CASE_INSENSITIVE_ORDER)
                         .limit(maxItems)
-                        .map(name -> Map.<String, Object>of("label", name, "kind", "parameter", "detail", "JDBC procedure parameter", "insertText", name, "insertTextFormat", "plain", "source",
-                                "jdbc.schema", "replaceRange", Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column())))
+                        .map(name -> new CompletionItem(name, "parameter", "JDBC procedure parameter", null, name, "plain", "jdbc.schema"))
                         .toList();
             }
             boolean explicitDatabasePrefix = qualifierPartCount(prefix) >= 3;
@@ -176,8 +229,7 @@ final class JdbcSqlSemanticHandler
                             .toLowerCase()))
                     .sorted((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(a.name(), b.name()))
                     .limit(maxItems)
-                    .map(info -> Map.<String, Object>of("label", info.name(), "kind", info.kind(), "detail", "JDBC procedure", "insertText", info.name(), "insertTextFormat", "plain", "source",
-                            "jdbc.schema", "replaceRange", Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column())))
+                    .map(info -> new CompletionItem(info.name(), info.kind(), "JDBC procedure", null, info.name(), "plain", "jdbc.schema"))
                     .toList();
         }
 
@@ -203,16 +255,17 @@ final class JdbcSqlSemanticHandler
                     {
                         String detail = "table".equals(info.kind()) ? "JDBC table"
                                 : "JDBC view";
-                        return Map.<String, Object>of("label", info.name(), "kind", info.kind(), "detail", detail, "insertText", info.name(), "insertTextFormat", "plain", "source", "jdbc.schema",
-                                "replaceRange", Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column()));
+                        return new CompletionItem(info.name(), info.kind(), detail, null, info.name(), "plain", "jdbc.schema");
                     })
                     .toList();
         }
 
         // -- COLUMN_REFERENCE context --
         List<String> tableNames;
-        List<Map<String, Object>> columnItems = new ArrayList<>();
+        List<CompletionItem> columnItems = new ArrayList<>();
         Set<String> seenLower = new HashSet<>();
+        Map<String, String> aliases = request.aliases() == null ? Map.of()
+                : request.aliases();
 
         if (prefix.contains("."))
         {
@@ -230,8 +283,7 @@ final class JdbcSqlSemanticHandler
                         && seenLower.add(col.toLowerCase()))
                 {
                     String insertText = qualifier + "." + col;
-                    columnItems.add(Map.<String, Object>of("label", insertText, "kind", "column", "detail", "JDBC column", "insertText", insertText, "insertTextFormat", "plain", "source",
-                            "jdbc.schema", "replaceRange", Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column())));
+                    columnItems.add(new CompletionItem(insertText, "column", "JDBC column", null, insertText, "plain", "jdbc.schema"));
                 }
             }
         }
@@ -260,15 +312,14 @@ final class JdbcSqlSemanticHandler
                                     .startsWith(prefix.toLowerCase()))
                             && seenLower.add(prefixed.toLowerCase()))
                     {
-                        columnItems.add(Map.<String, Object>of("label", prefixed, "kind", "column", "detail", "JDBC column", "insertText", prefixed, "insertTextFormat", "plain", "source",
-                                "jdbc.schema", "replaceRange", Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column())));
+                        columnItems.add(new CompletionItem(prefixed, "column", "JDBC column", null, prefixed, "plain", "jdbc.schema"));
                     }
                 }
             }
         }
 
         return columnItems.stream()
-                .sorted((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(String.valueOf(a.get("label")), String.valueOf(b.get("label"))))
+                .sorted((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(a.label(), b.label()))
                 .limit(maxItems)
                 .toList();
     }
@@ -442,45 +493,57 @@ final class JdbcSqlSemanticHandler
         String selectedDatabase = payload == null ? null
                 : trimToNull(payload.database());
 
-        recordUsage(connectionId, selectedDatabase);
-
-        List<Map<String, Object>> contents = new ArrayList<>();
-
-        if (context == SqlParseContext.TABLE_REFERENCE)
-        {
-            String tableMarkdown = buildTableHoverMarkdown(connectionId, token, aliases, selectedDatabase);
-            if (tableMarkdown == null)
-            {
-                return null;
-            }
-            contents.add(Map.of("value", tableMarkdown, "isTrusted", false));
-        }
-        else if (context == SqlParseContext.PROCEDURE_CALL)
-        {
-            String procMarkdown = buildProcedureHoverMarkdown(connectionId, token, aliases, selectedDatabase);
-            if (procMarkdown == null)
-            {
-                return null;
-            }
-            contents.add(Map.of("value", procMarkdown, "isTrusted", false));
-        }
-        else if (context == SqlParseContext.COLUMN_REFERENCE)
-        {
-            String columnMarkdown = buildColumnHoverMarkdown(connectionId, token, aliases, selectedDatabase);
-            if (columnMarkdown == null)
-            {
-                return null;
-            }
-            contents.add(Map.of("value", columnMarkdown, "isTrusted", false));
-        }
-
-        if (contents.isEmpty())
+        JdbcSqlEditorServices.Hover hover = hover(new JdbcSqlEditorServices.HoverRequest(connectionId, selectedDatabase, payload == null ? null
+                : payload.text(), context.name(), token, cursor.line(), cursor.column(), aliases));
+        if (hover == null
+                || isBlank(hover.markdown()))
         {
             return null;
         }
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("contents", contents);
+        result.put("contents", List.of(Map.of("value", hover.markdown(), "isTrusted", false)));
         return result;
+    }
+
+    @Override
+    public Hover hover(HoverRequest request)
+    {
+        if (request == null
+                || isBlank(request.token())
+                || isBlank(request.connectionId()))
+        {
+            return null;
+        }
+        SqlParseContext context = parseContext(request.sqlContext());
+        if (context == SqlParseContext.OTHER)
+        {
+            return null;
+        }
+
+        String connectionId = trimToNull(request.connectionId());
+        String selectedDatabase = trimToNull(request.database());
+        Map<String, String> aliases = request.aliases() == null ? Map.of()
+                : request.aliases();
+        String token = request.token();
+        recordUsage(connectionId, selectedDatabase);
+
+        String markdown = null;
+
+        if (context == SqlParseContext.TABLE_REFERENCE)
+        {
+            markdown = buildTableHoverMarkdown(connectionId, token, aliases, selectedDatabase);
+        }
+        else if (context == SqlParseContext.PROCEDURE_CALL)
+        {
+            markdown = buildProcedureHoverMarkdown(connectionId, token, aliases, selectedDatabase);
+        }
+        else if (context == SqlParseContext.COLUMN_REFERENCE)
+        {
+            markdown = buildColumnHoverMarkdown(connectionId, token, aliases, selectedDatabase);
+        }
+
+        return isBlank(markdown) ? null
+                : new Hover(markdown);
     }
 
     // -- Markdown builders --
@@ -824,6 +887,96 @@ final class JdbcSqlSemanticHandler
             }
         }
         return result;
+    }
+
+    private static Map<String, Object> toCompletionMap(JdbcSqlEditorServices.CompletionItem item, SqlCompletionSupport.SqlCompleteCursor cursor, int replaceStartColumn)
+    {
+        if (item == null
+                || isBlank(item.label()))
+        {
+            return Map.of();
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("label", item.label());
+        putIfNotBlank(result, "kind", item.kind());
+        putIfNotBlank(result, "detail", item.detail());
+        putIfNotBlank(result, "documentation", item.documentation());
+        putIfNotBlank(result, "insertText", item.insertText());
+        putIfNotBlank(result, "insertTextFormat", item.insertTextFormat());
+        putIfNotBlank(result, "source", item.source());
+        result.put("replaceRange", Map.of("startLine", cursor.line(), "startColumn", replaceStartColumn, "endLine", cursor.line(), "endColumn", cursor.column()));
+        return result;
+    }
+
+    private static Map<String, Object> toSymbolMap(JdbcSqlEditorServices.Symbol symbol)
+    {
+        if (symbol == null
+                || isBlank(symbol.kind())
+                || isBlank(symbol.name()))
+        {
+            return null;
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("kind", symbol.kind());
+        result.put("name", symbol.name());
+        putIfNotBlank(result, "fullName", symbol.fullName());
+        putIfNotBlank(result, "detail", symbol.detail());
+        if (symbol.attributes() != null
+                && !symbol.attributes()
+                        .isEmpty())
+        {
+            result.put("attributes", symbol.attributes());
+        }
+        return result;
+    }
+
+    private static JdbcSqlEditorServices.Symbol fromSymbolMap(Map<String, Object> map)
+    {
+        if (map == null
+                || isBlank(Objects.toString(map.get("kind"), null))
+                || isBlank(Objects.toString(map.get("name"), null)))
+        {
+            return null;
+        }
+        Map<String, Object> attributes = new LinkedHashMap<>();
+        Object rawAttributes = map.get("attributes");
+        if (rawAttributes instanceof Map<?, ?> rawMap)
+        {
+            for (Map.Entry<?, ?> entry : rawMap.entrySet())
+            {
+                if (entry.getKey() instanceof String key)
+                {
+                    attributes.put(key, entry.getValue());
+                }
+            }
+        }
+        return new JdbcSqlEditorServices.Symbol(Objects.toString(map.get("kind"), null), Objects.toString(map.get("name"), null), Objects.toString(map.get("fullName"), null),
+                Objects.toString(map.get("detail"), null), attributes.isEmpty() ? null
+                        : Map.copyOf(attributes));
+    }
+
+    private static SqlParseContext parseContext(String value)
+    {
+        if (isBlank(value))
+        {
+            return SqlParseContext.OTHER;
+        }
+        try
+        {
+            return SqlParseContext.valueOf(value);
+        }
+        catch (IllegalArgumentException e)
+        {
+            return SqlParseContext.OTHER;
+        }
+    }
+
+    private static void putIfNotBlank(Map<String, Object> target, String key, String value)
+    {
+        if (!isBlank(value))
+        {
+            target.put(key, value);
+        }
     }
 
     // -- Internal helpers --

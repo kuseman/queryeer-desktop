@@ -30,7 +30,6 @@ import com.queryeer.backend.api.SettingsModule;
 import com.queryeer.backend.api.parse.IncrementalParseFunction;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
-import com.queryeer.backend.queryengine.sql.parser.SqlCompletionSupport;
 import com.queryeer.backend.queryengine.sql.parser.TreeSitterSqlParseFunction;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
@@ -85,6 +84,7 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
     private final PayloadMapper payloadMapper;
     private final IncrementalParseSessionService parseSessions;
     private final IncrementalParseFunction parseFunction;
+    private final PayloadbuilderSqlSemanticHandler sqlSemanticHandler;
 
     //@formatter:off
     PayloadbuilderQueryEngineProvider(
@@ -100,6 +100,7 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
         this.catalogProviders = requireNonNull(catalogProviders, "catalogProviders");
         this.parseSessions = requireNonNull(parseSessions, "parseSessions");
         this.parseFunction = requireNonNull(parseFunction, "parseFunction");
+        this.sqlSemanticHandler = new PayloadbuilderSqlSemanticHandler(payloadMapper, parseSessions, engineId(), catalogProviders);
     }
 
     @Override
@@ -276,14 +277,17 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
         }
         if ("sql.complete".equals(action))
         {
-            return sqlComplete(fileId, payload);
+            return sqlSemanticHandler.complete(fileId, payload);
+        }
+        if ("sql.hover".equals(action))
+        {
+            return sqlSemanticHandler.hover(fileId, payload);
+        }
+        if ("sql.symbolAtPosition".equals(action))
+        {
+            return sqlSemanticHandler.symbolAtPosition(fileId, payload);
         }
         return catalogProviders.invoke(action, payload);
-    }
-
-    private Object sqlComplete(String fileId, Object payload)
-    {
-        return SqlCompletionSupport.complete(payloadMapper, parseSessions, engineId(), fileId, payload);
     }
 
     private CatalogRegistry buildCatalogRegistry(PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
@@ -401,6 +405,8 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
         actions.add("engine.capabilities");
         actions.add("sql.parse.snapshot");
         actions.add("sql.complete");
+        actions.add("sql.hover");
+        actions.add("sql.symbolAtPosition");
         actions.addAll(catalogProviders.actions());
         return actions;
     }

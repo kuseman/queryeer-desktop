@@ -147,7 +147,7 @@ class JdbcSqlSemanticHandlerTest
                 from table_that_not_exists
                 where externalId = '1234'
                 """;
-        SqlHoverSupport.SqlHoverPayload payload = new SqlHoverSupport.SqlHoverPayload("file1", sql, new SqlHoverSupport.SqlHoverCursor(3, 9), CONN_ID, "db1");
+        SqlHoverSupport.SqlHoverPayload payload = new SqlHoverSupport.SqlHoverPayload("file1", sql, new SqlHoverSupport.SqlHoverCursor(3, 9), CONN_ID, "db1", null);
 
         @SuppressWarnings("unchecked")
         Map<String, Object> result = (Map<String, Object>) SqlHoverSupport.hover(new JacksonPayloadMapper(), mock(IncrementalParseSessionService.class), "test-engine", "file1", payload,
@@ -168,7 +168,7 @@ class JdbcSqlSemanticHandlerTest
                     WHERE du.email = u.name
                 )
                 """;
-        SqlHoverSupport.SqlHoverPayload payload = new SqlHoverSupport.SqlHoverPayload("file1", sql, new SqlHoverSupport.SqlHoverCursor(6, 17), CONN_ID, "db1");
+        SqlHoverSupport.SqlHoverPayload payload = new SqlHoverSupport.SqlHoverPayload("file1", sql, new SqlHoverSupport.SqlHoverCursor(6, 17), CONN_ID, "db1", null);
 
         @SuppressWarnings("unchecked")
         Map<String, Object> result = (Map<String, Object>) SqlHoverSupport.hover(new JacksonPayloadMapper(), mock(IncrementalParseSessionService.class), "test-engine", "file1", payload,
@@ -193,7 +193,7 @@ class JdbcSqlSemanticHandlerTest
                     WHERE du.email = u.name
                 )
                 """;
-        SqlHoverSupport.SqlHoverPayload payload = new SqlHoverSupport.SqlHoverPayload("file1", sql, new SqlHoverSupport.SqlHoverCursor(6, 27), CONN_ID, "db1");
+        SqlHoverSupport.SqlHoverPayload payload = new SqlHoverSupport.SqlHoverPayload("file1", sql, new SqlHoverSupport.SqlHoverCursor(6, 27), CONN_ID, "db1", null);
 
         @SuppressWarnings("unchecked")
         Map<String, Object> result = (Map<String, Object>) SqlHoverSupport.hover(new JacksonPayloadMapper(), mock(IncrementalParseSessionService.class), "test-engine", "file1", payload,
@@ -218,7 +218,7 @@ class JdbcSqlSemanticHandlerTest
                     WHERE du.email = u.name
                 )
                 """;
-        SqlHoverSupport.SqlHoverPayload payload = new SqlHoverSupport.SqlHoverPayload("file1", sql, new SqlHoverSupport.SqlHoverCursor(5, 20), CONN_ID, "db1");
+        SqlHoverSupport.SqlHoverPayload payload = new SqlHoverSupport.SqlHoverPayload("file1", sql, new SqlHoverSupport.SqlHoverCursor(5, 20), CONN_ID, "db1", null);
 
         @SuppressWarnings("unchecked")
         Map<String, Object> result = (Map<String, Object>) SqlHoverSupport.hover(new JacksonPayloadMapper(), mock(IncrementalParseSessionService.class), "test-engine", "file1", payload,
@@ -243,7 +243,7 @@ class JdbcSqlSemanticHandlerTest
                     WHERE du.email = u.name
                 )
                 """;
-        SqlHoverSupport.SqlHoverPayload payload = new SqlHoverSupport.SqlHoverPayload("file1", sql, new SqlHoverSupport.SqlHoverCursor(5, 26), CONN_ID, "db1");
+        SqlHoverSupport.SqlHoverPayload payload = new SqlHoverSupport.SqlHoverPayload("file1", sql, new SqlHoverSupport.SqlHoverCursor(5, 26), CONN_ID, "db1", null);
 
         @SuppressWarnings("unchecked")
         Map<String, Object> result = (Map<String, Object>) SqlHoverSupport.hover(new JacksonPayloadMapper(), mock(IncrementalParseSessionService.class), "test-engine", "file1", payload,
@@ -302,13 +302,13 @@ class JdbcSqlSemanticHandlerTest
 
     private Map<String, Object> invokeTableHover(String connectionId, String database, String token)
     {
-        return handler.semanticHover(new SqlHoverSupport.SqlHoverPayload("file1", null, new SqlHoverSupport.SqlHoverCursor(1, 1), connectionId, database), "file1",
+        return handler.semanticHover(new SqlHoverSupport.SqlHoverPayload("file1", null, new SqlHoverSupport.SqlHoverCursor(1, 1), connectionId, database, null), "file1",
                 new SqlHoverSupport.SqlHoverCursor(1, 1), token, SqlParseContext.TABLE_REFERENCE, Map.of());
     }
 
     private Map<String, Object> invokeColumnHover(String connectionId, String database, String token)
     {
-        return handler.semanticHover(new SqlHoverSupport.SqlHoverPayload("file1", null, new SqlHoverSupport.SqlHoverCursor(1, 1), connectionId, database), "file1",
+        return handler.semanticHover(new SqlHoverSupport.SqlHoverPayload("file1", null, new SqlHoverSupport.SqlHoverCursor(1, 1), connectionId, database, null), "file1",
                 new SqlHoverSupport.SqlHoverCursor(1, 1), token, SqlParseContext.COLUMN_REFERENCE, Map.of());
     }
 

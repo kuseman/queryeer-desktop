@@ -530,7 +530,7 @@ Success result:
 ```json
 {
   "result": {
-    "actions": ["engine.capabilities", "payloadbuilder.es.listIndices", "payloadbuilder.kafka.listTopics"],
+    "actions": ["engine.capabilities", "sql.complete", "sql.hover", "sql.symbolAtPosition", "payloadbuilder.es.listIndices", "payloadbuilder.kafka.listTopics"],
     "catalogIds": ["jdbc", "elasticsearch", "kafka", "filesystem", "http"]
   },
   "features": ["rows", "plan"],
@@ -575,7 +575,59 @@ Rules:
 - `payload` and `result` are opaque to the core protocol and transported as `unknown` JSON.
 - Backends SHOULD return `ENGINE_NOT_FOUND` for unknown `engineId` and `VALIDATION` for unsupported or invalid actions.
 
-JDBC semantic action `sql.symbolAtPosition` request payload:
+SQL semantic action `sql.complete` request payload:
+
+```json
+{
+  "fileId": "file-001",
+  "version": 42,
+  "text": "select * from sales.dbo.ord",
+  "cursor": { "line": 1, "column": 27 },
+  "connectionId": "conn-001",
+  "database": "master",
+  "engineState": {
+    "payloadbuilder": {
+      "defaultCatalogAlias": "jdbc1",
+      "catalogs": {
+        "jdbc1": { "catalogId": "Jdbc", "properties": { "connectionId": "conn-001" } }
+      }
+    }
+  },
+  "trigger": { "kind": "triggerCharacter", "character": "." },
+  "limits": { "maxItems": 100 }
+}
+```
+
+SQL semantic action `sql.complete` result:
+
+```json
+{
+  "items": [
+    {
+      "label": "orders",
+      "kind": "table",
+      "detail": "Payloadbuilder table",
+      "documentation": "Optional markdown/plain text documentation",
+      "sortText": "orders",
+      "filterText": "orders",
+      "insertText": "orders",
+      "insertTextFormat": "plain",
+      "commitCharacters": ["."],
+      "replaceRange": { "startLine": 1, "startColumn": 19, "endLine": 1, "endColumn": 27 },
+      "source": "jdbc1"
+    }
+  ],
+  "isIncomplete": false,
+  "context": {
+    "fileId": "file-001",
+    "requestedVersion": 42,
+    "snapshotVersion": 42,
+    "usedFallback": false
+  }
+}
+```
+
+SQL semantic action `sql.hover` request payload:
 
 ```json
 {
@@ -583,11 +635,51 @@ JDBC semantic action `sql.symbolAtPosition` request payload:
   "text": "select * from sales.dbo.orders",
   "cursor": { "line": 1, "column": 25 },
   "connectionId": "conn-001",
-  "database": "master"
+  "database": "master",
+  "engineState": {
+    "payloadbuilder": {
+      "defaultCatalogAlias": "jdbc1",
+      "catalogs": {
+        "jdbc1": { "catalogId": "Jdbc", "properties": { "connectionId": "conn-001" } }
+      }
+    }
+  }
 }
 ```
 
-JDBC semantic action `sql.symbolAtPosition` result, or `null` when no symbol is resolved:
+SQL semantic action `sql.hover` result, or `null` when no hover is resolved:
+
+```json
+{
+  "contents": [
+    { "value": "### orders\n\nPayloadbuilder table", "isTrusted": false }
+  ],
+  "context": "TABLE_REFERENCE",
+  "token": "orders"
+}
+```
+
+SQL semantic action `sql.symbolAtPosition` request payload:
+
+```json
+{
+  "fileId": "file-001",
+  "text": "select * from sales.dbo.orders",
+  "cursor": { "line": 1, "column": 25 },
+  "connectionId": "conn-001",
+  "database": "master",
+  "engineState": {
+    "payloadbuilder": {
+      "defaultCatalogAlias": "jdbc1",
+      "catalogs": {
+        "jdbc1": { "catalogId": "Jdbc", "properties": { "connectionId": "conn-001" } }
+      }
+    }
+  }
+}
+```
+
+SQL semantic action `sql.symbolAtPosition` result, or `null` when no symbol is resolved:
 
 ```json
 {
@@ -608,6 +700,9 @@ JDBC semantic action `sql.symbolAtPosition` result, or `null` when no symbol is 
 Rules:
 
 - `engineState` is an engine-owned opaque blob. Core protocol forwards it without interpretation.
+- SQL semantic action `connectionId` and `database` fields are used by JDBC; `engineState` carries the same engine-owned state shape used by `queryengine.execute` and is used by Payloadbuilder catalog developer tools.
+- Desktop injects current execution context provider state into semantic action payloads before sending `queryengine.invoke`.
+- Payloadbuilder semantic actions only query metadata for catalog providers that explicitly opt in through `PayloadbuilderCatalogSqlEditorServices`. The Payloadbuilder JDBC catalog delegates to the shared JDBC SQL editor services; the generic built-in implementation for other catalogs uses Payloadbuilder catalog system tables/functions and must not query non-opted-in catalogs.
 - Engines SHOULD only return changed values in patches.
 - `features` declares output capabilities such as `rows` and `plan`. If omitted, clients use `rows` by convention.
 - `artifacts` carries non-row output payloads. Graph artifacts MUST follow the `GraphDocument` contract below.
@@ -835,7 +930,8 @@ Current Java stdio scaffold implementation status:
 - `queryengine.execute` implemented (mocked progressive notifications); `fileId` is required and validated
 - `queryengine.cancel` implemented (mocked cancellation notification)
 - `backend.runtimeStatus` implemented
-- JDBC provider actions include `jdbc.schema.snapshot` (latest cached snapshot by `connectionId` and optional `scope`), `jdbc.schema.refresh` (synchronous refresh + cache persist with scope-aware behavior), `sql.symbolAtPosition` (returns symbol `name`, `fullName`, `detail`, and attributes for table/view names under the cursor), and `sql.hover` (returns pre-formatted markdown for table/column names under the cursor, resolved from H2 DEEP snapshot only)
+- JDBC provider actions include `jdbc.schema.snapshot` (latest cached snapshot by `connectionId` and optional `scope`), `jdbc.schema.refresh` (synchronous refresh + cache persist with scope-aware behavior), `sql.complete` (schema-aware SQL completions from the cached snapshot), `sql.symbolAtPosition` (returns symbol `name`, `fullName`, `detail`, and attributes for table/view names under the cursor), and `sql.hover` (returns pre-formatted markdown for table/column names under the cursor, resolved from H2 DEEP snapshot only)
+- Payloadbuilder provider actions include `sql.complete`, `sql.hover`, and `sql.symbolAtPosition`. These actions are backed by opt-in catalog developer tools; built-in `jdbc` delegates to the shared JDBC schema developer-tools service, while `elasticsearch`, `kafka`, `filesystem`, and `http` opt into the generic system-table implementation.
 - JDBC provider action `jdbc.schema.fetch` resolves connection settings by `connectionId` only; fetch payload supports `connectionId`, `scope`, and optional `target` (no inline connection overrides).
 - JDBC provider action `jdbc.schema.status` returns crawl status/statistics for all configured connections (or a single connection when `connectionId` is provided). Each status entry includes: `connectionId`, `connectionTitle`, `scope` (`top`|`deep`), `databaseKey` (null for top), `lastSuccessAt`, `lastAttemptAt`, `lastFailureAt`, `nextDueAt`, `consecutiveFailures`, `usageScore`, `enabled`, `objectCount`, `lastError`.
 - JDBC provider action `jdbc.connection.test` accepts `{ "connectionId": "..." }` whole body for a connection.

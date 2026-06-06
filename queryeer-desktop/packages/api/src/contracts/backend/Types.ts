@@ -343,6 +343,7 @@ export type SymbolAtPositionInvokePayload = {
   cursor: { line: number; column: number };
   connectionId?: string;
   database?: string;
+  engineState?: unknown;
 };
 
 export type SymbolAtPositionInvokeResult = {
@@ -361,6 +362,7 @@ export type SqlCompleteInvokePayload = {
   text?: string;
   connectionId?: string;
   database?: string;
+  engineState?: unknown;
   cursor: { line: number; column: number };
   trigger?: { kind: "invoke" | "triggerCharacter" | "retrigger"; character?: string };
   limits?: { maxItems?: number };
@@ -401,6 +403,7 @@ export type SqlHoverInvokePayload = {
   text?: string;
   connectionId?: string;
   database?: string;
+  engineState?: unknown;
   cursor: { line: number; column: number };
 };
 
