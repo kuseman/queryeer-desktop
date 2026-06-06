@@ -8,7 +8,9 @@ import java.util.Objects;
 import com.queryeer.backend.api.PayloadUtils;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
 import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
+import com.queryeer.backend.queryengine.jdbc.JdbcSqlEditorServices;
 import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
+import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogSqlEditorServices;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
 import se.kuseman.payloadbuilder.api.execution.IQuerySession;
@@ -23,10 +25,12 @@ public final class JdbcCatalogProvider implements PayloadbuilderCatalogProviderC
     private static final JdbcCatalog CATALOG = new JdbcCatalog();
 
     private final JdbcRuntimeService jdbcRuntimeService;
+    private final PayloadbuilderCatalogSqlEditorServices editorServices;
 
-    public JdbcCatalogProvider(JdbcRuntimeService jdbcRuntimeService)
+    public JdbcCatalogProvider(JdbcRuntimeService jdbcRuntimeService, JdbcSqlEditorServices jdbcSqlEditorServices)
     {
         this.jdbcRuntimeService = Objects.requireNonNull(jdbcRuntimeService, "jdbcRuntimeService");
+        this.editorServices = new PayloadbuilderJdbcSqlEditorServices(Objects.requireNonNull(jdbcSqlEditorServices, "jdbcSqlEditorServices"));
     }
 
     @Override
@@ -39,6 +43,12 @@ public final class JdbcCatalogProvider implements PayloadbuilderCatalogProviderC
     public Catalog createCatalog()
     {
         return CATALOG;
+    }
+
+    @Override
+    public PayloadbuilderCatalogSqlEditorServices editorServices()
+    {
+        return editorServices;
     }
 
     @Override

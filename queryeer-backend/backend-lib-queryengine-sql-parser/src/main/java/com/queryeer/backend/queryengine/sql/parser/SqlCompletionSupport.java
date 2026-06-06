@@ -193,7 +193,7 @@ public final class SqlCompletionSupport
         return linePrefix.substring(start);
     }
 
-    public record SqlCompletePayload(String fileId, Long version, String text, String connectionId, String database, SqlCompleteCursor cursor, SqlCompleteLimits limits)
+    public record SqlCompletePayload(String fileId, Long version, String text, String connectionId, String database, Object engineState, SqlCompleteCursor cursor, SqlCompleteLimits limits)
     {
     }
 
@@ -242,11 +242,38 @@ public final class SqlCompletionSupport
         // Guard: if the deepest node's own text is not identifier-like (e.g. an ERROR
         // node spanning multiple tokens, or the cursor landed on whitespace), fall back
         // to raw-text scanning which is immune to tree-sitter byte-range issues.
+        // Also fall back if the node or its parent contains catalog separator '#' —
+        // tree-sitter may not span the full catalog.schema.table, so raw scan gives the complete name.
         int leafStart = node.getStartByte();
         int leafEnd = node.getEndByte();
+        String leafText = leafEnd <= text.length() ? text.substring(leafStart, leafEnd)
+                : "";
+        boolean leafOrParentHasCatalogPrefix = leafText.contains("#");
+        if (!leafOrParentHasCatalogPrefix
+                && node.getParent() != null
+                && !node.getParent()
+                        .isNull())
+        {
+            int parentStart = node.getParent()
+                    .getStartByte();
+            int parentEnd = node.getParent()
+                    .getEndByte();
+            if (parentEnd <= text.length())
+            {
+                leafOrParentHasCatalogPrefix = text.substring(parentStart, parentEnd)
+                        .contains("#");
+            }
+        }
+        String rawIdentifier = identifierTextAtCursor(text, line, column);
+        if (rawIdentifier != null
+                && rawIdentifier.contains("#"))
+        {
+            return rawIdentifier;
+        }
         if (leafEnd > text.length()
                 || leafStart >= leafEnd
-                || !isIdentifierText(text.substring(leafStart, leafEnd)))
+                || !isIdentifierText(leafText)
+                || leafOrParentHasCatalogPrefix)
         {
             return identifierTextAtCursor(text, line, column);
         }
@@ -319,19 +346,35 @@ public final class SqlCompletionSupport
         {
             return null;
         }
-        // Backward scan for the prefix
+        // Backward scan for the prefix (including catalog qualifier with #)
         int prefixStart = col0;
-        while (prefixStart > 0
-                && isIdentifierChar(lineText.charAt(prefixStart - 1)))
+        while (prefixStart > 0)
         {
-            prefixStart--;
+            char c = lineText.charAt(prefixStart - 1);
+            if (isIdentifierChar(c)
+                    || c == '.')
+            {
+                prefixStart--;
+            }
+            else
+            {
+                break;
+            }
         }
-        // Forward scan for the suffix
+        // Forward scan for the suffix (including schema.table with .)
         int suffixEnd = col0;
-        while (suffixEnd < lineText.length()
-                && isIdentifierChar(lineText.charAt(suffixEnd)))
+        while (suffixEnd < lineText.length())
         {
-            suffixEnd++;
+            char c = lineText.charAt(suffixEnd);
+            if (isIdentifierChar(c)
+                    || c == '.')
+            {
+                suffixEnd++;
+            }
+            else
+            {
+                break;
+            }
         }
         if (prefixStart >= suffixEnd)
         {
@@ -365,6 +408,7 @@ public final class SqlCompletionSupport
         return Character.isLetterOrDigit(c)
                 || c == '_'
                 || c == '.'
+                || c == '#'
                 || c == '['
                 || c == ']'
                 || c == '"'

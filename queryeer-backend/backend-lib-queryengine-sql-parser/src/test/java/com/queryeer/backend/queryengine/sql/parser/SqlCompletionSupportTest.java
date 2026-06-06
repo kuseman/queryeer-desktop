@@ -34,7 +34,7 @@ class SqlCompletionSupportTest
     {
         PayloadMapper payloadMapper = new JacksonPayloadMapper();
         IncrementalParseSessionService parseSessions = new EmptyParseSessionService();
-        SqlCompletionSupport.SqlCompletePayload payload = new SqlCompletionSupport.SqlCompletePayload("file-1", 4L, "sel", null, null, new SqlCompletionSupport.SqlCompleteCursor(1, 4), null);
+        SqlCompletionSupport.SqlCompletePayload payload = new SqlCompletionSupport.SqlCompletePayload("file-1", 4L, "sel", null, null, null, new SqlCompletionSupport.SqlCompleteCursor(1, 4), null);
 
         Object result = assertDoesNotThrow(() -> SqlCompletionSupport.complete(payloadMapper, parseSessions, "jdbc", null, payload));
         Map<String, Object> map = assertInstanceOf(Map.class, result);
@@ -225,6 +225,30 @@ class SqlCompletionSupportTest
         // Cursor on 't1' part of 'dbo.t1' (column 19 = 't' of t1)
         String result = SqlCompletionSupport.identifierAtPosition(new EmptyParseSessionService(), "jdbc", "file-1", "SELECT * FROM dbo.t1", 1, 19);
         assertEquals("dbo.t1", result);
+    }
+
+    @Test
+    void identifierAtPositionReturnsCatalogQualifiedName()
+    {
+        // Cursor on 'tables' in 'jdbc#sys.tables' (column 27 = 't' of tables)
+        String result = SqlCompletionSupport.identifierAtPosition(new EmptyParseSessionService(), "payloadbuilder", "file-1", "SELECT * FROM jdbc#sys.tables", 1, 27);
+        assertEquals("jdbc#sys.tables", result);
+    }
+
+    @Test
+    void identifierAtPositionReturnsCatalogQualifiedNameWhenOnMiddlePart()
+    {
+        // Cursor on 'sys' in 'jdbc#sys.tables' (column 22 = 's' of sys)
+        String result = SqlCompletionSupport.identifierAtPosition(new EmptyParseSessionService(), "payloadbuilder", "file-1", "SELECT * FROM jdbc#sys.tables", 1, 22);
+        assertEquals("jdbc#sys.tables", result);
+    }
+
+    @Test
+    void identifierAtPositionReturnsCatalogQualifiedNameWithoutSchemaSeparator()
+    {
+        // Cursor on 'products' in 'sem#products' (column 20 = 'r' of products)
+        String result = SqlCompletionSupport.identifierAtPosition(new EmptyParseSessionService(), "payloadbuilder", "file-1", "SELECT * FROM sem#products", 1, 20);
+        assertEquals("sem#products", result);
     }
 
     @Test

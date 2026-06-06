@@ -46,6 +46,10 @@ export function getQueryEngineService(): QueryEngineService {
   return serviceInstance;
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export class QueryEngineService {
   private readonly executionListeners = new Map<string, Set<QueryEventListener>>();
   private readonly globalEventListeners = new Set<GlobalQueryEventListener>();
@@ -273,8 +277,9 @@ export class QueryEngineService {
 
   async invoke(params: EngineInvokeParams, options?: { silent?: boolean }): Promise<unknown> {
     await ensureBackendHealthy();
+    const decoratedParams = this.decorateInvokeParams(params);
     const response = await withVaultRetry(async () => {
-      const resp = await window.appShell.invokeBackendEngine(params);
+      const resp = await window.appShell.invokeBackendEngine(decoratedParams);
       if (resp.error?.code === "SECURITY_SESSION_CLOSED") {
         throw new Error(`SECURITY_SESSION_CLOSED: ${resp.error.message}`);
       }
@@ -397,6 +402,30 @@ export class QueryEngineService {
       }
     }
     return next;
+  }
+
+  private decorateInvokeParams(params: EngineInvokeParams): EngineInvokeParams {
+    const payload = params.payload;
+    if (!params.fileId || !isObjectRecord(payload) || Object.prototype.hasOwnProperty.call(payload, "engineState")) {
+      return params;
+    }
+
+    const decorated = this.decorateExecuteParams({
+      engineId: params.engineId,
+      fileId: params.fileId,
+      text: typeof payload.text === "string" ? payload.text : ""
+    });
+    if (decorated.engineState === undefined) {
+      return params;
+    }
+
+    return {
+      ...params,
+      payload: {
+        ...payload,
+        engineState: decorated.engineState
+      }
+    };
   }
 
   private resolveEngineId(params: Omit<ExecuteParams, "engineId">): string | undefined {

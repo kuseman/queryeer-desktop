@@ -82,7 +82,7 @@ public final class SqlHoverSupport
         return null;
     }
 
-    public record SqlHoverPayload(String fileId, String text, SqlHoverCursor cursor, String connectionId, String database)
+    public record SqlHoverPayload(String fileId, String text, SqlHoverCursor cursor, String connectionId, String database, Object engineState)
     {
     }
 

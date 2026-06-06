@@ -40,6 +40,7 @@ import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaStore;
 import com.queryeer.backend.queryengine.jdbc.CancellableJdbcQueryExecutor;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
+import com.queryeer.backend.queryengine.jdbc.JdbcSqlEditorServices;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryEventListener;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryRequest;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryResult;
@@ -139,6 +140,11 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     public String engineId()
     {
         return ENGINE_ID;
+    }
+
+    JdbcSqlEditorServices editorServices()
+    {
+        return sqlSemanticHandler;
     }
 
     @Override
@@ -338,9 +344,9 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             case ACTION_CONNECTION_SESSIONS -> connectionSessions();
             case ACTION_CONNECTION_SESSION_CLOSE -> connectionSessionClose(payload);
             case ACTION_SQL_PARSE_SNAPSHOT -> sqlSemanticHandler.parseSnapshot(fileId);
-            case ACTION_SQL_COMPLETE -> sqlSemanticHandler.complete(fileId, payload);
+            case ACTION_SQL_COMPLETE -> sqlSemanticHandler.completeInvoke(fileId, payload);
             case ACTION_SQL_SYMBOL_AT_POSITION -> sqlSemanticHandler.symbolAtPosition(fileId, payload);
-            case ACTION_SQL_HOVER -> sqlSemanticHandler.hover(fileId, payload);
+            case ACTION_SQL_HOVER -> sqlSemanticHandler.hoverInvoke(fileId, payload);
             case ACTION_ENGINE_CAPABILITIES -> engineCapabilities();
             default -> QueryEngineProvider.super.invoke(fileId, action, payload);
         };

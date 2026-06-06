@@ -68,6 +68,9 @@ export class CoreSecurityService {
     }
     const response = await this.bridge.unlockWithStored();
     await this.showNoticeIfNeeded("Security Startup Unlock", response);
+    if (response.accepted) {
+      void this.getStatus();
+    }
     return response;
   }
 
@@ -77,6 +80,7 @@ export class CoreSecurityService {
       masterPasswordStorage: this.getMasterPasswordStorage()
     });
     this.unlockedHint = response.accepted;
+    void this.getStatus();
     return response;
   }
 
@@ -176,6 +180,7 @@ export class CoreSecurityService {
       await this.showNoticeIfNeeded("Security Startup Unlock", response);
       if (response.accepted) {
         this.unlockedHint = true;
+        void this.getStatus();
         return true;
       }
     }
@@ -235,6 +240,7 @@ export class CoreSecurityService {
       masterPasswordStorage: this.getMasterPasswordStorage()
     });
     await this.showNoticeIfNeeded("Security Master Password", response);
+    void this.getStatus();
     return response;
   }
 

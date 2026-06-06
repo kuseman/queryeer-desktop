@@ -203,6 +203,76 @@ describe("QueryEngineService backend readiness", () => {
     );
   });
 
+  it("decorates object invoke payloads with execution context provider engineState", async () => {
+    const invokeBackendEngine = vi.fn(async () => ({ result: { ok: true } }));
+    window.appShell = {
+      ...originalAppShell,
+      getBackendStatus: async () => ({
+        mode: "mock-stdio",
+        state: "healthy",
+        supportedCapabilities: [],
+        activeExecutionIds: [],
+        recentExecutions: [],
+        backendLogs: []
+      }),
+      invokeBackendEngine
+    };
+
+    const service = new QueryEngineService();
+    service.registerExecutionContextProvider((params) => {
+      if (params.engineId !== "payloadbuilder") {
+        return undefined;
+      }
+      return { engineState: { payloadbuilder: { catalogs: { fake: { catalogId: "example.fake" } } } } };
+    });
+
+    await service.invoke({
+      engineId: "payloadbuilder",
+      fileId: "file-1",
+      action: "sql.complete",
+      payload: { text: "select * from ", cursor: { line: 1, column: 15 } }
+    });
+
+    expect(invokeBackendEngine).toHaveBeenCalledWith(expect.objectContaining({
+      payload: expect.objectContaining({
+        engineState: { payloadbuilder: { catalogs: { fake: { catalogId: "example.fake" } } } }
+      })
+    }));
+  });
+
+  it("does not overwrite explicit invoke payload engineState", async () => {
+    const invokeBackendEngine = vi.fn(async () => ({ result: { ok: true } }));
+    window.appShell = {
+      ...originalAppShell,
+      getBackendStatus: async () => ({
+        mode: "mock-stdio",
+        state: "healthy",
+        supportedCapabilities: [],
+        activeExecutionIds: [],
+        recentExecutions: [],
+        backendLogs: []
+      }),
+      invokeBackendEngine
+    };
+
+    const service = new QueryEngineService();
+    service.registerExecutionContextProvider(() => ({
+      engineState: { payloadbuilder: { catalogs: { fromProvider: { catalogId: "provider" } } } }
+    }));
+
+    const explicitState = { payloadbuilder: { catalogs: { explicit: { catalogId: "explicit" } } } };
+    await service.invoke({
+      engineId: "payloadbuilder",
+      fileId: "file-1",
+      action: "sql.hover",
+      payload: { text: "select * from fake.products", cursor: { line: 1, column: 20 }, engineState: explicitState }
+    });
+
+    expect(invokeBackendEngine).toHaveBeenCalledWith(expect.objectContaining({
+      payload: expect.objectContaining({ engineState: explicitState })
+    }));
+  });
+
   it("emits queryengine.failed and clears state when unlock fails during execute", async () => {
     const executeBackendQuery = vi.fn(async () => ({ accepted: true, queryExecutionId: "q-backend" }));
     window.appShell = {
