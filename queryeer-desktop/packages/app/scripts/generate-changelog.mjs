@@ -54,12 +54,28 @@ function parseCommits(raw) {
     ["Other Changes", []]
   ]);
   for (const subject of raw.split(/\r?\n/).filter(Boolean)) {
-    if (/^release:|^chore: prepare for next development iteration/i.test(subject)) {
-      continue;
+    const entries = splitConventionalCommits(subject);
+    for (const entry of entries) {
+      if (/^release:|^chore: prepare for next development iteration/i.test(entry)) {
+        continue;
+      }
+      categories.get(categorize(entry)).push(formatSubject(entry));
     }
-    categories.get(categorize(subject)).push(formatSubject(subject));
   }
   return categories;
+}
+
+/** Split a commit subject line that may contain multiple conventional commits concatenated together. */
+function splitConventionalCommits(subject) {
+  const parts = subject.split(/\s(?=(?:feat|fix|chore|build|ci|docs|refactor|test)(?:\([^)]*\))?:\s)/);
+  const result = [];
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (trimmed && /^(?:feat|fix|chore|build|ci|docs|refactor|test)/i.test(trimmed)) {
+      result.push(trimmed);
+    }
+  }
+  return result.length > 0 ? result : [subject];
 }
 
 function writeReleaseSection(lines, version, categories) {
