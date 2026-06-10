@@ -53,7 +53,7 @@ public final class KafkaCatalogProvider implements PayloadbuilderCatalogProvider
         KafkaConnection connection = getConnection(connectionId);
         if (connection == null)
         {
-            throw new IllegalArgumentException("Connection with id: " + connectionId + " could not be found");
+            return;
         }
 
         String bootstrapServers = connection.bootstrapServers();

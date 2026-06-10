@@ -50,7 +50,7 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
         ElasticsearchConnection connection = getConnection(connectionId);
         if (connection == null)
         {
-            throw new IllegalArgumentException("Connection with id: " + connectionId + " could not be found");
+            return;
         }
 
         String index = stringValue(properties, KEY_INDEX);
