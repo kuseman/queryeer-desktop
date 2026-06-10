@@ -68,7 +68,7 @@ public final class JdbcCatalogProvider implements PayloadbuilderCatalogProviderC
                 .resolve(connectionId);
         if (jdbcConnection == null)
         {
-            throw new IllegalArgumentException("Connection with id: " + connectionId + " could not be found");
+            return;
         }
 
         querySession.setCatalogProperty(alias, JdbcCatalog.DRIVER_CLASSNAME, jdbcConnection.dialect()

@@ -1,7 +1,7 @@
 package com.queryeer.backend.plugin.payloadbuilder.elasticsearch;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
 import java.util.Map;
@@ -75,7 +75,7 @@ class ElasticsearchCatalogProviderTest
     }
 
     @Test
-    void resolveConnectionReturnsEmptyWhenNotFound()
+    void injectPropertiesDoesNotThrowWhenConnectionNotFound()
     {
         ConfigService config = new ConfigService()
         {
@@ -96,11 +96,11 @@ class ElasticsearchCatalogProviderTest
 
         ElasticsearchCatalogProvider provider = new ElasticsearchCatalogProvider(config, TEST_MAPPER);
         QuerySession session = new QuerySession(new CatalogRegistry());
-        assertThrows(IllegalArgumentException.class, () -> provider.injectProperties(session, "es", params));
+        assertDoesNotThrow(() -> provider.injectProperties(session, "es", params));
     }
 
     @Test
-    void resolveConnectionReturnsEmptyWhenModuleNull()
+    void injectPropertiesDoesNotThrowWhenModuleNull()
     {
         ConfigService config = new ConfigService()
         {
@@ -122,6 +122,32 @@ class ElasticsearchCatalogProviderTest
         Map<String, Object> params = Map.of("connectionId", "550e8400-e29b-41d4-a716-446655440100", "index", "myindex");
 
         QuerySession session = new QuerySession(new CatalogRegistry());
-        assertThrows(IllegalArgumentException.class, () -> provider.injectProperties(session, "es", params));
+        assertDoesNotThrow(() -> provider.injectProperties(session, "es", params));
+    }
+
+    @Test
+    void injectPropertiesDoesNotThrowWhenConnectionIdMissing()
+    {
+        ConfigService config = new ConfigService()
+        {
+            @Override
+            public String get(String key)
+            {
+                return null;
+            }
+
+            @Override
+            public SettingsModule getModule(String moduleId)
+            {
+                return null;
+            }
+        };
+
+        ElasticsearchCatalogProvider provider = new ElasticsearchCatalogProvider(config, TEST_MAPPER);
+
+        Map<String, Object> params = Map.of("index", "myindex");
+
+        QuerySession session = new QuerySession(new CatalogRegistry());
+        assertDoesNotThrow(() -> provider.injectProperties(session, "es", params));
     }
 }

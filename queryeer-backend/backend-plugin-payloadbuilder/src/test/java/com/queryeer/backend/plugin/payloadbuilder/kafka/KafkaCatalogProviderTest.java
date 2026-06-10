@@ -1,5 +1,6 @@
 package com.queryeer.backend.plugin.payloadbuilder.kafka;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -125,7 +126,7 @@ class KafkaCatalogProviderTest
     }
 
     @Test
-    void injectPropertiesThrowsWhenConnectionMissing()
+    void injectPropertiesDoesNotThrowWhenConnectionMissing()
     {
         ConfigService config = new ConfigService()
         {
@@ -150,7 +151,7 @@ class KafkaCatalogProviderTest
 
         KafkaCatalogProvider provider = new KafkaCatalogProvider(config, TEST_MAPPER);
         QuerySession session = new QuerySession(new CatalogRegistry());
-        assertThrows(IllegalArgumentException.class, () -> provider.injectProperties(session, "kfk", Map.of("connectionId", "missing")));
+        assertDoesNotThrow(() -> provider.injectProperties(session, "kfk", Map.of("connectionId", "missing")));
     }
 
     @Test
