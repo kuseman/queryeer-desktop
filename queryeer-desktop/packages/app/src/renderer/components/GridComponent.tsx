@@ -205,20 +205,21 @@ export function computeNextSelectionFromClick(input: {
   return { shouldApply: true, selection: nextSelection, anchor: nextAnchor };
 }
 
-function toGlideSelection(
+export function toGlideSelection(
   model: SelectionModel | null,
-  toVisualIndex: (dataCol: number) => number = (i) => i
+  toVisualIndex: (dataCol: number) => number = (i) => i,
+  anchor?: SelectionAnchor | null
 ): GridSelection {
   const rowSelection = (model?.cells ?? []).filter((cell) => cell.colIndex === -1).reduce((selection, cell) => selection.add(cell.row), CompactSelection.empty());
   const individualCells = (model?.cells ?? []).filter((cell) => cell.colIndex >= 0);
   const individualRanges = individualCells.map((cell) => ({ x: toVisualIndex(cell.colIndex), y: cell.row, width: 1, height: 1 }));
   if (!model?.rect) {
-    const first = individualCells[0];
+    const last = individualCells[individualCells.length - 1];
     return {
-      current: first ? {
-        cell: [toVisualIndex(first.colIndex), first.row],
-        range: { x: toVisualIndex(first.colIndex), y: first.row, width: 1, height: 1 },
-        rangeStack: individualRanges.slice(1),
+      current: last ? {
+        cell: [toVisualIndex(last.colIndex), last.row],
+        range: { x: toVisualIndex(last.colIndex), y: last.row, width: 1, height: 1 },
+        rangeStack: individualRanges.slice(0, -1),
       } : undefined,
       columns: CompactSelection.empty(),
       rows: rowSelection,
@@ -243,9 +244,11 @@ function toGlideSelection(
     x = Math.min(visStart, visEnd);
     width = Math.abs(visEnd - visStart) + 1;
   }
+  const activeCol = anchor ? toVisualIndex(anchor.colIndex) : visStart;
+  const activeRow = anchor ? anchor.row : model.rect.rowStart;
   return {
     current: {
-      cell: [visStart, model.rect.rowStart],
+      cell: [activeCol, activeRow],
       range: { x, y: model.rect.rowStart, width, height: model.rect.rowEnd - model.rect.rowStart + 1 },
       rangeStack: individualRanges,
     },
@@ -393,7 +396,7 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
   const [initialGridState] = useState(() => getInitialGridState?.());
   const initialSelection = useMemo(() => getInitialSelection?.() ?? { selection: null, anchor: null }, [getInitialSelection]);
   const [selection, setSelection] = useState<SelectionModel | null>(initialSelection.selection);
-  const [glideSelection, setGlideSelection] = useState<GridSelection>(() => toGlideSelection(initialSelection.selection));
+  const [glideSelection, setGlideSelection] = useState<GridSelection>(() => toGlideSelection(initialSelection.selection, undefined, initialSelection.anchor));
   const selectionRef = useRef<SelectionModel | null>(initialSelection.selection);
   const previousSelectionRef = useRef<SelectionModel | null>(initialSelection.selection);
   const anchorRef = useRef<SelectionAnchor | null>(initialSelection.anchor);
@@ -663,7 +666,7 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
     selectionRef.current = newSelection;
     anchorRef.current = newAnchor;
     setSelection(newSelection);
-    setGlideSelection(toGlideSelection(newSelection, getVisualIndex));
+    setGlideSelection(toGlideSelection(newSelection, getVisualIndex, newAnchor));
     onSelectionChange?.(newSelection, newAnchor);
   }, [getVisualIndex, onSelectionChange]);
 
