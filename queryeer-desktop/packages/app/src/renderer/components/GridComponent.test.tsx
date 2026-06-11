@@ -1,7 +1,8 @@
 import React, { act, createRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { GridComponent, type GridSearchHandle } from "./GridComponent";
+import { GridComponent, toGlideSelection, type GridSearchHandle } from "./GridComponent";
+import type { SelectionModel } from "../../plugins/core.queryengine.output.table/clipboard/CellSelectionModel";
 
 void React;
 
@@ -1586,6 +1587,43 @@ describe("GridComponent", () => {
     expect(lastCall?.rect?.selectedDataCols).toBeUndefined();
     expect(lastCall?.rect?.colIndexStart).toBe(0);
     expect(lastCall?.rect?.colIndexEnd).toBe(1);
+  });
+
+  it("toGlideSelection uses the last individual cell as the active cell", () => {
+    const cells: SelectionModel = {
+      rect: null,
+      cells: [
+        { row: 10, colIndex: 3 },
+        { row: 25, colIndex: 7 },
+        { row: 5, colIndex: 1 },
+      ],
+    };
+    // When there are multiple individual Ctrl+click cells and no rectangle,
+    // the current.cell MUST be the LAST cell so that glide's auto-scroll
+    // effect does not jump back to the first cell when adding a new cell.
+    expect(toGlideSelection(cells)).toMatchObject({
+      current: { cell: [1, 5] },
+    });
+    // rangeStack should contain all cells except the last
+    expect(toGlideSelection(cells).current?.rangeStack).toEqual([
+      { x: 3, y: 10, width: 1, height: 1 },
+      { x: 7, y: 25, width: 1, height: 1 },
+    ]);
+  });
+
+  it("toGlideSelection with a single cell uses that cell as active", () => {
+    const cells: SelectionModel = {
+      rect: null,
+      cells: [{ row: 7, colIndex: 2 }],
+    };
+    const result = toGlideSelection(cells);
+    expect(result.current?.cell).toEqual([2, 7]);
+    expect(result.current?.rangeStack).toEqual([]);
+  });
+
+  it("toGlideSelection with empty cells returns no current", () => {
+    expect(toGlideSelection(null)).toMatchObject({ current: undefined });
+    expect(toGlideSelection({ rect: null, cells: [] },)).toMatchObject({ current: undefined });
   });
 
   it("toGlideSelection shows correct visual range for non-contiguous selectedDataCols", async () => {
