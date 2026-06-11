@@ -29,7 +29,7 @@ export function buildSchemaGraph(
     id: `er-${sanitizeId(databaseName)}`,
     title: `ER Diagram - ${databaseName}`,
     layout: {
-      direction: "left-right",
+      direction: "top-bottom",
       rankSpacing: 100,
       nodeSpacing: 80,
     },

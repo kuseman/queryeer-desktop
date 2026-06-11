@@ -6,6 +6,7 @@ import { dagreGraphLayoutProvider, type GraphLayoutProvider, type PositionedGrap
 import { formatGraphPropertyValue, getGraphEntityActions, getGraphEntityProperties, getImportantProperties, resolveGraphEntity, validateGraphDocument } from "./graph-utils";
 import { getGraphNodeTypeRegistry } from "./graph-node-type-registry";
 import { getGraphViewState, setGraphViewState } from "./graph-view-state-store";
+import { getVisibleVertexIds, hasVisibleVertexEntry, setAllVerticesVisible, subscribeToVisibleVertices } from "./graph-visible-vertices-store";
 import "@xyflow/react/dist/style.css";
 import "./graph.css";
 
@@ -64,6 +65,19 @@ const layoutDirectionOptions: Array<{ value: GraphLayoutDirection; label: string
   { value: "right-left", label: "Right to left" }
 ];
 
+let defaultNodeTypes: NodeTypes | null = null;
+function getDefaultNodeTypes(): NodeTypes {
+  if (!defaultNodeTypes) {
+    const registry = getGraphNodeTypeRegistry();
+    const types: NodeTypes = { default: GraphVertexNode as unknown as NodeTypes[string] };
+    for (const [kind, component] of registry.getAll()) {
+      types[kind] = component as unknown as NodeTypes[string];
+    }
+    defaultNodeTypes = types;
+  }
+  return defaultNodeTypes;
+}
+
 export function GraphViewer({
   graph,
   viewStateKey,
@@ -82,6 +96,23 @@ export function GraphViewer({
   const [layoutDirectionOverride, setLayoutDirectionOverride] = useState<GraphLayoutDirection | "auto">(
     () => getGraphViewState(graphViewStateKey)?.layoutDirection ?? "auto"
   );
+  const [, forceRender] = useState(0);
+  useEffect(() => subscribeToVisibleVertices(() => forceRender((n) => n + 1)), []);
+  // Synchronously initialize the store if it's empty so the first render
+  // already sees the full vertex set; no flash, no race with the sidebar panel.
+  if (!hasVisibleVertexEntry(graphViewStateKey) && graph.vertices.length > 0) {
+    setAllVerticesVisible(graphViewStateKey, graph.vertices.map((v) => v.id), true);
+  }
+  const visibleVertexIds = getVisibleVertexIds(graphViewStateKey);
+  const expandedVertexIds = useMemo(() => {
+    if (visibleVertexIds.size === 0) return visibleVertexIds;
+    const expanded = new Set(visibleVertexIds);
+    for (const edge of graph.edges) {
+      if (visibleVertexIds.has(edge.sourceVertexId)) expanded.add(edge.targetVertexId);
+      if (visibleVertexIds.has(edge.targetVertexId)) expanded.add(edge.sourceVertexId);
+    }
+    return expanded;
+  }, [visibleVertexIds, graph.edges]);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const graphIdRef = useRef(graphViewStateKey);
   const layoutDirectionRef = useRef(layoutDirectionOverride);
@@ -93,6 +124,14 @@ export function GraphViewer({
   // Keep layoutDirectionRef in sync during render (graphIdRef is updated in effect to avoid
   // breaking the save-on-switch guard)
   layoutDirectionRef.current = layoutDirectionOverride;
+
+  const fitViewKeyRef = useRef(0);
+  useEffect(() => {
+    if (fitViewKeyRef.current > 0) {
+      rfInstanceRef.current?.fitView({ duration: 200 });
+    }
+    fitViewKeyRef.current++;
+  }, [expandedVertexIds]);
 
   const interaction = interactionStore
     ? externalInteraction
@@ -118,27 +157,31 @@ export function GraphViewer({
     ? graph.layout?.direction ?? "top-bottom"
     : layoutDirectionOverride;
 
-  const nodeTypes = useMemo<NodeTypes>(() => {
-    const registry = getGraphNodeTypeRegistry();
-    const types: NodeTypes = { default: GraphVertexNode as unknown as NodeTypes[string] };
-    for (const [kind, component] of registry.getAll()) {
-      types[kind] = component as unknown as NodeTypes[string];
-    }
-    return types;
-  }, []);
+  const nodeTypes = getDefaultNodeTypes();
+
+  const visibleGraph = useMemo<GraphDocument>(() => {
+    const visibleEdges = graph.edges.filter(
+      (e) => expandedVertexIds.has(e.sourceVertexId) && expandedVertexIds.has(e.targetVertexId)
+    );
+    return {
+      ...graph,
+      vertices: graph.vertices.filter((v) => expandedVertexIds.has(v.id)),
+      edges: visibleEdges,
+    };
+  }, [graph, expandedVertexIds]);
 
   const graphWithLayoutOverride = useMemo<GraphDocument>(() => {
     if (layoutDirectionOverride === "auto") {
-      return graph;
+      return visibleGraph;
     }
     return {
-      ...graph,
+      ...visibleGraph,
       layout: {
-        ...graph.layout,
+        ...visibleGraph.layout,
         direction: layoutDirectionOverride
       }
     };
-  }, [graph, layoutDirectionOverride]);
+  }, [visibleGraph, layoutDirectionOverride]);
 
   const positionedGraph = useMemo(() => layoutProvider.layout(graphWithLayoutOverride), [graphWithLayoutOverride, layoutProvider]);
 
@@ -169,7 +212,7 @@ export function GraphViewer({
 
   const edges = useMemo<FlowEdge[]>(() => {
     const vertexMap = new Map(graph.vertices.map((v) => [v.id, v]));
-    return graph.edges.map((edge) => {
+    return positionedGraph.edges.map((edge) => {
       const selected = selectedEntity?.type === "edge" && selectedEntity.entity.id === edge.id;
       const highlighted = highlightedEdgeIds.has(edge.id);
       const className = [
@@ -221,7 +264,7 @@ export function GraphViewer({
         }
       };
     });
-  }, [graph.edges, graph.vertices, highlightedEdgeIds, selectedEntity]);
+  }, [graph.vertices, highlightedEdgeIds, selectedEntity, positionedGraph.edges]);
 
   useEffect(() => {
     onSelectionChanged?.(selectedEntity);

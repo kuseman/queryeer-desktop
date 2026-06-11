@@ -201,7 +201,7 @@ describe("buildSchemaGraph", () => {
     const result = buildSchemaGraph([root], "testdb");
     expect(result.id).toBe("er-testdb");
     expect(result.title).toBe("ER Diagram - testdb");
-    expect(result.layout?.direction).toBe("left-right");
+    expect(result.layout?.direction).toBe("top-bottom");
     expect(result.vertices[0]!.id).toContain("table-");
   });
 

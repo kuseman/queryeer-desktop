@@ -1,0 +1,90 @@
+.jdbc-schema-graph-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  color: var(--text-0);
+}
+
+.jdbc-schema-graph-empty {
+  padding: 12px;
+  color: var(--text-1);
+  font-size: var(--ui-font-size-sm);
+}
+
+.jdbc-schema-graph-search {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.jdbc-schema-graph-search input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-2);
+  color: var(--text-0);
+  font-size: var(--ui-font-size-xs);
+}
+
+.jdbc-schema-graph-search input::placeholder {
+  color: var(--text-1);
+}
+
+.jdbc-schema-graph-count {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--ui-font-size-xs);
+  color: var(--text-1);
+}
+
+.jdbc-schema-graph-toggle-all {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: inherit;
+}
+
+.jdbc-schema-graph-toggle-all:hover {
+  text-decoration: underline;
+}
+
+.jdbc-schema-graph-count span {
+  margin-left: auto;
+}
+
+.jdbc-schema-graph-list {
+  overflow: auto;
+  padding: 4px 0;
+  flex: 1;
+}
+
+.jdbc-schema-graph-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: var(--ui-font-size-xs);
+  color: var(--text-0);
+}
+
+.jdbc-schema-graph-item:hover {
+  background: var(--bg-2);
+}
+
+.jdbc-schema-graph-item input[type="checkbox"] {
+  flex-shrink: 0;
+}
+
+.jdbc-schema-graph-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

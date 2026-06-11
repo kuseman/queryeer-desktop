@@ -34,6 +34,7 @@ import { subscribeJdbcQueryPlanDialectSupport } from "../core.queryengine/query-
 import { registerJdbcFlowNodeContribution } from "./flow-node-contribution";
 import { buildSchemaGraph } from "./jdbc-schema-graph-builder";
 import { SchemaTableNode } from "./SchemaTableNode";
+import { JdbcSchemaGraphPanel } from "./JdbcSchemaGraphPanel";
 import { GRAPH_DOCUMENT_MIME_TYPE, GRAPH_DOCUMENT_EXTENSION } from "../core.graph/constants";
 import { registerQueryEditorStatusItem } from "@queryeer/api/queryengine/QueryEditorStatusExtension";
 import { JdbcConnectionStatus } from "./JdbcConnectionStatus";
@@ -278,6 +279,18 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       render: () => <JdbcNavigationView context={context} />
     });
 
+    context.layout.registerView({
+      id: "core.queryengine.jdbc.schemaGraph",
+      title: "Schema Graph Tables",
+      defaultZone: "primarySidebar",
+      order: 35,
+      canCollapse: true,
+      flex: 1,
+      minHeight: 80,
+      when: "activeFile?.metadata?.schemaSource == 'jdbc'",
+      render: () => <JdbcSchemaGraphPanel context={context} />
+    });
+
     const treeContextMenu = getJdbcTreeContextMenuRegistry();
 
     // Register custom graph node types for TABLE/VIEW rendering
@@ -337,6 +350,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
           metadata: {
             ...(file.metadata ?? {}),
             workspaceTransient: true,
+            schemaSource: "jdbc",
             graphDocument: graph,
           },
         });
