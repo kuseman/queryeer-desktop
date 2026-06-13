@@ -1,4 +1,4 @@
-import { app, BrowserWindow, webContents, nativeImage, shell } from "electron";
+import { app, BrowserWindow, webContents, nativeImage, shell, screen, type Rectangle } from "electron";
 import { join } from "node:path";
 import { readFile, writeFile, readdir, stat, mkdir } from "node:fs/promises";
 import { memoryUsage, versions } from "node:process";
@@ -33,6 +33,7 @@ import { createBeforeQuitHandler } from "./app-shutdown.js";
 import { wireExpressionEvaluatorIpc } from "./expressions/expression-evaluator.js";
 import { defaultPluginsDirPath } from "./plugins/plugin-paths.js";
 import { defaultPluginsLockfilePath, PluginInventoryService } from "./plugins/plugin-inventory-service.js";
+import { defaultWindowStatePath, type WindowStateSnapshot, WindowStateStore } from "./window/window-state-store.js";
 
 const isDev = !app.isPackaged;
 const queryeerReleasesUrl = "https://api.github.com/repos/kuseman/queryeer-desktop/releases";
@@ -94,11 +95,13 @@ let queryExportStore: QueryExportStore | null = null;
 let recentFilesStore: RecentFilesStore | null = null;
 let securityService: SecurityService | null = null;
 let pluginInventoryService: PluginInventoryService | null = null;
+let windowStateStore: WindowStateStore | null = null;
 let mainWindow: BrowserWindow | null = null;
 
 const beforeQuitHandler = createBeforeQuitHandler({
   stopBackend: () => backendGateway.stop(),
   flushWorkspace: () => workspaceStore?.flush() ?? Promise.resolve(),
+  flushWindowState: () => windowStateStore?.flush() ?? Promise.resolve(),
   requestQuit: () => app.quit()
 });
 
@@ -107,14 +110,75 @@ const windowIconPath = join(__dirname, "../../resources/icons/icon-256.png");
 const dockIcon = nativeImage.createFromPath(dockIconPath);
 const windowIcon = nativeImage.createFromPath(windowIconPath);
 
-function createMainWindow(): void {
+const MAIN_WINDOW_DEFAULT_WIDTH = 1280;
+const MAIN_WINDOW_DEFAULT_HEIGHT = 800;
+const MAIN_WINDOW_MIN_WIDTH = 1024;
+const MAIN_WINDOW_MIN_HEIGHT = 640;
+
+type MainWindowCreateState = {
+  width: number;
+  height: number;
+  x?: number;
+  y?: number;
+  maximized: boolean;
+};
+
+function intersectsRect(a: Rectangle, b: Rectangle): boolean {
+  return a.x < b.x + b.width
+    && a.x + a.width > b.x
+    && a.y < b.y + b.height
+    && a.y + a.height > b.y;
+}
+
+function isVisibleOnAnyDisplay(bounds: Rectangle): boolean {
+  const displays = screen.getAllDisplays();
+  return displays.some((display) => intersectsRect(bounds, display.workArea));
+}
+
+function resolveMainWindowCreateState(restoredState: WindowStateSnapshot | null): MainWindowCreateState {
+  const fallback: MainWindowCreateState = {
+    width: MAIN_WINDOW_DEFAULT_WIDTH,
+    height: MAIN_WINDOW_DEFAULT_HEIGHT,
+    maximized: false
+  };
+
+  if (!restoredState) {
+    return fallback;
+  }
+
+  const width = Math.max(MAIN_WINDOW_MIN_WIDTH, Math.round(restoredState.bounds.width));
+  const height = Math.max(MAIN_WINDOW_MIN_HEIGHT, Math.round(restoredState.bounds.height));
+  const x = Math.round(restoredState.bounds.x);
+  const y = Math.round(restoredState.bounds.y);
+  const candidate: Rectangle = { x, y, width, height };
+
+  if (!isVisibleOnAnyDisplay(candidate)) {
+    return {
+      ...fallback,
+      maximized: restoredState.maximized === true
+    };
+  }
+
+  return {
+    width,
+    height,
+    x,
+    y,
+    maximized: restoredState.maximized === true
+  };
+}
+
+function createMainWindow(restoredState: WindowStateSnapshot | null = null): void {
   const isDarwin = process.platform === "darwin";
+  const initialState = resolveMainWindowCreateState(restoredState);
 
   const window = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 1024,
-    minHeight: 640,
+    width: initialState.width,
+    height: initialState.height,
+    ...(initialState.x !== undefined ? { x: initialState.x } : {}),
+    ...(initialState.y !== undefined ? { y: initialState.y } : {}),
+    minWidth: MAIN_WINDOW_MIN_WIDTH,
+    minHeight: MAIN_WINDOW_MIN_HEIGHT,
     show: false,
     frame: isDarwin,
     ...(isDarwin ? { titleBarStyle: "hiddenInset" as const } : {}),
@@ -131,6 +195,27 @@ function createMainWindow(): void {
 
   if (!windowIcon.isEmpty()) {
     window.setIcon(windowIcon);
+  }
+
+  const scheduleWindowStateSave = (): void => {
+    if (!windowStateStore || window.isDestroyed() || window.isMinimized()) {
+      return;
+    }
+    const bounds = window.isMaximized() ? window.getNormalBounds() : window.getBounds();
+    windowStateStore.scheduleSave({
+      bounds,
+      maximized: window.isMaximized()
+    });
+  };
+
+  window.on("move", scheduleWindowStateSave);
+  window.on("resize", scheduleWindowStateSave);
+  window.on("maximize", scheduleWindowStateSave);
+  window.on("unmaximize", scheduleWindowStateSave);
+  window.on("close", scheduleWindowStateSave);
+
+  if (initialState.maximized) {
+    window.maximize();
   }
 
   window.once("ready-to-show", () => {
@@ -344,6 +429,9 @@ app.whenReady().then(async () => {
     settingsDirPath
   });
   settingsStore.wireIpc();
+  windowStateStore = new WindowStateStore({
+    windowStatePath: defaultWindowStatePath(app.getPath("userData"))
+  });
   backupStore = new BackupStore({
     backupsDir: defaultBackupsDir(app.getPath("userData"))
   });
@@ -482,7 +570,8 @@ app.whenReady().then(async () => {
       .catch((error: unknown) => console.log("An error occurred:", error));
   }
 
-  createMainWindow();
+  const persistedWindowState = await windowStateStore.read();
+  createMainWindow(persistedWindowState);
   sendWindowState();
 
   if (mainWindow) {
@@ -501,7 +590,10 @@ app.whenReady().then(async () => {
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow();
+      void (async () => {
+        const persistedState = await windowStateStore?.read() ?? null;
+        createMainWindow(persistedState);
+      })();
     }
   });
 });
