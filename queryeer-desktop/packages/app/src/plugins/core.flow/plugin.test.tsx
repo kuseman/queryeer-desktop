@@ -203,7 +203,7 @@ describe("core.flow plugin", () => {
 
     expect(context.files.capabilities.registerCapabilities).toHaveBeenCalledWith(
       FLOW_DOCUMENT_MIME_TYPE,
-      ["backupable", "editable", "viewable"]
+      ["backupable", "creatable", "editable", "viewable"]
     );
     expect(context.files.capabilities.registerContentCategory).toHaveBeenCalledWith(
       FLOW_DOCUMENT_MIME_TYPE,

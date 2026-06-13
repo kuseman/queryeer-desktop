@@ -14,6 +14,10 @@ export type FileCloseOptions = {
   discardDirty?: boolean;
 };
 
+export type FileSaveOptions = {
+  saveAs?: boolean;
+};
+
 export type FileMediator = {
   openFile: (uri: string, hint?: FileOpenHint) => Promise<FileEntity>;
   createUntitledFile: (options?: {
@@ -26,7 +30,7 @@ export type FileMediator = {
   getUntitledCounter: () => number;
   setUntitledCounter: (counter: number) => void;
   closeFile: (fileId: string, opts?: FileCloseOptions) => Promise<void>;
-  saveFile: (fileId: string) => Promise<void>;
+  saveFile: (fileId: string, opts?: FileSaveOptions) => Promise<void>;
   setActiveFileId: (fileId: string | null) => void;
   getActiveFileId: () => string | null;
   onActiveFileChanged: (listener: (fileId: string | null) => void) => () => void;

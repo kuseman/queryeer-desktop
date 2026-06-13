@@ -1,19 +1,33 @@
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
-import type { LayoutEditorContribution, LayoutWelcomeContribution } from "@queryeer/api/extensions/LayoutExtension";
+import type {
+  LayoutEditorContribution,
+  LayoutEditorInstanceContext,
+  LayoutWelcomeContribution
+} from "@queryeer/api/extensions/LayoutExtension";
 import PluginErrorBoundary from "./PluginErrorBoundary";
 
 type EditorPaneProps = {
   activeFile: FileEntity | null;
   activeEditor: LayoutEditorContribution | null;
+  editorInstanceContext: LayoutEditorInstanceContext;
   welcomes: LayoutWelcomeContribution[];
 };
 
-export function EditorPane({ activeFile, activeEditor, welcomes }: EditorPaneProps) {
+export function EditorPane({ activeFile, activeEditor, editorInstanceContext, welcomes }: EditorPaneProps) {
   return (
     <div className="shell-editor-content">
       {activeEditor ? (
         <PluginErrorBoundary pluginId={activeEditor.id} pluginName={activeEditor.title}>
-          <div key={activeEditor.id} className="shell-editor-pane">{activeEditor.render({ activeFile: activeFile ?? undefined })}</div>
+          <div
+            key={activeEditor.id}
+            className="shell-editor-pane"
+            data-editor-instance-id={editorInstanceContext.editorInstanceId}
+          >
+            {activeEditor.render({
+              ...editorInstanceContext,
+              activeFile: activeFile ?? undefined
+            })}
+          </div>
         </PluginErrorBoundary>
       ) : welcomes.length > 0 ? (
         welcomes.map((welcome) => (

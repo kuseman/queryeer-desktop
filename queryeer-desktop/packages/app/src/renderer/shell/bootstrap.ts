@@ -428,6 +428,7 @@ export async function bootstrapShell() {
     executeCommand,
     canExecuteCommand: (commandId: string) => host.canExecuteCommand(commandId),
     onCommandContextChanged: (listener: () => void) => chain.onDidChange(listener),
+    contextChain: chain,
     diagnostics: host.getDiagnostics(),
     getExtensions: () => host.getExtensions(),
     onMenuRebuild: (fn: () => void) => {

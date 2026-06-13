@@ -1,29 +1,38 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import type { PluginContext } from "@queryeer/api/plugin/Plugin";
-import { GRAPH_DOCUMENT_EDITOR_ID, GRAPH_DOCUMENT_EXTENSION, GRAPH_DOCUMENT_MIME_TYPE } from "./constants";
+import { GRAPH_DOCUMENT_EDITOR_ID, GRAPH_DOCUMENT_MIME_TYPE } from "./constants";
+
+const editorRegistryHostMock = vi.hoisted(() => ({
+  registerContentRepository: vi.fn(() => () => {})
+}));
+
+vi.mock("../../core/plugin-runtime/ExtensionRegistry", () => ({
+  getEditorRegistryHost: () => editorRegistryHostMock
+}));
 
 vi.mock("./GraphViewer", () => ({
-  GraphViewer: ({ graph }: { graph: { id: string } }) => <div data-testid="mock-graph-viewer">{graph.id}</div>
+  GraphViewer: ({
+    graph,
+    initialPropertiesPanelCollapsed
+  }: {
+    graph: { id: string };
+    initialPropertiesPanelCollapsed?: boolean;
+  }) => (
+    <div data-testid="mock-graph-viewer" data-collapsed={String(initialPropertiesPanelCollapsed === true)}>
+      {graph.id}
+    </div>
+  )
 }));
 
 import { coreGraphPlugin, handleGraphDocumentAction } from "./plugin";
+import { getGraphDocumentRepository } from "./GraphDocumentRepository";
 
 void React;
 
 function makePluginContext(): PluginContext {
-  const commands = new Map<string, () => Promise<void> | void>();
-  const createdFile = {
-    fileId: "graph-file",
-    version: 0,
-    uri: "untitled:SampleGraph.qgraph",
-    mimeType: GRAPH_DOCUMENT_MIME_TYPE,
-    dirtyVsBackend: false,
-    dirtyVsDisk: false,
-    diskState: "inSync" as const,
-    openedAt: new Date().toISOString()
-  };
   return {
     files: {
       capabilities: {
@@ -33,13 +42,12 @@ function makePluginContext(): PluginContext {
       },
       registerMimeResolver: vi.fn(),
       mimeIcons: { registerMimeIcon: vi.fn() },
-      updateFile: vi.fn()
+      updateFile: vi.fn(),
+      markDirty: vi.fn()
     },
     layout: { registerEditor: vi.fn() },
     commands: {
-      registerCommand: vi.fn((command: { id: string; handler: () => Promise<void> | void }) => {
-        commands.set(command.id, command.handler);
-      })
+      registerCommand: vi.fn()
     },
     menu: { registerMenuItem: vi.fn() },
     assistant: {
@@ -50,10 +58,22 @@ function makePluginContext(): PluginContext {
       invokeTool: vi.fn(async () => ({ ok: false }))
     },
     fileMediator: {
-      createUntitledFile: vi.fn(async () => createdFile)
-    },
-    _commands: commands
+      createUntitledFile: vi.fn()
+    }
   } as unknown as PluginContext;
+}
+
+function makeFile(fileId: string, mimeType: string): FileEntity {
+  return {
+    fileId,
+    version: 0,
+    uri: `untitled:${fileId}.qgraph`,
+    mimeType,
+    dirtyVsBackend: false,
+    dirtyVsDisk: false,
+    diskState: "inSync",
+    openedAt: new Date().toISOString()
+  };
 }
 
 describe("core.graph plugin", () => {
@@ -62,6 +82,8 @@ describe("core.graph plugin", () => {
 
   beforeEach(() => {
     (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    editorRegistryHostMock.registerContentRepository.mockClear();
+    getGraphDocumentRepository().clearForTests();
     rootElement = document.createElement("div");
     document.body.appendChild(rootElement);
     root = createRoot(rootElement);
@@ -91,36 +113,45 @@ describe("core.graph plugin", () => {
     expect(writeText).toHaveBeenCalledWith("select");
   });
 
-  it("registers graph MIME editor and opens a sample graph", async () => {
+  it("registers graph MIME editor and content repository", async () => {
     const context = makePluginContext();
-    const commands = (context as unknown as { _commands: Map<string, () => Promise<void> | void> })._commands;
 
     await coreGraphPlugin.activate(context);
 
     expect(context.files.capabilities.registerCapabilities).toHaveBeenCalledWith(
       GRAPH_DOCUMENT_MIME_TYPE,
-      ["viewable"]
+      ["viewable", "backupable"]
     );
     expect(context.layout.registerEditor).toHaveBeenCalledWith(expect.objectContaining({
       id: GRAPH_DOCUMENT_EDITOR_ID,
       supportedMimeTypes: [GRAPH_DOCUMENT_MIME_TYPE]
     }));
+    expect(editorRegistryHostMock.registerContentRepository).toHaveBeenCalledWith(getGraphDocumentRepository());
+    expect(context.commands.registerCommand).not.toHaveBeenCalled();
+    expect(context.menu.registerMenuItem).not.toHaveBeenCalled();
+  });
 
-    await commands.get("core.graph.openSample")?.();
+  it("starts JDBC graph documents with the properties panel collapsed", async () => {
+    const context = makePluginContext();
 
-    expect(context.fileMediator.createUntitledFile).toHaveBeenCalledWith({
-      mimeType: GRAPH_DOCUMENT_MIME_TYPE,
-      extension: GRAPH_DOCUMENT_EXTENSION,
-      title: "SampleGraph"
+    await coreGraphPlugin.activate(context);
+
+    const registeredEditor = (context.layout.registerEditor as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+      render: (renderContext: { activeFile: FileEntity }) => JSX.Element;
+    };
+    const genericFile = makeFile("generic-graph", GRAPH_DOCUMENT_MIME_TYPE);
+    const jdbcFile = makeFile("jdbc-graph", "application/vnd.queryeer.jdbc-schema-graph+json");
+    getGraphDocumentRepository().seedFile(genericFile, { id: "generic", vertices: [], edges: [] });
+    getGraphDocumentRepository().seedFile(jdbcFile, { id: "jdbc", vertices: [], edges: [] });
+
+    await act(async () => {
+      root.render(registeredEditor.render({ activeFile: genericFile }));
     });
-    expect(context.files.updateFile).toHaveBeenCalledWith(
-      "graph-file",
-      expect.objectContaining({
-        metadata: expect.objectContaining({
-          graphDocument: expect.objectContaining({ id: "core.graph.sample" }),
-          workspaceTransient: true
-        })
-      })
-    );
+    expect(rootElement.querySelector("[data-testid='mock-graph-viewer']")?.getAttribute("data-collapsed")).toBe("false");
+
+    await act(async () => {
+      root.render(registeredEditor.render({ activeFile: jdbcFile }));
+    });
+    expect(rootElement.querySelector("[data-testid='mock-graph-viewer']")?.getAttribute("data-collapsed")).toBe("true");
   });
 });

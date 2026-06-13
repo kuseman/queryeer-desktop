@@ -33,6 +33,49 @@
   overflow: hidden;
 }
 
+.shell-main.is-split {
+  flex-direction: row;
+}
+
+.shell-editor-group {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-0);
+}
+
+.shell-editor-group.is-active {
+  background: var(--surface-editor-active);
+}
+
+.shell-editor-group:focus {
+  outline: none;
+}
+
+.shell-editor-split-divider {
+  flex: 0 0 5px;
+  cursor: col-resize;
+  position: relative;
+  background: linear-gradient(to right, transparent 0, transparent 2px, var(--border) 2px, var(--border) 3px, transparent 3px);
+}
+
+.shell-editor-split-divider::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  right: -3px;
+}
+
+.shell-editor-split-divider:hover,
+body.is-resizing-editor-split .shell-editor-split-divider {
+  background: linear-gradient(to right, transparent 0, transparent 2px, var(--accent-muted) 2px, var(--accent-muted) 3px, transparent 3px);
+}
+
 .shell-panel {
   display: flex;
   flex-direction: column;
@@ -101,6 +144,11 @@ body.is-resizing-layout {
   user-select: none;
 }
 
+body.is-resizing-editor-split {
+  cursor: col-resize;
+  user-select: none;
+}
+
 body.is-resizing-panel {
   cursor: row-resize;
   user-select: none;
@@ -110,6 +158,23 @@ body.is-resizing-panel {
   .shell-main {
     width: calc(100% - 24px);
     margin: 16px auto;
+  }
+
+  .shell-main.is-split {
+    flex-direction: column;
+  }
+
+  .shell-main.is-split .shell-editor-group + .shell-editor-group {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+
+  .shell-main.is-split .shell-editor-split-divider {
+    display: none;
+  }
+
+  .shell-main.is-split .shell-editor-split-divider + .shell-editor-group {
+    border-top: 1px solid var(--border);
   }
 
   .shell-layout {

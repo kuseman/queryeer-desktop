@@ -1,5 +1,10 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
 import { confirmCloseDirtyFile } from "../../renderer/shell/close-file-guard";
+import {
+  requestCloseActiveEditor,
+  requestOpenEditorToSide,
+  requestSplitActiveEditorRight
+} from "../../renderer/shell/layout-editor-events";
 import { requestToggleZone } from "../../renderer/shell/layout-zone-events";
 import { fileUriToPath } from "@queryeer/api/files/Resolvers";
 import { getCoreSettingsService } from "../core.settings/service";
@@ -46,26 +51,7 @@ export const coreLayoutPlugin: Plugin = {
         resolveActiveMessageDialog({ action: "" });
         resolveActiveInputDialog({ canceled: true, value: undefined });
 
-        const activeFileId = context.fileMediator.getActiveFileId();
-        if (!activeFileId) {
-          return;
-        }
-        const file = context.files.getFile(activeFileId);
-        if (!file) {
-          return;
-        }
-
-        const isDirty = file.dirtyVsDisk || file.dirtyVsBackend;
-        if (isDirty) {
-          const shouldClose = await confirmCloseDirtyFile(file, (options) =>
-            context.dialog.showMessage(options)
-          );
-          if (!shouldClose) {
-            return;
-          }
-        }
-
-        await context.fileMediator.closeFile(activeFileId, { discardDirty: true });
+        requestCloseActiveEditor();
       }
     });
 
@@ -74,6 +60,20 @@ export const coreLayoutPlugin: Plugin = {
       title: "Close Editor",
       handler: async () => {
         await context.commands.executeCommand("core.closeActive");
+      }
+    });
+
+    context.commands.registerCommand({
+      id: "core.layout.splitEditorRight",
+      title: "Split Editor Right",
+      handler: async () => {
+        const contextFileId = context.fileMediator.getContextFileId();
+        const activeFileId = context.fileMediator.getActiveFileId();
+        if (contextFileId && contextFileId !== activeFileId) {
+          requestOpenEditorToSide({ fileId: contextFileId });
+          return;
+        }
+        requestSplitActiveEditorRight();
       }
     });
 
@@ -113,10 +113,19 @@ export const coreLayoutPlugin: Plugin = {
     context.keybindings.registerKeybinding({
       id: "core.layout.keybinding.togglePrimarySidebar",
       commandId: "core.layout.togglePrimarySidebar",
-      key: "CtrlOrCmd+B",
+      key: "CmdOrCtrl+B",
       when: "global",
       scope: "global",
       order: 100
+    });
+
+    context.keybindings.registerKeybinding({
+      id: "core.layout.keybinding.splitEditorRight",
+      commandId: "core.layout.splitEditorRight",
+      key: "CmdOrCtrl+\\",
+      when: "hasActiveFile && activeEditorCanSplit",
+      scope: "global",
+      order: 840
     });
 
     context.layout.setShellDefaults({
@@ -184,10 +193,11 @@ export const coreLayoutPlugin: Plugin = {
       order: 10,
       actions: [
         { id: "core.layout.tab.close", label: "Close", order: 10 },
-        { id: "core.layout.tab.closeOthers", label: "Close Others", order: 20 },
-        { id: "core.layout.tab.closeAll", label: "Close All", order: 30 },
-        { id: "core.layout.tab.copyPath", label: "Copy Path", order: 40, enabledWhen: "uri.startsWith('file://')" },
-        { id: "core.layout.tab.openInExplorer", label: "Open in System Explorer", order: 50, enabledWhen: "uri.startsWith('file://')" }
+        { id: "core.layout.tab.splitRight", label: "Split Right", order: 20, enabledWhen: "canSplit" },
+        { id: "core.layout.tab.closeOthers", label: "Close Others", order: 30 },
+        { id: "core.layout.tab.closeAll", label: "Close All", order: 40 },
+        { id: "core.layout.tab.copyPath", label: "Copy Path", order: 50, enabledWhen: "uri.startsWith('file://')" },
+        { id: "core.layout.tab.openInExplorer", label: "Open in System Explorer", order: 60, enabledWhen: "uri.startsWith('file://')" }
       ]
     });
 
@@ -216,6 +226,14 @@ export const coreLayoutPlugin: Plugin = {
           if (!shouldClose) return;
         }
         await context.fileMediator.closeFile(fileId, { discardDirty: true });
+      }
+    });
+
+    context.commands.registerCommand({
+      id: "core.layout.tab.splitRight",
+      title: "Split Tab Right",
+      handler: async () => {
+        await context.commands.executeCommand("core.layout.splitEditorRight");
       }
     });
 

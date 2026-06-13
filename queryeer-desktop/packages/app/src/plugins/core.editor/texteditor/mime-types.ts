@@ -12,7 +12,7 @@ type TextMimeTypeRegistration = MimeTypeRegistration & {
   monacoLanguageId: string;
 };
 
-const TEXT_CAPABILITIES: MimeCapability[] = ["backupable", "editable", "viewable"];
+const TEXT_CAPABILITIES: MimeCapability[] = ["backupable", "editable", "viewable", "creatable"];
 
 const TEXT_EDITOR_MIME_TYPES: TextMimeTypeRegistration[] = [
   {

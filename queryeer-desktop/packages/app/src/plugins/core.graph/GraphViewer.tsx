@@ -35,6 +35,7 @@ type GraphViewerProps = {
   layoutProvider?: GraphLayoutProvider;
   iconResolver?: (label?: string, kind?: string) => string | undefined;
   interactionStore?: GraphInteractionStoreLike;
+  initialPropertiesPanelCollapsed?: boolean;
   onEntityAction?: (invocation: GraphActionInvocation) => void;
   onSelectionChanged?: (entity: GraphEntity | null) => void;
 };
@@ -84,6 +85,7 @@ export function GraphViewer({
   layoutProvider = dagreGraphLayoutProvider,
   iconResolver,
   interactionStore,
+  initialPropertiesPanelCollapsed = false,
   onEntityAction,
   onSelectionChanged
 }: GraphViewerProps): JSX.Element {
@@ -446,7 +448,11 @@ export function GraphViewer({
           <Controls />
         </ReactFlow>
       </div>
-      <GraphPropertiesPanel entity={selectedEntity} />
+      <GraphPropertiesPanel
+        entity={selectedEntity}
+        graphViewStateKey={graphViewStateKey}
+        initialCollapsed={initialPropertiesPanelCollapsed}
+      />
       {tooltip && <GraphTooltip state={tooltip} />}
       {contextMenu && (
         <ContextMenuSurface
@@ -611,8 +617,16 @@ function GraphTooltip({ state }: { state: TooltipState }): JSX.Element | null {
   );
 }
 
-function GraphPropertiesPanel({ entity }: { entity: GraphEntity | null }): JSX.Element {
-  const [collapsed, setCollapsed] = useState(false);
+function GraphPropertiesPanel({
+  entity,
+  graphViewStateKey,
+  initialCollapsed
+}: {
+  entity: GraphEntity | null;
+  graphViewStateKey: string;
+  initialCollapsed: boolean;
+}): JSX.Element {
+  const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [width, setWidth] = useState(300);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const groups = getGraphEntityProperties(entity);
@@ -620,6 +634,10 @@ function GraphPropertiesPanel({ entity }: { entity: GraphEntity | null }): JSX.E
   useEffect(() => {
     setCollapsedGroups({});
   }, [entity?.type, entity?.entity.id]);
+
+  useEffect(() => {
+    setCollapsed(initialCollapsed);
+  }, [graphViewStateKey, initialCollapsed]);
 
   const startResize = (event: React.MouseEvent): void => {
     event.preventDefault();

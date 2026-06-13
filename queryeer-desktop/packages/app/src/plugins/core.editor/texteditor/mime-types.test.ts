@@ -57,7 +57,8 @@ describe("text editor mime type registrations", () => {
     expect(registerCapabilities).toHaveBeenCalledWith("application/sql", [
       "backupable",
       "editable",
-      "viewable"
+      "viewable",
+      "creatable"
     ]);
     expect(registerContentCategory).toHaveBeenCalledWith("application/sql", "text");
     expect(registerLabel).not.toHaveBeenCalled();

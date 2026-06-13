@@ -237,7 +237,7 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
       untitledCounter = Math.max(0, Math.floor(counter));
     },
 
-    async saveFile(fileId) {
+    async saveFile(fileId, opts) {
       const file = filesRegistry.getFile(fileId);
       if (!file) {
         return;
@@ -252,14 +252,14 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
 
       let targetUri = file.uri;
 
-      if (isUntitled) {
+      if (isUntitled || opts?.saveAs === true) {
         if (!showSaveDialog) {
           return;
         }
         const ext = extensionFromMimeType(file.mimeType);
         const dialogResult = await showSaveDialog({
-          title: "Save Query",
-          defaultPath: decodeURIComponent(file.uri.replace(/^untitled:/, "")) || undefined,
+          title: "Save File",
+          defaultPath: defaultSavePathFromUri(file.uri),
           filters: [{ name: "File", extensions: [ext] }]
         });
         if (dialogResult.canceled || !dialogResult.filePath) {
@@ -389,4 +389,18 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
       });
     }
   };
+}
+
+function defaultSavePathFromUri(uri: string): string | undefined {
+  if (uri.startsWith("untitled:")) {
+    return decodeURIComponent(uri.replace(/^untitled:/, "")) || undefined;
+  }
+  if (uri.startsWith("file://")) {
+    let path = decodeURIComponent(uri.replace(/^file:\/\//, ""));
+    if (/^\/[a-zA-Z]:/.test(path)) {
+      path = path.slice(1);
+    }
+    return path || undefined;
+  }
+  return undefined;
 }

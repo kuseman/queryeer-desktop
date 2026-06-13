@@ -35,16 +35,25 @@ function hasModifierKeybinding(key: string): boolean {
   return /(^|\+)(Ctrl|Cmd|Meta|Alt|Option|Shift)(\+|$)/i.test(key);
 }
 
-function isInEditor(): boolean {
-  const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  if (!active) return false;
-  return active.closest("[data-context='editor'], .shell-editor-pane, .shell-editor-content") !== null;
+const EDITOR_FOCUS_SELECTORS = "[data-context='editor'], .shell-editor-pane, .shell-editor-content";
+
+function isInEditor(target?: EventTarget | null): boolean {
+  const elementTarget = target instanceof Element ? target : null;
+  if (elementTarget?.closest(EDITOR_FOCUS_SELECTORS)) {
+    return true;
+  }
+
+  const active = document.activeElement instanceof Element ? document.activeElement : null;
+  if (!active) {
+    return false;
+  }
+  return active.closest(EDITOR_FOCUS_SELECTORS) !== null;
 }
 
 function isInsideModalDialog(target: EventTarget | null): boolean {
-  const element = target instanceof HTMLElement
+  const element = target instanceof Element
     ? target
-    : (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    : (document.activeElement instanceof Element ? document.activeElement : null);
   if (!element) {
     return false;
   }
@@ -97,14 +106,20 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
     duplicateBindings: []
   };
 
-  function findBinding(normalized: string): { matched: ResolvedKeybinding | undefined; contextSnapshot: Record<string, unknown> } {
+  function findBinding(
+    normalized: string,
+    eventTarget: EventTarget | null
+  ): { matched: ResolvedKeybinding | undefined; contextSnapshot: Record<string, unknown> } {
     const rawContextSnapshot = options.contextChain?.getEffectiveContext() ?? contextKeys!.snapshot();
+    const editorFocusFromDom = isInEditor(eventTarget);
+    const editorFocus = Boolean(
+      rawContextSnapshot.editorFocus || rawContextSnapshot.editorTextFocus || editorFocusFromDom
+    );
     const contextSnapshot = {
       ...rawContextSnapshot,
-      editorFocus: Boolean(rawContextSnapshot.editorFocus || rawContextSnapshot.editorTextFocus)
+      editorFocus
     } as Record<string, unknown>;
     const inputFocus = Boolean(rawContextSnapshot.inputFocus);
-    const editorFocus = Boolean(rawContextSnapshot.editorFocus || rawContextSnapshot.editorTextFocus);
 
     const matched = [...resolved]
       .sort((a, b) => (b.order ?? 0) - (a.order ?? 0))
@@ -136,7 +151,7 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
 
   function executeBinding(matched: ResolvedKeybinding, event: KeyboardEvent): void {
     event.preventDefault();
-    if (isInEditor()) {
+    if (isInEditor(event.target)) {
       event.stopPropagation();
     }
     void options.executeCommand(matched.commandId);
@@ -162,7 +177,7 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
       return;
     }
 
-    const { matched } = findBinding(normalized);
+    const { matched } = findBinding(normalized, event.target);
     if (!matched) {
       return;
     }

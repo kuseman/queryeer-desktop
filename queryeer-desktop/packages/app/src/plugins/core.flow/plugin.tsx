@@ -36,6 +36,7 @@ export const coreFlowPlugin: Plugin = {
     context.files.capabilities.registerLabel?.(FLOW_DOCUMENT_MIME_TYPE, "Flow");
     context.files.capabilities.registerCapabilities(FLOW_DOCUMENT_MIME_TYPE, [
       "backupable",
+      "creatable",
       "editable",
       "viewable"
     ]);

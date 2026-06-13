@@ -113,6 +113,18 @@ export type LayoutStatusItemContribution = {
   render: () => ReactNode;
 };
 
+export type LayoutEditorInstanceContext = {
+  editorInstanceId: string;
+  editorGroupId: string;
+  editorGroupIndex: number;
+  editorGroupCount: number;
+  isActiveEditorGroup: boolean;
+};
+
+export type LayoutEditorRenderContext = Partial<LayoutEditorInstanceContext> & {
+  activeFile?: FileEntity;
+};
+
 export type LayoutEditorContribution = {
   id: string;
   title: string;
@@ -124,7 +136,7 @@ export type LayoutEditorContribution = {
   openIntents?: FileOpenIntent[];
   priority?: number;
   canSplit?: boolean;
-  render: (context?: { activeFile?: FileEntity }) => ReactNode;
+  render: (context?: LayoutEditorRenderContext) => ReactNode;
 };
 
 export type LayoutWelcomeContribution = {

@@ -186,9 +186,11 @@ describe("core.layout close editor", () => {
     );
   });
 
-  it("closes active clean file without confirmation", async () => {
+  it("requests active editor close without direct file closure", async () => {
     const file = makeFile({ dirtyVsDisk: false, dirtyVsBackend: false });
     const { context, commands, closeFile, showMessage } = createContext(file);
+    const listener = vi.fn();
+    window.addEventListener("shell:closeActiveEditor", listener);
     coreLayoutPlugin.activate(context);
 
     const handler = commands.get("core.closeActive");
@@ -196,7 +198,9 @@ describe("core.layout close editor", () => {
     await handler?.();
 
     expect(showMessage).not.toHaveBeenCalled();
-    expect(closeFile).toHaveBeenCalledWith(file.fileId, { discardDirty: true });
+    expect(closeFile).not.toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledTimes(1);
+    window.removeEventListener("shell:closeActiveEditor", listener);
   });
 
   it("closes focused value preview before closing files", async () => {
@@ -212,21 +216,20 @@ describe("core.layout close editor", () => {
     expect(closeFile).not.toHaveBeenCalled();
   });
 
-  it("asks confirmation for dirty file and respects cancel", async () => {
+  it("leaves dirty confirmation to the shell close handler", async () => {
     const file = makeFile({ uri: "untitled:Query.sql", dirtyVsDisk: true });
     const { context, commands, closeFile, showMessage } = createContext(file);
     showMessage.mockResolvedValueOnce({ action: "cancel" });
+    const listener = vi.fn();
+    window.addEventListener("shell:closeActiveEditor", listener);
     coreLayoutPlugin.activate(context);
 
     const handler = commands.get("core.closeActive");
     await handler?.();
 
-    expect(showMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "Unsaved Changes",
-        message: expect.stringContaining("Query.sql")
-      })
-    );
+    expect(showMessage).not.toHaveBeenCalled();
     expect(closeFile).not.toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledTimes(1);
+    window.removeEventListener("shell:closeActiveEditor", listener);
   });
 });

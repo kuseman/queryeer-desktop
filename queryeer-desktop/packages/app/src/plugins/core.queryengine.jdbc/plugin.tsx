@@ -14,7 +14,7 @@ import { getJdbcSessionStore } from "./jdbc-session-store";
 import { DatabaseIcon } from "./DatabaseIcon";
 import { getJdbcNavigationStore } from "./jdbc-navigation-store";
 import { JdbcNavigationView } from "./JdbcNavigationView";
-import { JDBC_NAV_DB_KEY, type JdbcSelectedDatabase } from "./jdbc-navigation-types";
+import { JDBC_NAV_DB_KEY, type JdbcSelectedDatabase, type JdbcTreeNode } from "./jdbc-navigation-types";
 import { writeJdbcContextMetadata, initJdbcFileBinding } from "./jdbc-metadata";
 import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";
 import { getQuickCommandService } from "../core.quickcommand/service";
@@ -35,7 +35,14 @@ import { registerJdbcFlowNodeContribution } from "./flow-node-contribution";
 import { buildSchemaGraph } from "./jdbc-schema-graph-builder";
 import { SchemaTableNode } from "./SchemaTableNode";
 import { JdbcSchemaGraphPanel } from "./JdbcSchemaGraphPanel";
-import { GRAPH_DOCUMENT_MIME_TYPE, GRAPH_DOCUMENT_EXTENSION } from "../core.graph/constants";
+import { GRAPH_DOCUMENT_EDITOR_ID } from "../core.graph/constants";
+import { GraphIcon } from "../core.graph/GraphIcon";
+import { getGraphDocumentRepository } from "../core.graph/GraphDocumentRepository";
+import {
+  JDBC_SCHEMA_GRAPH_EXTENSION,
+  JDBC_SCHEMA_GRAPH_MIME_TYPE
+} from "./jdbc-schema-graph-constants";
+import { requestOpenEditorToSide } from "../../renderer/shell/layout-editor-events";
 import { registerQueryEditorStatusItem } from "@queryeer/api/queryengine/QueryEditorStatusExtension";
 import { JdbcConnectionStatus } from "./JdbcConnectionStatus";
 
@@ -54,7 +61,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
     version: "0.1.0",
     kind: "core",
     description: "JDBC connection setup and execution context wiring",
-    dependencies: ["core.queryengine", "core.settings", "core.security", "core.files", "core.flow"],
+    dependencies: ["core.queryengine", "core.settings", "core.security", "core.files", "core.flow", "core.graph"],
     requiredCapabilities: ["query.engine"],
     providesCapabilities: ["query.engine.jdbc"]
   },
@@ -77,11 +84,28 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
 
     context.files.capabilities.registerLabel?.("application/sql", "Jdbc");
     context.files.capabilities.registerPreferredNewFileMimeType?.("application/sql", 10);
+    context.files.capabilities.registerCapabilities(JDBC_SCHEMA_GRAPH_MIME_TYPE, ["viewable", "backupable"]);
+    context.files.capabilities.registerContentCategory(JDBC_SCHEMA_GRAPH_MIME_TYPE, "text");
+    context.files.capabilities.registerLabel?.(JDBC_SCHEMA_GRAPH_MIME_TYPE, "JDBC Schema Graph");
+    context.files.capabilities.registerPreferredExtension?.(JDBC_SCHEMA_GRAPH_MIME_TYPE, JDBC_SCHEMA_GRAPH_EXTENSION);
+    context.files.registerMimeResolver((_uri, hint) => {
+      return hint?.extension?.toLowerCase() === JDBC_SCHEMA_GRAPH_EXTENSION
+        ? JDBC_SCHEMA_GRAPH_MIME_TYPE
+        : undefined;
+    });
+    context.files.registerEditorResolver((file) => {
+      return file.mimeType === JDBC_SCHEMA_GRAPH_MIME_TYPE ? GRAPH_DOCUMENT_EDITOR_ID : undefined;
+    });
 
     context.files.mimeIcons.registerMimeIcon({
       moduleId: "core.queryengine.jdbc",
       mimeType: "application/sql",
       icon: DatabaseIcon
+    });
+    context.files.mimeIcons.registerMimeIcon({
+      moduleId: "core.queryengine.jdbc",
+      mimeType: JDBC_SCHEMA_GRAPH_MIME_TYPE,
+      icon: GraphIcon
     });
 
     for (const tool of createJdbcAssistantTools(context)) {
@@ -287,7 +311,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       canCollapse: true,
       flex: 1,
       minHeight: 80,
-      when: "activeFile?.metadata?.schemaSource == 'jdbc'",
+      when: `activeFile?.mimeType == '${JDBC_SCHEMA_GRAPH_MIME_TYPE}'`,
       render: () => <JdbcSchemaGraphPanel context={context} />
     });
 
@@ -332,6 +356,29 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       }
     });
 
+    const createSchemaDiagram = async (node: JdbcTreeNode, options: { openToSide: boolean }): Promise<void> => {
+      const snapshot = await loadDeepSnapshot(node.connectionId);
+      const graph = buildSchemaGraph(snapshot, node.name);
+      const file = await context.fileMediator.createUntitledFile({
+        mimeType: JDBC_SCHEMA_GRAPH_MIME_TYPE,
+        extension: JDBC_SCHEMA_GRAPH_EXTENSION,
+        title: `ER Diagram - ${node.name}`,
+      });
+      context.files.updateFile(file.fileId, {
+        dirtyVsDisk: true,
+        metadata: {
+          ...(file.metadata ?? {}),
+          schemaSource: "jdbc",
+          graphDocument: graph,
+        },
+      });
+      getGraphDocumentRepository().seedFile(file, graph, { notifyDirty: true });
+      context.files.markDirty(file.fileId);
+      if (options.openToSide) {
+        requestOpenEditorToSide({ fileId: file.fileId, removeFromOtherGroups: true });
+      }
+    };
+
     treeContextMenu.registerContribution({
       id: "core.queryengine.jdbc.showSchemaDiagram",
       label: "Schema Diagram",
@@ -339,21 +386,18 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       order: 150,
       matches: (node) => node.kind === "database",
       run: async (node) => {
-        const snapshot = await loadDeepSnapshot(node.connectionId);
-        const graph = buildSchemaGraph(snapshot, node.name);
-        const file = await context.fileMediator.createUntitledFile({
-          mimeType: GRAPH_DOCUMENT_MIME_TYPE,
-          extension: GRAPH_DOCUMENT_EXTENSION,
-          title: `ER Diagram - ${node.name}`,
-        });
-        context.files.updateFile(file.fileId, {
-          metadata: {
-            ...(file.metadata ?? {}),
-            workspaceTransient: true,
-            schemaSource: "jdbc",
-            graphDocument: graph,
-          },
-        });
+        await createSchemaDiagram(node, { openToSide: false });
+      }
+    });
+
+    treeContextMenu.registerContribution({
+      id: "core.queryengine.jdbc.showSchemaDiagram.toSide",
+      label: "Schema Diagram to Side",
+      section: "diagram",
+      order: 151,
+      matches: (node) => node.kind === "database",
+      run: async (node) => {
+        await createSchemaDiagram(node, { openToSide: true });
       }
     });
 

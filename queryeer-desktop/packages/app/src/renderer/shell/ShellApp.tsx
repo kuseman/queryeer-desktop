@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useCallback, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useCallback, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { ExtensionSnapshot } from "../../core/plugin-runtime/ExtensionRegistry";
 import type {
   LayoutZone,
@@ -10,6 +10,8 @@ import type { FileMediator } from "@queryeer/api/files/FileMediator";
 import type { FilesRegistry } from "@queryeer/api/files/FilesRegistry";
 import type { CommandExecutionResult } from "@queryeer/api/plugin/Plugin";
 import "@queryeer/api/shell/Api";
+import type { ContextChain } from "../../plugins/core.commands/context-chain";
+import { ContextPriority } from "../../plugins/core.commands/context-priority";
 import { CoreMenuBar } from "../../plugins/core.menu/MenuBar";
 import type { RendererWorkspaceService } from "../workspace/workspace-service";
 import { Toolbar, StatusBar, Sidebar, SidebarDivider, EditorTabs, EditorPane, PluginErrorBoundary } from "../../plugins/core.layout";
@@ -29,17 +31,33 @@ import { inflateDottedKeys } from "./context-value-flatten";
 import { subscribeOpenPanelRequests } from "./layout-panel-events";
 import { subscribeFocusSidebarViewRequests } from "./layout-sidebar-events";
 import { subscribeToggleZoneRequests } from "./layout-zone-events";
+import {
+  subscribeCloseActiveEditorRequests,
+  subscribeOpenEditorToSideRequests,
+  subscribeSplitActiveEditorRightRequests
+} from "./layout-editor-events";
 import { getOutlineRegistry } from "../../core/plugin-runtime/ExtensionRegistry";
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../../plugins/core.settings/service";
 import { getKeybindingLabel } from "../../plugins/core.commands/keybinding-label-accessor";
 import { subscribeKeybindingsRuntime } from "../../plugins/core.commands/keybindings-runtime-accessor";
 import { hasActiveQueryPlanDialect } from "../../plugins/core.queryengine/query-plan/supported-dialects";
 import {
-  recordTabActivation,
-  resolveActiveFileAfterRegistryUpdate,
-  resolveNextActiveTab,
-  resolveOpenFileIds
-} from "./tab-activation-queue";
+  closeFileInGroup,
+  createPersistedEditorLayout,
+  focusEditorGroup,
+  getActiveEditorGroup,
+  getActiveWorkbenchFileId,
+  isFileReferenced,
+  listWorkbenchFileIds,
+  openFileInActiveGroup,
+  openFileToSide,
+  resizeAdjacentEditorGroups,
+  restoreEditorWorkbenchStateFromSnapshot,
+  selectFileInGroup,
+  splitActiveGroupRight,
+  syncWorkbenchWithFiles,
+  type EditorWorkbenchState
+} from "./editor-workbench-state";
 import "./shell-app.css";
 
 const OPEN_NEW_FILES_LAST_SETTING_ID = "core.files.openNewFilesLast";
@@ -52,6 +70,7 @@ export type ShellAppProps = {
   executeCommand: (commandId: string) => Promise<CommandExecutionResult>;
   canExecuteCommand: (commandId: string) => boolean;
   onCommandContextChanged: (listener: () => void) => () => void;
+  contextChain: ContextChain;
 };
 
 export function ShellApp({
@@ -61,7 +80,8 @@ export function ShellApp({
   workspaceService,
   executeCommand,
   canExecuteCommand,
-  onCommandContextChanged
+  onCommandContextChanged,
+  contextChain
 }: ShellAppProps): JSX.Element {
   const [, setKeybindingsVersion] = useState(0);
   const [visibleZones, setVisibleZones] = useState<Set<LayoutZone>>(() => {
@@ -120,36 +140,39 @@ export function ShellApp({
   );
   const [activePanelTab, setActivePanelTab] = useState<string | null>(null);
   const [files, setFiles] = useState<FileEntity[]>(() => filesRegistry.listFiles());
-  const [openFileIds, setOpenFileIds] = useState<string[]>(() =>
-    filesRegistry.listFiles().map((file) => file.fileId)
-  );
-  const [activeFileId, setActiveFileId] = useState<string | null>(
-    () => workspaceService.restoredActiveFileId() ?? filesRegistry.listFiles()[0]?.fileId ?? null
-  );
-  const [tabActivationQueue, setTabActivationQueue] = useState<string[]>(() => {
-    const restored = workspaceService.restoredActiveFileId();
-    return restored ? [restored] : [];
+  const [editorWorkbench, setEditorWorkbench] = useState<EditorWorkbenchState>(() => {
+    const initialFiles = filesRegistry.listFiles();
+    return restoreEditorWorkbenchStateFromSnapshot(
+      initialFiles.map((file) => ({ fileId: file.fileId, uri: file.uri })),
+      workspaceService.restoredLayout(),
+      workspaceService.restoredActiveFileId() ?? initialFiles[0]?.fileId ?? null
+    );
   });
-  const tabActivationQueueRef = useRef<string[]>(tabActivationQueue);
+  const activeFileId = getActiveWorkbenchFileId(editorWorkbench);
+  const activeGroup = getActiveEditorGroup(editorWorkbench);
+  const filesRef = useRef<FileEntity[]>(files);
+  const editorWorkbenchRef = useRef<EditorWorkbenchState>(editorWorkbench);
   const activeFileIdRef = useRef<string | null>(activeFileId);
   const [commandContextVersion, setCommandContextVersion] = useState(0);
   const [, setSettingsVersion] = useState(0);
   const layoutRef = useRef<HTMLElement | null>(null);
-  const tabsRef = useRef<HTMLDivElement | null>(null);
+  const shellMainRef = useRef<HTMLDivElement | null>(null);
+  const tabsByGroupRef = useRef(new Map<string, HTMLDivElement | null>());
+  const canSplitFileRef = useRef<(fileId: string) => boolean>(() => false);
   const visibleZonesRef = useRef(visibleZones);
   const activePanelTabRef = useRef(activePanelTab);
+
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
 
   useEffect(() => {
     activeFileIdRef.current = activeFileId;
   }, [activeFileId]);
 
   useEffect(() => {
-    tabActivationQueueRef.current = tabActivationQueue;
-  }, [tabActivationQueue]);
-
-  useEffect(() => {
-    setTabActivationQueue((previous) => recordTabActivation(previous, activeFileId));
-  }, [activeFileId]);
+    editorWorkbenchRef.current = editorWorkbench;
+  }, [editorWorkbench]);
 
   useEffect(() => {
     visibleZonesRef.current = visibleZones;
@@ -158,6 +181,15 @@ export function ShellApp({
   useEffect(() => {
     activePanelTabRef.current = activePanelTab;
   }, [activePanelTab]);
+
+  useEffect(() => {
+    const unregister = contextChain.register({
+      id: "core.layout.editorGroup",
+      priority: ContextPriority.EDITOR_GROUP,
+      context: {}
+    });
+    return unregister;
+  }, [contextChain]);
 
   useEffect(() => {
     workspaceService.setActiveFileSnapshotProvider(() => activeFileIdRef.current);
@@ -225,7 +257,7 @@ export function ShellApp({
       ? getOutlineRegistry().hasProvider(activeFileForViewContext.mimeType)
       : false;
     return {
-      hasOpenFiles: openFileIds.length > 0,
+      hasOpenFiles: listWorkbenchFileIds(editorWorkbench).length > 0,
       hasActiveFile: activeFileForViewContext != null,
       activeFile: activeFileForViewContext
         ? {
@@ -242,7 +274,7 @@ export function ShellApp({
       hasActiveQueryPlanDialect: hasActiveQueryPlanDialect(activeFileForViewContext),
       outlineSupported
     };
-  }, [openFileIds.length, activeFileId, files, filesRegistry]);
+  }, [activeFileId, editorWorkbench, files, filesRegistry]);
 
   const toolbarActions = useMemo(
     () => filterToolbarActions(extensions.layout.toolbarActions, viewContext),
@@ -282,6 +314,18 @@ export function ShellApp({
     return map;
   }, [editors]);
 
+  useEffect(() => {
+    const activeFile = activeFileId ? files.find((file) => file.fileId === activeFileId) : null;
+    const activeEditorForContext = activeFile?.editorId ? editorsById.get(activeFile.editorId) : undefined;
+    contextChain.update("core.layout.editorGroup", {
+      activeEditorGroupId: activeGroup.id,
+      editorGroupCount: editorWorkbench.groups.length,
+      hasMultipleEditorGroups: editorWorkbench.groups.length > 1,
+      activeEditorCanSplit: activeEditorForContext?.canSplit === true
+    });
+    contextChain.activate("core.layout.editorGroup");
+  }, [activeFileId, activeGroup.id, contextChain, editorWorkbench.groups, editorsById, files]);
+
   const commandTitleById = useMemo(() => {
     const map = new Map<string, string>();
     for (const command of extensions.commands) {
@@ -305,27 +349,6 @@ export function ShellApp({
       setKeybindingsVersion((version) => version + 1);
     });
   }, []);
-
-  const openFiles = useMemo(
-    () =>
-      openFileIds
-        .map((id) => files.find((file) => file.fileId === id))
-        .filter((file): file is FileEntity => Boolean(file)),
-    [openFileIds, files]
-  );
-
-  const activeFile = useMemo(
-    () => {
-      if (!activeFileId) return null;
-      return files.find((file) => file.fileId === activeFileId) ?? null;
-    },
-    [activeFileId, files]
-  );
-
-  const activeEditor = useMemo(() => {
-    if (!activeFile?.editorId) return null;
-    return editorsById.get(activeFile.editorId) ?? null;
-  }, [activeFile, editorsById]);
 
   const tooltipContributions = useMemo(
     () => [...extensions.tooltip.sections].sort((a, b) => a.order - b.order),
@@ -413,6 +436,26 @@ export function ShellApp({
   }, [toggleZone]);
 
   useEffect(() => {
+    return subscribeSplitActiveEditorRightRequests(() => {
+      setEditorWorkbench((previous) => {
+        const fileId = getActiveWorkbenchFileId(previous);
+        if (!fileId || !canSplitFileRef.current(fileId)) {
+          return previous;
+        }
+        return splitActiveGroupRight(previous);
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    return subscribeOpenEditorToSideRequests((request) => {
+      setEditorWorkbench((previous) => openFileToSide(previous, request.fileId, {
+        removeFromOtherGroups: request.removeFromOtherGroups
+      }));
+    });
+  }, []);
+
+  useEffect(() => {
     return subscribeFocusSidebarViewRequests((request) => {
       const requestedZone = request.zone
         ?? (request.viewId
@@ -437,13 +480,6 @@ export function ShellApp({
     });
   }, [extensions.layout.views]);
 
-  const handleTabContextMenuAction = useCallback(
-    (actionId: string, _file: FileEntity) => {
-      void executeCommand(actionId);
-    },
-    [executeCommand]
-  );
-
   const handleTabContextMenuOpen = useCallback(
     (file: FileEntity | null) => {
       fileMediator.setContextFileId(file?.fileId ?? null);
@@ -451,37 +487,30 @@ export function ShellApp({
     [fileMediator]
   );
 
-  const closeFile = (fileId: string) => {
-    const performClose = () => {
-      setOpenFileIds((prev) => {
-        const next = prev.filter((id) => id !== fileId);
-        if (activeFileIdRef.current === fileId) {
-          setTabActivationQueue((previousQueue) => {
-            const resolution = resolveNextActiveTab({
-              queue: previousQueue,
-              openFileIds: next,
-              excludeFileId: fileId,
-              previousOpenFileIds: prev
-            });
-            tabActivationQueueRef.current = resolution.nextQueue;
-            activeFileIdRef.current = resolution.nextActiveFileId;
-            setActiveFileId(resolution.nextActiveFileId);
-            return resolution.nextQueue;
-          });
-        } else {
-          setTabActivationQueue((previousQueue) => {
-            const nextQueue = previousQueue.filter((queuedId) => queuedId !== fileId);
-            tabActivationQueueRef.current = nextQueue;
-            return nextQueue;
-          });
-        }
-        return next;
-      });
-      void fileMediator.closeFile(fileId, { discardDirty: true });
-    };
+  const canSplitFile = useCallback(
+    (fileId: string): boolean => {
+      const file = files.find((candidate) => candidate.fileId === fileId);
+      if (!file?.editorId) {
+        return false;
+      }
+      return editorsById.get(file.editorId)?.canSplit === true;
+    },
+    [editorsById, files]
+  );
 
+  useEffect(() => {
+    canSplitFileRef.current = canSplitFile;
+  }, [canSplitFile]);
+
+  const closeFile = useCallback((fileId: string, groupId: string = editorWorkbenchRef.current.activeGroupId) => {
+    const nextWorkbench = closeFileInGroup(editorWorkbenchRef.current, groupId, fileId);
+    if (isFileReferenced(nextWorkbench, fileId)) {
+      setEditorWorkbench(nextWorkbench);
+      return;
+    }
     const file = filesRegistry.getFile(fileId);
     if (!file) {
+      setEditorWorkbench(nextWorkbench);
       return;
     }
     void (async () => {
@@ -489,18 +518,81 @@ export function ShellApp({
       if (!shouldClose) {
         return;
       }
-      performClose();
+      setEditorWorkbench(nextWorkbench);
+      await fileMediator.closeFile(fileId, { discardDirty: true });
+    })();
+  }, [fileMediator, filesRegistry]);
+
+  useEffect(() => {
+    return subscribeCloseActiveEditorRequests(() => {
+      const fileId = getActiveWorkbenchFileId(editorWorkbenchRef.current);
+      if (!fileId) {
+        return;
+      }
+      closeFile(fileId, editorWorkbenchRef.current.activeGroupId);
+    });
+  }, [closeFile]);
+
+  const closeFilesInGroup = (groupId: string, shouldClose: (fileId: string) => boolean) => {
+    void (async () => {
+      let nextWorkbench = editorWorkbenchRef.current;
+      const group = nextWorkbench.groups.find((candidate) => candidate.id === groupId);
+      if (!group) {
+        return;
+      }
+      const fileIdsToEvaluate = group.fileIds.filter(shouldClose);
+      const fileIdsToCloseGlobally: string[] = [];
+
+      for (const fileId of fileIdsToEvaluate) {
+        const candidate = closeFileInGroup(nextWorkbench, groupId, fileId);
+        if (!isFileReferenced(candidate, fileId)) {
+          const file = filesRegistry.getFile(fileId);
+          if (file) {
+            const confirmed = await confirmCloseDirtyFile(file, requestMessageDialog);
+            if (!confirmed) {
+              return;
+            }
+          }
+          fileIdsToCloseGlobally.push(fileId);
+        }
+        nextWorkbench = candidate;
+      }
+
+      setEditorWorkbench(nextWorkbench);
+      for (const fileId of fileIdsToCloseGlobally) {
+        await fileMediator.closeFile(fileId, { discardDirty: true });
+      }
     })();
   };
 
-  const selectFile = (fileId: string) => {
-    setTabActivationQueue((previousQueue) => {
-      const nextQueue = recordTabActivation(previousQueue, fileId);
-      tabActivationQueueRef.current = nextQueue;
-      return nextQueue;
-    });
-    activeFileIdRef.current = fileId;
-    setActiveFileId(fileId);
+  const handleTabContextMenuAction = (actionId: string, file: FileEntity, groupId: string) => {
+    if (actionId === "core.layout.tab.close") {
+      closeFile(file.fileId, groupId);
+      return;
+    }
+    if (actionId === "core.layout.tab.closeOthers") {
+      closeFilesInGroup(groupId, (fileId) => fileId !== file.fileId);
+      return;
+    }
+    if (actionId === "core.layout.tab.closeAll") {
+      closeFilesInGroup(groupId, () => true);
+      return;
+    }
+    if (actionId === "core.layout.tab.splitRight") {
+      if (canSplitFile(file.fileId)) {
+        setEditorWorkbench((previous) => splitActiveGroupRight(selectFileInGroup(previous, groupId, file.fileId)));
+      }
+      return;
+    }
+    void executeCommand(actionId);
+  };
+
+  const selectFile = (fileId: string, groupId: string = editorWorkbenchRef.current.activeGroupId) => {
+    setEditorWorkbench((previous) => selectFileInGroup(previous, groupId, fileId));
+  };
+
+  const focusGroup = (groupId: string) => {
+    setEditorWorkbench((previous) => focusEditorGroup(previous, groupId));
   };
 
   useEffect(() => {
@@ -510,24 +602,34 @@ export function ShellApp({
 
   useEffect(() => {
     return fileMediator.onActiveFileChanged((fileId) => {
-      const nextQueue = recordTabActivation(tabActivationQueueRef.current, fileId);
-      tabActivationQueueRef.current = nextQueue;
-      setTabActivationQueue(nextQueue);
-      activeFileIdRef.current = fileId;
-      setActiveFileId(fileId);
-      workspaceService.setActiveFileId(fileId);
+      if (!fileId) {
+        return;
+      }
+      if (fileId === activeFileIdRef.current) {
+        return;
+      }
+      setEditorWorkbench((previous) => {
+        const containingGroup = previous.groups.find((group) => group.fileIds.includes(fileId));
+        if (containingGroup) {
+          return selectFileInGroup(previous, containingGroup.id, fileId);
+        }
+        return openFileInActiveGroup(previous, fileId);
+      });
     });
-  }, [fileMediator, workspaceService]);
+  }, [fileMediator]);
 
   useEffect(() => {
-    if (!activeFileId || !tabsRef.current) return;
-    const tab = tabsRef.current.querySelector(`[data-file-id="${CSS.escape(activeFileId)}"]`);
+    if (!activeFileId) return;
+    const activeTabs = tabsByGroupRef.current.get(activeGroup.id);
+    if (!activeTabs) return;
+    const tab = activeTabs.querySelector(`[data-file-id="${CSS.escape(activeFileId)}"]`);
     if (tab) {
       tab.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
     }
-  }, [activeFileId]);
+  }, [activeFileId, activeGroup.id]);
 
   useEffect(() => {
+    const uriByFileId = new Map(files.map((file) => [file.fileId, file.uri]));
     workspaceService.setLayout({
       visibleZones: [...visibleZones],
       sidebarWidths: {
@@ -536,75 +638,44 @@ export function ShellApp({
       },
       sidebarPanelStates: panelStates,
       sidebarPanelHeights: panelHeights,
-      panelHeight
+      panelHeight,
+      editorGroups: editorWorkbench.groups.map((group) => ({
+        id: group.id,
+        fileUris: group.fileIds
+          .map((fileId) => uriByFileId.get(fileId))
+          .filter((uri): uri is string => Boolean(uri)),
+        activeFileUri: group.activeFileId ? uriByFileId.get(group.activeFileId) : undefined
+      })),
+      activeEditorGroupId: activeGroup.id,
+      editorLayout: createPersistedEditorLayout(editorWorkbench)
     });
-  }, [visibleZones, primarySidebarWidth, secondarySidebarWidth, panelStates, panelHeights, panelHeight, workspaceService]);
+  }, [activeGroup.id, editorWorkbench, files, visibleZones, primarySidebarWidth, secondarySidebarWidth, panelStates, panelHeights, panelHeight, workspaceService]);
 
   useEffect(() => {
     return filesRegistry.subscribe((next) => {
-      let nextOpenFileIds: string[] = [];
-      let addedFileIds: string[] = [];
-      let previousOpenFileIdsForActivation: string[] = [];
-      setFiles((prev) => {
-        if (filesAreStructurallyIdentical(prev, next)) return prev;
-        return next;
-      });
-      setTabActivationQueue((previousQueue) => {
-        const nextSet = new Set(next.map((file) => file.fileId));
-        const nextQueue = previousQueue.filter((queuedId) => nextSet.has(queuedId));
-        tabActivationQueueRef.current = nextQueue;
-        if (nextQueue.length === previousQueue.length &&
-            nextQueue.every((id, i) => id === previousQueue[i])) {
-          return previousQueue;
-        }
-        return nextQueue;
-      });
-      setOpenFileIds((prev) => {
-        previousOpenFileIdsForActivation = prev;
+      if (filesAreStructurallyIdentical(filesRef.current, next)) {
+        return;
+      }
+      filesRef.current = next;
+      setFiles(next);
+      setEditorWorkbench((previous) => {
         const settings = getCoreSettingsService();
         const openNewFilesLast = settings?.getValue(OPEN_NEW_FILES_LAST_SETTING_ID) !== false;
-        const resolution = resolveOpenFileIds({
-          previousOpenFileIds: prev,
-          nextFiles: next.map((file) => ({ fileId: file.fileId, uri: file.uri })),
-          openNewFilesLast,
-          activeFileId: activeFileIdRef.current,
-          activationQueue: tabActivationQueueRef.current
-        });
-        nextOpenFileIds = resolution.nextOpenFileIds;
-        addedFileIds = resolution.addedFileIds;
-        if (resolution.addedFileIds.length === 0 &&
-            resolution.nextOpenFileIds.length === prev.length &&
-            resolution.nextOpenFileIds.every((id, i) => id === prev[i])) {
-          return prev;
-        }
+        const resolution = syncWorkbenchWithFiles(
+          previous,
+          next.map((file) => ({ fileId: file.fileId, uri: file.uri })),
+          { openNewFilesLast }
+        );
         const uriByFileId = new Map(next.map((file) => [file.fileId, file.uri]));
         workspaceService.setOpenFileOrder(
-          resolution.nextOpenFileIds
+          listWorkbenchFileIds(resolution.state)
             .map((fileId) => uriByFileId.get(fileId))
             .filter((uri): uri is string => Boolean(uri))
         );
-        return resolution.nextOpenFileIds;
-      });
-      setActiveFileId((prev) => {
-        const resolution = resolveActiveFileAfterRegistryUpdate({
-          previousActiveFileId: prev,
-          previousOpenFileIds: previousOpenFileIdsForActivation,
-          nextOpenFileIds,
-          addedFileIds,
-          activationQueue: tabActivationQueueRef.current
-        });
-        if (resolution.nextQueue !== tabActivationQueueRef.current) {
-          tabActivationQueueRef.current = resolution.nextQueue;
-          setTabActivationQueue(resolution.nextQueue);
-        }
-        activeFileIdRef.current = resolution.nextActiveFileId;
-        if (resolution.nextActiveFileId === prev) {
-          return prev;
-        }
-        return resolution.nextActiveFileId;
+        return resolution.state;
       });
     });
-  }, [filesRegistry, setActiveFileId]);
+  }, [filesRegistry, workspaceService]);
 
   const beginResize = (target: "primary" | "secondary") => {
     const onMouseMove = (event: MouseEvent) => {
@@ -651,6 +722,41 @@ export function ShellApp({
     document.body.classList.add("is-resizing-panel");
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseup", onMouseUp);
+  };
+
+  const beginResizeEditorSplit = (dividerIndex: number, startX: number) => {
+    const main = shellMainRef.current;
+    if (!main) {
+      return;
+    }
+    const rect = main.getBoundingClientRect();
+    const totalWidth = Math.max(1, rect.width);
+    const startWorkbench = editorWorkbenchRef.current;
+    const minSize = 160 / totalWidth;
+
+    const onMouseMove = (event: MouseEvent) => {
+      const delta = (event.clientX - startX) / totalWidth;
+      setEditorWorkbench(resizeAdjacentEditorGroups(startWorkbench, dividerIndex, delta, minSize));
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.classList.remove("is-resizing-editor-split");
+    };
+
+    document.body.classList.add("is-resizing-editor-split");
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  };
+
+  const focusEditorGroupFromPointer = (event: ReactMouseEvent<HTMLDivElement>): void => {
+    focusGroup(event.currentTarget.dataset.editorGroupId ?? "");
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (target?.closest("input, textarea, select, button, [contenteditable='true'], [role='button']")) {
+      return;
+    }
+    event.currentTarget.focus({ preventScroll: true });
   };
 
   const showPrimarySidebar = visibleZones.has("primarySidebar");
@@ -715,31 +821,92 @@ export function ShellApp({
         )}
 
         <section className="shell-main-area" aria-label="Main area">
-          <div className="shell-main">
-            <EditorTabs
-              openFiles={openFiles}
-              activeFileId={activeFileId}
-              editorsById={editorsById}
-              tabsRef={tabsRef}
-              onSelectFile={selectFile}
-              onCloseFile={closeFile}
-              tooltipContributions={tooltipContributions}
-              tabContextMenus={tabContextMenus}
-              tabHeaderStyleContributions={tabHeaderStyleContributions}
-              tabTitleContributions={tabTitleContributions}
-              hasMimeCapability={(mimeType, capability) =>
-                filesRegistry.capabilities.hasCapability(mimeType, capability)
-              }
-              getMimeIcon={filesRegistry.mimeIcons.getMimeIcon}
-              onTabContextMenuAction={handleTabContextMenuAction}
-              onTabContextMenuOpen={handleTabContextMenuOpen}
-            />
+          <div ref={shellMainRef} className={`shell-main ${editorWorkbench.groups.length > 1 ? "is-split" : ""}`}>
+            {editorWorkbench.groups.map((group, index) => {
+              const groupFiles = group.fileIds
+                .map((id) => files.find((file) => file.fileId === id))
+                .filter((file): file is FileEntity => Boolean(file));
+              const groupActiveFile = group.activeFileId
+                ? files.find((file) => file.fileId === group.activeFileId) ?? null
+                : null;
+              const groupActiveEditor = groupActiveFile?.editorId
+                ? editorsById.get(groupActiveFile.editorId) ?? null
+                : null;
+              const isActiveGroup = group.id === activeGroup.id;
+              const editorInstanceContext = {
+                editorInstanceId: [
+                  group.id,
+                  groupActiveEditor?.id ?? "no-editor",
+                  groupActiveFile?.fileId ?? "no-file"
+                ].join(":"),
+                editorGroupId: group.id,
+                editorGroupIndex: index,
+                editorGroupCount: editorWorkbench.groups.length,
+                isActiveEditorGroup: isActiveGroup
+              };
+              return (
+                <Fragment key={group.id}>
+                  {index > 0 && (
+                    <div
+                      key={`${group.id}-divider`}
+                      className="shell-editor-split-divider"
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label="Resize editor split"
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        beginResizeEditorSplit(index - 1, event.clientX);
+                      }}
+                    />
+                  )}
+                  <div
+                    key={group.id}
+                    className={`shell-editor-group ${isActiveGroup ? "is-active" : ""}`}
+                    data-context="editor"
+                    data-editor-group-id={group.id}
+                    tabIndex={-1}
+                    style={{ flexGrow: editorWorkbench.sizes[index] ?? 1 }}
+                    onMouseDownCapture={focusEditorGroupFromPointer}
+                    onFocusCapture={() => focusGroup(group.id)}
+                  >
+                    <EditorTabs
+                      openFiles={groupFiles}
+                      activeFileId={group.activeFileId}
+                      editorsById={editorsById}
+                      tabsRef={(node) => {
+                        if (node) {
+                          tabsByGroupRef.current.set(group.id, node);
+                        } else {
+                          tabsByGroupRef.current.delete(group.id);
+                        }
+                      }}
+                      onSelectFile={(fileId) => selectFile(fileId, group.id)}
+                      onCloseFile={(fileId) => closeFile(fileId, group.id)}
+                      tooltipContributions={tooltipContributions}
+                      tabContextMenus={tabContextMenus}
+                      tabHeaderStyleContributions={tabHeaderStyleContributions}
+                      tabTitleContributions={tabTitleContributions}
+                      hasMimeCapability={(mimeType, capability) =>
+                        filesRegistry.capabilities.hasCapability(mimeType, capability)
+                      }
+                      getMimeIcon={filesRegistry.mimeIcons.getMimeIcon}
+                      onTabContextMenuAction={(actionId, file) => handleTabContextMenuAction(actionId, file, group.id)}
+                      onTabContextMenuOpen={(file) => {
+                        focusGroup(group.id);
+                        handleTabContextMenuOpen(file);
+                      }}
+                    />
 
-            <EditorPane
-              activeFile={activeFile}
-              activeEditor={activeEditor}
-              welcomes={welcomes}
-            />
+                    <EditorPane
+                      activeFile={groupActiveFile}
+                      activeEditor={groupActiveEditor}
+                      editorInstanceContext={editorInstanceContext}
+                      welcomes={welcomes}
+                    />
+                  </div>
+                </Fragment>
+              );
+            })}
           </div>
         </section>
 
