@@ -12,6 +12,25 @@ export type PersistedFileEntry = {
   persistentViewState?: ViewStateBag;
 };
 
+export type PersistedEditorGroup = {
+  id: string;
+  fileUris: string[];
+  activeFileUri?: string;
+};
+
+export type PersistedEditorLayoutNode =
+  | {
+      kind: "leaf";
+      groupId: string;
+    }
+  | {
+      kind: "split";
+      /** horizontal = left-to-right children, vertical = top-to-bottom children. */
+      direction: "horizontal" | "vertical";
+      children: PersistedEditorLayoutNode[];
+      sizes?: number[];
+    };
+
 export type PersistedLayoutSnapshot = {
   visibleZones?: LayoutZone[];
   sidebarWidths?: {
@@ -21,6 +40,9 @@ export type PersistedLayoutSnapshot = {
   sidebarPanelStates?: Record<string, boolean>;
   sidebarPanelHeights?: Record<string, number>;
   panelHeight?: number;
+  editorGroups?: PersistedEditorGroup[];
+  activeEditorGroupId?: string;
+  editorLayout?: PersistedEditorLayoutNode;
 };
 
 export type WorkspaceSnapshot = {

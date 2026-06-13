@@ -22,7 +22,7 @@ type EditorTabsProps = {
   openFiles: FileEntity[];
   activeFileId: string | null;
   editorsById: Map<string, LayoutEditorContribution>;
-  tabsRef: React.RefObject<HTMLDivElement>;
+  tabsRef: React.Ref<HTMLDivElement>;
   onSelectFile: (fileId: string) => void;
   onCloseFile: (fileId: string) => void;
   tooltipContributions?: TooltipSectionContribution[];
@@ -214,6 +214,9 @@ export function EditorTabs({
           {allActions
             .filter((action) => {
               if (!action.enabledWhen) return true;
+              const contextEditor = contextMenu.file.editorId
+                ? editorsById.get(contextMenu.file.editorId)
+                : undefined;
               try {
                 return getExpressionRuntime().evaluateBooleanSync(
                   action.enabledWhen,
@@ -223,7 +226,8 @@ export function EditorTabs({
                     fileId: contextMenu.file.fileId,
                     dirtyVsDisk: contextMenu.file.dirtyVsDisk,
                     dirtyVsBackend: contextMenu.file.dirtyVsBackend,
-                    editable: hasMimeCapability?.(contextMenu.file.mimeType, "editable") ?? false
+                    editable: hasMimeCapability?.(contextMenu.file.mimeType, "editable") ?? false,
+                    canSplit: contextEditor?.canSplit === true
                   },
                   { mode: "when", source: `tabContextMenu:${action.id}`, timeoutMs: 50 }
                 );

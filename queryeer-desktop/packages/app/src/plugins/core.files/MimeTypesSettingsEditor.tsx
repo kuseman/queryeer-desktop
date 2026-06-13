@@ -4,6 +4,7 @@ type MimeTypeOption = {
   mimeType: string;
   label: string;
   icon: (props: MimeIconProps) => JSX.Element;
+  canCreate: boolean;
 };
 
 type MimeTypeConfigItem = {
@@ -22,7 +23,7 @@ type MimeTypesSettingsEditorProps = {
 function normalizeValue(value: unknown, options: MimeTypeOption[]): MimeTypeConfigItem[] {
   const available = new Map(options.map((o) => [o.mimeType, o]));
   if (!Array.isArray(value)) {
-    return options.map((o) => ({ mimeType: o.mimeType, enableForNew: true }));
+    return options.map((o) => ({ mimeType: o.mimeType, enableForNew: o.canCreate }));
   }
   const result: MimeTypeConfigItem[] = [];
   const seen = new Set<string>();
@@ -37,15 +38,16 @@ function normalizeValue(value: unknown, options: MimeTypeOption[]): MimeTypeConf
     }
     seen.add(mimeType);
     const color = typeof item.color === "string" ? item.color : undefined;
+    const option = available.get(mimeType)!;
     result.push({
       mimeType,
-      enableForNew: Boolean(item.enableForNew),
+      enableForNew: option.canCreate && Boolean(item.enableForNew),
       color
     });
   }
   for (const option of options) {
     if (!seen.has(option.mimeType)) {
-      result.push({ mimeType: option.mimeType, enableForNew: true });
+      result.push({ mimeType: option.mimeType, enableForNew: option.canCreate });
     }
   }
   return result;
@@ -91,12 +93,12 @@ export function MimeTypesSettingsEditor({
             <div key={item.mimeType} className="settings-mime-grid-row" role="row">
               <label
                 className="settings-mime-grid-toggle"
-                title="Include in New menus"
+                title={option.canCreate ? "Include in New menus" : "This MIME type cannot be created from New menus"}
               >
                 <input
                   type="checkbox"
-                  checked={item.enableForNew}
-                  disabled={readonly}
+                  checked={option.canCreate && item.enableForNew}
+                  disabled={readonly || !option.canCreate}
                   onChange={(event) => {
                     const next = [...items];
                     next[index] = { ...item, enableForNew: event.target.checked };

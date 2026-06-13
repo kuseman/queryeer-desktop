@@ -373,7 +373,7 @@ describe("FileMediator.saveFile", () => {
     await mediator.saveFile(file.fileId);
 
     expect(showSaveDialog).toHaveBeenCalledWith({
-      title: "Save Query",
+      title: "Save File",
       defaultPath: "Query1.sql",
       filters: [{ name: "File", extensions: ["sql"] }]
     });
@@ -418,6 +418,31 @@ describe("FileMediator.saveFile", () => {
     await mediator.saveFile(file.fileId);
 
     expect(writeFile).not.toHaveBeenCalled();
+  });
+
+  it("forces save dialog for file-backed files when saveAs is true", async () => {
+    const { mediator, registry, resolveFileContent, writeFile, showSaveDialog } = setupHarness();
+    const file = await mediator.openFile("file:///C:/Users/test/Original.sql", {
+      mimeType: "application/sql"
+    });
+
+    showSaveDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePath: "C:\\Users\\test\\Copy.sql"
+    });
+
+    await mediator.saveFile(file.fileId, { saveAs: true });
+
+    expect(showSaveDialog).toHaveBeenCalledWith({
+      title: "Save File",
+      defaultPath: "C:/Users/test/Original.sql",
+      filters: [{ name: "File", extensions: ["sql"] }]
+    });
+    expect(resolveFileContent).toHaveBeenCalledWith(file.fileId, "file:///C:/Users/test/Original.sql");
+    expect(writeFile).toHaveBeenCalledWith("file:///C:/Users/test/Copy.sql", "resolved-content");
+    const updated = registry.createFilesRegistry().getFile(file.fileId);
+    expect(updated?.uri).toBe("file:///C:/Users/test/Copy.sql");
+    expect(updated?.dirtyVsDisk).toBe(false);
   });
 
   it("does nothing for untitled when showSaveDialog not provided", async () => {

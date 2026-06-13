@@ -68,7 +68,7 @@ function createHarness(): Harness {
         }),
         hasCapability: vi.fn(() => true),
         listMimeTypesByCapability: vi.fn((capability) => {
-          if (capability !== "editable") {
+          if (capability !== "creatable") {
             return [];
           }
           return ["application/sql", "application/plbsql", "application/json"];
@@ -296,6 +296,26 @@ describe("core.files plugin", () => {
     );
   });
 
+  it("save command saves the active file", async () => {
+    const harness = createHarness();
+
+    coreFilesPlugin.activate(harness.context);
+    const handler = harness.commands.get("core.files.save");
+    await handler?.();
+
+    expect(harness.context.fileMediator.saveFile).toHaveBeenCalledWith("active-file");
+  });
+
+  it("save as command forces a save dialog through the mediator", async () => {
+    const harness = createHarness();
+
+    coreFilesPlugin.activate(harness.context);
+    const handler = harness.commands.get("core.files.saveAs");
+    await handler?.();
+
+    expect(harness.context.fileMediator.saveFile).toHaveBeenCalledWith("active-file", { saveAs: true });
+  });
+
   it("registers toolbar new menu with configured mime type order", () => {
     const harness = createHarness();
 
@@ -320,7 +340,7 @@ describe("core.files plugin", () => {
     expect(options.map((option) => option.label)).toEqual(["Payloadbuilder", "Jdbc"]);
   });
 
-  it("uses all editable mime types when setting is empty", async () => {
+  it("uses all creatable mime types when setting is empty", async () => {
     const harness = createHarness();
     settingsServiceMock.getValue.mockImplementation((settingId) => {
       if (settingId === "core.files.mimeTypes") {
@@ -465,5 +485,77 @@ describe("core.files plugin", () => {
       options: Array<{ mimeType: string }>;
     };
     expect(props.options.map((option) => option.mimeType)).toContain("application/vnd.queryeer.flow+plain");
+  });
+
+  it("keeps non-creatable mime types colorable but out of New menus", () => {
+    const harness = createHarness();
+    const qjdbcGraphMimeType = "application/vnd.queryeer.jdbc-schema-graph+json";
+    settingsServiceMock.getValue.mockImplementation((settingId) => {
+      if (settingId === "core.files.mimeTypes") {
+        return [
+          { mimeType: qjdbcGraphMimeType, enableForNew: true, color: "#00ff00" },
+          { mimeType: "application/sql", enableForNew: true }
+        ];
+      }
+      return undefined;
+    });
+    (harness.context.files.capabilities.listAllMimeTypes as ReturnType<typeof vi.fn>).mockReturnValue([
+      "application/sql",
+      qjdbcGraphMimeType
+    ]);
+    (harness.context.files.capabilities.listMimeTypesByCapability as ReturnType<typeof vi.fn>).mockImplementation((capability) => {
+      return capability === "creatable" ? ["application/sql"] : [];
+    });
+    (harness.context.files.capabilities.hasCapability as ReturnType<typeof vi.fn>).mockImplementation((mimeType, capability) => {
+      return mimeType === "application/sql" || capability !== "creatable";
+    });
+
+    coreFilesPlugin.activate(harness.context);
+
+    const toolbarMenu = harness.toolbarActions.find(
+      (item) => item.id === "core.files.toolbar.new.menu"
+    ) as
+      | {
+          getItems: () => Array<{ value: string }>;
+        }
+      | undefined;
+    expect(toolbarMenu?.getItems().map((option) => option.value)).toEqual(["application/sql"]);
+
+    const rendererCalls = (harness.context.settings.registerAdvancedRenderer as ReturnType<typeof vi.fn>).mock
+      .calls as Array<[{ id: string; render: (params: { value: unknown; setValue: (value: unknown) => void; readonly: boolean }) => JSX.Element }]>
+    ;
+    const mimeRenderer = rendererCalls.find((call) => call[0].id === "core.files.mimeTypes.renderer")?.[0];
+    const element = mimeRenderer!.render({
+      value: [],
+      setValue: () => {},
+      readonly: false
+    });
+    const props = element.props as {
+      options: Array<{ mimeType: string; canCreate: boolean }>;
+    };
+    expect(props.options.find((option) => option.mimeType === qjdbcGraphMimeType)?.canCreate).toBe(false);
+
+    const calls = (harness.context.layout.registerTabHeaderStyle as ReturnType<typeof vi.fn>).mock
+      .calls as Array<[{ id: string; render: (ctx: { file: FileEntity; isActive: boolean; hasCapability: (cap: string) => boolean }) => unknown }]>
+    ;
+    const tabHeaderStyle = calls.find((call) => call[0].id === "core.files.tabHeaderStyle.mimeColor");
+    const result = tabHeaderStyle![0].render({
+      file: {
+        fileId: "f-graph",
+        version: 0,
+        uri: "untitled:ER.qjdbcgraph",
+        mimeType: qjdbcGraphMimeType,
+        dirtyVsBackend: false,
+        dirtyVsDisk: false,
+        diskState: "inSync",
+        openedAt: new Date().toISOString()
+      },
+      isActive: false,
+      hasCapability: () => false
+    });
+    expect(result).toEqual({
+      className: "tab-accent",
+      style: { "--tab-accent-color": "#00ff00" }
+    });
   });
 });

@@ -235,6 +235,34 @@ describe("createKeybindingService", () => {
     service.dispose();
   });
 
+  it("executes editorFocus keybinding while a non-input editor container is focused", async () => {
+    const executeCommand = vi.fn(async () => ({ commandId: "core.files.save", executed: true }));
+    const service = createKeybindingService({
+      executeCommand,
+      getUserKeybindings: async () => ({
+        version: KEYBINDINGS_SCHEMA_VERSION,
+        bindings: [{ commandId: "core.files.save", key: "Ctrl+S", when: "editorFocus", scope: "editor" }],
+        unbound: []
+      })
+    });
+
+    await service.initialize(makeExtensions());
+
+    const editorRoot = document.createElement("div");
+    editorRoot.setAttribute("data-context", "editor");
+    editorRoot.tabIndex = -1;
+    document.body.appendChild(editorRoot);
+    editorRoot.focus();
+
+    const event = new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true });
+    editorRoot.dispatchEvent(event);
+
+    expect(executeCommand).toHaveBeenCalledWith("core.files.save");
+
+    document.body.removeChild(editorRoot);
+    service.dispose();
+  });
+
   it("treats editorTextFocus as editorFocus with context chain", async () => {
     const executeCommand = vi.fn(async () => ({ commandId: "core.files.save", executed: true }));
     const chain = createContextChain();
@@ -248,6 +276,37 @@ describe("createKeybindingService", () => {
       getUserKeybindings: async () => ({
         version: KEYBINDINGS_SCHEMA_VERSION,
         bindings: [{ commandId: "core.files.save", key: "Ctrl+Alt+K", when: "editorFocus", scope: "editor" }],
+        unbound: []
+      }),
+      contextChain: chain
+    });
+
+    await service.initialize(makeExtensions());
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, altKey: true, bubbles: true }));
+
+    expect(executeCommand).toHaveBeenCalledWith("core.files.save");
+    service.dispose();
+  });
+
+  it("uses the active editor scope when split panes register competing editor contexts", async () => {
+    const executeCommand = vi.fn(async () => ({ commandId: "core.files.save", executed: true }));
+    const chain = createContextChain();
+    chain.register({
+      id: "left-editor",
+      priority: 40,
+      context: { editorTextFocus: true, editorFocus: false, inputFocus: true, languageId: "sql" }
+    });
+    chain.register({
+      id: "right-editor",
+      priority: 40,
+      context: { editorTextFocus: false, editorFocus: false, inputFocus: false, languageId: "json" }
+    });
+    chain.activate("left-editor");
+    const service = createKeybindingService({
+      executeCommand,
+      getUserKeybindings: async () => ({
+        version: KEYBINDINGS_SCHEMA_VERSION,
+        bindings: [{ commandId: "core.files.save", key: "Ctrl+Alt+K", when: "editorFocus && languageId == 'sql'", scope: "editor" }],
         unbound: []
       }),
       contextChain: chain

@@ -17,6 +17,7 @@ type MimeTypeConfigItem = {
 
 const ALL_MIME_CAPABILITIES: MimeCapability[] = [
   "backupable",
+  "creatable",
   "editable",
   "viewable",
   "queryexecutable"
@@ -127,7 +128,7 @@ function toMimeLabel(mimeType: string): string {
 }
 
 function listNewFileMimeTypeOptions(context: Parameters<Plugin["activate"]>[0]): NewFileMimeTypeOption[] {
-  const mimeTypes = context.files.capabilities.listMimeTypesByCapability("editable");
+  const mimeTypes = context.files.capabilities.listMimeTypesByCapability("creatable");
   return mimeTypes.map((mimeType) => ({
     mimeType,
     extension: fileExtensionForMimeType(context, mimeType),
@@ -176,13 +177,15 @@ function listAllMimeTypeOptions(
   extension: string;
   label: string;
   icon: (props: { className?: string }) => JSX.Element;
+  canCreate: boolean;
 }> {
   const mimeTypes = context.files.capabilities.listAllMimeTypes();
   return mimeTypes.map((mimeType) => ({
     mimeType,
     extension: fileExtensionForMimeType(context, mimeType),
     label: context.files.capabilities.getLabel?.(mimeType) ?? toMimeLabel(mimeType),
-    icon: context.files.mimeIcons.getMimeIcon(mimeType) ?? DocumentIcon
+    icon: context.files.mimeIcons.getMimeIcon(mimeType) ?? DocumentIcon,
+    canCreate: context.files.capabilities.hasCapability(mimeType, "creatable")
   }));
 }
 
@@ -230,21 +233,21 @@ export const coreFilesPlugin: Plugin = {
   },
   activate: (context) => {
     const allMimeTypes = context.files.capabilities.listAllMimeTypes();
-    const editableMimeTypes = new Set(
-      context.files.capabilities.listMimeTypesByCapability("editable")
+    const creatableMimeTypes = new Set(
+      context.files.capabilities.listMimeTypesByCapability("creatable")
     );
     const preferredNewMimeTypes = context.files.capabilities.listPreferredNewFileMimeTypes?.() ?? [];
     const preferredSet = new Set(preferredNewMimeTypes);
 
     const orderedAllMimeTypes = [
       ...preferredNewMimeTypes.filter((m) => allMimeTypes.includes(m)),
-      ...allMimeTypes.filter((m) => !preferredSet.has(m) && editableMimeTypes.has(m)),
-      ...allMimeTypes.filter((m) => !editableMimeTypes.has(m))
+      ...allMimeTypes.filter((m) => !preferredSet.has(m) && creatableMimeTypes.has(m)),
+      ...allMimeTypes.filter((m) => !creatableMimeTypes.has(m))
     ];
 
     const defaultMimeTypes: MimeTypeConfigItem[] = orderedAllMimeTypes.map((mimeType) => ({
       mimeType,
-      enableForNew: editableMimeTypes.has(mimeType),
+      enableForNew: creatableMimeTypes.has(mimeType),
       color: undefined
     }));
 
@@ -266,7 +269,8 @@ export const coreFilesPlugin: Plugin = {
             options={allMimeTypeOptions.map((option) => ({
               mimeType: option.mimeType,
               label: option.label,
-              icon: option.icon
+              icon: option.icon,
+              canCreate: option.canCreate
             }))}
           />
         );
@@ -407,7 +411,7 @@ export const coreFilesPlugin: Plugin = {
           configuredOptions.some((option) => option.mimeType === active.mimeType);
         const selectedMimeType = activeInConfigured
           ? active?.mimeType
-          : (configuredOptions[0]?.mimeType ?? active?.mimeType ?? "text/plain");
+          : (configuredOptions[0]?.mimeType ?? "text/plain");
         const extension = fileExtensionForMimeType(context, selectedMimeType);
         await context.fileMediator.createUntitledFile({
           extension,
@@ -524,7 +528,14 @@ export const coreFilesPlugin: Plugin = {
     context.commands.registerCommand({
       id: "core.files.saveAs",
       title: "Save As",
-      handler: async () => {}
+      handler: async () => {
+        const contextFileId = context.fileMediator.getContextFileId();
+        const fileId = contextFileId ?? context.fileMediator.getActiveFileId();
+        if (fileId) {
+          await maybeFormatBeforeSave(fileId, context.editors);
+          await context.fileMediator.saveFile(fileId, { saveAs: true });
+        }
+      }
     });
 
     context.layout.registerToolbarAction({

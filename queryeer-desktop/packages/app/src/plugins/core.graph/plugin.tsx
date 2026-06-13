@@ -1,17 +1,59 @@
+import { useEffect, useState } from "react";
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import type { GraphActionInvocation, GraphDocument } from "@queryeer/api/graph";
 import { GraphViewer } from "./GraphViewer";
 import { GRAPH_DOCUMENT_EDITOR_ID, GRAPH_DOCUMENT_EXTENSION, GRAPH_DOCUMENT_MIME_TYPE } from "./constants";
 import { GraphIcon } from "./GraphIcon";
-import { createSampleGraphDocument } from "./sample-graph";
+import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegistry";
+import { getGraphDocumentRepository } from "./GraphDocumentRepository";
 import "./graph.css";
 
 function GraphDocumentEditor({ activeFile }: { activeFile?: FileEntity }): JSX.Element {
-  const graph = resolveGraphDocument(activeFile);
+  const [graph, setGraph] = useState<GraphDocument | null>(() => activeFile ? getGraphDocumentRepository().getGraphForFile(activeFile) : null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!activeFile) {
+      setGraph(null);
+      setLoading(false);
+      return;
+    }
+    const repository = getGraphDocumentRepository();
+    let disposed = false;
+    const unsubscribe = repository.subscribe((fileId) => {
+      if (fileId === activeFile.fileId) {
+        setGraph(repository.getGraphForFile(activeFile));
+      }
+    });
+    const existing = repository.getGraphForFile(activeFile);
+    setGraph(existing);
+    if (existing) {
+      setLoading(false);
+      return () => {
+        disposed = true;
+        unsubscribe();
+      };
+    }
+    setLoading(activeFile.uri.startsWith("file:"));
+    void repository.openFile(activeFile).then((loaded) => {
+      if (!disposed) {
+        setGraph(loaded);
+        setLoading(false);
+      }
+    });
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, [activeFile]);
 
   if (!activeFile) {
     return <div className="graph-output-empty">No graph document is active.</div>;
+  }
+
+  if (loading) {
+    return <div className="graph-output-empty">Loading graph document...</div>;
   }
 
   if (!graph) {
@@ -22,7 +64,13 @@ function GraphDocumentEditor({ activeFile }: { activeFile?: FileEntity }): JSX.E
     );
   }
 
-  return <GraphViewer graph={graph} onEntityAction={handleGraphDocumentAction} />;
+  return (
+    <GraphViewer
+      graph={graph}
+      initialPropertiesPanelCollapsed={activeFile.mimeType !== GRAPH_DOCUMENT_MIME_TYPE}
+      onEntityAction={handleGraphDocumentAction}
+    />
+  );
 }
 
 export async function handleGraphDocumentAction(invocation: GraphActionInvocation): Promise<void> {
@@ -30,18 +78,6 @@ export async function handleGraphDocumentAction(invocation: GraphActionInvocatio
     return;
   }
   await navigator.clipboard?.writeText(invocation.entityId);
-}
-
-function resolveGraphDocument(file: FileEntity | undefined): GraphDocument | null {
-  const candidate = file?.metadata?.graphDocument;
-  if (!candidate || typeof candidate !== "object") {
-    return null;
-  }
-  const graph = candidate as Partial<GraphDocument>;
-  if (typeof graph.id !== "string" || !Array.isArray(graph.vertices) || !Array.isArray(graph.edges)) {
-    return null;
-  }
-  return graph as GraphDocument;
 }
 
 export const coreGraphPlugin: Plugin = {
@@ -55,9 +91,11 @@ export const coreGraphPlugin: Plugin = {
     providesCapabilities: ["graph.view"]
   },
   activate: (context) => {
-    context.files.capabilities.registerCapabilities(GRAPH_DOCUMENT_MIME_TYPE, ["viewable"]);
+    getEditorRegistryHost().registerContentRepository(getGraphDocumentRepository());
+    context.files.capabilities.registerCapabilities(GRAPH_DOCUMENT_MIME_TYPE, ["viewable", "backupable"]);
     context.files.capabilities.registerContentCategory(GRAPH_DOCUMENT_MIME_TYPE, "text");
     context.files.capabilities.registerLabel?.(GRAPH_DOCUMENT_MIME_TYPE, "Graph");
+    context.files.capabilities.registerPreferredExtension?.(GRAPH_DOCUMENT_MIME_TYPE, GRAPH_DOCUMENT_EXTENSION);
     context.files.registerMimeResolver((_uri, hint) => {
       return hint?.extension?.toLowerCase() === GRAPH_DOCUMENT_EXTENSION ? GRAPH_DOCUMENT_MIME_TYPE : undefined;
     });
@@ -74,35 +112,8 @@ export const coreGraphPlugin: Plugin = {
       supportedMimeTypes: [GRAPH_DOCUMENT_MIME_TYPE],
       openIntents: ["view", "edit"],
       priority: 500,
+      canSplit: true,
       render: ({ activeFile } = {}) => <GraphDocumentEditor activeFile={activeFile} />
-    });
-
-    context.commands.registerCommand({
-      id: "core.graph.openSample",
-      title: "Open Sample Graph",
-      category: "Graph",
-      handler: async () => {
-        const file = await context.fileMediator.createUntitledFile({
-          mimeType: GRAPH_DOCUMENT_MIME_TYPE,
-          extension: GRAPH_DOCUMENT_EXTENSION,
-          title: "SampleGraph"
-        });
-        context.files.updateFile(file.fileId, {
-          metadata: {
-            ...(file.metadata ?? {}),
-            workspaceTransient: true,
-            graphDocument: createSampleGraphDocument()
-          }
-        });
-      }
-    });
-
-    context.menu.registerMenuItem({
-      id: "core.graph.dev.openSample",
-      parentId: "core.menu.tools.dev",
-      label: "Open Sample Graph",
-      order: 60,
-      commandId: "core.graph.openSample"
     });
   }
 };

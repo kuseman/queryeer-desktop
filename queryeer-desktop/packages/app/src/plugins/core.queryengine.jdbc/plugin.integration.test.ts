@@ -5,6 +5,13 @@ import {
   clearFlowNodeTypeContributionsForTests,
   getFlowNodeTypeContribution
 } from "../core.flow/flow-node-type-contributions";
+import { getJdbcTreeContextMenuRegistry, resetJdbcTreeContextMenuRegistry } from "./jdbc-tree-context-menu-registry";
+import type { JdbcTreeNode } from "./jdbc-navigation-types";
+import { getGraphDocumentRepository } from "../core.graph/GraphDocumentRepository";
+import {
+  JDBC_SCHEMA_GRAPH_EXTENSION,
+  JDBC_SCHEMA_GRAPH_MIME_TYPE
+} from "./jdbc-schema-graph-constants";
 
 const mocks = vi.hoisted(() => ({
   registerExecutionContextProviderMock: vi.fn(),
@@ -265,6 +272,8 @@ describe("core.queryengine.jdbc plugin integration", () => {
     mocks.onSettingsInitializedMock.mockReturnValue(() => {});
     mocks.executeQueryForFlowMock.mockResolvedValue({ rowsAffected: 1, rows: [{ ok: true }], preview: "select 1" });
     clearFlowNodeTypeContributionsForTests();
+    resetJdbcTreeContextMenuRegistry();
+    getGraphDocumentRepository().clearForTests();
   });
 
   it("contributes JDBC flow query node type", () => {
@@ -306,6 +315,94 @@ describe("core.queryengine.jdbc plugin integration", () => {
     })).toEqual([
       { field: "jdbc.connection", message: "Connection is required." }
     ]);
+  });
+
+  it("registers schema diagram context actions for current group and side group", () => {
+    const context = createContext();
+
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const schemaGraphView = (context.layout.registerView as ReturnType<typeof vi.fn>).mock.calls
+      .map((call: unknown[]) => call[0] as { id?: string; when?: string })
+      .find((view) => view.id === "core.queryengine.jdbc.schemaGraph");
+    expect(schemaGraphView?.when).toBe(`activeFile?.mimeType == '${JDBC_SCHEMA_GRAPH_MIME_TYPE}'`);
+
+    const items = getJdbcTreeContextMenuRegistry().getItemsForNode({
+      id: "database-1",
+      connectionId: "conn-1",
+      dialectId: "jdbc",
+      kind: "database",
+      nodeType: "container",
+      name: "Orders",
+      attributes: {},
+      isExpanded: false,
+      isLoaded: true,
+      isLoading: false,
+      loadError: undefined,
+      childIds: []
+    } satisfies JdbcTreeNode);
+    expect(items.find((item) => item.id === "core.queryengine.jdbc.showSchemaDiagram"))
+      .toMatchObject({
+        label: "Schema Diagram",
+        section: "diagram"
+      });
+    expect(items.find((item) => item.id === "core.queryengine.jdbc.showSchemaDiagram.toSide"))
+      .toMatchObject({
+        label: "Schema Diagram to Side",
+        section: "diagram"
+      });
+  });
+
+  it("creates durable JDBC schema graph documents", async () => {
+    const context = createContext();
+    const createdFile: FileEntity = {
+      fileId: "schema-graph-file",
+      version: 0,
+      uri: "untitled:ER%20Diagram%20-%20Orders.qjdbcgraph",
+      mimeType: JDBC_SCHEMA_GRAPH_MIME_TYPE,
+      dirtyVsBackend: false,
+      dirtyVsDisk: false,
+      diskState: "inSync",
+      openedAt: new Date().toISOString(),
+      metadata: {}
+    };
+    (context.fileMediator.createUntitledFile as ReturnType<typeof vi.fn>).mockResolvedValue(createdFile);
+
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const node = {
+      id: "database-1",
+      connectionId: "conn-1",
+      dialectId: "jdbc",
+      kind: "database",
+      nodeType: "container",
+      name: "Orders",
+      attributes: {},
+      isExpanded: false,
+      isLoaded: true,
+      isLoading: false,
+      loadError: undefined,
+      childIds: []
+    } satisfies JdbcTreeNode;
+    const action = getJdbcTreeContextMenuRegistry()
+      .getItemsForNode(node)
+      .find((item) => item.id === "core.queryengine.jdbc.showSchemaDiagram");
+
+    await action?.onSelect();
+
+    expect(context.fileMediator.createUntitledFile).toHaveBeenCalledWith({
+      mimeType: JDBC_SCHEMA_GRAPH_MIME_TYPE,
+      extension: JDBC_SCHEMA_GRAPH_EXTENSION,
+      title: "ER Diagram - Orders"
+    });
+    const update = (context.files.updateFile as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[1] as
+      | { dirtyVsDisk?: boolean; metadata?: Record<string, unknown> }
+      | undefined;
+    expect(update?.dirtyVsDisk).toBe(true);
+    expect(update?.metadata?.schemaSource).toBe("jdbc");
+    expect(update?.metadata?.workspaceTransient).toBeUndefined();
+    expect(context.files.markDirty).toHaveBeenCalledWith("schema-graph-file");
+    expect(getGraphDocumentRepository().getModelForFile("schema-graph-file")?.getContent()).toContain("er-Orders");
   });
 
   it("resolves JDBC flow connection through core.flow local mapping", async () => {

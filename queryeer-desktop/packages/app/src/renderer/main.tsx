@@ -50,6 +50,7 @@ async function startApp(): Promise<void> {
         executeCommand={bootstrap.executeCommand}
         canExecuteCommand={bootstrap.canExecuteCommand}
         onCommandContextChanged={bootstrap.onCommandContextChanged}
+        contextChain={bootstrap.contextChain}
       />
     </React.StrictMode>
   );

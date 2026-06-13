@@ -1,35 +1,61 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { PluginContext } from "@queryeer/api/plugin/Plugin";
-import type { GraphDocument } from "@queryeer/api/graph";
+import { filesAreStructurallyIdentical } from "../../renderer/shell/file-entity-utils";
+import { getGraphDocumentRepository } from "../core.graph/GraphDocumentRepository";
 import { getVisibleVertexIds, setAllVerticesVisible, subscribeToVisibleVertices, toggleVisibleVertex } from "../core.graph/graph-visible-vertices-store";
 import "./JdbcSchemaGraphPanel.css";
-
-function resolveGraphDocument(file: { metadata?: Record<string, unknown> } | null | undefined): GraphDocument | null {
-  const candidate = file?.metadata?.graphDocument;
-  if (!candidate || typeof candidate !== "object") return null;
-  const graph = candidate as Partial<GraphDocument>;
-  if (typeof graph.id !== "string" || !Array.isArray(graph.vertices) || !Array.isArray(graph.edges)) return null;
-  return graph as GraphDocument;
-}
 
 export function JdbcSchemaGraphPanel({ context }: { context: PluginContext }): ReactNode {
   const [activeFileId, setActiveFileId] = useState<string | null>(() => context.fileMediator.getActiveFileId());
   const [files, setFiles] = useState(() => context.files.listFiles());
   const [query, setQuery] = useState("");
+  const [graph, setGraph] = useState(() => {
+    const initialFileId = context.fileMediator.getActiveFileId();
+    const initialFile = initialFileId ? context.files.getFile(initialFileId) : undefined;
+    return initialFile ? getGraphDocumentRepository().getGraphForFile(initialFile) : null;
+  });
 
   useEffect(() => {
     return context.fileMediator.onActiveFileChanged((id) => setActiveFileId(id));
   }, [context.fileMediator]);
 
   useEffect(() => {
-    return context.files.subscribe((next) => setFiles(next));
+    return context.files.subscribe((next) => {
+      setFiles((previous) => filesAreStructurallyIdentical(previous, next) ? previous : next);
+    });
   }, [context.files]);
 
-  const graph = useMemo(() => {
+  const activeFile = useMemo(() => {
     if (!activeFileId) return null;
-    const file = files.find((f) => f.fileId === activeFileId);
-    return resolveGraphDocument(file);
+    return files.find((f) => f.fileId === activeFileId) ?? null;
   }, [activeFileId, files]);
+
+  useEffect(() => {
+    if (!activeFile) {
+      setGraph(null);
+      return;
+    }
+    const repository = getGraphDocumentRepository();
+    let disposed = false;
+    const unsubscribe = repository.subscribe((fileId) => {
+      if (fileId === activeFile.fileId) {
+        setGraph(repository.getGraphForFile(activeFile));
+      }
+    });
+    const existing = repository.getGraphForFile(activeFile);
+    setGraph(existing);
+    if (!existing) {
+      void repository.openFile(activeFile).then((loaded) => {
+        if (!disposed) {
+          setGraph(loaded);
+        }
+      });
+    }
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, [activeFile]);
 
   const graphId = graph?.id ?? "";
   const [, forceRender] = useState(0);

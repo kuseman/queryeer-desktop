@@ -4,7 +4,7 @@ import type { JSX } from "react";
 
 export type FilesSubscriber = (files: FileEntity[]) => void;
 
-export type MimeCapability = "backupable" | "queryexecutable" | "viewable" | "editable";
+export type MimeCapability = "backupable" | "queryexecutable" | "viewable" | "editable" | "creatable";
 
 export type ContentCategory = "text" | "image" | "binary";
 

@@ -274,6 +274,9 @@ export class ExplorerStore {
   public markFileOpen(fileId: string, isOpen: boolean): void {
     const node = this.state.treeNodes.get(fileId);
     if (node && node.type === "file") {
+      if (node.isOpen === isOpen) {
+        return;
+      }
       const newTreeNodes = new Map(this.state.treeNodes);
       newTreeNodes.set(fileId, { ...node, isOpen });
       this.state = {

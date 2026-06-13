@@ -102,6 +102,20 @@ describe("createContextChain", () => {
       expect(chain.getLastFocusedScopeId(ContextPriority.ZONE)).toBe("zone");
       expect(chain.getLastFocusedScopeId(ContextPriority.EDITOR_INSTANCE)).toBe("editor");
     });
+
+    it("notifies listeners when activation changes effective context", () => {
+      const listener = vi.fn();
+      chain.register({ id: "left", priority: ContextPriority.EDITOR_INSTANCE, context: { activePane: "left" } });
+      chain.register({ id: "right", priority: ContextPriority.EDITOR_INSTANCE, context: { activePane: "right" } });
+      chain.onDidChange(listener);
+
+      chain.activate("left");
+      chain.activate("right");
+      chain.activate("right");
+
+      expect(listener).toHaveBeenCalledTimes(2);
+      expect(chain.getEffectiveContext().activePane).toBe("right");
+    });
   });
 
   describe("getEffectiveContext", () => {
@@ -133,6 +147,55 @@ describe("createContextChain", () => {
         context: { editorFocus: true }
       });
       expect(chain.getEffectiveContext()).toEqual({ editorFocus: true });
+    });
+
+    it("uses only the activated scope when multiple scopes share a priority", () => {
+      chain.register({
+        id: "left-editor",
+        priority: ContextPriority.EDITOR_INSTANCE,
+        context: { editorTextFocus: true, languageId: "sql", selectedText: "select 1" }
+      });
+      chain.register({
+        id: "right-editor",
+        priority: ContextPriority.EDITOR_INSTANCE,
+        context: { editorTextFocus: false, languageId: "json", selectedText: "" }
+      });
+
+      chain.activate("left-editor");
+
+      expect(chain.getEffectiveContext()).toEqual({
+        editorTextFocus: true,
+        languageId: "sql",
+        selectedText: "select 1"
+      });
+    });
+
+    it("does not let inactive sibling updates override the active scope", () => {
+      chain.register({
+        id: "left-editor",
+        priority: ContextPriority.EDITOR_INSTANCE,
+        context: { hasSelection: true, selectedText: "from active" }
+      });
+      chain.register({
+        id: "right-editor",
+        priority: ContextPriority.EDITOR_INSTANCE,
+        context: { hasSelection: false, selectedText: "" }
+      });
+      chain.activate("left-editor");
+
+      chain.update("right-editor", { hasSelection: true, selectedText: "from inactive" });
+
+      expect(chain.getEffectiveContext()).toEqual({
+        hasSelection: true,
+        selectedText: "from active"
+      });
+    });
+
+    it("omits same-priority scopes until one is activated", () => {
+      chain.register({ id: "left-editor", priority: ContextPriority.EDITOR_INSTANCE, context: { editorTextFocus: true } });
+      chain.register({ id: "right-editor", priority: ContextPriority.EDITOR_INSTANCE, context: { editorTextFocus: false } });
+
+      expect(chain.getEffectiveContext()).toEqual({});
     });
   });
 
