@@ -5,6 +5,7 @@ type QuitEvent = {
 type ShutdownDependencies = {
   stopBackend: () => Promise<void>;
   flushWorkspace: () => Promise<void>;
+  flushWindowState: () => Promise<void>;
   requestQuit: () => void;
 };
 
@@ -28,6 +29,12 @@ export function createBeforeQuitHandler(deps: ShutdownDependencies): (event: Qui
         await deps.flushWorkspace();
       } catch {
         // Ignore workspace flush failures during app shutdown.
+      }
+
+      try {
+        await deps.flushWindowState();
+      } catch {
+        // Ignore window state flush failures during app shutdown.
       }
     })();
 

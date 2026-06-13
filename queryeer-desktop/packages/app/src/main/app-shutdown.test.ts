@@ -11,20 +11,23 @@ describe("createBeforeQuitHandler", () => {
     });
     const stopBackend = vi.fn(() => stopBackendPromise);
     const flushWorkspace = vi.fn(async () => {});
+    const flushWindowState = vi.fn(async () => {});
     const requestQuit = vi.fn();
     const preventDefault = vi.fn();
 
-    const handler = createBeforeQuitHandler({ stopBackend, flushWorkspace, requestQuit });
+    const handler = createBeforeQuitHandler({ stopBackend, flushWorkspace, flushWindowState, requestQuit });
     handler({ preventDefault });
 
     expect(preventDefault).toHaveBeenCalledTimes(1);
     expect(stopBackend).toHaveBeenCalledTimes(1);
     expect(flushWorkspace).not.toHaveBeenCalled();
+    expect(flushWindowState).not.toHaveBeenCalled();
     expect(requestQuit).not.toHaveBeenCalled();
 
     releaseStop();
     await vi.waitFor(() => {
       expect(flushWorkspace).toHaveBeenCalledTimes(1);
+      expect(flushWindowState).toHaveBeenCalledTimes(1);
       expect(requestQuit).toHaveBeenCalledTimes(1);
     });
   });
@@ -32,10 +35,11 @@ describe("createBeforeQuitHandler", () => {
   it("runs shutdown once for repeated before-quit events", async () => {
     const stopBackend = vi.fn(async () => {});
     const flushWorkspace = vi.fn(async () => {});
+    const flushWindowState = vi.fn(async () => {});
     const requestQuit = vi.fn();
     const preventDefault = vi.fn();
 
-    const handler = createBeforeQuitHandler({ stopBackend, flushWorkspace, requestQuit });
+    const handler = createBeforeQuitHandler({ stopBackend, flushWorkspace, flushWindowState, requestQuit });
     handler({ preventDefault });
     handler({ preventDefault });
 
@@ -43,6 +47,7 @@ describe("createBeforeQuitHandler", () => {
       expect(preventDefault).toHaveBeenCalledTimes(1);
       expect(stopBackend).toHaveBeenCalledTimes(1);
       expect(flushWorkspace).toHaveBeenCalledTimes(1);
+      expect(flushWindowState).toHaveBeenCalledTimes(1);
       expect(requestQuit).toHaveBeenCalledTimes(1);
     });
   });
