@@ -86,6 +86,7 @@ describe("AboutDialogHost", () => {
       root.render(<AboutDialogHost />);
     });
     expect(rootElement.textContent).toContain("win32 (x64)");
+    expect(rootElement.textContent).toContain("Copyright (c) 2026 Marcus Henriksson");
   });
 
   it("shows Queryeer tab when desktop changelog is present", async () => {

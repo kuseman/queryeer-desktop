@@ -126,6 +126,7 @@ function AboutTab(props: { state: ReturnType<typeof getAboutDialogState> }): JSX
       <div className="about-brand">
         <h3>Queryeer</h3>
         <p className="about-version">v{state.appVersion}</p>
+        <p className="about-copyright">Copyright (c) 2026 Marcus Henriksson</p>
       </div>
 
       <div className="about-info-grid">
