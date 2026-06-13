@@ -107,6 +107,12 @@
   font-size: var(--ui-font-size-sm);
 }
 
+.about-copyright {
+  margin: 10px 0 0;
+  color: var(--text-2);
+  font-size: var(--ui-font-size-xs);
+}
+
 .about-info-grid {
   display: grid;
   gap: 8px;
