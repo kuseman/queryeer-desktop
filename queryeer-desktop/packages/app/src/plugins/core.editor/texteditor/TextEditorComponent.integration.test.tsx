@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import type { FilesRegistry } from "@queryeer/api/files/FilesRegistry";
 import type { ContextMenuProvider } from "@queryeer/api/extensions/ContextMenuExtension";
+import type { OutlineRegistry } from "@queryeer/api/extensions/OutlineExtension";
+import type { EditorRegistryHost } from "@queryeer/api/editor/EditorCapability";
 import { preloadMonaco } from "./MonacoTextEditorApi";
 import { TextEditorComponent } from "./TextEditorComponent";
 import { TextEditorRegistry } from "./TextEditorRegistry";
@@ -171,6 +173,29 @@ function makeFile(overrides: Partial<FileEntity>): FileEntity {
     openedAt: new Date().toISOString(),
     ...overrides
   };
+}
+
+function createOutlineRegistry(): OutlineRegistry {
+  return {
+    registerOutlineProvider: vi.fn(),
+    registerSupplementaryOutlineProvider: vi.fn(),
+    hasProvider: vi.fn(() => false),
+    getProvider: vi.fn(),
+    getSymbols: vi.fn(async () => [])
+  } as unknown as OutlineRegistry;
+}
+
+function createEditorRegistryHost() {
+  return {
+    getActiveEditor: vi.fn(() => null),
+    setActiveEditor: vi.fn(),
+    onActiveEditorChanged: vi.fn(() => ({ dispose: vi.fn() })),
+    registerContentRepository: vi.fn(() => () => {}),
+    resolveFileContent: vi.fn(),
+    broadcastContentUpdate: vi.fn(),
+    applyRecoveredContent: vi.fn(),
+    onContentDirty: vi.fn(() => () => {})
+  } as unknown as EditorRegistryHost & { setActiveEditor: ReturnType<typeof vi.fn> };
 }
 
 async function flush(): Promise<void> {
@@ -351,6 +376,75 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
     });
 
     expect(markDirtySpy).not.toHaveBeenCalled();
+  });
+
+  it("does not focus or register inactive editor groups while mounting", async () => {
+    const file = makeFile({ fileId: "file-inactive", uri: "file:///inactive.sql" });
+    filesById.set(file.fileId, file);
+    const editorRegistryHost = createEditorRegistryHost();
+
+    await act(async () => {
+      root.render(
+        <TextEditorComponent
+          file={file}
+          registry={registry}
+          editorRegistryHost={editorRegistryHost}
+          outlineRegistry={createOutlineRegistry()}
+          editorInstanceId="right:core.editor.text"
+          isActiveEditorGroup={false}
+        />
+      );
+      await flush();
+    });
+
+    const editor = editors[0];
+    expect(editor).toBeTruthy();
+    expect(editor.focus).not.toHaveBeenCalled();
+    expect(editorRegistryHost.setActiveEditor).not.toHaveBeenCalled();
+  });
+
+  it("focuses and registers the editor when its group becomes active", async () => {
+    const file = makeFile({ fileId: "file-active-transition", uri: "file:///active-transition.sql" });
+    filesById.set(file.fileId, file);
+    const editorRegistryHost = createEditorRegistryHost();
+    const outlineRegistry = createOutlineRegistry();
+
+    await act(async () => {
+      root.render(
+        <TextEditorComponent
+          file={file}
+          registry={registry}
+          editorRegistryHost={editorRegistryHost}
+          outlineRegistry={outlineRegistry}
+          editorInstanceId="right:core.editor.text"
+          isActiveEditorGroup={false}
+        />
+      );
+      await flush();
+    });
+
+    const editor = editors[0];
+    expect(editor).toBeTruthy();
+    expect(editorRegistryHost.setActiveEditor).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.render(
+        <TextEditorComponent
+          file={file}
+          registry={registry}
+          editorRegistryHost={editorRegistryHost}
+          outlineRegistry={outlineRegistry}
+          editorInstanceId="right:core.editor.text"
+          isActiveEditorGroup={true}
+        />
+      );
+      await flush();
+    });
+
+    expect(editor.focus).toHaveBeenCalled();
+    expect(editorRegistryHost.setActiveEditor).toHaveBeenCalledWith(
+      expect.objectContaining({ fileId: file.fileId })
+    );
   });
 });
 

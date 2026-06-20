@@ -202,6 +202,16 @@ describe("bootstrapShell diagnostics wiring", () => {
 
     const result = await bootstrapShell();
 
+    expect(result.contextChain.getEffectiveContext()).toMatchObject({ activeFileId: null });
+
+    const activeFile = await result.fileMediator.createUntitledFile({ mimeType: "text/plain" });
+
+    expect(result.contextChain.getEffectiveContext()).toMatchObject({
+      activeFileId: activeFile.fileId,
+      hasActiveFile: true,
+      activeFile: expect.objectContaining({ fileId: activeFile.fileId })
+    });
+
     expect(result.diagnostics.externalLoadErrors).toEqual([
       {
         pluginId: "external.bad.module",

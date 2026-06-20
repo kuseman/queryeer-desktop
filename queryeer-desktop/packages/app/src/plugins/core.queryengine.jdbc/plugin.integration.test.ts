@@ -12,6 +12,9 @@ import {
   JDBC_SCHEMA_GRAPH_EXTENSION,
   JDBC_SCHEMA_GRAPH_MIME_TYPE
 } from "./jdbc-schema-graph-constants";
+import { createContextChain } from "../core.commands/context-chain";
+import { setCommandContextChain } from "../core.commands/command-context-accessor";
+import { ContextPriority } from "../core.commands/context-priority";
 
 const mocks = vi.hoisted(() => ({
   registerExecutionContextProviderMock: vi.fn(),
@@ -271,6 +274,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
     mocks.getCoreSettingsServiceMock.mockReturnValue(null);
     mocks.onSettingsInitializedMock.mockReturnValue(() => {});
     mocks.executeQueryForFlowMock.mockResolvedValue({ rowsAffected: 1, rows: [{ ok: true }], preview: "select 1" });
+    setCommandContextChain(createContextChain());
     clearFlowNodeTypeContributionsForTests();
     resetJdbcTreeContextMenuRegistry();
     getGraphDocumentRepository().clearForTests();
@@ -347,10 +351,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
         section: "diagram"
       });
     expect(items.find((item) => item.id === "core.queryengine.jdbc.showSchemaDiagram.toSide"))
-      .toMatchObject({
-        label: "Schema Diagram to Side",
-        section: "diagram"
-      });
+      .toBeUndefined();
   });
 
   it("creates durable JDBC schema graph documents", async () => {
@@ -917,7 +918,46 @@ describe("core.queryengine.jdbc plugin integration", () => {
 
     await handler();
 
-    expect(mocks.setIncludeActualPlanMock).toHaveBeenCalledWith("file-1", true);
+    expect(mocks.setIncludeActualPlanMock).toHaveBeenCalledWith("file-1", "file-1", true);
+  });
+
+  it("actual plan command prefers focused command context over stale mediator active file", async () => {
+    const context = createContext();
+    const file1 = context.files.getFile("file-1")!;
+    const file2: FileEntity = { ...file1, fileId: "file-2", uri: "file:///file-2.sql" };
+    (context.files.getFile as ReturnType<typeof vi.fn>).mockImplementation((fileId: string) => {
+      if (fileId === "file-2") {
+        return file2;
+      }
+      if (fileId === "file-1") {
+        return file1;
+      }
+      return undefined;
+    });
+    (context.fileMediator.getActiveFileId as ReturnType<typeof vi.fn>).mockReturnValue("file-1");
+    const chain = createContextChain();
+    chain.register({
+      id: "focused-editor",
+      priority: ContextPriority.EDITOR_INSTANCE,
+      context: {
+        editorFocus: true,
+        activeFileId: "file-2",
+        activeEditorGroupId: "group-2"
+      }
+    });
+    setCommandContextChain(chain);
+    mocks.readViewStateMock.mockReturnValue({ includeActualPlan: false });
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const registerCommandMock = context.commands.registerCommand as ReturnType<typeof vi.fn>;
+    const commandCall = registerCommandMock.mock.calls.find(
+      (call: unknown[]) => (call[0] as { id?: string } | undefined)?.id === "core.queryengine.jdbc.toggleActualPlan"
+    );
+    const handler = commandCall![0].handler as () => Promise<void>;
+
+    await handler();
+
+    expect(mocks.setIncludeActualPlanMock).toHaveBeenCalledWith("file-2", "core.queryengine:group-2", true);
   });
 
   it("applies connection color to tab header style for JDBC files", () => {

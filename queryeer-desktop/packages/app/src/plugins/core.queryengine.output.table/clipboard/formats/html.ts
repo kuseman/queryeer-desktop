@@ -12,7 +12,8 @@ export const htmlFormat: ClipboardFormat = {
   label: "HTML table",
   mimeType: "text/html",
   format: ({ grid, columns }) => {
-    if (columns.length <= 1) return null;
+    const selectedCellCount = grid.reduce((count, row) => count + row.filter((cell) => cell.selected).length, 0);
+    if (selectedCellCount <= 1) return null;
 
     const header = `<tr>${columns.map((c) => `<td><strong>${esc(c.name)}</strong></td>`).join("")}</tr>`;
 

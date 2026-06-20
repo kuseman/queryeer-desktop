@@ -1,6 +1,12 @@
 export type TableResultStoreKey = {
+  outputSessionId?: string;
   fileId?: string;
   resultSetIndex: number;
+};
+
+type TableResultStoreScope = {
+  outputSessionId?: string;
+  fileId?: string;
 };
 
 type Entry = {
@@ -12,16 +18,44 @@ type Entry = {
 class TableResultStore {
   private readonly entries = new Map<string, Entry>();
 
-  clearFile(fileId?: string): void {
-    const prefix = `${fileId ?? ""}:`;
+  clear(scope?: TableResultStoreScope): void {
+    const hasSession = scope?.outputSessionId !== undefined;
+    const hasFile = scope?.fileId !== undefined;
+    if (!hasSession && !hasFile) {
+      this.clearAll();
+      return;
+    }
     for (const [key, entry] of this.entries.entries()) {
-      if (!key.startsWith(prefix)) {
+      const parsed = parseStoreKey(key);
+      if (!parsed) {
+        continue;
+      }
+      if (hasSession && parsed.outputSessionId !== scope?.outputSessionId) {
+        continue;
+      }
+      if (hasFile && parsed.fileId !== scope?.fileId) {
         continue;
       }
       entry.chunks = [];
       entry.rowCount = 0;
       this.emit(entry);
     }
+  }
+
+  clearAll(): void {
+    for (const entry of this.entries.values()) {
+      entry.chunks = [];
+      entry.rowCount = 0;
+      this.emit(entry);
+    }
+  }
+
+  clearFile(fileId?: string): void {
+    if (fileId === undefined) {
+      this.clearAll();
+      return;
+    }
+    this.clear({ fileId });
   }
 
   appendRows(key: TableResultStoreKey, rows: unknown[][]): void {
@@ -132,7 +166,27 @@ class TableResultStore {
 }
 
 function toKey(key: TableResultStoreKey): string {
-  return `${key.fileId ?? ""}:${key.resultSetIndex}`;
+  return JSON.stringify([key.outputSessionId ?? "", key.fileId ?? "", key.resultSetIndex]);
+}
+
+function parseStoreKey(key: string): {
+  outputSessionId: string;
+  fileId: string;
+  resultSetIndex: number;
+} | null {
+  try {
+    const parsed = JSON.parse(key) as unknown;
+    if (!Array.isArray(parsed) || parsed.length !== 3) {
+      return null;
+    }
+    const [outputSessionId, fileId, resultSetIndex] = parsed;
+    if (typeof outputSessionId !== "string" || typeof fileId !== "string" || typeof resultSetIndex !== "number") {
+      return null;
+    }
+    return { outputSessionId, fileId, resultSetIndex };
+  } catch {
+    return null;
+  }
 }
 
 const instance = new TableResultStore();

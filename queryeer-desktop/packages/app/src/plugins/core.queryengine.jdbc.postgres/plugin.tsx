@@ -75,7 +75,7 @@ export const coreQueryEngineJdbcPostgresPlugin: Plugin = {
         return undefined;
       }
 
-      const viewState = getQueryViewStateStore().read(params.fileId);
+      const viewState = getQueryViewStateStore().read(params.fileId, params.targetOutputSessionId ?? params.fileId);
       const includeActualPlan = viewState.includeActualPlan === true && !params.options?.intent;
 
       return {

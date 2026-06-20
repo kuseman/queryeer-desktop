@@ -47,6 +47,7 @@ export async function bootstrapShell() {
       "activeFile.mimeType": undefined,
       selectedText: "",
       hasSelection: false,
+      activeFileId: null,
       hasActiveFile: false,
       hasActiveTextEditor: false,
       editorTextFocus: false,
@@ -219,6 +220,7 @@ export async function bootstrapShell() {
       ? filesRegistry!.capabilities.hasCapability(activeFile.mimeType, "queryexecutable") === true
       : false;
     chain.update("activeFile", {
+      activeFileId,
       hasActiveFile: activeFile != null,
       activeFile: activeFile
         ? {
@@ -326,6 +328,7 @@ export async function bootstrapShell() {
     executeCommand: async (commandId): Promise<CommandExecutionResult> => {
       return executeCommand(commandId);
     },
+    canExecuteCommand: (commandId) => host.canExecuteCommand(commandId),
     getUserKeybindings: () => window.appShell.getUserKeybindings(),
     contextChain: chain
   });

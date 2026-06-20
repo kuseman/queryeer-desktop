@@ -264,13 +264,27 @@ function fromGlideSelection(
   hasReorderedColumns: boolean = false
 ): { selection: SelectionModel | null; anchor: SelectionAnchor | null } {
   const cells = [...selection.rows].map((row) => ({ row, colIndex: -1 }));
+  const cellKeys = new Set(cells.map((cell) => `${cell.row}:${cell.colIndex}`));
+  const addCell = (row: number, colIndex: number) => {
+    const key = `${row}:${colIndex}`;
+    if (cellKeys.has(key)) return;
+    cellKeys.add(key);
+    cells.push({ row, colIndex });
+  };
   const current = selection.current;
   if (!current) {
     return cells.length > 0 ? { selection: { rect: null, cells }, anchor: null } : { selection: null, anchor: null };
   }
   for (const range of current.rangeStack) {
-    if (range.width === 1 && range.height === 1 && range.x >= 0 && range.x < totalCols) {
-      cells.push({ row: range.y, colIndex: toDataIndex(range.x) });
+    const rowEnd = range.y + range.height - 1;
+    const colEnd = range.x + range.width - 1;
+    for (let row = range.y; row <= rowEnd; row++) {
+      for (let visualCol = range.x; visualCol <= colEnd; visualCol++) {
+        if (visualCol < 0 || visualCol >= totalCols) continue;
+        const dataIndex = toDataIndex(visualCol);
+        if (dataIndex < 0 || dataIndex >= totalCols) continue;
+        addCell(row, dataIndex);
+      }
     }
   }
   const rowStart = current.range.y;
@@ -297,7 +311,7 @@ function fromGlideSelection(
     colIndexEnd = Math.min(totalCols - 1, colVisEnd);
   }
   if (current.range.width === 1 && current.range.height === 1 && cells.length > 0) {
-    cells.push({ row: rowStart, colIndex: colIndexStart });
+    addCell(rowStart, colIndexStart);
     return {
       selection: { rect: null, cells },
       anchor: { row: current.cell[1], colIndex: colIndexStart },

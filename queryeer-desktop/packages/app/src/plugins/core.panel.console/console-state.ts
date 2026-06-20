@@ -61,6 +61,9 @@ export function getConsolePanelVisible(): boolean {
 }
 
 export function setConsolePanelVisible(visible: boolean): void {
+  if (consolePanelVisible === visible) {
+    return;
+  }
   consolePanelVisible = visible;
   if (visible) {
     resetConsoleNotifications();

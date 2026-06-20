@@ -18,12 +18,15 @@ export function fileDisplayName(uri: string): string {
   return uri;
 }
 
+export function hasUnsavedChanges(file: FileEntity): boolean {
+  return file.dirtyVsDisk || file.dirtyVsBackend;
+}
+
 export async function confirmCloseDirtyFile(
   file: FileEntity,
   showDialog: ShowCloseDialog
 ): Promise<boolean> {
-  const hasUnsavedChanges = file.dirtyVsDisk || file.dirtyVsBackend;
-  if (!hasUnsavedChanges) {
+  if (!hasUnsavedChanges(file)) {
     return true;
   }
 

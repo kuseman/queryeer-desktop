@@ -22,6 +22,7 @@ type ExecuteParams = {
   fileId: string;
   engineState?: unknown;
   options?: QueryExecuteOptions;
+  targetOutputSessionId?: string;
 };
 
 type EngineInvokeParams = {
@@ -29,6 +30,13 @@ type EngineInvokeParams = {
   fileId?: string;
   action: string;
   payload?: unknown;
+};
+
+type ExecuteRequestConsumeTarget = {
+  fileId?: string;
+  targetOutputSessionId?: string;
+  targetEditorGroupId?: string;
+  isActiveEditorGroup?: boolean;
 };
 
 class SecuritySessionClosedError extends Error {
@@ -113,10 +121,14 @@ export class QueryEngineService {
     if (!engineId) {
       throw new Error("No query engine matched this file");
     }
+    const targetOutputSessionId = params.targetOutputSessionId;
     const decoratedParams = this.decorateExecuteParams({
       ...params,
       engineId
     });
+    if (targetOutputSessionId !== undefined) {
+      decoratedParams.targetOutputSessionId = targetOutputSessionId;
+    }
     this.executionContextById.set(queryExecutionId, decoratedParams);
     for (const listener of this.globalEventListeners) {
       listener(
@@ -302,10 +314,26 @@ export class QueryEngineService {
     return this.pendingExecuteOptions;
   }
 
-  consumeExecuteOptions(fileId?: string): ExecuteRequestOptions | null {
+  consumeExecuteOptions(fileId?: string): ExecuteRequestOptions | null;
+  consumeExecuteOptions(target?: ExecuteRequestConsumeTarget): ExecuteRequestOptions | null;
+  consumeExecuteOptions(target?: string | ExecuteRequestConsumeTarget): ExecuteRequestOptions | null {
     const opts = this.pendingExecuteOptions;
     if (!opts) return null;
-    if (opts.fileIdOverride && opts.fileIdOverride !== fileId) {
+
+    const targetInfo: ExecuteRequestConsumeTarget = typeof target === "string"
+      ? { fileId: target }
+      : (target ?? {});
+
+    if (opts.targetOutputSessionId && opts.targetOutputSessionId !== targetInfo.targetOutputSessionId) {
+      return null;
+    }
+    if (opts.targetEditorGroupId && opts.targetEditorGroupId !== targetInfo.targetEditorGroupId) {
+      return null;
+    }
+    if (opts.fileIdOverride && opts.fileIdOverride !== targetInfo.fileId) {
+      return null;
+    }
+    if (!opts.targetOutputSessionId && !opts.targetEditorGroupId && targetInfo.isActiveEditorGroup === false) {
       return null;
     }
     this.pendingExecuteOptions = null;

@@ -14,6 +14,7 @@ export class OutputRegistry {
   private readonly contributors: OutputContributor[] = [];
   private readonly listeners: Array<() => void> = [];
   private selectedPrimaryId: string | null = null;
+  private readonly selectedPrimaryBySessionId = new Map<string, string | null>();
 
   register(contributor: OutputContributor): void {
     this.contributors.push(contributor);
@@ -36,7 +37,29 @@ export class OutputRegistry {
     this.selectedPrimaryId = id;
   }
 
+  setSelectedPrimaryForSession(sessionId: string | undefined, id: string | null): void {
+    if (!sessionId) {
+      this.selectedPrimaryId = id;
+      return;
+    }
+    if (id === null) {
+      this.selectedPrimaryBySessionId.delete(sessionId);
+      return;
+    }
+    this.selectedPrimaryBySessionId.set(sessionId, id);
+  }
+
   getSelectedPrimaryId(): string | null {
+    return this.selectedPrimaryId;
+  }
+
+  getSelectedPrimaryIdForSession(sessionId?: string): string | null {
+    if (!sessionId) {
+      return this.selectedPrimaryId;
+    }
+    if (this.selectedPrimaryBySessionId.has(sessionId)) {
+      return this.selectedPrimaryBySessionId.get(sessionId) ?? null;
+    }
     return this.selectedPrimaryId;
   }
 
@@ -46,13 +69,13 @@ export class OutputRegistry {
    * hook, allowing Ag-Grid to call applyTransaction() without a full re-render.
    */
   notifyChunkRows(chunk: RowChunk, targetPrimaryId?: string | null): void {
-    const effectivePrimaryId = targetPrimaryId ?? this.selectedPrimaryId;
+    const effectivePrimaryId = targetPrimaryId ?? this.getSelectedPrimaryIdForSession(chunk.outputSessionId);
     const primary = this.contributors.find((c) => c.id === effectivePrimaryId);
     primary?.onChunkRows?.(chunk);
   }
 
   notifyExecutionStart(execution: OutputExecutionStart, targetPrimaryId?: string | null): void {
-    const effectivePrimaryId = targetPrimaryId ?? this.selectedPrimaryId;
+    const effectivePrimaryId = targetPrimaryId ?? this.getSelectedPrimaryIdForSession(execution.outputSessionId);
     const primary = this.contributors.find((c) => c.id === effectivePrimaryId);
     primary?.onExecutionStart?.(execution);
   }

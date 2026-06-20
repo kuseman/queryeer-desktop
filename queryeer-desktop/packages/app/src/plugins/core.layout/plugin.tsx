@@ -3,7 +3,8 @@ import { confirmCloseDirtyFile } from "../../renderer/shell/close-file-guard";
 import {
   requestCloseActiveEditor,
   requestOpenEditorToSide,
-  requestSplitActiveEditorRight
+  requestSplitActiveEditorRight,
+  requestToggleMaximizeActiveEditorGroup
 } from "../../renderer/shell/layout-editor-events";
 import { requestToggleZone } from "../../renderer/shell/layout-zone-events";
 import { fileUriToPath } from "@queryeer/api/files/Resolvers";
@@ -74,6 +75,16 @@ export const coreLayoutPlugin: Plugin = {
           return;
         }
         requestSplitActiveEditorRight();
+      }
+    });
+
+    context.commands.registerCommand({
+      id: "core.layout.toggleMaximizeActiveEditorGroup",
+      title: "Toggle Maximize Active Editor Group",
+      category: "View",
+      enablement: "hasMultipleEditorGroups",
+      handler: async () => {
+        requestToggleMaximizeActiveEditorGroup();
       }
     });
 
@@ -194,6 +205,8 @@ export const coreLayoutPlugin: Plugin = {
       actions: [
         { id: "core.layout.tab.close", label: "Close", order: 10 },
         { id: "core.layout.tab.splitRight", label: "Split Right", order: 20, enabledWhen: "canSplit" },
+        { id: "core.layout.tab.moveLeft", label: "Move to Left Group", order: 25, enabledWhen: "canMoveToLeftGroup" },
+        { id: "core.layout.tab.moveRight", label: "Move to Right Group", order: 26, enabledWhen: "canMoveToRightGroup" },
         { id: "core.layout.tab.closeOthers", label: "Close Others", order: 30 },
         { id: "core.layout.tab.closeAll", label: "Close All", order: 40 },
         { id: "core.layout.tab.copyPath", label: "Copy Path", order: 50, enabledWhen: "uri.startsWith('file://')" },

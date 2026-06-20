@@ -577,4 +577,48 @@ describe("QueryEngineService backend readiness", () => {
     const failedParams = cancelled?.params as { error?: { code?: string; message?: string } };
     expect(failedParams.error?.code).toBe("CANCELLED");
   });
+
+  it("consumes execute options for matching output session id", () => {
+    const service = new QueryEngineService();
+
+    service.requestExecute({
+      textOverride: "select 1",
+      targetOutputSessionId: "session-a"
+    });
+
+    expect(service.consumeExecuteOptions({
+      fileId: "file-1",
+      targetOutputSessionId: "session-b",
+      isActiveEditorGroup: true
+    })).toBeNull();
+
+    const consumed = service.consumeExecuteOptions({
+      fileId: "file-1",
+      targetOutputSessionId: "session-a",
+      isActiveEditorGroup: false
+    });
+    expect(consumed).toEqual(expect.objectContaining({
+      textOverride: "select 1",
+      targetOutputSessionId: "session-a"
+    }));
+    expect(service.peekExecuteOptions()).toBeNull();
+  });
+
+  it("does not consume generic execute options from inactive group", () => {
+    const service = new QueryEngineService();
+
+    service.requestExecute({ textOverride: "select 2" });
+
+    expect(service.consumeExecuteOptions({
+      fileId: "file-1",
+      isActiveEditorGroup: false
+    })).toBeNull();
+
+    const consumed = service.consumeExecuteOptions({
+      fileId: "file-1",
+      isActiveEditorGroup: true
+    });
+    expect(consumed).toEqual(expect.objectContaining({ textOverride: "select 2" }));
+    expect(service.peekExecuteOptions()).toBeNull();
+  });
 });

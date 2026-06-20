@@ -17,6 +17,13 @@ export type DockPlacement = "start" | "end" | "before" | "after";
 
 export type LayoutActionIconRenderer = (props: { className?: string }) => ReactNode;
 
+export type LayoutToolbarContext = {
+  activeFile?: FileEntity;
+  activeEditorGroupId?: string;
+  editorGroupCount: number;
+  hasMultipleEditorGroups: boolean;
+};
+
 export type LayoutToolbarActionContribution = {
   id: string;
   type?: "action";
@@ -26,7 +33,7 @@ export type LayoutToolbarActionContribution = {
   commandId: string;
   icon?: string | LayoutActionIconRenderer;
   when?: string;
-  pressed?: () => boolean;
+  pressed?: (context: LayoutToolbarContext) => boolean;
 };
 
 export type LayoutToolbarSeparatorContribution = {
@@ -49,11 +56,11 @@ export type LayoutToolbarSelectContribution = {
   order?: number;
   alignment?: "west" | "east";
   when?: string;
-  getOptions: () => LayoutToolbarSelectOption[];
-  getValue: () => string;
-  onChange: (value: string) => void;
-  disabled?: boolean | (() => boolean);
-  isVisible?: () => boolean;
+  getOptions: (context: LayoutToolbarContext) => LayoutToolbarSelectOption[];
+  getValue: (context: LayoutToolbarContext) => string;
+  onChange: (value: string, context: LayoutToolbarContext) => void;
+  disabled?: boolean | ((context: LayoutToolbarContext) => boolean);
+  isVisible?: (context: LayoutToolbarContext) => boolean;
 };
 
 export type LayoutToolbarMenuItem = {
@@ -70,10 +77,10 @@ export type LayoutToolbarMenuContribution = {
   alignment?: "west" | "east";
   icon?: string | LayoutActionIconRenderer;
   when?: string;
-  getItems: () => LayoutToolbarMenuItem[];
-  onSelect: (value: string) => void;
-  disabled?: boolean | (() => boolean);
-  isVisible?: () => boolean;
+  getItems: (context: LayoutToolbarContext) => LayoutToolbarMenuItem[];
+  onSelect: (value: string, context: LayoutToolbarContext) => void;
+  disabled?: boolean | ((context: LayoutToolbarContext) => boolean);
+  isVisible?: (context: LayoutToolbarContext) => boolean;
 };
 
 export type LayoutToolbarContribution =
@@ -163,6 +170,7 @@ export type TabHeaderStyleContext = {
   file: FileEntity;
   isActive: boolean;
   hasCapability: (capability: MimeCapability) => boolean;
+  editorGroupId?: string;
 };
 
 export type TabHeaderStyle = {

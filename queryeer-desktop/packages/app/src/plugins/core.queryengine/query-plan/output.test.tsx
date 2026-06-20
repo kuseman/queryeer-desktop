@@ -148,7 +148,7 @@ describe("query plan output registration", () => {
     });
 
     const firstKey = rootElement.querySelector("[data-testid='mock-graph-viewer']")?.getAttribute("data-view-state-key");
-    expect(firstKey).toMatch(/^query-plan:file-1:plan-1:postgres-plan-1:\d+$/);
+    expect(firstKey).toMatch(/^query-plan:default-session:file-1:plan-1:postgres-plan-1:\d+$/);
 
     await act(async () => {
       root.render(<>{contributor!.render({
@@ -161,7 +161,7 @@ describe("query plan output registration", () => {
     });
 
     const secondKey = rootElement.querySelector("[data-testid='mock-graph-viewer']")?.getAttribute("data-view-state-key");
-    expect(secondKey).toMatch(/^query-plan:file-1:plan-1:postgres-plan-1:\d+$/);
+    expect(secondKey).toMatch(/^query-plan:default-session:file-1:plan-1:postgres-plan-1:\d+$/);
     expect(secondKey).not.toBe(firstKey);
   });
 });

@@ -58,6 +58,46 @@ export function PanelIcon({ className }: IconProps): JSX.Element {
   );
 }
 
+export function MaximizeEditorGroupIcon({ className }: IconProps): JSX.Element {
+  return (
+    <svg className={className} viewBox="0 0 16 16" aria-hidden="true">
+      <rect
+        x="2.5"
+        y="2.5"
+        width="11"
+        height="11"
+        rx="1.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1"
+      />
+      <path d="M5.25 4.75h-1v3" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+      <path d="M4.25 4.75h3" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+      <path d="M10.75 11.25h1v-3" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+      <path d="M11.75 11.25h-3" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function RestoreEditorGroupIcon({ className }: IconProps): JSX.Element {
+  return (
+    <svg className={className} viewBox="0 0 16 16" aria-hidden="true">
+      <rect
+        x="3.5"
+        y="3.5"
+        width="9"
+        height="9"
+        rx="1.25"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1"
+      />
+      <path d="M6 7h4v4" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10 7 6 11" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function GenericActionIcon({ className }: IconProps): JSX.Element {
   return (
     <svg className={className} viewBox="0 0 16 16" aria-hidden="true">

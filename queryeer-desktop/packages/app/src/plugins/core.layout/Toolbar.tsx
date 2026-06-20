@@ -1,6 +1,7 @@
 import type {
   LayoutActionIconRenderer,
   LayoutToolbarContribution,
+  LayoutToolbarContext,
   LayoutToolbarMenuContribution,
   LayoutToolbarSelectContribution,
   LayoutZone
@@ -11,12 +12,13 @@ import { memo, useEffect, useState } from "react";
 
 type ToolbarProps = {
   toolbarActions: LayoutToolbarContribution[];
+  toolbarContext?: LayoutToolbarContext;
   visibleZones: ReadonlySet<LayoutZone>;
   canExecuteCommand: (commandId: string) => boolean;
   executeCommand: (commandId: string) => Promise<CommandExecutionResult>;
   getCommandTitle: (commandId: string) => string | undefined;
   getCommandAccelerator: (commandId: string) => string | undefined;
-  commandContextVersion?: number;
+  onCommandContextChanged?: (listener: () => void) => () => void;
 };
 
 const zoneToggleByCommand: Record<string, LayoutZone | undefined> = {
@@ -25,15 +27,23 @@ const zoneToggleByCommand: Record<string, LayoutZone | undefined> = {
   "core.layout.togglePanel": "panel"
 };
 
+const DEFAULT_TOOLBAR_CONTEXT: LayoutToolbarContext = {
+  editorGroupCount: 0,
+  hasMultipleEditorGroups: false
+};
+
 function ToolbarComponent({
   toolbarActions,
+  toolbarContext = DEFAULT_TOOLBAR_CONTEXT,
   visibleZones,
   canExecuteCommand,
   executeCommand,
   getCommandTitle,
-  getCommandAccelerator
+  getCommandAccelerator,
+  onCommandContextChanged
 }: ToolbarProps) {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [, setCommandContextVersion] = useState(0);
 
   useEffect(() => {
     const onMouseDown = (event: MouseEvent) => {
@@ -48,6 +58,28 @@ function ToolbarComponent({
       document.removeEventListener("mousedown", onMouseDown);
     };
   }, []);
+
+  useEffect(() => {
+    if (!onCommandContextChanged) {
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = onCommandContextChanged(() => {
+      if (timer === null) {
+        timer = setTimeout(() => {
+          timer = null;
+          setCommandContextVersion((version) => version + 1);
+        }, 500);
+      }
+    });
+    return () => {
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
+      unsubscribe();
+    };
+  }, [onCommandContextChanged]);
+
   const isZoneVisible = (zone: LayoutZone) => visibleZones.has(zone);
   const westActions = toolbarActions.filter((action) => (action.alignment ?? "west") === "west");
   const eastActions = toolbarActions.filter((action) => (action.alignment ?? "west") === "east");
@@ -64,13 +96,13 @@ function ToolbarComponent({
   };
 
   const renderSelect = (contribution: LayoutToolbarSelectContribution) => {
-    if (contribution.isVisible && !contribution.isVisible()) {
+    if (contribution.isVisible && !contribution.isVisible(toolbarContext)) {
       return null;
     }
-    const options = contribution.getOptions();
-    const value = contribution.getValue();
+    const options = contribution.getOptions(toolbarContext);
+    const value = contribution.getValue(toolbarContext);
     const disabled = typeof contribution.disabled === "function"
-      ? contribution.disabled()
+      ? contribution.disabled(toolbarContext)
       : (contribution.disabled ?? false);
 
     return (
@@ -81,7 +113,7 @@ function ToolbarComponent({
           value={value}
           disabled={disabled || options.length === 0}
           onChange={(event) => {
-            contribution.onChange(event.target.value);
+            contribution.onChange(event.target.value, toolbarContext);
           }}
         >
           {options.map((option) => (
@@ -95,13 +127,13 @@ function ToolbarComponent({
   };
 
   const renderMenu = (contribution: LayoutToolbarMenuContribution) => {
-    if (contribution.isVisible && !contribution.isVisible()) {
+    if (contribution.isVisible && !contribution.isVisible(toolbarContext)) {
       return null;
     }
-    const items = contribution.getItems();
+    const items = contribution.getItems(toolbarContext);
     const disabled =
       typeof contribution.disabled === "function"
-        ? contribution.disabled()
+        ? contribution.disabled(toolbarContext)
         : (contribution.disabled ?? false);
     const isOpen = openMenuId === contribution.id;
 
@@ -132,7 +164,7 @@ function ToolbarComponent({
                 type="button"
                 className="shell-context-menu__item shell-toolbar-menu-item"
                 onClick={() => {
-                  contribution.onSelect(item.value);
+                  contribution.onSelect(item.value, toolbarContext);
                   setOpenMenuId(null);
                 }}
               >
@@ -164,7 +196,7 @@ function ToolbarComponent({
     const label = action.title ?? getCommandTitle(action.commandId);
     const accelerator = getCommandAccelerator(action.commandId);
     const tooltip = label ? (accelerator ? `${label} (${accelerator})` : label) : undefined;
-    const isActive = zoneToggle ? isZoneVisible(zoneToggle) : (action.pressed?.() ?? false);
+    const isActive = zoneToggle ? isZoneVisible(zoneToggle) : (action.pressed?.(toolbarContext) ?? false);
 
     return (
       <button

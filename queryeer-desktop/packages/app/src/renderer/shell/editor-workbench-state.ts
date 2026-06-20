@@ -20,7 +20,10 @@ export type EditorWorkbenchState = {
   groups: EditorGroupState[];
   activeGroupId: string;
   sizes: number[];
+  maximizedGroupId?: string | null;
 };
+
+export type EditorGroupMoveDirection = "left" | "right";
 
 type FileDescriptor = {
   fileId: string;
@@ -45,7 +48,8 @@ export function createEditorWorkbenchState(
   return {
     groups: [group],
     activeGroupId: group.id,
-    sizes: [1]
+    sizes: [1],
+    maximizedGroupId: null
   };
 }
 
@@ -57,7 +61,8 @@ export function normalizeEditorWorkbenchState(state: EditorWorkbenchState): Edit
   return {
     groups: groups.map(normalizeGroup),
     activeGroupId,
-    sizes: normalizeSizes(state.sizes, groups.length)
+    sizes: normalizeSizes(state.sizes, groups.length),
+    maximizedGroupId: state.maximizedGroupId && groups.length > 1 ? activeGroupId : null
   };
 }
 
@@ -82,14 +87,16 @@ export function restoreEditorWorkbenchStateFromSnapshot(
   }
 
   const orderedGroups = orderGroupsByPersistedLayout(groups, restoredLayout?.editorLayout);
-  const activeGroupId = resolveRestoredActiveGroupId(orderedGroups, restoredLayout);
+  const maximizedGroupId = resolveRestoredMaximizedGroupId(orderedGroups, restoredLayout);
+  const activeGroupId = maximizedGroupId ?? resolveRestoredActiveGroupId(orderedGroups, restoredLayout);
   return normalizeEditorWorkbenchState({
     groups: orderedGroups,
     activeGroupId,
     sizes: resolvePersistedEditorLayoutSizes(
       restoredLayout?.editorLayout,
       orderedGroups.map((group) => group.id)
-    )
+    ),
+    maximizedGroupId
   });
 }
 
@@ -149,7 +156,22 @@ export function focusEditorGroup(state: EditorWorkbenchState, groupId: string): 
   if (!state.groups.some((group) => group.id === groupId)) {
     return state;
   }
-  return { ...state, activeGroupId: groupId };
+  if (state.activeGroupId === groupId) {
+    return state;
+  }
+  return normalizeEditorWorkbenchState({ ...state, activeGroupId: groupId });
+}
+
+export function toggleMaximizedEditorGroup(state: EditorWorkbenchState, groupId: string): EditorWorkbenchState {
+  if (state.groups.length <= 1 || !state.groups.some((group) => group.id === groupId)) {
+    return normalizeEditorWorkbenchState({ ...state, maximizedGroupId: null });
+  }
+  const nextMaximizedGroupId = state.maximizedGroupId === groupId ? null : groupId;
+  return normalizeEditorWorkbenchState({
+    ...state,
+    activeGroupId: groupId,
+    maximizedGroupId: nextMaximizedGroupId
+  });
 }
 
 export function selectFileInGroup(
@@ -200,11 +222,12 @@ export function splitActiveGroupRight(state: EditorWorkbenchState): EditorWorkbe
     newGroup,
     ...state.groups.slice(activeIndex + 1)
   ];
-  return {
+  return normalizeEditorWorkbenchState({
     groups,
     activeGroupId: newGroup.id,
-    sizes: normalizeSizes([], groups.length)
-  };
+    sizes: normalizeSizes([], groups.length),
+    maximizedGroupId: state.maximizedGroupId ? newGroup.id : null
+  });
 }
 
 export function openFileToSide(
@@ -248,11 +271,75 @@ export function openFileToSide(
   );
 
   const collapsed = collapseEmptyGroups(groups, targetGroup.id);
-  return {
+  return normalizeEditorWorkbenchState({
     groups: collapsed,
     activeGroupId: targetGroup.id,
-    sizes: normalizeSizes([], collapsed.length)
-  };
+    sizes: normalizeSizes([], collapsed.length),
+    maximizedGroupId: state.maximizedGroupId ? targetGroup.id : null
+  });
+}
+
+export function moveFileToSide(
+  state: EditorWorkbenchState,
+  sourceGroupId: string,
+  fileId: string,
+  direction: EditorGroupMoveDirection,
+  options: { openNewFilesLast: boolean }
+): EditorWorkbenchState {
+  const sourceIndex = state.groups.findIndex((group) => group.id === sourceGroupId);
+  if (sourceIndex < 0) {
+    return state;
+  }
+
+  const sourceGroup = state.groups[sourceIndex];
+  if (!sourceGroup.fileIds.includes(fileId)) {
+    return state;
+  }
+
+  const existingTargetIndex = direction === "left" ? sourceIndex - 1 : sourceIndex + 1;
+  const existingTargetGroup = state.groups[existingTargetIndex];
+  if (direction === "left" && !existingTargetGroup) {
+    return state;
+  }
+  if (direction === "right" && !existingTargetGroup && sourceGroup.fileIds.length <= 1) {
+    return state;
+  }
+
+  const targetGroup = existingTargetGroup ?? {
+    id: nextGroupId(state.groups),
+    fileIds: [],
+    activeFileId: null,
+    activationQueue: []
+  } satisfies EditorGroupState;
+
+  const groupsWithTarget = existingTargetGroup
+    ? [...state.groups]
+    : [
+        ...state.groups.slice(0, sourceIndex + 1),
+        targetGroup,
+        ...state.groups.slice(sourceIndex + 1)
+      ];
+
+  const movedGroups = groupsWithTarget.map((group) => {
+    if (group.id === sourceGroupId) {
+      return removeFileFromGroup(group, fileId);
+    }
+    if (group.id === targetGroup.id) {
+      return addFileToGroup(group, fileId, options.openNewFilesLast);
+    }
+    return group;
+  });
+
+  const collapsed = collapseEmptyGroups(movedGroups, targetGroup.id);
+  const groupCountChanged = collapsed.length !== state.groups.length;
+  return normalizeEditorWorkbenchState({
+    groups: collapsed,
+    activeGroupId: collapsed.some((group) => group.id === targetGroup.id)
+      ? targetGroup.id
+      : collapsed[0].id,
+    sizes: normalizeSizes(groupCountChanged ? [] : state.sizes, collapsed.length),
+    maximizedGroupId: state.maximizedGroupId ? targetGroup.id : null
+  });
 }
 
 export function resizeAdjacentEditorGroups(
@@ -302,7 +389,8 @@ export function closeFileInGroup(
   return normalizeEditorWorkbenchState({
     groups: collapsed,
     activeGroupId,
-    sizes: normalizeSizes([], collapsed.length)
+    sizes: normalizeSizes([], collapsed.length),
+    maximizedGroupId: state.maximizedGroupId ?? null
   });
 }
 
@@ -374,7 +462,8 @@ export function syncWorkbenchWithFiles(
       activeGroupId: collapsed.some((group) => group.id === state.activeGroupId)
         ? state.activeGroupId
         : collapsed[0].id,
-      sizes: normalizeSizes(state.sizes, collapsed.length)
+      sizes: normalizeSizes(state.sizes, collapsed.length),
+      maximizedGroupId: state.maximizedGroupId ?? null
     }),
     addedFileIds
   };
@@ -456,6 +545,21 @@ function resolveRestoredActiveGroupId(
   return groups[0].id;
 }
 
+function resolveRestoredMaximizedGroupId(
+  groups: RestoredEditorGroup[],
+  restoredLayout: PersistedLayoutSnapshot | null | undefined
+): string | null {
+  const maximizedEditorGroupId = restoredLayout?.maximizedEditorGroupId;
+  if (
+    groups.length > 1 &&
+    maximizedEditorGroupId &&
+    groups.some((group) => group.id === maximizedEditorGroupId)
+  ) {
+    return maximizedEditorGroupId;
+  }
+  return null;
+}
+
 function mapGroup(
   state: EditorWorkbenchState,
   groupId: string,
@@ -497,6 +601,25 @@ function removeFileFromGroup(group: EditorGroupState, fileId: string): EditorGro
     activeFileId: resolution.nextActiveFileId,
     activationQueue: resolution.nextQueue
   };
+}
+
+function addFileToGroup(group: EditorGroupState, fileId: string, openNewFilesLast: boolean): EditorGroupState {
+  if (group.fileIds.includes(fileId)) {
+    return activateFile(group, fileId);
+  }
+
+  const resolution = resolveOpenFileIds({
+    previousOpenFileIds: group.fileIds,
+    nextFiles: [
+      ...group.fileIds.map((id) => ({ fileId: id, uri: id })),
+      { fileId, uri: fileId }
+    ],
+    openNewFilesLast,
+    activeFileId: group.activeFileId,
+    activationQueue: group.activationQueue
+  });
+
+  return activateFile({ ...group, fileIds: resolution.nextOpenFileIds }, fileId);
 }
 
 function collapseEmptyGroups(groups: EditorGroupState[], preferredActiveGroupId: string): EditorGroupState[] {

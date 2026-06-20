@@ -1,6 +1,7 @@
 import type { LayoutStatusItemContribution } from "@queryeer/api/extensions/LayoutExtension";
 import type { CommandExecutionResult } from "@queryeer/api/plugin/Plugin";
 import PluginErrorBoundary from "./PluginErrorBoundary";
+import { memo } from "react";
 
 type StatusBarProps = {
   statusItemsLeft: LayoutStatusItemContribution[];
@@ -9,7 +10,7 @@ type StatusBarProps = {
   canExecuteCommand: (commandId: string) => boolean;
 };
 
-export function StatusBar({ statusItemsLeft, statusItemsRight, executeCommand, canExecuteCommand }: StatusBarProps) {
+function StatusBarComponent({ statusItemsLeft, statusItemsRight, executeCommand, canExecuteCommand }: StatusBarProps) {
   return (
     <footer className="shell-status-bar" aria-label="Status bar">
       <div className="shell-status-bar-left">
@@ -30,13 +31,15 @@ export function StatusBar({ statusItemsLeft, statusItemsRight, executeCommand, c
   );
 }
 
+export const StatusBar = memo(StatusBarComponent);
+
 type StatusItemContentProps = {
   item: LayoutStatusItemContribution;
   executeCommand: (commandId: string) => Promise<CommandExecutionResult>;
   canExecuteCommand: (commandId: string) => boolean;
 };
 
-export function StatusItemContent({ item, executeCommand, canExecuteCommand }: StatusItemContentProps) {
+function StatusItemContentComponent({ item, executeCommand, canExecuteCommand }: StatusItemContentProps) {
   if (!item.commandId) {
     return <PluginErrorBoundary pluginId={item.id}>{item.render()}</PluginErrorBoundary>;
   }
@@ -66,3 +69,5 @@ export function StatusItemContent({ item, executeCommand, canExecuteCommand }: S
     </span>
   );
 }
+
+export const StatusItemContent = memo(StatusItemContentComponent);

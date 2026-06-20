@@ -1,6 +1,7 @@
 import React from "react";
-import type { Plugin } from "@queryeer/api/plugin/Plugin";
+import type { LayoutToolbarContext } from "@queryeer/api/extensions/LayoutExtension";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
+import type { Plugin } from "@queryeer/api/plugin/Plugin";
 import { getQueryEngineService } from "./QueryEngineService";
 import { getQueryPlanArtifactStore, queryCompletedArtifacts, isPlanGraphArtifact } from "./query-plan/artifact-store";
 import { clearGraphViewState } from "../core.graph/graph-view-state-store";
@@ -24,24 +25,32 @@ import { SYMBOL_ACTIONS_SETTING_ID } from "./symbol-action-types";
 import type { SymbolAction } from "./symbol-action-types";
 import { SymbolActionsSettingsEditor } from "./symbol-action-settings";
 import { onCoreSettingsServiceInitialized } from "../core.settings/service";
+import { querySessionKey, toQueryOutputSessionId } from "./query-session";
 
 void React;
 
-const QUERY_TAB_STATE_METADATA_KEY = "core.queryengine.tabState";
-
 type QueryTabState = "running" | "failed";
 
-function readQueryTabState(file: FileEntity): QueryTabState | undefined {
-  const state = file.metadata?.[QUERY_TAB_STATE_METADATA_KEY];
-  if (state === "running" || state === "failed") {
-    return state;
+const TAB_STATE_METADATA_KEY = "core.queryengine.tabStateByGroup";
+const HAS_RUNNING_QUERY_KEY = "core.queryengine.hasRunningQuery";
+
+function readQueryTabState(file: FileEntity, groupId: string | undefined): QueryTabState | undefined {
+  if (!groupId) {
+    return undefined;
   }
-  return undefined;
+  const tabStateByGroup = file.metadata?.[TAB_STATE_METADATA_KEY] as Record<string, QueryTabState> | undefined;
+  const tabState = tabStateByGroup?.[groupId];
+  return tabState === "running" || tabState === "failed" ? tabState : undefined;
 }
 
-function writeQueryTabState(
+function getToolbarSessionId(toolbarContext: LayoutToolbarContext, fallbackFileId: string): string {
+  return toQueryOutputSessionId(toolbarContext.activeEditorGroupId, fallbackFileId);
+}
+
+function writeQueryTabStateToMetadata(
   context: Parameters<Plugin["activate"]>[0],
   fileId: string,
+  groupId: string,
   state: QueryTabState | undefined
 ): void {
   const file = context.files.getFile(fileId);
@@ -49,10 +58,27 @@ function writeQueryTabState(
     return;
   }
   const metadata = { ...(file.metadata ?? {}) };
+  const tabStateByGroup = (metadata[TAB_STATE_METADATA_KEY] as Record<string, QueryTabState> | undefined) ?? {};
   if (state) {
-    metadata[QUERY_TAB_STATE_METADATA_KEY] = state;
+    tabStateByGroup[groupId] = state;
   } else {
-    delete metadata[QUERY_TAB_STATE_METADATA_KEY];
+    delete tabStateByGroup[groupId];
+  }
+  if (Object.keys(tabStateByGroup).length > 0) {
+    metadata[TAB_STATE_METADATA_KEY] = tabStateByGroup;
+    if (state === "running") {
+      metadata[HAS_RUNNING_QUERY_KEY] = true;
+    } else {
+      const anyRunning = Object.values(tabStateByGroup).some((s) => s === "running");
+      if (anyRunning) {
+        metadata[HAS_RUNNING_QUERY_KEY] = true;
+      } else {
+        delete metadata[HAS_RUNNING_QUERY_KEY];
+      }
+    }
+  } else {
+    delete metadata[TAB_STATE_METADATA_KEY];
+    delete metadata[HAS_RUNNING_QUERY_KEY];
   }
   context.files.updateFile(fileId, { metadata });
 }
@@ -95,11 +121,19 @@ export const coreQueryEnginePlugin: Plugin = {
       return file;
     };
 
+    const getToolbarQueryFile = (toolbarContext: LayoutToolbarContext) => {
+      const file = toolbarContext.activeFile;
+      if (file && context.files.capabilities.hasCapability(file.mimeType, "queryexecutable")) {
+        return file;
+      }
+      return getActiveQueryFile();
+    };
+
     const getSelectableOutputs = () => getOutputRegistry().getSelectablePrimaryContributors();
 
-    const resolveSelectedOutput = (fileId: string): string => {
+    const resolveSelectedOutput = (fileId: string, sessionId?: string): string => {
       const outputs = getSelectableOutputs();
-      const selected = getQueryViewStateStore().read(fileId).executionTargetOutputId;
+      const selected = getQueryViewStateStore().read(fileId, sessionId ?? fileId).executionTargetOutputId;
       if (selected && outputs.some((output) => output.id === selected)) {
         return selected;
       }
@@ -116,7 +150,7 @@ export const coreQueryEnginePlugin: Plugin = {
       { id: "queryengine.file-binding" }
     );
 
-    const fileIdByExecutionId = new Map<string, string>();
+    const executionInfoById = new Map<string, { fileId: string; outputSessionId: string }>();
 
     // Register the split-pane query editor for mime types marked queryexecutable
     context.layout.registerEditor({
@@ -126,17 +160,27 @@ export const coreQueryEnginePlugin: Plugin = {
       supportedContentCategories: ["text"],
       openIntents: ["edit", "view"],
       priority: 500,
-      render: ({ activeFile } = {}) => <QueryEditorComponent file={activeFile} editorRegistryHost={getEditorRegistryHost()} outlineRegistry={getOutlineRegistry()} />
+      canSplit: true,
+      render: ({ activeFile, editorInstanceId, editorGroupId, isActiveEditorGroup } = {}) => (
+        <QueryEditorComponent
+          file={activeFile}
+          editorRegistryHost={getEditorRegistryHost()}
+          outlineRegistry={getOutlineRegistry()}
+          editorInstanceId={editorInstanceId}
+          editorGroupId={editorGroupId}
+          isActiveEditorGroup={isActiveEditorGroup}
+        />
+      )
     });
 
     context.layout.registerTabHeaderStyle({
       id: "core.queryengine.tabHeaderStyle.execution",
       order: 100,
-      render: ({ file, hasCapability }) => {
+      render: ({ file, hasCapability, editorGroupId }) => {
         if (!hasCapability("queryexecutable")) {
           return null;
         }
-        const tabState = readQueryTabState(file);
+        const tabState = readQueryTabState(file, editorGroupId);
         if (tabState === "running") {
           return {
             className: "queryengine-tab-state-running",
@@ -157,8 +201,10 @@ export const coreQueryEnginePlugin: Plugin = {
 
       if (event.method === "query.started") {
         if (params?.queryExecutionId && executeContext?.fileId) {
-          fileIdByExecutionId.set(params.queryExecutionId, executeContext.fileId);
-          writeQueryTabState(context, executeContext.fileId, "running");
+          const outputSessionId = executeContext.targetOutputSessionId ?? "";
+          const groupId = querySessionKey(outputSessionId);
+          executionInfoById.set(params.queryExecutionId, { fileId: executeContext.fileId, outputSessionId });
+          writeQueryTabStateToMetadata(context, executeContext.fileId, groupId, "running");
         }
         return;
       }
@@ -167,17 +213,15 @@ export const coreQueryEnginePlugin: Plugin = {
         return;
       }
 
-      const fileId = fileIdByExecutionId.get(params.queryExecutionId);
-      if (!fileId) {
+      const info = executionInfoById.get(params.queryExecutionId);
+      if (!info) {
         return;
       }
 
       if (event.method === "queryengine.completed") {
         const artifacts = queryCompletedArtifacts(event.params);
         if (artifacts.length > 0) {
-          // Clear viewport state for previous plan artifacts so the new plan
-          // doesn't restore a zoom/pan that doesn't fit the current data
-          for (const old of queryPlanStore.list(fileId)) {
+          for (const old of queryPlanStore.list(info.fileId)) {
             clearGraphViewState(old.graph.id);
           }
           for (const artifact of artifacts) {
@@ -185,13 +229,15 @@ export const coreQueryEnginePlugin: Plugin = {
               clearGraphViewState(artifact.graph.id);
             }
           }
-          queryPlanStore.rememberArtifacts(fileId, artifacts);
+          queryPlanStore.rememberArtifacts(info.fileId, artifacts);
         }
-        fileIdByExecutionId.delete(params.queryExecutionId);
-        writeQueryTabState(context, fileId, undefined);
+        const groupId = querySessionKey(info.outputSessionId);
+        executionInfoById.delete(params.queryExecutionId);
+        writeQueryTabStateToMetadata(context, info.fileId, groupId, undefined);
       } else if (event.method === "queryengine.failed") {
-        fileIdByExecutionId.delete(params.queryExecutionId);
-        writeQueryTabState(context, fileId, "failed");
+        const groupId = querySessionKey(info.outputSessionId);
+        executionInfoById.delete(params.queryExecutionId);
+        writeQueryTabStateToMetadata(context, info.fileId, groupId, "failed");
       }
     });
 
@@ -203,7 +249,7 @@ export const coreQueryEnginePlugin: Plugin = {
       id: "core.queryengine.execute",
       title: "Execute Query",
       category: "Query",
-      enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFile?.metadata?.core?.queryengine?.tabState != 'running'",
+      enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFile?.metadata?.core?.queryengine?.hasRunningQuery != true",
       handler: async () => {
         queryEngineService.requestExecute();
       }
@@ -213,7 +259,7 @@ export const coreQueryEnginePlugin: Plugin = {
       id: "core.queryengine.cancel",
       title: "Cancel Query",
       category: "Query",
-      enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFile?.metadata?.core?.queryengine?.tabState == 'running'",
+      enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFile?.metadata?.core?.queryengine?.hasRunningQuery == true",
       handler: async () => {
         queryEngineService.requestCancel();
       }
@@ -252,9 +298,13 @@ export const coreQueryEnginePlugin: Plugin = {
       commandId: "core.queryengine.toggleOutputPanel",
       icon: "panel",
       when: "hasActiveQueryExecutableFile",
-      pressed: () => {
-        const file = getActiveQueryFile();
-        return file ? getQueryViewStateStore().read(file.fileId).outputPanelCollapsed === false : true;
+      pressed: (toolbarContext) => {
+        const file = getToolbarQueryFile(toolbarContext);
+        if (!file) {
+          return true;
+        }
+        const sessionId = getToolbarSessionId(toolbarContext, file.fileId);
+        return getQueryViewStateStore().read(file.fileId, sessionId).outputPanelCollapsed === false;
       }
     });
 
@@ -266,19 +316,21 @@ export const coreQueryEnginePlugin: Plugin = {
       alignment: "west",
       when: "hasActiveQueryExecutableFile",
       getOptions: () => getSelectableOutputs().map((output) => ({ value: output.id, label: output.title })),
-      getValue: () => {
-        const active = getActiveQueryFile();
+      getValue: (toolbarContext) => {
+        const active = getToolbarQueryFile(toolbarContext);
         if (!active) {
           return getSelectableOutputs()[0]?.id ?? TEXT_OUTPUT_PRIMARY_ID;
         }
-        return resolveSelectedOutput(active.fileId);
+        const sessionId = getToolbarSessionId(toolbarContext, active.fileId);
+        return resolveSelectedOutput(active.fileId, sessionId);
       },
-      onChange: (value) => {
-        const active = getActiveQueryFile();
+      onChange: (value, toolbarContext) => {
+        const active = getToolbarQueryFile(toolbarContext);
         if (!active) {
           return;
         }
-        getQueryViewStateStore().setSelectedOutput(active.fileId, value);
+        const sessionId = getToolbarSessionId(toolbarContext, active.fileId);
+        getQueryViewStateStore().setSelectedOutput(active.fileId, sessionId, value);
       },
       disabled: () => getSelectableOutputs().length === 0
     });
@@ -291,27 +343,30 @@ export const coreQueryEnginePlugin: Plugin = {
       alignment: "west",
       when: "hasActiveQueryExecutableFile",
       getOptions: () => getQueryOutputFormatRegistry().getFormatters().map((f) => ({ value: f.id, label: f.label })),
-      getValue: () => {
-        const active = getActiveQueryFile();
+      getValue: (toolbarContext) => {
+        const active = getToolbarQueryFile(toolbarContext);
         const formatters = getQueryOutputFormatRegistry().getFormatters();
         if (!active) {
           return formatters[0]?.id ?? "csv";
         }
-        return getQueryViewStateStore().read(active.fileId).textOutputFormat ?? formatters[0]?.id ?? "csv";
+        const sessionId = getToolbarSessionId(toolbarContext, active.fileId);
+        return getQueryViewStateStore().read(active.fileId, sessionId).textOutputFormat ?? formatters[0]?.id ?? "csv";
       },
-      onChange: (value) => {
-        const active = getActiveQueryFile();
+      onChange: (value, toolbarContext) => {
+        const active = getToolbarQueryFile(toolbarContext);
         if (!active) {
           return;
         }
-        getQueryViewStateStore().setTextOutputFormat(active.fileId, value);
+        const sessionId = getToolbarSessionId(toolbarContext, active.fileId);
+        getQueryViewStateStore().setTextOutputFormat(active.fileId, sessionId, value);
       },
-      disabled: () => {
-        const active = getActiveQueryFile();
+      disabled: (toolbarContext) => {
+        const active = getToolbarQueryFile(toolbarContext);
         if (!active) {
           return true;
         }
-        const id = resolveSelectedOutput(active.fileId);
+        const sessionId = getToolbarSessionId(toolbarContext, active.fileId);
+        const id = resolveSelectedOutput(active.fileId, sessionId);
         return id !== TEXT_OUTPUT_PRIMARY_ID && id !== "core.queryengine.output.file";
       }
     });

@@ -163,7 +163,7 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
         return undefined;
       }
 
-      const viewState = getQueryViewStateStore().read(params.fileId);
+      const viewState = getQueryViewStateStore().read(params.fileId, params.targetOutputSessionId ?? params.fileId);
       const includeActualPlan = viewState.includeActualPlan === true && !params.options?.intent;
       const rawXmlMode = getCoreSettingsService()?.getValue(SQLSERVER_PLAN_OUTPUT_SETTING_ID) === "include"
         ? "include"

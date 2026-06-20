@@ -37,10 +37,12 @@ export type TextEditorComponentProps = {
   editorRegistryHost?: EditorRegistryHost;
   outlineRegistry?: OutlineRegistry;
   editorId?: string;
+  editorInstanceId?: string;
+  isActiveEditorGroup?: boolean;
   openContextMenuOnModifierClick?: boolean;
 };
 
-export function TextEditorComponent({ file, registry, editorRegistryHost, outlineRegistry, editorId, openContextMenuOnModifierClick = false }: TextEditorComponentProps): JSX.Element {
+export function TextEditorComponent({ file, registry, editorRegistryHost, outlineRegistry, editorId, editorInstanceId, isActiveEditorGroup = true, openContextMenuOnModifierClick = false }: TextEditorComponentProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monacoType.editor.IStandaloneCodeEditor | null>(null);
   const apiRef = useRef<MonacoTextEditorApi | null>(null);
@@ -52,6 +54,10 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
   // Keep a current-registry ref so the contextmenu DOM listener (which has [] deps) can always read it.
   const registryRef = useRef(registry);
   registryRef.current = registry;
+  const editorInstanceIdRef = useRef(editorInstanceId);
+  editorInstanceIdRef.current = editorInstanceId;
+  const isActiveEditorGroupRef = useRef(isActiveEditorGroup);
+  isActiveEditorGroupRef.current = isActiveEditorGroup;
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; sections: ContextMenuItem[][]; loading?: boolean } | null>(null);
   const contextMenuRequestIdRef = useRef(0);
@@ -113,7 +119,7 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
       return;
     }
 
-    const activeFile = registryRef.current.getActiveFile();
+    const activeFile = registryRef.current.getActiveFile(editorInstanceIdRef.current);
     if (!activeFile) {
       if (requestId !== contextMenuRequestIdRef.current) {
         return;
@@ -207,6 +213,26 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
     updateNewlineDecorations();
   }, [updateNewlineDecorations]);
 
+  const activateEditorHandle = useCallback((activeFile?: FileEntity | null, shouldFocus = false) => {
+    if (!isActiveEditorGroupRef.current) {
+      return;
+    }
+    const api = apiRef.current;
+    if (!api) {
+      return;
+    }
+    if (shouldFocus) {
+      api.focus();
+    }
+    if (editorRegistryHost && outlineRegistry) {
+      const handle = createTextEditorHandle(editorId ?? "core.editor.text", api, outlineRegistry, registry, {
+        editorInstanceId: editorInstanceIdRef.current,
+        fileId: activeFile?.fileId ?? registry.getActiveFile(editorInstanceIdRef.current)?.fileId ?? null
+      });
+      editorRegistryHost.setActiveEditor(handle);
+    }
+  }, [editorId, editorRegistryHost, outlineRegistry, registry]);
+
   // Keep ref in sync so it can be called from closures that don't have it in deps
   updateNewlineDecorationsRef.current = updateNewlineDecorations;
 
@@ -274,11 +300,11 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
 
     disposablesRef.current.push(
       editor.onDidDispose(() => {
-        if (editorRegistryHost && outlineRegistry) {
+        if (isActiveEditorGroupRef.current && editorRegistryHost && outlineRegistry) {
           editorRegistryHost.setActiveEditor(null);
         }
         api.dispose();
-        registry.onEditorDisposed();
+        registry.onEditorDisposed(undefined, editorInstanceIdRef.current);
         editorRef.current = null;
         apiRef.current = null;
       })
@@ -286,14 +312,11 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
 
     disposablesRef.current.push(
       editor.onDidFocusEditorWidget(() => {
-        if (editorRegistryHost && outlineRegistry) {
-          const handle = createTextEditorHandle(editorId ?? "core.editor.text", api, outlineRegistry, registry);
-          editorRegistryHost.setActiveEditor(handle);
-        }
+        activateEditorHandle(file);
       })
     );
 
-    registry.onEditorReady(api);
+    registry.onEditorReady(api, editorInstanceIdRef.current);
 
     if (openContextMenuOnModifierClick) {
       let modifierPressed = false;
@@ -375,10 +398,7 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
       disposablesRef.current.push({ dispose: () => hoverDecorations.clear() });
     }
 
-    if (editorRegistryHost && outlineRegistry) {
-      const handle = createTextEditorHandle(editorId ?? "core.editor.text", api, outlineRegistry, registry);
-      editorRegistryHost.setActiveEditor(handle);
-    }
+    activateEditorHandle(file);
 
     let dirtyTimer: ReturnType<typeof setTimeout> | null = null;
     api.onDidChangeModelContent((event) => {
@@ -389,9 +409,9 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
       if (dirtyTimer === null) {
         dirtyTimer = setTimeout(() => {
           dirtyTimer = null;
-          const currentFile = registry.getActiveFile();
+          const currentFile = registry.getActiveFile(editorInstanceIdRef.current);
           if (currentFile?.fileId) {
-            registry.markDirty(currentFile.fileId);
+            registry.markDirty(currentFile.fileId, editorInstanceIdRef.current);
           }
         }, 0);
       }
@@ -400,31 +420,34 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
     const fileForInitialLoad = pendingFileRef.current ?? fileToLoad;
     if (fileForInitialLoad) {
       pendingFileRef.current = fileForInitialLoad;
-      await registry.openFileAsync(fileForInitialLoad);
-      api.focus();
+      await registry.openFileAsync(fileForInitialLoad, editorInstanceIdRef.current, { focus: false });
+      activateEditorHandle(fileForInitialLoad, true);
       pendingFileRef.current = null;
     }
 
     initStartedRef.current = false;
-  }, [applyEditorSettings, registry, editorRegistryHost, outlineRegistry, editorId, showEditorContextMenu, openContextMenuOnModifierClick]);
+  }, [activateEditorHandle, applyEditorSettings, registry, showEditorContextMenu, openContextMenuOnModifierClick]);
 
   useEffect(() => {
     if (!file) return;
     if (editorRef.current) {
       if (file === pendingFileRef.current) return;
       pendingFileRef.current = file;
-    void registry.openFileAsync(file).then(() => {
-      apiRef.current?.focus();
-      if (editorRegistryHost && outlineRegistry && apiRef.current) {
-        const handle = createTextEditorHandle(editorId ?? "core.editor.text", apiRef.current, outlineRegistry, registry);
-        editorRegistryHost.setActiveEditor(handle);
-      }
+    void registry.openFileAsync(file, editorInstanceIdRef.current, { focus: false }).then(() => {
+      activateEditorHandle(file, true);
     });
       return;
     }
     pendingFileRef.current = file;
     void initEditorOnce(file);
-  }, [file?.fileId, registry, initEditorOnce]);
+  }, [activateEditorHandle, file?.fileId, registry, initEditorOnce]);
+
+  useEffect(() => {
+    if (!isActiveEditorGroup) {
+      return;
+    }
+    activateEditorHandle(file, true);
+  }, [activateEditorHandle, file?.fileId, isActiveEditorGroup]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -437,7 +460,7 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
       newlineDecorationsRef.current = null;
       if (editorRef.current) {
         const disposedViewState = apiRef.current?.getViewState();
-        registry.captureActiveViewState(disposedViewState);
+        registry.captureActiveViewState(disposedViewState, editorInstanceIdRef.current);
         editorRef.current.dispose();
         editorRef.current = null;
       }

@@ -77,12 +77,15 @@ export const coreEditorTextPlugin: Plugin = {
       supportedContentCategories: ["text"],
       openIntents: ["view", "edit"],
       priority: 200,
-      render: ({ activeFile } = {}) => {
+      canSplit: true,
+      render: ({ activeFile, editorInstanceId, isActiveEditorGroup } = {}) => {
         return <TextEditorComponent
           file={activeFile}
           registry={textRegistry}
           editorRegistryHost={editorRegistryHost}
           outlineRegistry={getOutlineRegistry()}
+          editorInstanceId={editorInstanceId}
+          isActiveEditorGroup={isActiveEditorGroup}
         />;
       }
     });

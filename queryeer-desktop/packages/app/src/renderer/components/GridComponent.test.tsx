@@ -1065,6 +1065,53 @@ describe("GridComponent", () => {
     expect(snapshot.colOrder).toEqual(["y", "x", "z"]);
   });
 
+  it("copy preserves multi-cell rangeStack selections from ctrl-click after drag", async () => {
+    const onCopySelection = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "a", title: "A", type: "int" }, { key: "b", title: "B", type: "string" }]}
+          getRowCount={() => 3}
+          getRowsRange={(start, end) => [[1, "a"], [2, "b"], [3, "c"]].slice(start, end)}
+          getRow={(index) => [[1, "a"], [2, "b"], [3, "c"]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          onCopySelection={onCopySelection}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onGridSelectionChange({
+        current: {
+          cell: [1, 2],
+          range: { x: 1, y: 0, width: 1, height: 3 },
+          rangeStack: [{ x: 0, y: 0, width: 1, height: 3 }],
+        },
+        columns: [],
+        rows: [],
+      });
+    });
+
+    const container = rootElement.firstElementChild;
+    expect(container).not.toBeNull();
+    act(() => {
+      container!.dispatchEvent(new KeyboardEvent("keydown", { key: "c", ctrlKey: true, bubbles: true }));
+    });
+
+    expect(onCopySelection).toHaveBeenCalledTimes(1);
+    const snapshot = onCopySelection.mock.calls[0]?.[0];
+    expect(snapshot.model).toEqual({
+      rect: { rowStart: 0, rowEnd: 2, colIndexStart: 1, colIndexEnd: 1 },
+      cells: [{ row: 0, colIndex: 0 }, { row: 1, colIndex: 0 }, { row: 2, colIndex: 0 }],
+    });
+  });
+
   it("copy via Cmd+C on macOS after column reorder carries colOrder matching visual order", async () => {
     const onCopySelection = vi.fn();
     const onSelectionChange = vi.fn();

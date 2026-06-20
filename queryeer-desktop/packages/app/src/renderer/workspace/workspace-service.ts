@@ -79,6 +79,15 @@ function deriveUntitledCounter(snapshot: WorkspaceSnapshot): number {
   return maxFromFiles;
 }
 
+function resolveRestoredActiveFileUri(snapshot: WorkspaceSnapshot): string | undefined {
+  const activeGroupId = snapshot.layout?.activeEditorGroupId;
+  const activeGroup = activeGroupId
+    ? snapshot.layout?.editorGroups?.find((group) => group.id === activeGroupId)
+    : undefined;
+  const activeGroupUri = activeGroup?.activeFileUri ?? activeGroup?.fileUris.at(-1);
+  return activeGroupUri ?? snapshot.activeFileUri;
+}
+
 export function stableBackupIdForUri(uri: string): string {
   let hash = 2166136261;
   for (let i = 0; i < uri.length; i += 1) {
@@ -156,8 +165,9 @@ export class RendererWorkspaceService {
       await this.restoreFileContentFromBackup(fileEntities[i].fileId, entry.backupFileId);
     }
 
-    if (snapshot.activeFileUri) {
-      const entity = fileEntities.find((f) => f.uri === snapshot.activeFileUri);
+    const restoredActiveFileUri = resolveRestoredActiveFileUri(snapshot);
+    if (restoredActiveFileUri) {
+      const entity = fileEntities.find((f) => f.uri === restoredActiveFileUri);
       if (entity) {
         this.activeFileId = entity.fileId;
         this.fileMediator.setActiveFileId(entity.fileId);

@@ -16,4 +16,6 @@ export type ExecuteRequestOptions = {
   formatOverride?: string;
   optionsOverride?: QueryExecuteOptions;
   fileIdOverride?: string;
+  targetOutputSessionId?: string;
+  targetEditorGroupId?: string;
 };

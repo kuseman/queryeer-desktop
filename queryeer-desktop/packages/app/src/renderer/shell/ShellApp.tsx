@@ -2,7 +2,8 @@ import { Fragment, useEffect, useMemo, useCallback, useRef, useState, type Mouse
 import type { ExtensionSnapshot } from "../../core/plugin-runtime/ExtensionRegistry";
 import type {
   LayoutZone,
-  LayoutEditorContribution
+  LayoutEditorContribution,
+  LayoutToolbarContext
 } from "@queryeer/api/extensions/LayoutExtension";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import { filesAreStructurallyIdentical } from "./file-entity-utils";
@@ -24,6 +25,7 @@ import { AboutDialogHost } from "../../plugins/core.about/AboutDialogHost.js";
 import { NotificationHost } from "../../plugins/core.notification/NotificationHost";
 import { filterMenuItemsByWhen } from "../../plugins/core.menu/menu-item-filter";
 import { confirmCloseDirtyFile } from "./close-file-guard";
+import { planCloseFileInGroup } from "./close-file-plan";
 import { requestMessageDialog } from "../../plugins/core.dialog/message-dialog-service";
 import { filterSidebarViews } from "./sidebar-view-filter";
 import { filterToolbarActions } from "./toolbar-action-filter";
@@ -34,7 +36,8 @@ import { subscribeToggleZoneRequests } from "./layout-zone-events";
 import {
   subscribeCloseActiveEditorRequests,
   subscribeOpenEditorToSideRequests,
-  subscribeSplitActiveEditorRightRequests
+  subscribeSplitActiveEditorRightRequests,
+  subscribeToggleMaximizeActiveEditorGroupRequests
 } from "./layout-editor-events";
 import { getOutlineRegistry } from "../../core/plugin-runtime/ExtensionRegistry";
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../../plugins/core.settings/service";
@@ -42,13 +45,12 @@ import { getKeybindingLabel } from "../../plugins/core.commands/keybinding-label
 import { subscribeKeybindingsRuntime } from "../../plugins/core.commands/keybindings-runtime-accessor";
 import { hasActiveQueryPlanDialect } from "../../plugins/core.queryengine/query-plan/supported-dialects";
 import {
-  closeFileInGroup,
   createPersistedEditorLayout,
   focusEditorGroup,
   getActiveEditorGroup,
   getActiveWorkbenchFileId,
-  isFileReferenced,
   listWorkbenchFileIds,
+  moveFileToSide,
   openFileInActiveGroup,
   openFileToSide,
   resizeAdjacentEditorGroups,
@@ -56,8 +58,11 @@ import {
   selectFileInGroup,
   splitActiveGroupRight,
   syncWorkbenchWithFiles,
+  toggleMaximizedEditorGroup,
   type EditorWorkbenchState
 } from "./editor-workbench-state";
+import { createEditorInstanceId } from "./editor-instance-id";
+import { applyEditorGroupSizePreview, getEditorGroupElements } from "./editor-split-resize";
 import "./shell-app.css";
 
 const OPEN_NEW_FILES_LAST_SETTING_ID = "core.files.openNewFilesLast";
@@ -150,10 +155,12 @@ export function ShellApp({
   });
   const activeFileId = getActiveWorkbenchFileId(editorWorkbench);
   const activeGroup = getActiveEditorGroup(editorWorkbench);
+  const activeFile = activeFileId
+    ? files.find((file) => file.fileId === activeFileId) ?? undefined
+    : undefined;
   const filesRef = useRef<FileEntity[]>(files);
   const editorWorkbenchRef = useRef<EditorWorkbenchState>(editorWorkbench);
   const activeFileIdRef = useRef<string | null>(activeFileId);
-  const [commandContextVersion, setCommandContextVersion] = useState(0);
   const [, setSettingsVersion] = useState(0);
   const layoutRef = useRef<HTMLElement | null>(null);
   const shellMainRef = useRef<HTMLDivElement | null>(null);
@@ -194,18 +201,6 @@ export function ShellApp({
   useEffect(() => {
     workspaceService.setActiveFileSnapshotProvider(() => activeFileIdRef.current);
   }, [workspaceService]);
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    return onCommandContextChanged(() => {
-      if (timer === null) {
-        timer = setTimeout(() => {
-          timer = null;
-          setCommandContextVersion((version) => version + 1);
-        }, 500);
-      }
-    });
-  }, [onCommandContextChanged]);
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
@@ -258,6 +253,7 @@ export function ShellApp({
       : false;
     return {
       hasOpenFiles: listWorkbenchFileIds(editorWorkbench).length > 0,
+      activeFileId,
       hasActiveFile: activeFileForViewContext != null,
       activeFile: activeFileForViewContext
         ? {
@@ -314,8 +310,14 @@ export function ShellApp({
     return map;
   }, [editors]);
 
+  const toolbarContext = useMemo<LayoutToolbarContext>(() => ({
+    activeFile,
+    activeEditorGroupId: activeGroup.id,
+    editorGroupCount: editorWorkbench.groups.length,
+    hasMultipleEditorGroups: editorWorkbench.groups.length > 1
+  }), [activeFile, activeGroup.id, editorWorkbench.groups.length]);
+
   useEffect(() => {
-    const activeFile = activeFileId ? files.find((file) => file.fileId === activeFileId) : null;
     const activeEditorForContext = activeFile?.editorId ? editorsById.get(activeFile.editorId) : undefined;
     contextChain.update("core.layout.editorGroup", {
       activeEditorGroupId: activeGroup.id,
@@ -324,7 +326,7 @@ export function ShellApp({
       activeEditorCanSplit: activeEditorForContext?.canSplit === true
     });
     contextChain.activate("core.layout.editorGroup");
-  }, [activeFileId, activeGroup.id, contextChain, editorWorkbench.groups, editorsById, files]);
+  }, [activeFile, activeGroup.id, contextChain, editorWorkbench.groups, editorsById]);
 
   const commandTitleById = useMemo(() => {
     const map = new Map<string, string>();
@@ -456,6 +458,12 @@ export function ShellApp({
   }, []);
 
   useEffect(() => {
+    return subscribeToggleMaximizeActiveEditorGroupRequests(() => {
+      setEditorWorkbench((previous) => toggleMaximizedEditorGroup(previous, previous.activeGroupId));
+    });
+  }, []);
+
+  useEffect(() => {
     return subscribeFocusSidebarViewRequests((request) => {
       const requestedZone = request.zone
         ?? (request.viewId
@@ -503,23 +511,20 @@ export function ShellApp({
   }, [canSplitFile]);
 
   const closeFile = useCallback((fileId: string, groupId: string = editorWorkbenchRef.current.activeGroupId) => {
-    const nextWorkbench = closeFileInGroup(editorWorkbenchRef.current, groupId, fileId);
-    if (isFileReferenced(nextWorkbench, fileId)) {
-      setEditorWorkbench(nextWorkbench);
-      return;
-    }
     const file = filesRegistry.getFile(fileId);
+    const plan = planCloseFileInGroup(editorWorkbenchRef.current, groupId, fileId, file);
     if (!file) {
-      setEditorWorkbench(nextWorkbench);
+      setEditorWorkbench(plan.nextWorkbench);
       return;
     }
     void (async () => {
-      const shouldClose = await confirmCloseDirtyFile(file, requestMessageDialog);
-      if (!shouldClose) {
+      if (plan.shouldConfirm && !await confirmCloseDirtyFile(file, requestMessageDialog)) {
         return;
       }
-      setEditorWorkbench(nextWorkbench);
-      await fileMediator.closeFile(fileId, { discardDirty: true });
+      setEditorWorkbench(plan.nextWorkbench);
+      if (plan.shouldCloseGlobally) {
+        await fileMediator.closeFile(fileId, { discardDirty: true });
+      }
     })();
   }, [fileMediator, filesRegistry]);
 
@@ -544,18 +549,18 @@ export function ShellApp({
       const fileIdsToCloseGlobally: string[] = [];
 
       for (const fileId of fileIdsToEvaluate) {
-        const candidate = closeFileInGroup(nextWorkbench, groupId, fileId);
-        if (!isFileReferenced(candidate, fileId)) {
-          const file = filesRegistry.getFile(fileId);
-          if (file) {
-            const confirmed = await confirmCloseDirtyFile(file, requestMessageDialog);
-            if (!confirmed) {
-              return;
-            }
+        const file = filesRegistry.getFile(fileId);
+        const plan = planCloseFileInGroup(nextWorkbench, groupId, fileId, file);
+        if (file && plan.shouldConfirm) {
+          const confirmed = await confirmCloseDirtyFile(file, requestMessageDialog);
+          if (!confirmed) {
+            return;
           }
+        }
+        if (plan.shouldCloseGlobally) {
           fileIdsToCloseGlobally.push(fileId);
         }
-        nextWorkbench = candidate;
+        nextWorkbench = plan.nextWorkbench;
       }
 
       setEditorWorkbench(nextWorkbench);
@@ -584,6 +589,17 @@ export function ShellApp({
       }
       return;
     }
+    if (actionId === "core.layout.tab.moveLeft" || actionId === "core.layout.tab.moveRight") {
+      const openNewFilesLast = getCoreSettingsService()?.getValue(OPEN_NEW_FILES_LAST_SETTING_ID) !== false;
+      setEditorWorkbench((previous) => moveFileToSide(
+        previous,
+        groupId,
+        file.fileId,
+        actionId === "core.layout.tab.moveLeft" ? "left" : "right",
+        { openNewFilesLast }
+      ));
+      return;
+    }
     void executeCommand(actionId);
   };
 
@@ -593,6 +609,10 @@ export function ShellApp({
 
   const focusGroup = (groupId: string) => {
     setEditorWorkbench((previous) => focusEditorGroup(previous, groupId));
+  };
+
+  const toggleMaximizeGroup = (groupId: string) => {
+    setEditorWorkbench((previous) => toggleMaximizedEditorGroup(previous, groupId));
   };
 
   useEffect(() => {
@@ -630,6 +650,9 @@ export function ShellApp({
 
   useEffect(() => {
     const uriByFileId = new Map(files.map((file) => [file.fileId, file.uri]));
+    const persistedMaximizedGroupId = editorWorkbench.groups.length > 1
+      ? editorWorkbench.maximizedGroupId ?? undefined
+      : undefined;
     workspaceService.setLayout({
       visibleZones: [...visibleZones],
       sidebarWidths: {
@@ -647,6 +670,7 @@ export function ShellApp({
         activeFileUri: group.activeFileId ? uriByFileId.get(group.activeFileId) : undefined
       })),
       activeEditorGroupId: activeGroup.id,
+      maximizedEditorGroupId: persistedMaximizedGroupId,
       editorLayout: createPersistedEditorLayout(editorWorkbench)
     });
   }, [activeGroup.id, editorWorkbench, files, visibleZones, primarySidebarWidth, secondarySidebarWidth, panelStates, panelHeights, panelHeight, workspaceService]);
@@ -733,16 +757,24 @@ export function ShellApp({
     const totalWidth = Math.max(1, rect.width);
     const startWorkbench = editorWorkbenchRef.current;
     const minSize = 160 / totalWidth;
+    const groupNodes = getEditorGroupElements(main);
+    let nextWorkbench = startWorkbench;
+    let moved = false;
 
     const onMouseMove = (event: MouseEvent) => {
       const delta = (event.clientX - startX) / totalWidth;
-      setEditorWorkbench(resizeAdjacentEditorGroups(startWorkbench, dividerIndex, delta, minSize));
+      nextWorkbench = resizeAdjacentEditorGroups(startWorkbench, dividerIndex, delta, minSize);
+      moved = true;
+      applyEditorGroupSizePreview(groupNodes, nextWorkbench.sizes);
     };
 
     const onMouseUp = () => {
       document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("mouseup", onMouseUp);
       document.body.classList.remove("is-resizing-editor-split");
+      if (moved) {
+        setEditorWorkbench(nextWorkbench);
+      }
     };
 
     document.body.classList.add("is-resizing-editor-split");
@@ -761,6 +793,8 @@ export function ShellApp({
 
   const showPrimarySidebar = visibleZones.has("primarySidebar");
   const showSecondarySidebar = visibleZones.has("secondarySidebar") && secondaryViews.length > 0;
+  const maximizedGroupId = editorWorkbench.groups.length > 1 ? editorWorkbench.maximizedGroupId ?? null : null;
+  const isEditorGroupMaximized = maximizedGroupId != null;
   const shellGridTemplateColumns =
     showPrimarySidebar && showSecondarySidebar
       ? `${primarySidebarWidth}px 1px minmax(0, 1fr) 1px ${secondarySidebarWidth}px`
@@ -782,12 +816,13 @@ export function ShellApp({
       {visibleZones.has("toolBar") && (
         <Toolbar
           toolbarActions={toolbarActions}
+          toolbarContext={toolbarContext}
           visibleZones={visibleZones}
           canExecuteCommand={canExecuteCommand}
           executeCommand={executeCommand}
           getCommandTitle={getCommandTitle}
           getCommandAccelerator={getCommandAccelerator}
-          commandContextVersion={commandContextVersion}
+          onCommandContextChanged={onCommandContextChanged}
         />
       )}
 
@@ -821,7 +856,7 @@ export function ShellApp({
         )}
 
         <section className="shell-main-area" aria-label="Main area">
-          <div ref={shellMainRef} className={`shell-main ${editorWorkbench.groups.length > 1 ? "is-split" : ""}`}>
+          <div ref={shellMainRef} className={`shell-main ${editorWorkbench.groups.length > 1 ? "is-split" : ""} ${isEditorGroupMaximized ? "is-editor-group-maximized" : ""}`.trim()}>
             {editorWorkbench.groups.map((group, index) => {
               const groupFiles = group.fileIds
                 .map((id) => files.find((file) => file.fileId === id))
@@ -833,12 +868,13 @@ export function ShellApp({
                 ? editorsById.get(groupActiveFile.editorId) ?? null
                 : null;
               const isActiveGroup = group.id === activeGroup.id;
+              const isGroupMaximized = maximizedGroupId === group.id;
+              const isGroupHiddenByMaximize = isEditorGroupMaximized && !isGroupMaximized;
               const editorInstanceContext = {
-                editorInstanceId: [
+                editorInstanceId: createEditorInstanceId(
                   group.id,
-                  groupActiveEditor?.id ?? "no-editor",
-                  groupActiveFile?.fileId ?? "no-file"
-                ].join(":"),
+                  groupActiveEditor?.id
+                ),
                 editorGroupId: group.id,
                 editorGroupIndex: index,
                 editorGroupCount: editorWorkbench.groups.length,
@@ -849,7 +885,7 @@ export function ShellApp({
                   {index > 0 && (
                     <div
                       key={`${group.id}-divider`}
-                      className="shell-editor-split-divider"
+                      className={`shell-editor-split-divider ${isEditorGroupMaximized ? "is-hidden-while-maximized" : ""}`.trim()}
                       role="separator"
                       aria-orientation="vertical"
                       aria-label="Resize editor split"
@@ -861,17 +897,21 @@ export function ShellApp({
                   )}
                   <div
                     key={group.id}
-                    className={`shell-editor-group ${isActiveGroup ? "is-active" : ""}`}
+                    className={`shell-editor-group ${isActiveGroup ? "is-active" : ""} ${isGroupMaximized ? "is-maximized" : ""} ${isGroupHiddenByMaximize ? "is-hidden-while-maximized" : ""}`.trim()}
                     data-context="editor"
                     data-editor-group-id={group.id}
+                    aria-hidden={isGroupHiddenByMaximize ? true : undefined}
                     tabIndex={-1}
-                    style={{ flexGrow: editorWorkbench.sizes[index] ?? 1 }}
+                    style={{ flexGrow: isGroupHiddenByMaximize ? 0 : isGroupMaximized ? 1 : editorWorkbench.sizes[index] ?? 1 }}
                     onMouseDownCapture={focusEditorGroupFromPointer}
                     onFocusCapture={() => focusGroup(group.id)}
                   >
                     <EditorTabs
                       openFiles={groupFiles}
                       activeFileId={group.activeFileId}
+                      editorGroupId={group.id}
+                      editorGroupIndex={index}
+                      editorGroupCount={editorWorkbench.groups.length}
                       editorsById={editorsById}
                       tabsRef={(node) => {
                         if (node) {
@@ -895,6 +935,9 @@ export function ShellApp({
                         focusGroup(group.id);
                         handleTabContextMenuOpen(file);
                       }}
+                      canMaximizeGroup={editorWorkbench.groups.length > 1}
+                      isGroupMaximized={isGroupMaximized}
+                      onToggleMaximizeGroup={() => toggleMaximizeGroup(group.id)}
                     />
 
                     <EditorPane

@@ -19,8 +19,16 @@ type TextOutputViewState = {
   scrollLine: number;
 };
 
-const VIEW_STATE_KEY = defineStateKey<TextOutputViewState>("core.queryengine.output.text.viewState");
+type TextOutputViewStateBySession = Record<string, TextOutputViewState>;
+
+const VIEW_STATE_KEY = defineStateKey<TextOutputViewStateBySession>("core.queryengine.output.text.viewStateBySession");
 const MAX_BUFFER_LINES = 10_000;
+const DEFAULT_OUTPUT_SESSION_KEY = "__default__";
+
+function toOutputSessionStorageKey(outputSessionId: string | undefined): string {
+  return outputSessionId ?? DEFAULT_OUTPUT_SESSION_KEY;
+}
+
 function capLines(lines: string[]): string[] {
   return lines.length > MAX_BUFFER_LINES ? lines.slice(lines.length - MAX_BUFFER_LINES) : lines;
 }
@@ -28,6 +36,7 @@ function capLines(lines: string[]): string[] {
 function TextOutputView({ context }: { context: OutputContext }): JSX.Element {
   const [scrollLine, setScrollLine] = useState(0);
   const scrollLineRef = useRef(0);
+  const outputSessionStorageKey = toOutputSessionStorageKey(context.outputSessionId);
 
   const formatter = context.textOutputFormat as TextOutputFormatId;
   const activeFormatter = useMemo(() => resolveTextOutputFormatter(formatter), [formatter]);
@@ -35,19 +44,25 @@ function TextOutputView({ context }: { context: OutputContext }): JSX.Element {
 
   useEffect(() => {
     if (!context.fileId) return;
-    const saved = getFileStateRegistry().get(context.fileId, VIEW_STATE_KEY);
+    const bySession = getFileStateRegistry().get(context.fileId, VIEW_STATE_KEY) ?? {};
+    const saved = bySession[outputSessionStorageKey]
+      ?? (outputSessionStorageKey !== DEFAULT_OUTPUT_SESSION_KEY ? bySession[DEFAULT_OUTPUT_SESSION_KEY] : undefined);
     if (!saved) return;
     setScrollLine(saved.scrollLine);
     scrollLineRef.current = saved.scrollLine;
-  }, [context.fileId]);
+  }, [context.fileId, outputSessionStorageKey]);
 
   useEffect(() => {
     if (!context.fileId) return;
+    const bySession = getFileStateRegistry().get(context.fileId, VIEW_STATE_KEY) ?? {};
     getFileStateRegistry().set(context.fileId, VIEW_STATE_KEY, {
-      lines: formattedLines,
-      scrollLine
+      ...bySession,
+      [outputSessionStorageKey]: {
+        lines: formattedLines,
+        scrollLine
+      }
     });
-  }, [context.fileId, formattedLines, scrollLine]);
+  }, [context.fileId, formattedLines, scrollLine, outputSessionStorageKey]);
 
   const handleLinkActivate = useCallback((uri: string) => {
     if (!uri.startsWith("editor://")) {
@@ -85,9 +100,13 @@ function TextOutputView({ context }: { context: OutputContext }): JSX.Element {
         if (!context.fileId) {
           return;
         }
+        const bySession = getFileStateRegistry().get(context.fileId, VIEW_STATE_KEY) ?? {};
         getFileStateRegistry().set(context.fileId, VIEW_STATE_KEY, {
-          lines: formattedLines,
-          scrollLine: line
+          ...bySession,
+          [outputSessionStorageKey]: {
+            lines: formattedLines,
+            scrollLine: line
+          }
         });
       }}
       onLinkActivate={handleLinkActivate}
