@@ -31,7 +31,7 @@ export function createJdbcAssistantTools(context: PluginContext): AssistantToolC
       title: "Search JDBC Tables and Views",
       description: "Search cached JDBC schema for tables and views using a glob pattern. Use this before writing SQL that references unknown table/view names. The active SQL file determines the JDBC connection and selected database. Pattern supports * and ? and matches object name, schema.name, and snapshot fullName.",
       order: 30,
-      when: "activeFile.mimeType == 'application/sql'",
+      when: "activeFile?.mimeType == 'application/sql'",
       inputSchema: {
         type: "object",
         required: ["pattern"],
@@ -47,7 +47,7 @@ export function createJdbcAssistantTools(context: PluginContext): AssistantToolC
       title: "Get JDBC Table or View Details",
       description: "Return cached columns, primary keys, foreign keys, indices, and other metadata for one JDBC table or view. Use a result from core.queryengine.jdbc.searchObjects when possible. The active SQL file determines the JDBC connection and selected database. This tool reads only cached deep schema snapshots and does not query the live database.",
       order: 31,
-      when: "activeFile.mimeType == 'application/sql'",
+      when: "activeFile?.mimeType == 'application/sql'",
       inputSchema: {
         type: "object",
         required: ["name"],

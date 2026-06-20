@@ -3,9 +3,11 @@ import {
   requestCloseActiveEditor,
   requestOpenEditorToSide,
   requestSplitActiveEditorRight,
+  requestToggleMaximizeActiveEditorGroup,
   subscribeCloseActiveEditorRequests,
   subscribeOpenEditorToSideRequests,
-  subscribeSplitActiveEditorRightRequests
+  subscribeSplitActiveEditorRightRequests,
+  subscribeToggleMaximizeActiveEditorGroupRequests
 } from "./layout-editor-events";
 
 describe("layout editor events", () => {
@@ -34,6 +36,16 @@ describe("layout editor events", () => {
     const unsubscribe = subscribeCloseActiveEditorRequests(listener);
 
     requestCloseActiveEditor();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+
+  it("publishes toggle-maximize-active-editor-group requests", () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeToggleMaximizeActiveEditorGroupRequests(listener);
+
+    requestToggleMaximizeActiveEditorGroup();
 
     expect(listener).toHaveBeenCalledTimes(1);
     unsubscribe();

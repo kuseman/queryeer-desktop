@@ -30,4 +30,21 @@ describe("table result store", () => {
 
     expect(listener).toHaveBeenCalledTimes(2);
   });
+
+  it("clears rows by output session scope without affecting other sessions", () => {
+    const store = getTableResultStore();
+    const leftKey = { outputSessionId: "session-left", fileId: "shared-file", resultSetIndex: 0 };
+    const rightKey = { outputSessionId: "session-right", fileId: "shared-file", resultSetIndex: 0 };
+
+    store.clearAll();
+    store.appendRows(leftKey, [[1], [2]]);
+    store.appendRows(rightKey, [[10]]);
+
+    store.clear({ outputSessionId: "session-left", fileId: "shared-file" });
+
+    expect(store.getRowCount(leftKey)).toBe(0);
+    expect(store.getRows(leftKey)).toEqual([]);
+    expect(store.getRowCount(rightKey)).toBe(1);
+    expect(store.getRows(rightKey)).toEqual([[10]]);
+  });
 });

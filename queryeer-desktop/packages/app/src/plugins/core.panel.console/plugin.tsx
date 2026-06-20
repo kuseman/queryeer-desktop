@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { BackendLogEntry, BackendLogLevel } from "@queryeer/api/backend";
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
 import { requestOpenPanel } from "../../renderer/shell/layout-panel-events";
@@ -155,27 +155,44 @@ export const corePanelConsolePlugin: Plugin = {
   }
 };
 
-function ConsoleStatusItem() {
-  const [unseenCount, setUnseenCount] = useState(() => getConsoleNotificationState().unseenErrorCount);
-  const [panelVisible, setPanelVisible] = useState(() => getConsolePanelVisible());
+type ConsoleStatusSnapshot = {
+  unseenCount: number;
+  panelVisible: boolean;
+};
+
+function readConsoleStatusSnapshot(): ConsoleStatusSnapshot {
+  return {
+    unseenCount: getConsoleNotificationState().unseenErrorCount,
+    panelVisible: getConsolePanelVisible()
+  };
+}
+
+function ConsoleStatusItemComponent() {
+  const [snapshot, setSnapshot] = useState(readConsoleStatusSnapshot);
 
   useEffect(() => {
     return subscribeConsoleNotification(() => {
-      setUnseenCount(getConsoleNotificationState().unseenErrorCount);
-      setPanelVisible(getConsolePanelVisible());
+      const next = readConsoleStatusSnapshot();
+      setSnapshot((current) => (
+        current.unseenCount === next.unseenCount && current.panelVisible === next.panelVisible
+          ? current
+          : next
+      ));
     });
   }, []);
 
-  const showBadge = !panelVisible && unseenCount > 0;
+  const showBadge = !snapshot.panelVisible && snapshot.unseenCount > 0;
   return (
     <span>
       Console
       {showBadge && (
-        <span className="console-status-error-badge">{unseenCount > 99 ? "99+" : unseenCount}</span>
+        <span className="console-status-error-badge">{snapshot.unseenCount > 99 ? "99+" : snapshot.unseenCount}</span>
       )}
     </span>
   );
 }
+
+const ConsoleStatusItem = memo(ConsoleStatusItemComponent);
 
 function ConsolePanel() {
   useEffect(() => {

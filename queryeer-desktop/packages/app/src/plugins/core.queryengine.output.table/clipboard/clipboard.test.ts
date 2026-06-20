@@ -88,8 +88,8 @@ describe("plainFormat — multiple rows", () => {
 // htmlFormat
 // ---------------------------------------------------------------------------
 
-describe("htmlFormat — single column returns null", () => {
-  it("returns null for 1-column selection", () => {
+describe("htmlFormat — single selected cell returns null", () => {
+  it("returns null for 1-cell selection", () => {
     expect(htmlFormat.format(makeSelection([[sel(true, "hello")]], [ts]))).toBeNull();
   });
 });
@@ -151,6 +151,26 @@ describe("htmlFormat — multi-column", () => {
       "<table><tbody>" +
       "<tr><td><strong>ts</strong></td><td><strong>msg</strong></td></tr>" +
       "<tr><td></td><td>x</td></tr>" +
+      "</tbody></table>"
+    );
+  });
+});
+
+describe("htmlFormat — multi-cell single column", () => {
+  it("produces HTML for multiple selected cells in one column", () => {
+    const s = makeSelection(
+      [
+        [sel(true, "T1")],
+        [sel(false, "skip")],
+        [sel(true, "T3")],
+      ],
+      [ts]
+    );
+    expect(htmlFormat.format(s)).toBe(
+      "<table><tbody>" +
+      "<tr><td><strong>ts</strong></td></tr>" +
+      "<tr><td>T1</td></tr>" +
+      "<tr><td>T3</td></tr>" +
       "</tbody></table>"
     );
   });

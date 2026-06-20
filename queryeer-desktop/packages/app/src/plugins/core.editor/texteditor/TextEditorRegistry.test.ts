@@ -4,7 +4,14 @@ import type { TextEditorApi } from "./TextEditorApi";
 import type { TextDocument } from "./types";
 import { setTextEditorContextChain, TextEditorRegistry } from "./TextEditorRegistry";
 import { createContextChain } from "../../core.commands/context-chain";
+import { ContextPriority } from "../../core.commands/context-priority";
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+declare module "./TextEditorRegistry" {
+  interface TextEditorRegistry {
+    [key: string]: unknown;
+  }
+}
 
 const STATE_KEY = "monaco.editor";
 
@@ -41,12 +48,65 @@ function makeDocument(uri: string): TextDocument {
   };
 }
 
+function createDeferred<T>() {
+  let resolve: (value: T | PromiseLike<T>) => void = () => {};
+  let reject: (reason?: unknown) => void = () => {};
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+function wireLegacyDefaultInstanceAccessors(registry: TextEditorRegistry): void {
+  type DefaultEditorState = {
+    activeFileId: string | null;
+    editorApi: TextEditorApi | null;
+    pendingFileForEditor: FileEntity | null;
+  };
+
+  const getDefaultState = (): DefaultEditorState => {
+    const instance = registry as unknown as {
+      getEditorState: (editorInstanceId?: string) => DefaultEditorState;
+    };
+    return instance.getEditorState();
+  };
+
+  Object.defineProperties(registry as unknown as object, {
+    activeFileId: {
+      configurable: true,
+      enumerable: false,
+      get: () => getDefaultState().activeFileId,
+      set: (value: string | null) => {
+        getDefaultState().activeFileId = value;
+      }
+    },
+    editorApi: {
+      configurable: true,
+      enumerable: false,
+      get: () => getDefaultState().editorApi,
+      set: (value: TextEditorApi | null) => {
+        getDefaultState().editorApi = value;
+      }
+    },
+    pendingFileForEditor: {
+      configurable: true,
+      enumerable: false,
+      get: () => getDefaultState().pendingFileForEditor,
+      set: (value: FileEntity | null) => {
+        getDefaultState().pendingFileForEditor = value;
+      }
+    }
+  });
+}
+
 describe("TextEditorRegistry view state", () => {
   let registry: TextEditorRegistry;
   let api: TextEditorApi;
 
   beforeEach(() => {
     registry = new TextEditorRegistry();
+    wireLegacyDefaultInstanceAccessors(registry);
     api = makeMockApi();
   });
 
@@ -744,6 +804,164 @@ describe("TextEditorRegistry view state", () => {
 });
 
 describe("TextEditorRegistry editor focus context", () => {
+  it("publishes the focused editor file and group into the context chain", () => {
+    const registry = new TextEditorRegistry();
+    const chain = createContextChain();
+    const file = makeFile({ fileId: "focused-file", uri: "file:///focused.sql" });
+    let focusListener: (() => void) | undefined;
+    const api = {
+      setModel: vi.fn(),
+      setViewState: vi.fn(),
+      focus: vi.fn(),
+      getModel: vi.fn(() => ({ languageId: "sql" })),
+      getSelection: vi.fn(() => null),
+      getSelectedText: vi.fn(() => ""),
+      onDidFocusEditorText: vi.fn((callback: () => void) => {
+        focusListener = callback;
+        return { dispose: vi.fn() };
+      }),
+      onDidBlurEditorText: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidFocusEditorWidget: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidBlurEditorWidget: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidChangeCursorSelection: vi.fn(() => ({ dispose: vi.fn() }))
+    } as unknown as TextEditorApi;
+
+    registry.setFilesRegistry({
+      getFile: (fileId: string) => fileId === file.fileId ? file : undefined,
+      capabilities: { hasCapability: vi.fn(() => true) }
+    } as any);
+    setTextEditorContextChain(chain);
+    registry.openFile(file, "editor-group-2:core.editor.text");
+    registry.onEditorReady(api, "editor-group-2:core.editor.text");
+
+    focusListener?.();
+
+    expect(chain.getEffectiveContext()).toMatchObject({
+      activeFileId: "focused-file",
+      activeEditorGroupId: "editor-group-2",
+      hasActiveFile: true,
+      hasActiveQueryExecutableFile: true
+    });
+  });
+
+  it("refreshes focused editor active file metadata when the files registry changes", () => {
+    const registry = new TextEditorRegistry();
+    const chain = createContextChain();
+    let file = makeFile({ fileId: "focused-file", uri: "file:///focused.sql", metadata: {} });
+    let focusListener: (() => void) | undefined;
+    let filesListener: ((files: FileEntity[]) => void) | undefined;
+    const api = {
+      setModel: vi.fn(),
+      setViewState: vi.fn(),
+      focus: vi.fn(),
+      getModel: vi.fn(() => ({ languageId: "sql" })),
+      getSelection: vi.fn(() => null),
+      getSelectedText: vi.fn(() => ""),
+      onDidFocusEditorText: vi.fn((callback: () => void) => {
+        focusListener = callback;
+        return { dispose: vi.fn() };
+      }),
+      onDidBlurEditorText: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidFocusEditorWidget: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidBlurEditorWidget: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidChangeCursorSelection: vi.fn(() => ({ dispose: vi.fn() }))
+    } as unknown as TextEditorApi;
+
+    registry.setFilesRegistry({
+      getFile: (fileId: string) => fileId === file.fileId ? file : undefined,
+      capabilities: { hasCapability: vi.fn(() => true) },
+      subscribe: vi.fn((callback: (files: FileEntity[]) => void) => {
+        filesListener = callback;
+        callback([file]);
+        return vi.fn();
+      })
+    } as any);
+    setTextEditorContextChain(chain);
+    registry.openFile(file, "editor-group-2:core.editor.text");
+    registry.onEditorReady(api, "editor-group-2:core.editor.text");
+    focusListener?.();
+
+    expect(chain.getEffectiveContext()).toMatchObject({
+      activeFile: {
+        metadata: {}
+      }
+    });
+
+    file = makeFile({
+      fileId: "focused-file",
+      uri: "file:///focused.sql",
+      metadata: { "core.queryengine.hasRunningQuery": true }
+    });
+    filesListener?.([file]);
+
+    expect(chain.getEffectiveContext()).toMatchObject({
+      activeFile: {
+        metadata: {
+          core: {
+            queryengine: {
+              hasRunningQuery: true
+            }
+          }
+        }
+      }
+    });
+  });
+
+  it("does not let a blurred editor scope override the shell active file context", () => {
+    const registry = new TextEditorRegistry();
+    const chain = createContextChain();
+    const editorFile = makeFile({ fileId: "editor-file", uri: "file:///editor.sql" });
+    const shellFile = makeFile({ fileId: "shell-file", uri: "file:///shell.sql" });
+    let focusListener: (() => void) | undefined;
+    let blurListener: (() => void) | undefined;
+    const api = {
+      setModel: vi.fn(),
+      setViewState: vi.fn(),
+      focus: vi.fn(),
+      getModel: vi.fn(() => ({ languageId: "sql" })),
+      getSelection: vi.fn(() => null),
+      getSelectedText: vi.fn(() => ""),
+      onDidFocusEditorText: vi.fn((callback: () => void) => {
+        focusListener = callback;
+        return { dispose: vi.fn() };
+      }),
+      onDidBlurEditorText: vi.fn((callback: () => void) => {
+        blurListener = callback;
+        return { dispose: vi.fn() };
+      }),
+      onDidFocusEditorWidget: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidBlurEditorWidget: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidChangeCursorSelection: vi.fn(() => ({ dispose: vi.fn() }))
+    } as unknown as TextEditorApi;
+
+    registry.setFilesRegistry({
+      getFile: (fileId: string) => fileId === editorFile.fileId ? editorFile : undefined,
+      capabilities: { hasCapability: vi.fn(() => true) }
+    } as any);
+    chain.register({
+      id: "shell-active-file",
+      priority: ContextPriority.ACTIVE_FILE,
+      context: {
+        activeFileId: shellFile.fileId,
+        hasActiveFile: true,
+        activeFile: shellFile
+      }
+    });
+    setTextEditorContextChain(chain);
+    registry.openFile(editorFile, "editor-group-2:core.editor.text");
+    registry.onEditorReady(api, "editor-group-2:core.editor.text");
+
+    expect(chain.getEffectiveContext()).toMatchObject({ activeFileId: "shell-file" });
+
+    focusListener?.();
+
+    expect(chain.getEffectiveContext()).toMatchObject({ activeFileId: "editor-file" });
+
+    blurListener?.();
+
+    expect(chain.getEffectiveContext()).toMatchObject({ activeFileId: "shell-file" });
+  });
+
   it("does not publish context changes for collapsed cursor movement", () => {
     const registry = new TextEditorRegistry();
     const chain = createContextChain();
@@ -777,5 +995,182 @@ describe("TextEditorRegistry editor focus context", () => {
 
     expect(api.getSelectedText).not.toHaveBeenCalled();
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe("TextEditorRegistry editor instances", () => {
+  let registry: TextEditorRegistry;
+
+  beforeEach(() => {
+    registry = new TextEditorRegistry();
+    wireLegacyDefaultInstanceAccessors(registry);
+  });
+
+  it("tracks active files independently per editor instance", async () => {
+    const leftFile = makeFile({ fileId: "file-left", uri: "file:///left.sql" });
+    const rightFile = makeFile({ fileId: "file-right", uri: "file:///right.sql" });
+    const filesById = new Map<string, FileEntity>([
+      [leftFile.fileId, leftFile],
+      [rightFile.fileId, rightFile]
+    ]);
+    registry.setFilesRegistry({
+      getFile: (fileId: string) => filesById.get(fileId)
+    } as any);
+
+    await registry.openFileAsync(leftFile, "left-instance");
+    await registry.openFileAsync(rightFile, "right-instance");
+
+    expect(registry.getActiveFile("left-instance")?.fileId).toBe(leftFile.fileId);
+    expect(registry.getActiveFile("right-instance")?.fileId).toBe(rightFile.fileId);
+  });
+
+  it("keeps recovered untitled content when split instances open concurrently", async () => {
+    const file = makeFile({
+      fileId: "file-1",
+      uri: "untitled:Untitled1.sql",
+      dirtyVsDisk: true
+    });
+    const filesRegistry = {
+      markDirty: vi.fn(),
+      getFile: vi.fn(() => file),
+      setEditorState: vi.fn(),
+      getEditorState: vi.fn()
+    };
+    registry.setFilesRegistry(filesRegistry as any);
+
+    registry.applyRecoveredContent(file.fileId, "recovered content");
+
+    const readResult1 = createDeferred<{ success: boolean; content: string }>();
+    const readResult2 = createDeferred<{ success: boolean; content: string }>();
+    const readFile = vi
+      .fn()
+      .mockReturnValueOnce(readResult1.promise)
+      .mockReturnValueOnce(readResult2.promise);
+
+    const appShellTarget = window as unknown as {
+      appShell?: Record<string, unknown>;
+    };
+    const previousAppShell = appShellTarget.appShell;
+
+    appShellTarget.appShell = {
+      ...(previousAppShell ?? {}),
+      readFile,
+      showDialogMessage: vi.fn(async () => ({ action: "" }))
+    };
+
+    try {
+      const leftOpen = registry.openFileAsync(file, "left-instance");
+      const rightOpen = registry.openFileAsync(file, "right-instance");
+
+      readResult1.resolve({ success: true, content: "" });
+      await Promise.resolve();
+      readResult2.resolve({ success: true, content: "" });
+
+      await Promise.all([leftOpen, rightOpen]);
+    } finally {
+      if (previousAppShell) {
+        appShellTarget.appShell = previousAppShell;
+      } else {
+        delete appShellTarget.appShell;
+      }
+    }
+
+    expect(registry.getModelForFile(file.fileId)?.getContent()).toBe("recovered content");
+    expect(filesRegistry.markDirty).toHaveBeenCalledWith(file.fileId);
+  });
+
+  it("markDirty reads content from the targeted editor instance", async () => {
+    const file = makeFile({ fileId: "file-1", uri: "file:///split.sql" });
+    const filesRegistry = {
+      markDirty: vi.fn(),
+      getFile: vi.fn(() => file),
+      setEditorState: vi.fn(),
+      getEditorState: vi.fn()
+    };
+    registry.setFilesRegistry(filesRegistry as any);
+
+    await registry.openFileAsync(file, "left-instance");
+    await registry.openFileAsync(file, "right-instance");
+
+    const leftApi = {
+      ...makeMockApi(),
+      getModel: vi.fn(() => makeDocument(file.uri)),
+      getContent: vi.fn(() => "left-content")
+    } as unknown as TextEditorApi;
+    const rightApi = {
+      ...makeMockApi(),
+      getModel: vi.fn(() => makeDocument(file.uri)),
+      getContent: vi.fn(() => "right-content")
+    } as unknown as TextEditorApi;
+
+    registry.onEditorReady(leftApi, "left-instance");
+    registry.onEditorReady(rightApi, "right-instance");
+
+    const dirtyListener = vi.fn();
+    registry.onContentDirty(dirtyListener);
+
+    registry.markDirty(file.fileId, "right-instance");
+
+    expect((rightApi as unknown as { getContent: ReturnType<typeof vi.fn> }).getContent).toHaveBeenCalled();
+    expect((leftApi as unknown as { getContent: ReturnType<typeof vi.fn> }).getContent).not.toHaveBeenCalled();
+    expect(registry.getModelForFile(file.fileId)?.getContent()).toBe("right-content");
+    expect(filesRegistry.markDirty).toHaveBeenCalledWith(file.fileId);
+    expect(dirtyListener).toHaveBeenCalledWith(file.fileId, "right-content");
+  });
+
+  it("applies runtime view state to all active instances for the same file", async () => {
+    const file = makeFile({ fileId: "file-1", uri: "file:///shared.sql" });
+    registry.setFilesRegistry({ getFile: () => file } as any);
+
+    await registry.openFileAsync(file, "left-instance");
+    await registry.openFileAsync(file, "right-instance");
+
+    const leftApi = {
+      ...makeMockApi(),
+      getModel: vi.fn(() => makeDocument(file.uri))
+    } as unknown as TextEditorApi;
+    const rightApi = {
+      ...makeMockApi(),
+      getModel: vi.fn(() => makeDocument(file.uri))
+    } as unknown as TextEditorApi;
+
+    registry.onEditorReady(leftApi, "left-instance");
+    registry.onEditorReady(rightApi, "right-instance");
+
+    const runtimeState = { cursor: { line: 12, column: 4 } };
+    registry.applyRuntimeViewState(file.fileId, runtimeState);
+
+    expect((leftApi as unknown as { setViewState: ReturnType<typeof vi.fn> }).setViewState).toHaveBeenCalledWith(runtimeState);
+    expect((rightApi as unknown as { setViewState: ReturnType<typeof vi.fn> }).setViewState).toHaveBeenCalledWith(runtimeState);
+  });
+
+  it("disposing one instance keeps other instances active", async () => {
+    const file = makeFile({ fileId: "file-1", uri: "file:///shared.sql" });
+    registry.setFilesRegistry({
+      getFile: () => file,
+      setEditorState: vi.fn(),
+      getEditorState: vi.fn()
+    } as any);
+
+    await registry.openFileAsync(file, "left-instance");
+    await registry.openFileAsync(file, "right-instance");
+
+    const leftApi = {
+      ...makeMockApi(),
+      getModel: vi.fn(() => makeDocument(file.uri))
+    } as unknown as TextEditorApi;
+    const rightApi = {
+      ...makeMockApi(),
+      getModel: vi.fn(() => makeDocument(file.uri))
+    } as unknown as TextEditorApi;
+
+    registry.onEditorReady(leftApi, "left-instance");
+    registry.onEditorReady(rightApi, "right-instance");
+
+    registry.onEditorDisposed(undefined, "left-instance");
+
+    expect(registry.getActiveEditor("left-instance")).toBeNull();
+    expect(registry.getActiveEditor("right-instance")).toBe(rightApi);
+    expect(registry.getActiveFile("right-instance")?.fileId).toBe(file.fileId);
   });
 });

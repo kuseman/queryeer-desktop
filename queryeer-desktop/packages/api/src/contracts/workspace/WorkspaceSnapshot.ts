@@ -42,6 +42,7 @@ export type PersistedLayoutSnapshot = {
   panelHeight?: number;
   editorGroups?: PersistedEditorGroup[];
   activeEditorGroupId?: string;
+  maximizedEditorGroupId?: string;
   editorLayout?: PersistedEditorLayoutNode;
 };
 

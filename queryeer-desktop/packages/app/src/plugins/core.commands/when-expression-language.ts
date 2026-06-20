@@ -31,11 +31,13 @@ export const CONTEXT_VARIABLES: CtxVar[] = [
   { name: "activeFile.mimeType", type: "string", description: "MIME type of the active file (e.g. 'application/sql')" },
   { name: "selectedText", type: "string", description: "Text currently selected in the editor" },
   { name: "hasSelection", type: "boolean", description: "True when text is selected in the editor" },
+  { name: "activeFileId", type: "string", description: "ID of the active file" },
   { name: "hasActiveFile", type: "boolean", description: "True when any file is open" },
   { name: "hasActiveTextEditor", type: "boolean", description: "True when a text editor is active" },
   { name: "editorTextFocus", type: "boolean", description: "True when the editor text area has keyboard focus" },
   { name: "hasActiveQueryExecutableFile", type: "boolean", description: "True when the active file can be executed as a query" },
   { name: "hasActiveQueryPlanDialect", type: "boolean", description: "True when the active query file uses a dialect that supports query plans" },
+  { name: "hasMultipleEditorGroups", type: "boolean", description: "True when the editor area contains multiple editor groups" },
   { name: "backendHealthy", type: "boolean", description: "True when the backend service is running and healthy" },
 ];
 

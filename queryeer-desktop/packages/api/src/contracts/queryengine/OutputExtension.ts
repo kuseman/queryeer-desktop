@@ -72,17 +72,21 @@ export type OutputContext = {
   executionStartedAtMs: number | null;
   textOutputFormat: string;
   rowsTargetPrimaryId: string | null;
+  /** Optional execution/output session identity (for split editors and pane-scoped output state). */
+  outputSessionId?: string;
   /** Identity of the file this context belongs to. Used by contributors for per-file state persistence. */
   fileId?: string;
 };
 
 export type RowChunk = {
+  outputSessionId?: string;
   fileId?: string;
   resultSetIndex: number;
   rows: unknown[][];
 };
 
 export type OutputExecutionStart = {
+  outputSessionId?: string;
   fileId?: string;
 };
 

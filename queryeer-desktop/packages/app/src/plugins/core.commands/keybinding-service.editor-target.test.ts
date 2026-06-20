@@ -84,7 +84,7 @@ describe("createKeybindingService editor target fallback", () => {
     await service.initialize(makeExtensions());
 
     const editorPane = document.createElement("div");
-    editorPane.className = "shell-editor-pane";
+    editorPane.className = "text-editor-container";
     document.body.appendChild(editorPane);
 
     const event = new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true, cancelable: true });

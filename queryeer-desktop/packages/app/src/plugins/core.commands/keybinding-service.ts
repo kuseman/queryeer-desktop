@@ -22,6 +22,7 @@ export type KeybindingService = {
 
 export type KeybindingServiceOptions = {
   executeCommand: (commandId: string) => Promise<CommandExecutionResult>;
+  canExecuteCommand?: (commandId: string) => boolean;
   getUserKeybindings: () => Promise<UserKeybindingsDocument>;
   /** When provided, context snapshots come from the shared chain instead of an isolated DOM tracker. */
   contextChain?: ContextChain;
@@ -35,11 +36,21 @@ function hasModifierKeybinding(key: string): boolean {
   return /(^|\+)(Ctrl|Cmd|Meta|Alt|Option|Shift)(\+|$)/i.test(key);
 }
 
-const EDITOR_FOCUS_SELECTORS = "[data-context='editor'], .shell-editor-pane, .shell-editor-content";
+const TEXT_EDITOR_TARGET_SELECTORS = ".text-editor-component, .text-editor-container, .monaco-editor";
+const EDITOR_FOCUS_SELECTORS = `[data-context='editor'], .shell-editor-pane, .shell-editor-content, ${TEXT_EDITOR_TARGET_SELECTORS}`;
+
+function isEventTargetInEditor(target?: EventTarget | null): boolean {
+  const elementTarget = target instanceof Element ? target : null;
+  return elementTarget?.closest(EDITOR_FOCUS_SELECTORS) !== null;
+}
+
+function isEventTargetInTextEditor(target?: EventTarget | null): boolean {
+  const elementTarget = target instanceof Element ? target : null;
+  return elementTarget?.closest(TEXT_EDITOR_TARGET_SELECTORS) !== null;
+}
 
 function isInEditor(target?: EventTarget | null): boolean {
-  const elementTarget = target instanceof Element ? target : null;
-  if (elementTarget?.closest(EDITOR_FOCUS_SELECTORS)) {
+  if (isEventTargetInEditor(target)) {
     return true;
   }
 
@@ -112,6 +123,7 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
   ): { matched: ResolvedKeybinding | undefined; contextSnapshot: Record<string, unknown> } {
     const rawContextSnapshot = options.contextChain?.getEffectiveContext() ?? contextKeys!.snapshot();
     const editorFocusFromDom = isInEditor(eventTarget);
+    const hasElementTargetOutsideTextEditor = eventTarget instanceof Element && !isEventTargetInTextEditor(eventTarget);
     const editorFocus = Boolean(
       rawContextSnapshot.editorFocus || rawContextSnapshot.editorTextFocus || editorFocusFromDom
     );
@@ -127,21 +139,35 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
         if (normalizeKeybindingKey(binding.key) !== normalized) {
           return false;
         }
+        if (binding.scope === "editor" && hasElementTargetOutsideTextEditor) {
+          return false;
+        }
         if (shouldSkipForInput(binding.when, inputFocus, editorFocus, binding.key)) {
           return false;
         }
         const expression = binding.when;
+        let whenMatches = false;
         if (!expression || expression.trim().length === 0 || expression.trim() === "global") {
-          return true;
+          whenMatches = true;
+        } else {
+          try {
+            whenMatches = runtime.evaluateBooleanSync(expression, contextSnapshot, {
+              mode: "when",
+              source: `keybinding:${binding.id}`,
+              timeoutMs: 50,
+            });
+          } catch (error) {
+            console.error(`[ExpressionRuntime][keybinding] '${binding.id}' failed :: ${expression}`, error);
+            return false;
+          }
+        }
+        if (!whenMatches) {
+          return false;
         }
         try {
-          return runtime.evaluateBooleanSync(expression, contextSnapshot, {
-            mode: "when",
-            source: `keybinding:${binding.id}`,
-            timeoutMs: 50,
-          });
+          return options.canExecuteCommand?.(binding.commandId) ?? true;
         } catch (error) {
-          console.error(`[ExpressionRuntime][keybinding] '${binding.id}' failed :: ${expression}`, error);
+          console.error(`[KeybindingService] canExecuteCommand('${binding.commandId}') failed`, error);
           return false;
         }
       });

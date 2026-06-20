@@ -5,6 +5,7 @@ import { fileUriToPath } from "@queryeer/api/files/Resolvers";
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../core.settings/service";
 import { DocumentIcon } from "./DocumentIcon";
 import { MimeTypesSettingsEditor } from "./MimeTypesSettingsEditor";
+import { getCommandContext } from "../core.commands/command-context-accessor";
 
 const MIME_TYPES_SETTING_ID = "core.files.mimeTypes";
 const NEW_FILE_OPEN_LAST_SETTING_ID = "core.files.openNewFilesLast";
@@ -222,6 +223,21 @@ async function maybeFormatBeforeSave(
   await activeEditor.format.format();
 }
 
+function resolveCommandActiveFileId(context: Parameters<Plugin["activate"]>[0], includeContextFile: boolean): string | null {
+  const contextFileId = includeContextFile ? context.fileMediator.getContextFileId() : null;
+  if (contextFileId) {
+    return contextFileId;
+  }
+
+  const commandContext = getCommandContext();
+  const commandFileId = commandContext.activeFileId;
+  if (typeof commandFileId === "string" && commandFileId.length > 0) {
+    return commandFileId;
+  }
+
+  return context.fileMediator.getActiveFileId();
+}
+
 export const coreFilesPlugin: Plugin = {
   manifest: {
     id: "core.files",
@@ -403,7 +419,7 @@ export const coreFilesPlugin: Plugin = {
       id: "core.files.new",
       title: "New File",
       handler: async () => {
-        const activeId = context.fileMediator.getActiveFileId();
+        const activeId = resolveCommandActiveFileId(context, false);
         const active = activeId ? context.files.getFile(activeId) : undefined;
         const configuredOptions = listConfiguredNewFileMimeTypeOptions(context);
         const activeInConfigured =
@@ -516,8 +532,7 @@ export const coreFilesPlugin: Plugin = {
       id: "core.files.save",
       title: "Save File",
       handler: async () => {
-        const contextFileId = context.fileMediator.getContextFileId();
-        const fileId = contextFileId ?? context.fileMediator.getActiveFileId();
+        const fileId = resolveCommandActiveFileId(context, true);
         if (fileId) {
           await maybeFormatBeforeSave(fileId, context.editors);
           await context.fileMediator.saveFile(fileId);
@@ -529,8 +544,7 @@ export const coreFilesPlugin: Plugin = {
       id: "core.files.saveAs",
       title: "Save As",
       handler: async () => {
-        const contextFileId = context.fileMediator.getContextFileId();
-        const fileId = contextFileId ?? context.fileMediator.getActiveFileId();
+        const fileId = resolveCommandActiveFileId(context, true);
         if (fileId) {
           await maybeFormatBeforeSave(fileId, context.editors);
           await context.fileMediator.saveFile(fileId, { saveAs: true });

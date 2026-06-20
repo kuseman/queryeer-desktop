@@ -3,15 +3,18 @@ import {
   closeFileInGroup,
   createEditorWorkbenchState,
   createPersistedEditorLayout,
+  focusEditorGroup,
   getActiveWorkbenchFileId,
   isFileReferenced,
   listWorkbenchFileIds,
+  moveFileToSide,
   openFileToSide,
   resizeAdjacentEditorGroups,
   restoreEditorWorkbenchStateFromSnapshot,
   selectFileInGroup,
   splitActiveGroupRight,
-  syncWorkbenchWithFiles
+  syncWorkbenchWithFiles,
+  toggleMaximizedEditorGroup
 } from "./editor-workbench-state";
 
 describe("editor workbench state", () => {
@@ -38,6 +41,44 @@ describe("editor workbench state", () => {
     expect(isFileReferenced(next, "query")).toBe(true);
   });
 
+  it("does not allocate a new state when focusing the already-active group", () => {
+    const state = createEditorWorkbenchState(["query"], "query");
+
+    const next = focusEditorGroup(state, state.activeGroupId);
+
+    expect(next).toBe(state);
+  });
+
+  it("maximizes and restores a requested editor group", () => {
+    const state = splitActiveGroupRight(createEditorWorkbenchState(["query"], "query"));
+    const leftGroupId = state.groups[0].id;
+
+    const maximized = toggleMaximizedEditorGroup(state, leftGroupId);
+    const restored = toggleMaximizedEditorGroup(maximized, leftGroupId);
+
+    expect(maximized.activeGroupId).toBe(leftGroupId);
+    expect(maximized.maximizedGroupId).toBe(leftGroupId);
+    expect(restored.maximizedGroupId).toBeNull();
+  });
+
+  it("does not maximize a single editor group", () => {
+    const state = createEditorWorkbenchState(["query"], "query");
+
+    const next = toggleMaximizedEditorGroup(state, state.groups[0].id);
+
+    expect(next.maximizedGroupId).toBeNull();
+  });
+
+  it("moves maximized state to the focused group", () => {
+    const state = splitActiveGroupRight(createEditorWorkbenchState(["query"], "query"));
+    const maximized = toggleMaximizedEditorGroup(state, state.groups[0].id);
+
+    const focused = focusEditorGroup(maximized, state.groups[1].id);
+
+    expect(focused.activeGroupId).toBe(state.groups[1].id);
+    expect(focused.maximizedGroupId).toBe(state.groups[1].id);
+  });
+
   it("opens a file to the group on the right and focuses it", () => {
     const state = createEditorWorkbenchState(["query"], "query");
 
@@ -54,6 +95,92 @@ describe("editor workbench state", () => {
 
     expect(next.groups.map((group) => group.fileIds)).toEqual([["query"], ["graph"]]);
     expect(getActiveWorkbenchFileId(next)).toBe("graph");
+  });
+
+  it("moves a tab to the existing right group and appends when openNewFilesLast is enabled", () => {
+    const state = {
+      groups: [
+        { id: "left", fileIds: ["a", "b"], activeFileId: "a", activationQueue: ["a"] },
+        { id: "right", fileIds: ["c", "d"], activeFileId: "c", activationQueue: ["c"] }
+      ],
+      activeGroupId: "left",
+      sizes: [0.6, 0.4]
+    };
+
+    const next = moveFileToSide(state, "left", "b", "right", { openNewFilesLast: true });
+
+    expect(next.groups.map((group) => group.fileIds)).toEqual([["a"], ["c", "d", "b"]]);
+    expect(next.groups[1].activeFileId).toBe("b");
+    expect(next.activeGroupId).toBe("right");
+    expect(next.sizes).toEqual([0.6, 0.4]);
+  });
+
+  it("moves a tab after the target active tab when openNewFilesLast is disabled", () => {
+    const state = {
+      groups: [
+        { id: "left", fileIds: ["a", "b"], activeFileId: "a", activationQueue: ["a"] },
+        { id: "right", fileIds: ["c", "d"], activeFileId: "c", activationQueue: ["c"] }
+      ],
+      activeGroupId: "left",
+      sizes: [0.5, 0.5]
+    };
+
+    const next = moveFileToSide(state, "left", "b", "right", { openNewFilesLast: false });
+
+    expect(next.groups.map((group) => group.fileIds)).toEqual([["a"], ["c", "b", "d"]]);
+    expect(next.groups[1].activeFileId).toBe("b");
+  });
+
+  it("creates a right group when moving right from the rightmost group with multiple tabs", () => {
+    const state = createEditorWorkbenchState(["a", "b"], "a");
+
+    const next = moveFileToSide(state, state.groups[0].id, "b", "right", { openNewFilesLast: true });
+
+    expect(next.groups.map((group) => group.fileIds)).toEqual([["a"], ["b"]]);
+    expect(next.groups[1].activeFileId).toBe("b");
+    expect(next.activeGroupId).toBe(next.groups[1].id);
+  });
+
+  it("does not create a right group when moving the only tab in the only group", () => {
+    const state = createEditorWorkbenchState(["a"], "a");
+
+    const next = moveFileToSide(state, state.groups[0].id, "a", "right", { openNewFilesLast: true });
+
+    expect(next).toBe(state);
+  });
+
+  it("moves a tab left only from a non-main group", () => {
+    const state = {
+      groups: [
+        { id: "left", fileIds: ["a"], activeFileId: "a", activationQueue: ["a"] },
+        { id: "right", fileIds: ["b", "c"], activeFileId: "b", activationQueue: ["b"] }
+      ],
+      activeGroupId: "right",
+      sizes: [0.5, 0.5]
+    };
+
+    const next = moveFileToSide(state, "right", "c", "left", { openNewFilesLast: true });
+    const noOp = moveFileToSide(state, "left", "a", "left", { openNewFilesLast: true });
+
+    expect(next.groups.map((group) => group.fileIds)).toEqual([["a", "c"], ["b"]]);
+    expect(next.activeGroupId).toBe("left");
+    expect(noOp).toBe(state);
+  });
+
+  it("removes a duplicate tab from the source and activates the existing target tab", () => {
+    const state = {
+      groups: [
+        { id: "left", fileIds: ["a", "b"], activeFileId: "a", activationQueue: ["a"] },
+        { id: "right", fileIds: ["b", "c"], activeFileId: "c", activationQueue: ["c"] }
+      ],
+      activeGroupId: "left",
+      sizes: [0.5, 0.5]
+    };
+
+    const next = moveFileToSide(state, "left", "b", "right", { openNewFilesLast: true });
+
+    expect(next.groups.map((group) => group.fileIds)).toEqual([["a"], ["b", "c"]]);
+    expect(next.groups[1].activeFileId).toBe("b");
   });
 
   it("closes a duplicate tab only in the requested group", () => {
@@ -111,6 +238,16 @@ describe("editor workbench state", () => {
 
     expect(listWorkbenchFileIds(result.state)).toEqual([]);
     expect(result.state.groups).toHaveLength(1);
+  });
+
+  it("clears maximized state when syncing down to one group", () => {
+    const split = splitActiveGroupRight(createEditorWorkbenchState(["query"], "query"));
+    const maximized = toggleMaximizedEditorGroup(split, split.groups[1].id);
+
+    const result = syncWorkbenchWithFiles(maximized, [], { openNewFilesLast: true });
+
+    expect(result.state.groups).toHaveLength(1);
+    expect(result.state.maximizedGroupId).toBeNull();
   });
 
   it("resizes adjacent editor groups while preserving total size", () => {
@@ -174,6 +311,65 @@ describe("editor workbench state", () => {
     expect(restored.groups.map((group) => group.fileIds)).toEqual([["query"], ["graph"]]);
     expect(restored.activeGroupId).toBe("right");
     expect(restored.sizes).toEqual([0.7, 0.3]);
+  });
+
+  it("restores a persisted maximized editor group as the active group", () => {
+    const restored = restoreEditorWorkbenchStateFromSnapshot(
+      [
+        { fileId: "query", uri: "file:///query.sql" },
+        { fileId: "graph", uri: "untitled:Graph.qjdbcgraph" }
+      ],
+      {
+        editorGroups: [
+          { id: "left", fileUris: ["file:///query.sql"], activeFileUri: "file:///query.sql" },
+          { id: "right", fileUris: ["untitled:Graph.qjdbcgraph"], activeFileUri: "untitled:Graph.qjdbcgraph" }
+        ],
+        activeEditorGroupId: "left",
+        maximizedEditorGroupId: "right"
+      },
+      "query"
+    );
+
+    expect(restored.activeGroupId).toBe("right");
+    expect(restored.maximizedGroupId).toBe("right");
+  });
+
+  it("clears invalid persisted maximized editor groups", () => {
+    const restored = restoreEditorWorkbenchStateFromSnapshot(
+      [
+        { fileId: "query", uri: "file:///query.sql" },
+        { fileId: "graph", uri: "untitled:Graph.qjdbcgraph" }
+      ],
+      {
+        editorGroups: [
+          { id: "left", fileUris: ["file:///query.sql"], activeFileUri: "file:///query.sql" },
+          { id: "right", fileUris: ["untitled:Graph.qjdbcgraph"], activeFileUri: "untitled:Graph.qjdbcgraph" }
+        ],
+        activeEditorGroupId: "left",
+        maximizedEditorGroupId: "missing"
+      },
+      "query"
+    );
+
+    expect(restored.activeGroupId).toBe("left");
+    expect(restored.maximizedGroupId).toBeNull();
+  });
+
+  it("clears a persisted maximized editor group when only one group is restored", () => {
+    const restored = restoreEditorWorkbenchStateFromSnapshot(
+      [{ fileId: "query", uri: "file:///query.sql" }],
+      {
+        editorGroups: [
+          { id: "left", fileUris: ["file:///query.sql"], activeFileUri: "file:///query.sql" }
+        ],
+        activeEditorGroupId: "left",
+        maximizedEditorGroupId: "left"
+      },
+      "query"
+    );
+
+    expect(restored.activeGroupId).toBe("left");
+    expect(restored.maximizedGroupId).toBeNull();
   });
 
   it("falls back to equal sizes when persisted layout tree does not match groups", () => {

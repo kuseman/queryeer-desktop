@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TextEditorApi } from "./TextEditorApi";
-import { TextEditorSelectionCapability, TextEditorVersionedTextEditCapability } from "./TextEditorCapabilities";
+import type { OutlineRegistry } from "@queryeer/api/extensions/OutlineExtension";
+import type { TextEditorRegistry } from "./TextEditorRegistry";
+import {
+  TextEditorSelectionCapability,
+  TextEditorVersionedTextEditCapability,
+  createTextEditorHandle
+} from "./TextEditorCapabilities";
 
 describe("TextEditorVersionedTextEditCapability", () => {
   it("applies edits when the expected version matches", () => {
@@ -156,5 +162,64 @@ describe("TextEditorSelectionCapability", () => {
 
     expect(capability.getContentFromRange(range)).toBe("'SE'");
     expect(getText).toHaveBeenCalledWith(range);
+  });
+});
+
+describe("createTextEditorHandle", () => {
+  it("uses editor instance context for active file lookup", () => {
+    const editor = {
+      getContent: vi.fn(() => "select 1")
+    } as unknown as TextEditorApi;
+    const outlineRegistry = {
+      hasProvider: vi.fn(() => false),
+      getSymbols: vi.fn()
+    } as unknown as OutlineRegistry;
+    const textRegistry = {
+      getActiveFile: vi.fn(() => ({ fileId: "active-file", mimeType: "application/sql" }))
+    } as unknown as TextEditorRegistry;
+
+    const handle = createTextEditorHandle(
+      "core.editor.text",
+      editor,
+      outlineRegistry,
+      textRegistry,
+      { editorInstanceId: "group-1:core.editor.text", fileId: "file-explicit" }
+    );
+
+    expect((textRegistry as unknown as { getActiveFile: ReturnType<typeof vi.fn> }).getActiveFile)
+      .toHaveBeenCalledWith("group-1:core.editor.text");
+    expect(handle.fileId).toBe("file-explicit");
+  });
+
+  it("resolves outline symbols with explicit file context", async () => {
+    const editor = {
+      getContent: vi.fn(() => "")
+    } as unknown as TextEditorApi;
+    const outlineRegistry = {
+      hasProvider: vi.fn(() => true),
+      getSymbols: vi.fn(() => [])
+    } as unknown as OutlineRegistry;
+    const textRegistry = {
+      getActiveFile: vi.fn(() => null),
+      getModelForFile: vi.fn(() => ({
+        getMimeType: () => "application/sql",
+        getContent: () => "select 1"
+      }))
+    } as unknown as TextEditorRegistry;
+
+    const handle = createTextEditorHandle(
+      "core.editor.text",
+      editor,
+      outlineRegistry,
+      textRegistry,
+      { fileId: "file-target" }
+    );
+
+    await Promise.resolve(handle.outline?.getSymbols());
+
+    expect((textRegistry as unknown as { getModelForFile: ReturnType<typeof vi.fn> }).getModelForFile)
+      .toHaveBeenCalledWith("file-target");
+    expect((outlineRegistry as unknown as { getSymbols: ReturnType<typeof vi.fn> }).getSymbols)
+      .toHaveBeenCalledWith("application/sql", "select 1");
   });
 });

@@ -289,6 +289,7 @@ export function resolveCellDisplayValue(type: string, value: unknown): string {
 type TableGridProps = {
   resultSetIndex: number;
   schema: { columns: Column[] };
+  outputSessionId?: string;
   fileId?: string;
   executionStartedAtMs?: number | null;
   onPreviewValue: (options: { title: string; value: string; mimeType?: string }) => void;
@@ -302,8 +303,8 @@ type TableGridProps = {
   onSearchMatchesUpdate?: (matches: Array<{ row: number; col: number }>) => void;
 };
 
-const TableGrid = forwardRef<GridSearchHandle, TableGridProps>(function TableGrid({ resultSetIndex, schema, fileId, executionStartedAtMs, onPreviewValue, isStreaming, searchText, searchCaseSensitive, searchRegex, searchWholeWord, searchMarkAll, searchActiveMatch, onSearchMatchesUpdate }: TableGridProps, ref): JSX.Element {
-  const storeKey = useMemo(() => ({ fileId, resultSetIndex }), [fileId, resultSetIndex]);
+const TableGrid = forwardRef<GridSearchHandle, TableGridProps>(function TableGrid({ resultSetIndex, schema, outputSessionId, fileId, executionStartedAtMs, onPreviewValue, isStreaming, searchText, searchCaseSensitive, searchRegex, searchWholeWord, searchMarkAll, searchActiveMatch, onSearchMatchesUpdate }: TableGridProps, ref): JSX.Element {
+  const storeKey = useMemo(() => ({ outputSessionId, fileId, resultSetIndex }), [outputSessionId, fileId, resultSetIndex]);
   const gridColumns = useMemo(() => toGridColumns(schema.columns), [schema.columns]);
   const [isDarkTheme, setIsDarkTheme] = useState<boolean>(() => (getThemeService()?.getActiveThemeMode() ?? "dark") === "dark");
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; sections: TableOutputContextMenuItem[][]; loading?: boolean } | null>(null);
@@ -458,6 +459,7 @@ function ResultSetMetadata({ metadata }: { metadata?: Record<string, string> }):
 
 function TableOutputView({ context, onPreviewValue }: { context: OutputContext; onPreviewValue: (options: { title: string; value: string; mimeType?: string }) => void }): JSX.Element {
   const tableSettings = resolveOutputTableSettings();
+  const outputSessionId = context.outputSessionId;
   const isStacked = tableSettings.viewMode === "stacked";
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeStackedResultSetIndex, setActiveStackedResultSetIndex] = useState<number | null>(null);
@@ -989,6 +991,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
                         ref={(handle) => { lazySearchHandles.current.set(resultSet.resultSetIndex, handle); }}
                         resultSetIndex={resultSet.resultSetIndex}
                         schema={resultSet.schema}
+                        outputSessionId={outputSessionId}
                         fileId={context.fileId}
                         executionStartedAtMs={context.executionStartedAtMs}
                         onPreviewValue={onPreviewValue}
@@ -1038,6 +1041,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
                   ref={(handle) => { lazySearchHandles.current.set(activeSet.resultSetIndex, handle); }}
                   resultSetIndex={activeSet.resultSetIndex}
                   schema={activeSet.schema}
+                  outputSessionId={outputSessionId}
                   fileId={context.fileId}
                   executionStartedAtMs={context.executionStartedAtMs}
                   onPreviewValue={onPreviewValue}
@@ -1241,8 +1245,12 @@ export const coreQueryEngineOutputTablePlugin: Plugin = {
       title: "Results",
       icon: outputTableIconUrl,
       priority: 0,
-      onExecutionStart: ({ fileId }) => {
-        getTableResultStore().clearFile(fileId);
+      onExecutionStart: ({ outputSessionId, fileId }) => {
+        if (outputSessionId || fileId) {
+          getTableResultStore().clear({ outputSessionId, fileId });
+        } else {
+          getTableResultStore().clearAll();
+        }
         if (fileId) {
           getFileStateRegistry().set(fileId, SELECTION_KEY, {});
           const gridState = getFileStateRegistry().get(fileId, GRID_STATE_KEY) ?? {};
@@ -1253,7 +1261,7 @@ export const coreQueryEngineOutputTablePlugin: Plugin = {
           getFileStateRegistry().set(fileId, GRID_STATE_KEY, clearedGridState);
         }
       },
-      onChunkRows: ({ fileId, resultSetIndex, rows }) => getTableResultStore().appendRows({ fileId, resultSetIndex }, rows),
+      onChunkRows: ({ outputSessionId, fileId, resultSetIndex, rows }) => getTableResultStore().appendRows({ outputSessionId, fileId, resultSetIndex }, rows),
       render: (outputContext) => <TableOutputView context={outputContext} onPreviewValue={(options) => void context.dialog.showValuePreview?.(options)} />
     });
   }

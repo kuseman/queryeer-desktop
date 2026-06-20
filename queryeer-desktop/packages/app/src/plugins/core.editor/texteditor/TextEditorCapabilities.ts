@@ -14,27 +14,37 @@ import type { TextEditorApi } from "./TextEditorApi";
 import type { TextEditorRegistry } from "./TextEditorRegistry";
 import type { OutlineRegistry } from "@queryeer/api/extensions/OutlineExtension";
 
+type TextEditorHandleContext = {
+  editorInstanceId?: string;
+  fileId?: string | null;
+};
+
 export class TextEditorOutlineCapability implements OutlineCapability {
   private readonly editor: TextEditorApi;
   private readonly outlineRegistry: OutlineRegistry;
   private readonly textRegistry: TextEditorRegistry;
+  private readonly context: TextEditorHandleContext;
 
   constructor(
     editor: TextEditorApi,
     outlineRegistry: OutlineRegistry,
-    textRegistry: TextEditorRegistry
+    textRegistry: TextEditorRegistry,
+    context: TextEditorHandleContext = {}
   ) {
     this.editor = editor;
     this.outlineRegistry = outlineRegistry;
     this.textRegistry = textRegistry;
+    this.context = context;
   }
 
   getSymbols(): OutlineSymbol[] | Promise<OutlineSymbol[]> {
-    const activeFile = this.textRegistry.getActiveFile();
-    if (!activeFile) return [];
-    const mimeType = activeFile.mimeType;
+    const activeFile = this.textRegistry.getActiveFile(this.context.editorInstanceId);
+    const fileId = this.context.fileId ?? activeFile?.fileId ?? null;
+    if (!fileId) return [];
+    const model = this.textRegistry.getModelForFile(fileId);
+    const mimeType = activeFile?.mimeType ?? model?.getMimeType();
+    if (!mimeType) return [];
     if (!this.outlineRegistry.hasProvider(mimeType)) return [];
-    const model = this.textRegistry.getModelForFile(activeFile.fileId ?? "");
     const content = this.normalizeContent(
       this.editor.getContent() || model?.getContent() || ""
     );
@@ -225,10 +235,12 @@ export function createTextEditorHandle(
   editorId: string,
   editor: TextEditorApi,
   outlineRegistry: OutlineRegistry,
-  textRegistry: TextEditorRegistry
+  textRegistry: TextEditorRegistry,
+  context: TextEditorHandleContext = {}
 ): EditorHandle {
-  const activeFile = textRegistry.getActiveFile();
-  const outline = new TextEditorOutlineCapability(editor, outlineRegistry, textRegistry);
+  const activeFile = textRegistry.getActiveFile(context.editorInstanceId);
+  const fileId = context.fileId ?? activeFile?.fileId ?? null;
+  const outline = new TextEditorOutlineCapability(editor, outlineRegistry, textRegistry, context);
   const format = new TextEditorFormatCapability(editor);
   const content = new TextEditorContentCapability(editor);
   const focus = new TextEditorFocusCapability(editor);
@@ -236,7 +248,7 @@ export function createTextEditorHandle(
   const versionedTextEdit = new TextEditorVersionedTextEditCapability(editor);
   return {
     editorId,
-    fileId: activeFile?.fileId ?? null,
+    fileId,
     outline,
     format,
     content,

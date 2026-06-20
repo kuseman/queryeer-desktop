@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginContext } from "@queryeer/api/plugin/Plugin";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
+import { createContextChain } from "../core.commands/context-chain";
+import { setCommandContextChain } from "../core.commands/command-context-accessor";
+import { ContextPriority } from "../core.commands/context-priority";
 
 const settingsServiceMock = {
   getValue: vi.fn<(settingId: string) => unknown>(),
@@ -221,6 +224,7 @@ function createNotificationMock() {
 
 describe("core.files plugin", () => {
   beforeEach(() => {
+    setCommandContextChain(createContextChain());
     settingsServiceMock.getValue.mockReset();
     settingsServiceMock.setValue.mockClear();
     settingsServiceMock.refreshSchemaFromRegistry.mockClear();
@@ -296,6 +300,49 @@ describe("core.files plugin", () => {
     );
   });
 
+  it("ctrl+n prefers command context active file over stale mediator active file", async () => {
+    const harness = createHarness();
+    harness.filesById.set("active-file", {
+      fileId: "active-file",
+      version: 1,
+      uri: "file:///active.sql",
+      mimeType: "application/sql",
+      dirtyVsBackend: false,
+      dirtyVsDisk: false,
+      diskState: "inSync",
+      openedAt: new Date().toISOString()
+    });
+    harness.filesById.set("focused-file", {
+      fileId: "focused-file",
+      version: 1,
+      uri: "file:///focused.plbsql",
+      mimeType: "application/plbsql",
+      dirtyVsBackend: false,
+      dirtyVsDisk: false,
+      diskState: "inSync",
+      openedAt: new Date().toISOString()
+    });
+    const chain = createContextChain();
+    chain.register({
+      id: "active-file",
+      priority: ContextPriority.ACTIVE_FILE,
+      context: { activeFileId: "focused-file" }
+    });
+    setCommandContextChain(chain);
+
+    coreFilesPlugin.activate(harness.context);
+    const handler = harness.commands.get("core.files.new");
+    await handler?.();
+
+    expect(harness.createUntitledFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mimeType: "application/plbsql",
+        extension: "plbsql",
+        cloneFromFileId: "focused-file"
+      })
+    );
+  });
+
   it("save command saves the active file", async () => {
     const harness = createHarness();
 
@@ -304,6 +351,44 @@ describe("core.files plugin", () => {
     await handler?.();
 
     expect(harness.context.fileMediator.saveFile).toHaveBeenCalledWith("active-file");
+  });
+
+  it("save command prefers the focused editor file over a stale mediator active file", async () => {
+    const harness = createHarness();
+    const chain = createContextChain();
+    chain.register({
+      id: "focused-editor",
+      priority: ContextPriority.EDITOR_INSTANCE,
+      context: {
+        editorFocus: true,
+        editorTextFocus: true,
+        activeFileId: "focused-file"
+      }
+    });
+    setCommandContextChain(chain);
+
+    coreFilesPlugin.activate(harness.context);
+    const handler = harness.commands.get("core.files.save");
+    await handler?.();
+
+    expect(harness.context.fileMediator.saveFile).toHaveBeenCalledWith("focused-file");
+  });
+
+  it("save command uses command context active file when editor focus has moved", async () => {
+    const harness = createHarness();
+    const chain = createContextChain();
+    chain.register({
+      id: "active-file",
+      priority: ContextPriority.ACTIVE_FILE,
+      context: { activeFileId: "context-active-file" }
+    });
+    setCommandContextChain(chain);
+
+    coreFilesPlugin.activate(harness.context);
+    const handler = harness.commands.get("core.files.save");
+    await handler?.();
+
+    expect(harness.context.fileMediator.saveFile).toHaveBeenCalledWith("context-active-file");
   });
 
   it("save as command forces a save dialog through the mediator", async () => {

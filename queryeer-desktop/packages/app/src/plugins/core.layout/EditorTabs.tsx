@@ -11,6 +11,7 @@ import type { TooltipSectionContribution } from "@queryeer/api/extensions/Toolti
 import type { MimeCapability, MimeIconProps } from "@queryeer/api/files/FilesRegistry";
 import { TabTooltip, buildTabTooltip } from "./TabTooltip";
 import { DocumentIcon } from "../../renderer/icons/DocumentIcon";
+import { MaximizeEditorGroupIcon, RestoreEditorGroupIcon } from "../../renderer/icons/LayoutIcons";
 import { getExpressionRuntime } from "../../plugins/core.expressions/runtime";
 
 type HoveredTab = {
@@ -21,6 +22,9 @@ type HoveredTab = {
 type EditorTabsProps = {
   openFiles: FileEntity[];
   activeFileId: string | null;
+  editorGroupId?: string;
+  editorGroupIndex?: number;
+  editorGroupCount?: number;
   editorsById: Map<string, LayoutEditorContribution>;
   tabsRef: React.Ref<HTMLDivElement>;
   onSelectFile: (fileId: string) => void;
@@ -33,11 +37,17 @@ type EditorTabsProps = {
   getMimeIcon?: (mimeType: string) => ((props: MimeIconProps) => JSX.Element) | undefined;
   onTabContextMenuAction?: (actionId: string, file: FileEntity) => void;
   onTabContextMenuOpen?: (file: FileEntity | null) => void;
+  canMaximizeGroup?: boolean;
+  isGroupMaximized?: boolean;
+  onToggleMaximizeGroup?: () => void;
 };
 
 export function EditorTabs({
   openFiles,
   activeFileId,
+  editorGroupId,
+  editorGroupIndex = 0,
+  editorGroupCount = 1,
   editorsById,
   tabsRef,
   onSelectFile,
@@ -49,7 +59,10 @@ export function EditorTabs({
   hasMimeCapability,
   getMimeIcon,
   onTabContextMenuAction,
-  onTabContextMenuOpen
+  onTabContextMenuOpen,
+  canMaximizeGroup = false,
+  isGroupMaximized = false,
+  onToggleMaximizeGroup
 }: EditorTabsProps) {
   const [hoveredTab, setHoveredTab] = useState<HoveredTab | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: FileEntity } | null>(null);
@@ -57,7 +70,7 @@ export function EditorTabs({
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
     if (onTabContextMenuOpen) {
-      onTabContextMenuOpen(null as unknown as FileEntity);
+      onTabContextMenuOpen(null);
     }
   }, [onTabContextMenuOpen]);
 
@@ -113,84 +126,106 @@ export function EditorTabs({
 
   return (
     <div ref={tabsRef} className="shell-editor-tabs">
-      {openFiles.map((file) => {
-        const editor = file.editorId ? editorsById.get(file.editorId) : undefined;
-        const title = composeTabTitle({
-          file,
-          editor,
-          tabTitleContributions: orderedTabTitleContributions,
-          hasMimeCapability,
-          isActive: activeFileId === file.fileId
-        });
+      <div className="shell-editor-tabs-list">
+        {openFiles.map((file) => {
+          const editor = file.editorId ? editorsById.get(file.editorId) : undefined;
+          const title = composeTabTitle({
+            file,
+            editor,
+            tabTitleContributions: orderedTabTitleContributions,
+            hasMimeCapability,
+            isActive: activeFileId === file.fileId
+          });
 
-        let titleClassName = "shell-editor-tab-title";
-        const styleContext = {
-          file,
-          isActive: activeFileId === file.fileId,
-          hasCapability: (capability: MimeCapability) =>
-            hasMimeCapability?.(file.mimeType, capability) ?? false
-        };
+          let titleClassName = "shell-editor-tab-title";
+          const styleContext = {
+            file,
+            isActive: activeFileId === file.fileId,
+            editorGroupId,
+            hasCapability: (capability: MimeCapability) =>
+              hasMimeCapability?.(file.mimeType, capability) ?? false
+          };
 
-        const tabHeaderStyle = orderedTabHeaderStyleContributions
-          .map((contribution) => contribution.render(styleContext))
-          .filter((style): style is NonNullable<typeof style> => style !== null)
-          .reduce(
-            (acc, style) => ({
-              className: [acc.className, style.className].filter(Boolean).join(" "),
-              indicatorClassName: [acc.indicatorClassName, style.indicatorClassName].filter(Boolean).join(" "),
-              style: { ...acc.style, ...style.style }
-            }),
-            { className: "", indicatorClassName: "", style: undefined as React.CSSProperties | undefined }
-          );
+          const tabHeaderStyle = orderedTabHeaderStyleContributions
+            .map((contribution) => contribution.render(styleContext))
+            .filter((style): style is NonNullable<typeof style> => style !== null)
+            .reduce(
+              (acc, style) => ({
+                className: [acc.className, style.className].filter(Boolean).join(" "),
+                indicatorClassName: [acc.indicatorClassName, style.indicatorClassName].filter(Boolean).join(" "),
+                style: { ...acc.style, ...style.style }
+              }),
+              { className: "", indicatorClassName: "", style: undefined as React.CSSProperties | undefined }
+            );
 
-        if (file.diskState === "deletedOnDisk") {
-          titleClassName += " is-deleted";
-        } else if (file.diskState === "modifiedOnDisk" && file.dirtyVsDisk) {
-          titleClassName += " is-modified";
-        }
+          if (file.diskState === "deletedOnDisk") {
+            titleClassName += " is-deleted";
+          } else if (file.diskState === "modifiedOnDisk" && file.dirtyVsDisk) {
+            titleClassName += " is-modified";
+          }
 
-        return (
-          <div
-            key={file.fileId}
-            data-file-id={file.fileId}
-            className={`shell-editor-tab ${activeFileId === file.fileId ? "is-active" : ""} ${tabHeaderStyle.className}`.trim()}
-            style={tabHeaderStyle.style}
-            onContextMenu={(e) => handleContextMenu(e, file)}
-            onMouseEnter={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              setHoveredTab({ fileId: file.fileId, rect });
-            }}
-            onMouseLeave={() => setHoveredTab(null)}
-          >
-            {tabHeaderStyle.indicatorClassName && (
-              <span className={`shell-editor-tab-indicator ${tabHeaderStyle.indicatorClassName}`.trim()} />
-            )}
+          return (
             <div
-              role="button"
-              className="shell-editor-tab-button"
-              onClick={() => onSelectFile(file.fileId)}
-            >
-              {(() => {
-                const icon = getMimeIcon ? getMimeIcon(file.mimeType) : undefined;
-                const IconComponent = icon ?? DocumentIcon;
-                return <IconComponent className="shell-editor-tab-icon" />;
-              })()}
-              <span className={titleClassName}>{title}</span>
-            </div>
-            <span
-              role="button"
-              className="shell-editor-tab-close"
-              onClick={(e) => {
-                e.stopPropagation();
-                onCloseFile(file.fileId);
+              key={file.fileId}
+              data-file-id={file.fileId}
+              className={`shell-editor-tab ${activeFileId === file.fileId ? "is-active" : ""} ${tabHeaderStyle.className}`.trim()}
+              style={tabHeaderStyle.style}
+              onContextMenu={(e) => handleContextMenu(e, file)}
+              onMouseEnter={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setHoveredTab({ fileId: file.fileId, rect });
               }}
-              aria-label={`Close ${title}`}
+              onMouseLeave={() => setHoveredTab(null)}
             >
-              ×
-            </span>
-          </div>
-        );
-      })}
+              {tabHeaderStyle.indicatorClassName && (
+                <span className={`shell-editor-tab-indicator ${tabHeaderStyle.indicatorClassName}`.trim()} />
+              )}
+              <div
+                role="button"
+                className="shell-editor-tab-button"
+                onClick={() => onSelectFile(file.fileId)}
+              >
+                {(() => {
+                  const icon = getMimeIcon ? getMimeIcon(file.mimeType) : undefined;
+                  const IconComponent = icon ?? DocumentIcon;
+                  return <IconComponent className="shell-editor-tab-icon" />;
+                })()}
+                <span className={titleClassName}>{title}</span>
+              </div>
+              <span
+                role="button"
+                className="shell-editor-tab-close"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCloseFile(file.fileId);
+                }}
+                aria-label={`Close ${title}`}
+              >
+                ×
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {canMaximizeGroup && onToggleMaximizeGroup && (
+        <div className="shell-editor-tabs-actions">
+          <button
+            type="button"
+            className={`shell-editor-group-maximize ${isGroupMaximized ? "is-restore" : ""}`.trim()}
+            aria-label={isGroupMaximized ? "Restore editor groups" : "Maximize editor group"}
+            aria-pressed={isGroupMaximized}
+            title={isGroupMaximized ? "Restore editor groups" : "Maximize editor group"}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleMaximizeGroup();
+            }}
+          >
+            {isGroupMaximized
+              ? <RestoreEditorGroupIcon className="shell-editor-group-maximize-icon" />
+              : <MaximizeEditorGroupIcon className="shell-editor-group-maximize-icon" />}
+          </button>
+        </div>
+      )}
       {hoveredTab && tooltipProps.sections.length > 0 && (
         <div
           className="shell-tab-tooltip"
@@ -220,15 +255,15 @@ export function EditorTabs({
               try {
                 return getExpressionRuntime().evaluateBooleanSync(
                   action.enabledWhen,
-                  {
-                    uri: contextMenu.file.uri,
-                    mimeType: contextMenu.file.mimeType,
-                    fileId: contextMenu.file.fileId,
-                    dirtyVsDisk: contextMenu.file.dirtyVsDisk,
-                    dirtyVsBackend: contextMenu.file.dirtyVsBackend,
-                    editable: hasMimeCapability?.(contextMenu.file.mimeType, "editable") ?? false,
-                    canSplit: contextEditor?.canSplit === true
-                  },
+                  buildTabContextMenuExpressionContext({
+                    file: contextMenu.file,
+                    editor: contextEditor,
+                    editorGroupId,
+                    editorGroupIndex,
+                    editorGroupCount,
+                    editorGroupFileCount: openFiles.length,
+                    hasMimeCapability
+                  }),
                   { mode: "when", source: `tabContextMenu:${action.id}`, timeoutMs: 50 }
                 );
               } catch {
@@ -236,15 +271,15 @@ export function EditorTabs({
               }
             })
             .map((action) => (
-            <div
-              key={action.id}
-              className="shell-context-menu__item shell-tab-context-menu-item"
-              onClick={() => handleActionClick(action)}
-            >
-              {action.icon && <span className={`shell-tab-context-menu-icon ${action.icon}`} />}
-              <span className="shell-tab-context-menu-label">{action.label}</span>
-            </div>
-          ))}
+              <div
+                key={action.id}
+                className="shell-context-menu__item shell-tab-context-menu-item"
+                onClick={() => handleActionClick(action)}
+              >
+                {action.icon && <span className={`shell-tab-context-menu-icon ${action.icon}`} />}
+                <span className="shell-tab-context-menu-label">{action.label}</span>
+              </div>
+            ))}
         </div>
       )}
     </div>
@@ -292,6 +327,46 @@ export function composeTabTitle({
     }
   }
   return `${prefix}${main}${suffix}`;
+}
+
+type BuildTabContextMenuExpressionContextParams = {
+  file: FileEntity;
+  editor: LayoutEditorContribution | undefined;
+  editorGroupId: string | undefined;
+  editorGroupIndex: number;
+  editorGroupCount: number;
+  editorGroupFileCount: number;
+  hasMimeCapability?: (mimeType: string, capability: MimeCapability) => boolean;
+};
+
+export function buildTabContextMenuExpressionContext({
+  file,
+  editor,
+  editorGroupId,
+  editorGroupIndex,
+  editorGroupCount,
+  editorGroupFileCount,
+  hasMimeCapability
+}: BuildTabContextMenuExpressionContextParams) {
+  const hasLeftEditorGroup = editorGroupIndex > 0;
+  const hasRightEditorGroup = editorGroupIndex < editorGroupCount - 1;
+  return {
+    uri: file.uri,
+    mimeType: file.mimeType,
+    fileId: file.fileId,
+    dirtyVsDisk: file.dirtyVsDisk,
+    dirtyVsBackend: file.dirtyVsBackend,
+    editable: hasMimeCapability?.(file.mimeType, "editable") ?? false,
+    canSplit: editor?.canSplit === true,
+    editorGroupId,
+    editorGroupIndex,
+    editorGroupCount,
+    editorGroupFileCount,
+    hasLeftEditorGroup,
+    hasRightEditorGroup,
+    canMoveToLeftGroup: hasLeftEditorGroup,
+    canMoveToRightGroup: hasRightEditorGroup || editorGroupFileCount > 1
+  };
 }
 
 function resolveBaseTabTitle(file: FileEntity, editor: LayoutEditorContribution | undefined): string {

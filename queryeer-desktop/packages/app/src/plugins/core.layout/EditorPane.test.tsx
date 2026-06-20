@@ -52,7 +52,7 @@ describe("EditorPane", () => {
           activeFile={makeFile()}
           activeEditor={activeEditor}
           editorInstanceContext={{
-            editorInstanceId: "editor-group-2:core.editor.test:file-1",
+            editorInstanceId: "editor-group-2:core.editor.test",
             editorGroupId: "editor-group-2",
             editorGroupIndex: 1,
             editorGroupCount: 2,
@@ -65,13 +65,13 @@ describe("EditorPane", () => {
 
     expect(render).toHaveBeenCalledWith(expect.objectContaining({
       activeFile: expect.objectContaining({ fileId: "file-1" }),
-      editorInstanceId: "editor-group-2:core.editor.test:file-1",
+      editorInstanceId: "editor-group-2:core.editor.test",
       editorGroupId: "editor-group-2",
       editorGroupIndex: 1,
       editorGroupCount: 2,
       isActiveEditorGroup: true
     }));
     expect(rootElement.querySelector(".shell-editor-pane")?.getAttribute("data-editor-instance-id"))
-      .toBe("editor-group-2:core.editor.test:file-1");
+      .toBe("editor-group-2:core.editor.test");
   });
 });

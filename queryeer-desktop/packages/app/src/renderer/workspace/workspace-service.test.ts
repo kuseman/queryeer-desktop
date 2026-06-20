@@ -185,6 +185,33 @@ describe("RendererWorkspaceService.hydrate", () => {
     expect(filesRegistry.getFile(activeFileId!)?.uri).toBe("file:///b.txt");
   });
 
+  it("prefers the persisted active editor group over legacy activeFileUri", async () => {
+    const snapshot: WorkspaceSnapshot = {
+      schemaVersion: WORKSPACE_SCHEMA_VERSION,
+      savedAt: "t",
+      activeFileUri: "file:///jdbc.sql",
+      files: [
+        { uri: "file:///jdbc.sql", mimeType: "application/sql" },
+        { uri: "file:///payload.json", mimeType: "application/json" }
+      ],
+      layout: {
+        editorGroups: [
+          { id: "left", fileUris: ["file:///jdbc.sql"], activeFileUri: "file:///jdbc.sql" },
+          { id: "right", fileUris: ["file:///payload.json"], activeFileUri: "file:///payload.json" }
+        ],
+        activeEditorGroupId: "right"
+      }
+    };
+    const { service, filesRegistry, mediator } = makeHarness(snapshot);
+
+    await service.hydrate();
+
+    const activeFileId = service.restoredActiveFileId();
+    expect(activeFileId).not.toBeNull();
+    expect(filesRegistry.getFile(activeFileId!)?.uri).toBe("file:///payload.json");
+    expect(filesRegistry.getFile(mediator.getActiveFileId()!)?.uri).toBe("file:///payload.json");
+  });
+
   it("restores untitled counter from snapshot", async () => {
     const snapshot: WorkspaceSnapshot = {
       schemaVersion: WORKSPACE_SCHEMA_VERSION,
@@ -390,7 +417,8 @@ describe("RendererWorkspaceService layout state", () => {
 
     service.setLayout({
       visibleZones: ["mainArea", "statusBar", "primarySidebar"],
-      sidebarWidths: { primary: 250 }
+      sidebarWidths: { primary: 250 },
+      maximizedEditorGroupId: "editor-group-2"
     });
     await vi.advanceTimersByTimeAsync(50);
 
@@ -402,6 +430,7 @@ describe("RendererWorkspaceService layout state", () => {
       "primarySidebar"
     ]);
     expect(persisted.layout?.sidebarWidths?.primary).toBe(250);
+    expect(persisted.layout?.maximizedEditorGroupId).toBe("editor-group-2");
   });
 
   it("restores and persists panelHeight", async () => {

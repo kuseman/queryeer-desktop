@@ -64,6 +64,19 @@ describe("console-state", () => {
     dispose();
   });
 
+  it("does not emit when panel visibility is unchanged", () => {
+    setConsolePanelVisible(false);
+    let notifications = 0;
+    const dispose = subscribeConsoleNotification(() => {
+      notifications += 1;
+    });
+
+    setConsolePanelVisible(false);
+
+    expect(notifications).toBe(0);
+    dispose();
+  });
+
   it("resets unseen errors explicitly", () => {
     notifyConsoleErrorAppended();
     resetConsoleNotifications();

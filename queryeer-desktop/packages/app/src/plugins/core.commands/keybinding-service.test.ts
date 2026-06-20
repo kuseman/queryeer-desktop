@@ -220,7 +220,7 @@ describe("createKeybindingService", () => {
     await service.initialize(makeExtensions());
 
     const editorRoot = document.createElement("div");
-    editorRoot.setAttribute("data-context", "editor");
+    editorRoot.className = "text-editor-component";
     const input = document.createElement("textarea");
     editorRoot.appendChild(input);
     document.body.appendChild(editorRoot);
@@ -232,6 +232,52 @@ describe("createKeybindingService", () => {
     expect(executeCommand).toHaveBeenCalledWith("core.files.save");
 
     document.body.removeChild(editorRoot);
+    service.dispose();
+  });
+
+  it("does not execute editor scoped keybinding for an output target when editor context is stale", async () => {
+    const executeCommand = vi.fn(async () => ({ commandId: "core.editor.text.find", executed: true }));
+    const chain = createContextChain();
+    chain.register({
+      id: "editor-instance",
+      priority: 40,
+      context: { editorTextFocus: true, editorFocus: true, inputFocus: true }
+    });
+    const service = createKeybindingService({
+      executeCommand,
+      canExecuteCommand: () => true,
+      getUserKeybindings: async () => ({
+        version: KEYBINDINGS_SCHEMA_VERSION,
+        bindings: [],
+        unbound: []
+      }),
+      contextChain: chain
+    });
+
+    const extensions = makeExtensions();
+    extensions.commands.push({ id: "core.editor.text.find", title: "Find", handler: () => {} });
+    extensions.keybindings.push({
+      id: "core.editor.text.keybinding.find",
+      commandId: "core.editor.text.find",
+      key: "CmdOrCtrl+F",
+      when: "editorFocus",
+      scope: "editor",
+      order: 30
+    });
+
+    await service.initialize(extensions);
+
+    const outputRoot = document.createElement("div");
+    outputRoot.className = "query-output-text-root";
+    document.body.appendChild(outputRoot);
+
+    const event = new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true, cancelable: true });
+    outputRoot.dispatchEvent(event);
+
+    expect(executeCommand).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+
+    document.body.removeChild(outputRoot);
     service.dispose();
   });
 
@@ -249,7 +295,7 @@ describe("createKeybindingService", () => {
     await service.initialize(makeExtensions());
 
     const editorRoot = document.createElement("div");
-    editorRoot.setAttribute("data-context", "editor");
+    editorRoot.className = "text-editor-component";
     editorRoot.tabIndex = -1;
     document.body.appendChild(editorRoot);
     editorRoot.focus();
@@ -351,6 +397,51 @@ describe("createKeybindingService", () => {
 
     expect(executeCommand).toHaveBeenCalledWith("core.queryengine.cancel");
     expect(event.defaultPrevented).toBe(true);
+    service.dispose();
+  });
+
+  it("does not consume Escape when the matching command is disabled", async () => {
+    const executeCommand = vi.fn(async () => ({ commandId: "core.queryengine.cancel", executed: false, reason: "disabled-by-enablement" as const }));
+    const chain = createContextChain();
+    chain.register({
+      id: "active-file",
+      priority: 20,
+      context: { hasActiveQueryExecutableFile: true }
+    });
+    chain.register({
+      id: "editor-instance",
+      priority: 40,
+      context: { editorTextFocus: true, editorFocus: false, inputFocus: true }
+    });
+    const service = createKeybindingService({
+      executeCommand,
+      canExecuteCommand: (commandId) => commandId !== "core.queryengine.cancel",
+      getUserKeybindings: async () => ({
+        version: KEYBINDINGS_SCHEMA_VERSION,
+        bindings: [{ commandId: "core.queryengine.cancel", key: "Escape", when: "hasActiveQueryExecutableFile", scope: "global" }],
+        unbound: []
+      }),
+      contextChain: chain
+    });
+
+    const extensions = makeExtensions();
+    extensions.commands.push({ id: "core.queryengine.cancel", title: "Cancel Query", handler: () => {} });
+
+    await service.initialize(extensions);
+    const editorRoot = document.createElement("div");
+    editorRoot.setAttribute("data-context", "editor");
+    const input = document.createElement("textarea");
+    editorRoot.appendChild(input);
+    document.body.appendChild(editorRoot);
+    input.focus();
+
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    input.dispatchEvent(event);
+
+    expect(executeCommand).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+
+    document.body.removeChild(editorRoot);
     service.dispose();
   });
 

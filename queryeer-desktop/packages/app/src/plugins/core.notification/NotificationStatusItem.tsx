@@ -1,14 +1,25 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { NotificationRecord } from "@queryeer/api/extensions/NotificationExtension";
 import { getNotificationService } from "./notification-service";
 
-export function NotificationStatusItem(): JSX.Element {
+function NotificationStatusItemComponent(): JSX.Element {
   const service = getNotificationService();
-  const [version, setVersion] = useState(0);
+  const [unread, setUnread] = useState(() => service.unreadCount());
+  const [, setOpenVersion] = useState(0);
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLSpanElement | null>(null);
+  const openRef = useRef(open);
+  openRef.current = open;
 
-  useEffect(() => service.subscribe(() => setVersion((current) => current + 1)), [service]);
+  useEffect(() => {
+    return service.subscribe(() => {
+      const nextUnread = service.unreadCount();
+      setUnread((current) => (current === nextUnread ? current : nextUnread));
+      if (openRef.current) {
+        setOpenVersion((current) => current + 1);
+      }
+    });
+  }, [service]);
 
   useEffect(() => {
     if (!open) {
@@ -23,9 +34,7 @@ export function NotificationStatusItem(): JSX.Element {
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
 
-  const notifications = service.list();
-  const unread = service.unreadCount();
-  void version;
+  const notifications = open ? service.list() : [];
 
   return (
     <span className="notification-status" ref={rootRef}>
@@ -48,6 +57,8 @@ export function NotificationStatusItem(): JSX.Element {
     </span>
   );
 }
+
+export const NotificationStatusItem = memo(NotificationStatusItemComponent);
 
 function NotificationPopover({
   notifications,

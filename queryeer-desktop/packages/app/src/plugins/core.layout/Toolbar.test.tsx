@@ -51,7 +51,8 @@ describe("Toolbar", () => {
     expect((buttons[1] as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("rechecks command enablement when command context changes", () => {
+  it("rechecks command enablement when command context changes", async () => {
+    vi.useFakeTimers();
     const actions: LayoutToolbarContribution[] = [
       { id: "estimated-plan", commandId: "cmd.estimatedPlan", icon: "file-open", title: "Estimated Plan" }
     ];
@@ -62,31 +63,41 @@ describe("Toolbar", () => {
     let canExecute = false;
     const canExecuteCommand = () => canExecute;
 
-    const renderToolbar = (commandContextVersion: number) => {
-      root.render(
-        <Toolbar
-          toolbarActions={actions}
-          visibleZones={visibleZones}
-          canExecuteCommand={canExecuteCommand}
-          executeCommand={executeCommand}
-          getCommandTitle={getCommandTitle}
-          getCommandAccelerator={getCommandAccelerator}
-          commandContextVersion={commandContextVersion}
-        />
-      );
-    };
-
-    act(() => {
-      renderToolbar(0);
-    });
-    expect((rootElement.querySelector("button.shell-toolbar-action") as HTMLButtonElement).disabled).toBe(true);
-
-    canExecute = true;
-    act(() => {
-      renderToolbar(1);
+    let contextListener: (() => void) | undefined;
+    const onCommandContextChanged = vi.fn((listener: () => void) => {
+      contextListener = listener;
+      return () => {
+        contextListener = undefined;
+      };
     });
 
-    expect((rootElement.querySelector("button.shell-toolbar-action") as HTMLButtonElement).disabled).toBe(false);
+    try {
+      act(() => {
+        root.render(
+          <Toolbar
+            toolbarActions={actions}
+            visibleZones={visibleZones}
+            canExecuteCommand={canExecuteCommand}
+            executeCommand={executeCommand}
+            getCommandTitle={getCommandTitle}
+            getCommandAccelerator={getCommandAccelerator}
+            onCommandContextChanged={onCommandContextChanged}
+          />
+        );
+      });
+
+      expect((rootElement.querySelector("button.shell-toolbar-action") as HTMLButtonElement).disabled).toBe(true);
+
+      canExecute = true;
+      contextListener?.();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(500);
+      });
+
+      expect((rootElement.querySelector("button.shell-toolbar-action") as HTMLButtonElement).disabled).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("executes non-toggle commands on click", async () => {
@@ -177,7 +188,68 @@ describe("Toolbar", () => {
       select.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
-    expect(onChange).toHaveBeenCalledWith("text");
+    expect(onChange).toHaveBeenCalledWith("text", {
+      editorGroupCount: 0,
+      hasMultipleEditorGroups: false
+    });
+  });
+
+  it("passes toolbar context to contribution callbacks", () => {
+    const onChange = vi.fn();
+    const getValue = vi.fn(() => "table");
+    const getOptions = vi.fn(() => [
+      { value: "table", label: "Table" },
+      { value: "text", label: "Text" }
+    ]);
+    const toolbarContext = {
+      activeFile: {
+        fileId: "file-1",
+        uri: "file:///q.sql",
+        mimeType: "application/sql",
+        version: 1,
+        dirtyVsBackend: false,
+        dirtyVsDisk: false,
+        diskState: "inSync" as const,
+        openedAt: new Date().toISOString()
+      },
+      activeEditorGroupId: "group-a",
+      editorGroupCount: 2,
+      hasMultipleEditorGroups: true
+    };
+
+    act(() => {
+      root.render(
+        <Toolbar
+          toolbarActions={[
+            {
+              id: "output-select",
+              type: "select",
+              title: "Output",
+              getOptions,
+              getValue,
+              onChange
+            }
+          ]}
+          toolbarContext={toolbarContext}
+          visibleZones={new Set(["mainArea"])}
+          canExecuteCommand={() => true}
+          executeCommand={vi.fn(async () => ({ commandId: "noop", executed: true }))}
+          getCommandTitle={() => undefined}
+          getCommandAccelerator={() => undefined}
+        />
+      );
+    });
+
+    expect(getOptions).toHaveBeenCalledWith(toolbarContext);
+    expect(getValue).toHaveBeenCalledWith(toolbarContext);
+
+    const select = rootElement.querySelector("select.shell-toolbar-select") as HTMLSelectElement;
+    act(() => {
+      select.value = "text";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    expect(onChange).toHaveBeenCalledWith("text", toolbarContext);
   });
 
   it("hides select when isVisible returns false", () => {
@@ -248,7 +320,10 @@ describe("Toolbar", () => {
       (menuItemButtons[1] as HTMLButtonElement).click();
     });
 
-    expect(onSelect).toHaveBeenCalledWith("application/json");
+    expect(onSelect).toHaveBeenCalledWith("application/json", {
+      editorGroupCount: 0,
+      hasMultipleEditorGroups: false
+    });
     expect(rootElement.querySelector(".shell-toolbar-menu")).toBeNull();
   });
 });

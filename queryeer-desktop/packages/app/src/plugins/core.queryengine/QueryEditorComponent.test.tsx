@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => {
   const cancelRequestListeners = new Set<() => void>();
   const toggleOutputPanelRequestListeners = new Set<() => void>();
   const selectedPrimaryRef = { value: "core.queryengine.output.table" as string | null };
+  const selectedPrimaryBySessionRef = new Map<string, string | null>();
   return {
     executeMock: vi.fn(async () => "exec-1"),
     consumeExecuteOptionsMock: vi.fn(() => null as { outputIdOverride?: string; optionsOverride?: QueryExecuteOptions } | null),
@@ -57,6 +58,7 @@ const mocks = vi.hoisted(() => {
       getSelection: () => null
     })),
     selectedPrimaryRef,
+    selectedPrimaryBySessionRef,
     subscribeByExecutionId,
     executeRequestListeners,
     cancelRequestListeners,
@@ -119,7 +121,20 @@ vi.mock("./output/OutputRegistry", () => ({
     setSelectedPrimary: (id: string | null) => {
       mocks.selectedPrimaryRef.value = id;
     },
+    setSelectedPrimaryForSession: (sessionId: string | undefined, id: string | null) => {
+      if (!sessionId) {
+        mocks.selectedPrimaryRef.value = id;
+        return;
+      }
+      mocks.selectedPrimaryBySessionRef.set(sessionId, id);
+    },
     getSelectedPrimaryId: () => mocks.selectedPrimaryRef.value,
+    getSelectedPrimaryIdForSession: (sessionId?: string) => {
+      if (sessionId && mocks.selectedPrimaryBySessionRef.has(sessionId)) {
+        return mocks.selectedPrimaryBySessionRef.get(sessionId) ?? null;
+      }
+      return mocks.selectedPrimaryRef.value;
+    },
     notifyChunkRows: vi.fn(),
     notifyExecutionStart: mocks.notifyExecutionStartMock,
     getContributors: () => [],
@@ -170,7 +185,16 @@ const mockOutlineRegistry: OutlineRegistry = {
 };
 
 const queryFilesById = new Map<string, FileEntity>();
-const OUTPUT_CONTEXT_KEY = defineStateKey<OutputContext>("core.queryengine.outputContext");
+const OUTPUT_CONTEXT_KEY = defineStateKey<Record<string, OutputContext>>("core.queryengine.outputContextBySession");
+
+function readOutputContext(fileId: string, outputSessionId?: string): OutputContext | undefined {
+  const bySession = getFileStateRegistry().get(fileId, OUTPUT_CONTEXT_KEY);
+  if (!bySession) {
+    return undefined;
+  }
+  const key = outputSessionId ?? fileId;
+  return bySession[key];
+}
 
 function makeFile(overrides: Partial<FileEntity>): FileEntity {
   const file: FileEntity = {
@@ -210,10 +234,11 @@ describe("QueryEditorComponent execution state across tab switches", () => {
     mocks.cancelRequestListeners.clear();
     mocks.toggleOutputPanelRequestListeners.clear();
     mocks.selectedPrimaryRef.value = "core.queryengine.output.table";
+    mocks.selectedPrimaryBySessionRef.clear();
     queryFilesById.clear();
-    getQueryViewStateStore().evict("file-1");
-    getQueryViewStateStore().evict("file-2");
-    getQueryViewStateStore().evict("file-plan");
+    getQueryViewStateStore().evict("file-1", "file-1");
+    getQueryViewStateStore().evict("file-2", "file-2");
+    getQueryViewStateStore().evict("file-plan", "file-plan");
     getFileStateRegistry().evict("file-1");
     getFileStateRegistry().evict("file-2");
     mocks.executeMock.mockResolvedValue("exec-1");
@@ -296,7 +321,7 @@ const filesRegistry = {
       await Promise.resolve();
     });
 
-    const context = getFileStateRegistry().get("file-1", OUTPUT_CONTEXT_KEY);
+    const context = readOutputContext("file-1");
     expect(context?.rowsTargetPrimaryId).toBe("core.queryengine.output.table");
   });
 
@@ -676,7 +701,7 @@ const filesRegistry = {
   it("tab selection is independent from toolbar output selection", async () => {
     const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
 
-    getQueryViewStateStore().setSelectedOutput("file-1", "core.queryengine.output.table");
+    getQueryViewStateStore().setSelectedOutput("file-1", "file-1", "core.queryengine.output.table");
 
     await act(async () => {
       root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
@@ -698,13 +723,13 @@ const filesRegistry = {
     const output = rootElement.querySelector('[data-testid="mock-output"]');
     expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.text");
 
-    expect(getQueryViewStateStore().read("file-1").selectedOutputId).toBe("core.queryengine.output.table");
+    expect(getQueryViewStateStore().read("file-1", "file-1").selectedOutputId).toBe("core.queryengine.output.table");
   });
 
   it("does not switch panel tab when toolbar output selection changes", async () => {
     const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
 
-    getQueryViewStateStore().setPanelSelectedOutput("file-1", "core.queryengine.output.table");
+    getQueryViewStateStore().setPanelSelectedOutput("file-1", "file-1", "core.queryengine.output.table");
 
     await act(async () => {
       root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
@@ -714,7 +739,7 @@ const filesRegistry = {
     expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.table");
 
     await act(async () => {
-      getQueryViewStateStore().setSelectedOutput("file-1", "core.queryengine.output.text");
+      getQueryViewStateStore().setSelectedOutput("file-1", "file-1", "core.queryengine.output.text");
       await Promise.resolve();
     });
 
@@ -725,7 +750,7 @@ const filesRegistry = {
   it("keeps toolbar-selected text format when executing", async () => {
     const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
 
-    getQueryViewStateStore().setTextOutputFormat("file-1", "json");
+    getQueryViewStateStore().setTextOutputFormat("file-1", "file-1", "json");
 
     await act(async () => {
       root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
@@ -754,8 +779,8 @@ const filesRegistry = {
     });
 
     await act(async () => {
-      getQueryViewStateStore().setPanelSelectedOutput("file-1", "core.queryengine.output.table");
-      getQueryViewStateStore().setSelectedOutput("file-1", "core.queryengine.output.text");
+      getQueryViewStateStore().setPanelSelectedOutput("file-1", "file-1", "core.queryengine.output.table");
+      getQueryViewStateStore().setSelectedOutput("file-1", "file-1", "core.queryengine.output.text");
       await Promise.resolve();
     });
 
@@ -800,7 +825,7 @@ const filesRegistry = {
     const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
     mocks.selectedPrimaryRef.value = "core.queryengine.output.table";
 
-    getQueryViewStateStore().setPanelSelectedOutput("file-1", "core.queryengine.output.text");
+    getQueryViewStateStore().setPanelSelectedOutput("file-1", "file-1", "core.queryengine.output.text");
 
     await act(async () => {
       root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
@@ -854,11 +879,14 @@ const filesRegistry = {
       await Promise.resolve();
     });
 
-    const context = getFileStateRegistry().get("file-1", OUTPUT_CONTEXT_KEY);
+    const context = readOutputContext("file-1");
     expect(context?.resultSets[0]?.rows).toEqual([]);
     expect(context?.resultSets[0]?.rowCount).toBe(2);
     expect(context?.fetchedRowCount).toBe(2);
-    expect(mocks.notifyExecutionStartMock).toHaveBeenCalledWith({ fileId: "file-1" }, "core.queryengine.output.table");
+    expect(mocks.notifyExecutionStartMock).toHaveBeenCalledWith(
+      { fileId: "file-1", outputSessionId: "file-1" },
+      "core.queryengine.output.table"
+    );
   });
 
   it("selects plan tab without routing row chunks to the plan output", async () => {
@@ -891,7 +919,7 @@ const filesRegistry = {
   it("selects plan tab over toolbar-selected output when plan is returned", async () => {
     const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
 
-    getQueryViewStateStore().setSelectedOutput("file-1", "core.queryengine.output.text");
+    getQueryViewStateStore().setSelectedOutput("file-1", "file-1", "core.queryengine.output.text");
 
     await act(async () => {
       root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
@@ -925,8 +953,8 @@ const filesRegistry = {
     const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
     const file2 = makeFile({ fileId: "file-2", uri: "file:///q2.sql" });
 
-    getQueryViewStateStore().setSelectedOutput("file-1", "core.queryengine.output.table");
-    getQueryViewStateStore().setPanelSelectedOutput("file-1", "core.queryengine.output.text");
+    getQueryViewStateStore().setSelectedOutput("file-1", "file-1", "core.queryengine.output.table");
+    getQueryViewStateStore().setPanelSelectedOutput("file-1", "file-1", "core.queryengine.output.text");
 
     await act(async () => {
       root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
@@ -948,13 +976,13 @@ const filesRegistry = {
 
     output = rootElement.querySelector('[data-testid="mock-output"]');
     expect(output?.getAttribute("data-selected-primary")).toBe("core.queryengine.output.text");
-    expect(getQueryViewStateStore().read("file-1").selectedOutputId).toBe("core.queryengine.output.table");
+    expect(getQueryViewStateStore().read("file-1", "file-1").selectedOutputId).toBe("core.queryengine.output.table");
   });
 
   it("does not persist output selection when switching output tabs", async () => {
     const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
 
-    getQueryViewStateStore().setSelectedOutput("file-1", "core.queryengine.output.text");
+    getQueryViewStateStore().setSelectedOutput("file-1", "file-1", "core.queryengine.output.text");
 
     await act(async () => {
       root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
@@ -966,7 +994,7 @@ const filesRegistry = {
 
     const output = rootElement.querySelector('[data-testid="mock-output"]');
     expect(output?.getAttribute("data-has-select-callback")).toBe("true");
-    expect(getQueryViewStateStore().read("file-1").selectedOutputId).toBe("core.queryengine.output.text");
+    expect(getQueryViewStateStore().read("file-1", "file-1").selectedOutputId).toBe("core.queryengine.output.text");
   });
 
   it("stores graph artifacts from completed query events", async () => {
@@ -1008,7 +1036,7 @@ const filesRegistry = {
       await Promise.resolve();
     });
 
-    const context = getFileStateRegistry().get("file-1", OUTPUT_CONTEXT_KEY);
+    const context = readOutputContext("file-1");
     expect(context?.features).toEqual(["plan"]);
     expect(context?.artifacts).toHaveLength(1);
     expect(context?.artifacts[0]?.graph.vertices[0]?.label).toBe("SELECT");
@@ -1090,10 +1118,141 @@ const filesRegistry = {
       await Promise.resolve();
     });
 
-    const context = getFileStateRegistry().get("file-1", OUTPUT_CONTEXT_KEY);
+    const context = readOutputContext("file-1");
     expect(context).toBeDefined();
     expect(context!.error?.details?.line).toBe(11);
     expect(context!.error?.details?.column).toBe(4);
+  });
+
+  it("routes active-group execute requests to the active query editor pane only", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+    const paneOne = document.createElement("div");
+    const paneTwo = document.createElement("div");
+    document.body.appendChild(paneOne);
+    document.body.appendChild(paneTwo);
+    const rootOne = createRoot(paneOne);
+    const rootTwo = createRoot(paneTwo);
+
+    try {
+      await act(async () => {
+        rootOne.render(
+          <QueryEditorComponent
+            file={file1}
+            editorRegistryHost={mockEditorRegistryHost}
+            outlineRegistry={mockOutlineRegistry}
+            editorGroupId="left"
+            isActiveEditorGroup={true}
+          />
+        );
+        rootTwo.render(
+          <QueryEditorComponent
+            file={file1}
+            editorRegistryHost={mockEditorRegistryHost}
+            outlineRegistry={mockOutlineRegistry}
+            editorGroupId="right"
+            isActiveEditorGroup={false}
+          />
+        );
+      });
+
+      await act(async () => {
+        for (const listener of mocks.executeRequestListeners) {
+          listener();
+        }
+        await Promise.resolve();
+      });
+
+      expect(mocks.executeMock).toHaveBeenCalledTimes(1);
+      expect(mocks.executeMock).toHaveBeenCalledWith(expect.objectContaining({ fileId: "file-1" }));
+    } finally {
+      await act(async () => {
+        rootOne.unmount();
+        rootTwo.unmount();
+      });
+      paneOne.remove();
+      paneTwo.remove();
+    }
+  });
+
+  it("keeps output context isolated per editor group session", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+    const paneOne = document.createElement("div");
+    const paneTwo = document.createElement("div");
+    document.body.appendChild(paneOne);
+    document.body.appendChild(paneTwo);
+    const rootOne = createRoot(paneOne);
+    const rootTwo = createRoot(paneTwo);
+
+    try {
+      await act(async () => {
+        rootOne.render(
+          <QueryEditorComponent
+            file={file1}
+            editorRegistryHost={mockEditorRegistryHost}
+            outlineRegistry={mockOutlineRegistry}
+            editorGroupId="left"
+            isActiveEditorGroup={true}
+          />
+        );
+        rootTwo.render(
+          <QueryEditorComponent
+            file={file1}
+            editorRegistryHost={mockEditorRegistryHost}
+            outlineRegistry={mockOutlineRegistry}
+            editorGroupId="right"
+            isActiveEditorGroup={false}
+          />
+        );
+      });
+
+      await act(async () => {
+        mocks.executeRequestListeners.forEach((listener) => listener());
+        await Promise.resolve();
+      });
+
+      await act(async () => {
+        rootOne.render(
+          <QueryEditorComponent
+            file={file1}
+            editorRegistryHost={mockEditorRegistryHost}
+            outlineRegistry={mockOutlineRegistry}
+            editorGroupId="left"
+            isActiveEditorGroup={false}
+          />
+        );
+        rootTwo.render(
+          <QueryEditorComponent
+            file={file1}
+            editorRegistryHost={mockEditorRegistryHost}
+            outlineRegistry={mockOutlineRegistry}
+            editorGroupId="right"
+            isActiveEditorGroup={true}
+          />
+        );
+      });
+
+      await act(async () => {
+        mocks.executeRequestListeners.forEach((listener) => listener());
+        await Promise.resolve();
+      });
+
+      expect(mocks.executeMock).toHaveBeenCalledTimes(2);
+
+      const leftContext = readOutputContext("file-1", "core.queryengine:left");
+      const rightContext = readOutputContext("file-1", "core.queryengine:right");
+      expect(leftContext?.outputSessionId).toBe("core.queryengine:left");
+      expect(rightContext?.outputSessionId).toBe("core.queryengine:right");
+      expect(leftContext?.state).toBe("running");
+      expect(rightContext?.state).toBe("running");
+      expect(leftContext).not.toBe(rightContext);
+    } finally {
+      await act(async () => {
+        rootOne.unmount();
+        rootTwo.unmount();
+      });
+      paneOne.remove();
+      paneTwo.remove();
+    }
   });
 
 });

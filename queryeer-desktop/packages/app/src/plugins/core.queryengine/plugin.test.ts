@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { QueryOutputArtifact } from "@queryeer/api/backend/Types";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
+import type { LayoutToolbarSelectContribution, TabHeaderStyleContribution } from "@queryeer/api/extensions/LayoutExtension";
 import type { PluginContext } from "@queryeer/api/plugin/Plugin";
 import { getQueryPlanArtifactStore } from "./query-plan/artifact-store";
+import { QUERY_VIEW_STATE_KEY } from "./QueryViewStateStore";
 
 const registerQueryPlanOutputMock = vi.hoisted(() => vi.fn());
 
@@ -288,9 +290,30 @@ describe("core.queryengine plugin", () => {
       expect.objectContaining({
         id: "core.queryengine.editor",
         supportedContentCategories: ["text"],
-        requiredCapabilities: ["queryexecutable"]
+        requiredCapabilities: ["queryexecutable"],
+        canSplit: true
       })
     );
+
+    const editorContribution = registerEditorMock.mock.calls[0]?.[0] as
+      | { render?: (context?: { activeFile?: FileEntity; editorInstanceId?: string; editorGroupId?: string; isActiveEditorGroup?: boolean }) => unknown }
+      | undefined;
+    expect(typeof editorContribution?.render).toBe("function");
+    const renderResult = editorContribution?.render?.({
+      activeFile: makeFile(),
+      editorInstanceId: "group-1:core.queryengine.editor",
+      editorGroupId: "group-1",
+      isActiveEditorGroup: true
+    }) as {
+      props?: {
+        editorInstanceId?: string;
+        editorGroupId?: string;
+        isActiveEditorGroup?: boolean;
+      }
+    } | undefined;
+    expect(renderResult?.props?.editorInstanceId).toBe("group-1:core.queryengine.editor");
+    expect(renderResult?.props?.editorGroupId).toBe("group-1");
+    expect(renderResult?.props?.isActiveEditorGroup).toBe(true);
 
     const registerTabHeaderStyleMock = context.layout.registerTabHeaderStyle as ReturnType<typeof vi.fn>;
     expect(registerTabHeaderStyleMock).toHaveBeenCalledWith(
@@ -300,31 +323,62 @@ describe("core.queryengine plugin", () => {
     );
   });
 
+  it("styles only the file whose tab metadata is running in the rendered group", () => {
+    const context = createContext(makeFile());
+    coreQueryEnginePlugin.activate(context);
+
+    const registerTabHeaderStyleMock = context.layout.registerTabHeaderStyle as ReturnType<typeof vi.fn>;
+    const contribution = registerTabHeaderStyleMock.mock.calls.find(
+      (call) => call[0]?.id === "core.queryengine.tabHeaderStyle.execution"
+    )?.[0] as TabHeaderStyleContribution | undefined;
+    expect(contribution).toBeDefined();
+
+    const runningFile = makeFile({
+      metadata: {
+        "core.queryengine.tabStateByGroup": { "group-1": "running" }
+      }
+    });
+    const siblingFile = makeFile({ fileId: "file-2", metadata: {} });
+    const baseContext = {
+      isActive: false,
+      editorGroupId: "group-1",
+      hasCapability: () => true
+    };
+
+    expect(contribution?.render({ ...baseContext, file: runningFile })).toMatchObject({
+      className: "queryengine-tab-state-running",
+      indicatorClassName: "queryengine-tab-indicator-running"
+    });
+    expect(contribution?.render({ ...baseContext, file: siblingFile })).toBeNull();
+    expect(contribution?.render({ ...baseContext, editorGroupId: "group-2", file: runningFile })).toBeNull();
+  });
+
   it("updates tab metadata from running to cleared on completion", () => {
     const file = makeFile();
     const context = createContext(file);
     coreQueryEnginePlugin.activate(context);
 
     const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
-      | ((event: { method: string; params?: { queryExecutionId?: string } }, executeContext?: { fileId?: string }) => void)
+      | ((event: { method: string; params?: { queryExecutionId?: string } }, executeContext?: { fileId?: string; targetOutputSessionId?: string }) => void)
       | undefined;
     expect(listener).toBeTypeOf("function");
 
     listener?.(
       { method: "query.started", params: { queryExecutionId: "q-1" } },
-      { fileId: "file-1" }
+      { fileId: "file-1", targetOutputSessionId: "core.queryengine:group-1" }
     );
     expect(context.files.updateFile).toHaveBeenCalledWith(
       "file-1",
       expect.objectContaining({
         metadata: expect.objectContaining({
           keep: true,
-          "core.queryengine.tabState": "running"
+          "core.queryengine.tabStateByGroup": { "group-1": "running" },
+          "core.queryengine.hasRunningQuery": true
         })
       })
     );
 
-    listener?.({ method: "queryengine.completed", params: { queryExecutionId: "q-1" } }, {});
+    listener?.({ method: "queryengine.completed", params: { queryExecutionId: "q-1" } }, { fileId: "file-1", targetOutputSessionId: "core.queryengine:group-1" });
     expect(context.files.updateFile).toHaveBeenLastCalledWith(
       "file-1",
       expect.objectContaining({
@@ -335,7 +389,8 @@ describe("core.queryengine plugin", () => {
     );
     const lastCallMetadata = (context.files.updateFile as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[1]
       ?.metadata as Record<string, unknown>;
-    expect(lastCallMetadata["core.queryengine.tabState"]).toBeUndefined();
+    expect(lastCallMetadata["core.queryengine.tabStateByGroup"]).toBeUndefined();
+    expect(lastCallMetadata["core.queryengine.hasRunningQuery"]).toBeUndefined();
   });
 
   it("keeps failed tab metadata until next execution", () => {
@@ -344,24 +399,27 @@ describe("core.queryengine plugin", () => {
     coreQueryEnginePlugin.activate(context);
 
     const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
-      | ((event: { method: string; params?: { queryExecutionId?: string } }, executeContext?: { fileId?: string }) => void)
+      | ((event: { method: string; params?: { queryExecutionId?: string } }, executeContext?: { fileId?: string; targetOutputSessionId?: string }) => void)
       | undefined;
     expect(listener).toBeTypeOf("function");
 
     listener?.(
       { method: "query.started", params: { queryExecutionId: "q-2" } },
-      { fileId: "file-1" }
+      { fileId: "file-1", targetOutputSessionId: "core.queryengine:group-1" }
     );
-    listener?.({ method: "queryengine.failed", params: { queryExecutionId: "q-2" } }, {});
+    listener?.({ method: "queryengine.failed", params: { queryExecutionId: "q-2" } }, { fileId: "file-1", targetOutputSessionId: "core.queryengine:group-1" });
 
     expect(context.files.updateFile).toHaveBeenLastCalledWith(
       "file-1",
       expect.objectContaining({
         metadata: expect.objectContaining({
-          "core.queryengine.tabState": "failed"
+          "core.queryengine.tabStateByGroup": { "group-1": "failed" }
         })
       })
     );
+    const lastCallMetadata = (context.files.updateFile as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[1]
+      ?.metadata as Record<string, unknown>;
+    expect(lastCallMetadata["core.queryengine.hasRunningQuery"]).toBeUndefined();
   });
 
   it("marks tab as failed when execute preflight emits queryengine.failed", () => {
@@ -370,27 +428,30 @@ describe("core.queryengine plugin", () => {
     coreQueryEnginePlugin.activate(context);
 
     const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
-      | ((event: { method: string; params?: { queryExecutionId?: string } }, executeContext?: { fileId?: string }) => void)
+      | ((event: { method: string; params?: { queryExecutionId?: string } }, executeContext?: { fileId?: string; targetOutputSessionId?: string }) => void)
       | undefined;
     expect(listener).toBeTypeOf("function");
 
     listener?.(
       { method: "query.started", params: { queryExecutionId: "q-3" } },
-      { fileId: "file-1" }
+      { fileId: "file-1", targetOutputSessionId: "core.queryengine:group-1" }
     );
-    listener?.({ method: "queryengine.failed", params: { queryExecutionId: "q-3" } }, {});
+    listener?.({ method: "queryengine.failed", params: { queryExecutionId: "q-3" } }, { fileId: "file-1", targetOutputSessionId: "core.queryengine:group-1" });
 
     expect(context.files.updateFile).toHaveBeenLastCalledWith(
       "file-1",
       expect.objectContaining({
         metadata: expect.objectContaining({
-          "core.queryengine.tabState": "failed"
+          "core.queryengine.tabStateByGroup": { "group-1": "failed" }
         })
       })
     );
+    const lastCallMetadata = (context.files.updateFile as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[1]
+      ?.metadata as Record<string, unknown>;
+    expect(lastCallMetadata["core.queryengine.hasRunningQuery"]).toBeUndefined();
   });
 
-  it("marks backend-dependent commands with backendHealthy enablement", () => {
+it("marks backend-dependent commands with backendHealthy enablement", () => {
     const context = createContext(makeFile());
     coreQueryEnginePlugin.activate(context);
 
@@ -398,13 +459,13 @@ describe("core.queryengine plugin", () => {
     expect(registerCommandMock).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "core.queryengine.execute",
-        enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFile?.metadata?.core?.queryengine?.tabState != 'running'"
+        enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFile?.metadata?.core?.queryengine?.hasRunningQuery != true"
       })
     );
     expect(registerCommandMock).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "core.queryengine.cancel",
-        enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFile?.metadata?.core?.queryengine?.tabState == 'running'"
+        enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFile?.metadata?.core?.queryengine?.hasRunningQuery == true"
       })
     );
 
@@ -439,6 +500,35 @@ describe("core.queryengine plugin", () => {
         when: "hasActiveQueryExecutableFile"
       })
     );
+  });
+
+  it("stores toolbar output selection under the active editor group session", () => {
+    const file = makeFile();
+    const context = createContext(file);
+    coreQueryEnginePlugin.activate(context);
+
+    const registerToolbarActionMock = context.layout.registerToolbarAction as ReturnType<typeof vi.fn>;
+    const outputSelect = registerToolbarActionMock.mock.calls
+      .map((call) => call[0])
+      .find((action) => action.id === "core.queryengine.toolbar.output.select") as LayoutToolbarSelectContribution | undefined;
+    expect(outputSelect).toBeDefined();
+
+    outputSelect?.onChange("core.queryengine.output.text", {
+      activeFile: file,
+      activeEditorGroupId: "group-2",
+      editorGroupCount: 2,
+      hasMultipleEditorGroups: true
+    });
+
+    const latestFile = context.files.getFile("file-1") as FileEntity;
+    const persisted = latestFile.persistentViewState?.[QUERY_VIEW_STATE_KEY] as {
+      version: number;
+      sessions: Record<string, { executionTargetOutputId?: string }>;
+    };
+
+    expect(persisted.version).toBe(2);
+    expect(persisted.sessions["core.queryengine:group-2"]?.executionTargetOutputId).toBe("core.queryengine.output.text");
+    expect(persisted.sessions["core.queryengine:group-1"]).toBeUndefined();
   });
 
   it("stores plan artifacts on completion and prunes stale files", () => {
@@ -477,7 +567,119 @@ describe("core.queryengine plugin", () => {
     expect(filesSubscription).toBeTypeOf("function");
     filesSubscription?.([makeFile({ fileId: "file-1" })]);
 
-    expect(store.list("file-zombie")).toEqual([]);
+expect(store.list("file-zombie")).toEqual([]);
     expect(store.list("file-1").map((artifact) => artifact.id)).toEqual(["plan-1"]);
+  });
+
+  describe("split pane tab indicator isolation", () => {
+    it("only marks tab as running for the session that started the query", () => {
+      const file = makeFile();
+      const context = createContext(file);
+      coreQueryEnginePlugin.activate(context);
+
+      const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+        | ((event: { method: string; params?: { queryExecutionId?: string } }, executeContext?: { fileId?: string; targetOutputSessionId?: string }) => void)
+        | undefined;
+      expect(listener).toBeTypeOf("function");
+
+      listener?.(
+        { method: "query.started", params: { queryExecutionId: "q-split-1" } },
+        { fileId: "file-1", targetOutputSessionId: "core.queryengine:group-1" }
+      );
+
+      expect(context.files.updateFile).toHaveBeenCalledWith(
+        "file-1",
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            "core.queryengine.tabStateByGroup": { "group-1": "running" }
+          })
+        })
+      );
+
+      const group2StartCall = (context.files.updateFile as ReturnType<typeof vi.fn>).mock.calls.find(
+        (call) =>
+          call[1]?.metadata?.["core.queryengine.tabStateByGroup"]?.["group-2"] === "running"
+      );
+      expect(group2StartCall).toBeUndefined();
+    });
+
+    it("preserves tab state in one group when another group completes", () => {
+      const file = makeFile();
+      const context = createContext(file);
+      coreQueryEnginePlugin.activate(context);
+
+      const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+        | ((event: { method: string; params?: { queryExecutionId?: string } }, executeContext?: { fileId?: string; targetOutputSessionId?: string }) => void)
+        | undefined;
+      expect(listener).toBeTypeOf("function");
+
+      listener?.(
+        { method: "query.started", params: { queryExecutionId: "q-split-1" } },
+        { fileId: "file-1", targetOutputSessionId: "core.queryengine:group-1" }
+      );
+      listener?.(
+        { method: "query.started", params: { queryExecutionId: "q-split-2" } },
+        { fileId: "file-1", targetOutputSessionId: "core.queryengine:group-2" }
+      );
+
+      expect(context.files.updateFile).toHaveBeenCalledWith(
+        "file-1",
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            "core.queryengine.tabStateByGroup": { "group-1": "running", "group-2": "running" }
+          })
+        })
+      );
+
+      listener?.(
+        { method: "queryengine.completed", params: { queryExecutionId: "q-split-1" } },
+        { fileId: "file-1", targetOutputSessionId: "core.queryengine:group-1" }
+      );
+
+      expect(context.files.updateFile).toHaveBeenLastCalledWith(
+        "file-1",
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            "core.queryengine.tabStateByGroup": { "group-2": "running" }
+          })
+        })
+      );
+    });
+
+    it("marks only the failed group's tab state to failed", () => {
+      const file = makeFile();
+      const context = createContext(file);
+      coreQueryEnginePlugin.activate(context);
+
+      const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+        | ((event: { method: string; params?: { queryExecutionId?: string } }, executeContext?: { fileId?: string; targetOutputSessionId?: string }) => void)
+        | undefined;
+      expect(listener).toBeTypeOf("function");
+
+      listener?.(
+        { method: "query.started", params: { queryExecutionId: "q-split-1" } },
+        { fileId: "file-1", targetOutputSessionId: "core.queryengine:group-1" }
+      );
+      listener?.(
+        { method: "query.started", params: { queryExecutionId: "q-split-2" } },
+        { fileId: "file-1", targetOutputSessionId: "core.queryengine:group-2" }
+      );
+
+      (context.files.updateFile as ReturnType<typeof vi.fn>).mockClear();
+
+      listener?.(
+        { method: "queryengine.failed", params: { queryExecutionId: "q-split-1" } },
+        { fileId: "file-1", targetOutputSessionId: "core.queryengine:group-1" }
+      );
+
+      expect(context.files.updateFile).toHaveBeenCalledWith(
+        "file-1",
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            "core.queryengine.tabStateByGroup": { "group-1": "failed", "group-2": "running" }
+          })
+        })
+      );
+    });
   });
 });

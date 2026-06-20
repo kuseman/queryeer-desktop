@@ -1,6 +1,7 @@
 const SPLIT_ACTIVE_EDITOR_RIGHT_EVENT = "shell:splitActiveEditorRight";
 const OPEN_EDITOR_TO_SIDE_EVENT = "shell:openEditorToSide";
 const CLOSE_ACTIVE_EDITOR_EVENT = "shell:closeActiveEditor";
+const TOGGLE_MAXIMIZE_ACTIVE_EDITOR_GROUP_EVENT = "shell:toggleMaximizeActiveEditorGroup";
 
 export type OpenEditorToSideRequest = {
   fileId: string;
@@ -42,4 +43,14 @@ export function subscribeCloseActiveEditorRequests(listener: () => void): () => 
   const handler = () => listener();
   window.addEventListener(CLOSE_ACTIVE_EDITOR_EVENT, handler);
   return () => window.removeEventListener(CLOSE_ACTIVE_EDITOR_EVENT, handler);
+}
+
+export function requestToggleMaximizeActiveEditorGroup(): void {
+  window.dispatchEvent(new CustomEvent(TOGGLE_MAXIMIZE_ACTIVE_EDITOR_GROUP_EVENT));
+}
+
+export function subscribeToggleMaximizeActiveEditorGroupRequests(listener: () => void): () => void {
+  const handler = () => listener();
+  window.addEventListener(TOGGLE_MAXIMIZE_ACTIVE_EDITOR_GROUP_EVENT, handler);
+  return () => window.removeEventListener(TOGGLE_MAXIMIZE_ACTIVE_EDITOR_GROUP_EVENT, handler);
 }

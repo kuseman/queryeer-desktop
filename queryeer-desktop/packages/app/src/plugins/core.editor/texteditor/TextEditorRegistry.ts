@@ -7,6 +7,7 @@ import { TextEditorModel } from "./TextEditorModel";
 import { TextEditorApi } from "./TextEditorApi";
 import { ViewStateStore } from "./ViewStateStore";
 import { registerTextEditorRepository } from "./TextEditorModelRepository";
+import { inflateDottedKeys } from "../../../renderer/shell/context-value-flatten";
 
 let registry: TextEditorRegistry | undefined;
 
@@ -39,30 +40,78 @@ export function getEditorContextChain(): ContextChain | null {
   return globalContextChain;
 }
 
+type EditorInstanceState = {
+  activeFileId: string | null;
+  editorApi: TextEditorApi | null;
+  pendingFileForEditor: FileEntity | null;
+  pendingFileShouldFocus: boolean;
+  editorFocusDisposables: Disposable[];
+  editorFocusContext: EditorFocusContext | null;
+  scopeId: string | null;
+  scopeUnregister: (() => void) | null;
+};
+
+type EditorFocusContext = {
+  hasActiveTextEditor: boolean;
+  editorFocus: boolean;
+  editorTextFocus: boolean;
+  languageId: string | undefined;
+  selectedText: string;
+  hasSelection: boolean;
+  editorInstanceId: string;
+  activeEditorGroupId?: string;
+};
+
+type OpenFileOptions = {
+  focus?: boolean;
+};
+
+const DEFAULT_EDITOR_INSTANCE_ID = "__default_editor_instance__";
+
 export class TextEditorRegistry {
   private readonly modelsByFileId = new Map<string, TextEditorModel>();
   private readonly modelsByUri = new Map<string, TextEditorModel>();
   private readonly pendingRecoveredContentByFileId = new Map<string, string>();
   private readonly runtimeViewState = new Map<string, unknown>();
   private readonly viewStateStore = new ViewStateStore(this.runtimeViewState);
-  private activeFileId: string | null = null;
-  private editorApi: TextEditorApi | null = null;
+  private readonly instanceStateByInstanceId = new Map<string, EditorInstanceState>();
   private listeners: Array<() => void> = [];
   private contentDirtyListeners: Array<(fileId: string, text: string) => void> = [];
   private filesRegistry: FilesRegistry | null = null;
-  private pendingFileForEditor: FileEntity | null = null;
-  private editorFocusDisposables: Disposable[] = [];
-  private scopeId: string | null = null;
-  private scopeUnregister: (() => void) | null = null;
+  private filesRegistryUnsubscribe: (() => void) | null = null;
 
   constructor() {
     registerTextEditorRepository(this);
   }
 
-  getCommandTargetEditor(): TextEditorApi | null {
-    if (this.editorApi?.getModel()) {
-      return this.editorApi;
+  private resolveInstanceId(editorInstanceId?: string): string {
+    return editorInstanceId ?? DEFAULT_EDITOR_INSTANCE_ID;
+  }
+
+  private getEditorState(editorInstanceId?: string): EditorInstanceState {
+    const resolvedInstanceId = this.resolveInstanceId(editorInstanceId);
+    let state = this.instanceStateByInstanceId.get(resolvedInstanceId);
+    if (!state) {
+      state = {
+        activeFileId: null,
+        editorApi: null,
+        pendingFileForEditor: null,
+        pendingFileShouldFocus: true,
+        editorFocusDisposables: [],
+        editorFocusContext: null,
+        scopeId: null,
+        scopeUnregister: null
+      };
+      this.instanceStateByInstanceId.set(resolvedInstanceId, state);
     }
+    return state;
+  }
+
+  private peekEditorState(editorInstanceId?: string): EditorInstanceState | undefined {
+    return this.instanceStateByInstanceId.get(this.resolveInstanceId(editorInstanceId));
+  }
+
+  getCommandTargetEditor(): TextEditorApi | null {
     const lastFocusedId = globalContextChain?.getLastFocusedScopeId(
       ContextPriority.EDITOR_INSTANCE
     );
@@ -72,11 +121,20 @@ export class TextEditorRegistry {
         return editor;
       }
     }
+
+    for (const state of this.instanceStateByInstanceId.values()) {
+      if (state.editorApi?.getModel()) {
+        return state.editorApi;
+      }
+    }
+
     return null;
   }
 
-  private wireEditorFocusTracking(api: TextEditorApi): void {
-    for (const disposable of this.editorFocusDisposables) {
+  private wireEditorFocusTracking(api: TextEditorApi, editorInstanceId?: string): void {
+    const resolvedInstanceId = this.resolveInstanceId(editorInstanceId);
+    const state = this.getEditorState(resolvedInstanceId);
+    for (const disposable of state.editorFocusDisposables) {
       disposable.dispose();
     }
 
@@ -84,31 +142,27 @@ export class TextEditorRegistry {
 
     // Shared mutable context object — updated in-place so each callback publishes the full picture.
     // languageId is left undefined until the first focus event (matching original behaviour).
-    const scopeCtx: {
-      hasActiveTextEditor: boolean;
-      editorFocus: boolean;
-      editorTextFocus: boolean;
-      languageId: string | undefined;
-      selectedText: string;
-      hasSelection: boolean;
-    } = {
+    const scopeCtx: EditorFocusContext = {
       hasActiveTextEditor: true,
       editorFocus: false,
       editorTextFocus: false,
       languageId: undefined,
       selectedText: "",
-      hasSelection: false
+      hasSelection: false,
+      editorInstanceId: resolvedInstanceId,
+      activeEditorGroupId: parseEditorGroupId(resolvedInstanceId)
     };
+    state.editorFocusContext = scopeCtx;
 
     const publish = (): void => {
-      if (this.scopeId && globalContextChain) {
-        globalContextChain.update(this.scopeId, { ...scopeCtx });
+      if (state.scopeId && globalContextChain) {
+        globalContextChain.update(state.scopeId, this.buildEditorInstanceContext(state));
       }
     };
 
     const onFocus = (): void => {
-      if (this.scopeId && globalContextChain) {
-        globalContextChain.activate(this.scopeId);
+      if (state.scopeId && globalContextChain) {
+        globalContextChain.activate(state.scopeId);
         scopeCtx.editorFocus = true;
         scopeCtx.editorTextFocus = true;
         scopeCtx.languageId = api.getModel()?.languageId;
@@ -167,41 +221,112 @@ export class TextEditorRegistry {
       focusDisposables.push(onChangeCursorSelection.call(api, onSelectionChange));
     }
 
-    this.editorFocusDisposables = focusDisposables;
+    state.editorFocusDisposables = focusDisposables;
+  }
+
+  private publishEditorInstanceContext(editorInstanceId?: string): void {
+    const state = this.peekEditorState(editorInstanceId);
+    this.publishEditorInstanceContextForState(state);
+  }
+
+  private publishEditorInstanceContextForState(state: EditorInstanceState | undefined): void {
+    if (!state?.scopeId || !state.editorFocusContext || !globalContextChain) {
+      return;
+    }
+    globalContextChain.update(state.scopeId, this.buildEditorInstanceContext(state));
+  }
+
+  private publishAllEditorInstanceContexts(): void {
+    for (const state of this.instanceStateByInstanceId.values()) {
+      this.publishEditorInstanceContextForState(state);
+    }
+  }
+
+  private buildEditorInstanceContext(state: EditorInstanceState): Record<string, unknown> {
+    const focusContext = state.editorFocusContext;
+    if (!focusContext) {
+      return { hasActiveTextEditor: true, editorFocus: false, editorTextFocus: false };
+    }
+
+    const { activeEditorGroupId, editorInstanceId, ...baseFocusContext } = focusContext;
+    const isFocused = baseFocusContext.editorFocus || baseFocusContext.editorTextFocus;
+    return {
+      ...(isFocused ? this.buildActiveFileContext(state.activeFileId) : {}),
+      ...baseFocusContext,
+      ...(isFocused
+        ? {
+            editorInstanceId,
+            ...(activeEditorGroupId ? { activeEditorGroupId } : {})
+          }
+        : {})
+    };
+  }
+
+  private buildActiveFileContext(fileId: string | null): Record<string, unknown> {
+    const activeFile = fileId ? this.filesRegistry?.getFile(fileId) : undefined;
+    return {
+      activeFileId: activeFile?.fileId ?? null,
+      hasActiveFile: activeFile != null,
+      activeFile: activeFile
+        ? {
+            fileId: activeFile.fileId,
+            uri: activeFile.uri,
+            editorId: activeFile.editorId,
+            mimeType: activeFile.mimeType,
+            metadata: inflateDottedKeys(activeFile.metadata ?? {}),
+            engineBinding: activeFile.engineBinding
+          }
+        : null,
+      hasActiveQueryExecutableFile: activeFile
+        ? this.filesRegistry?.capabilities?.hasCapability(activeFile.mimeType, "queryexecutable") === true
+        : false
+    };
   }
 
   setFilesRegistry(registry: FilesRegistry): void {
+    this.filesRegistryUnsubscribe?.();
     this.filesRegistry = registry;
     this.viewStateStore.setFilesRegistry(registry);
+    this.filesRegistryUnsubscribe = registry.subscribe?.(() => {
+      this.publishAllEditorInstanceContexts();
+    }) ?? null;
   }
 
-  onEditorReady(api: TextEditorApi): void {
-    this.editorApi = api;
+  onEditorReady(api: TextEditorApi, editorInstanceId?: string): void {
+    const resolvedInstanceId = this.resolveInstanceId(editorInstanceId);
+    const state = this.getEditorState(resolvedInstanceId);
+    state.editorApi = api;
 
     // Register a context scope for this editor instance.
-    if (this.scopeId) {
-      globalEditorByScopeId.delete(this.scopeId);
-      this.scopeUnregister?.();
+    if (state.scopeId) {
+      globalEditorByScopeId.delete(state.scopeId);
+      state.scopeUnregister?.();
     }
     const scopeId = `core.editor.monaco.${nextScopeIndex++}`;
-    this.scopeId = scopeId;
+    state.scopeId = scopeId;
     globalEditorByScopeId.set(scopeId, api);
     if (globalContextChain) {
-      this.scopeUnregister = globalContextChain.register({
+      state.scopeUnregister = globalContextChain.register({
         id: scopeId,
         priority: ContextPriority.EDITOR_INSTANCE,
-        context: { hasActiveTextEditor: true, editorFocus: false, editorTextFocus: false }
+        context: {
+          hasActiveTextEditor: true,
+          editorFocus: false,
+          editorTextFocus: false
+        }
       });
+    } else {
+      state.scopeUnregister = null;
     }
 
-    this.wireEditorFocusTracking(api);
+    this.wireEditorFocusTracking(api, resolvedInstanceId);
 
-    if (this.activeFileId) {
-      const model = this.modelsByFileId.get(this.activeFileId);
+    if (state.activeFileId) {
+      const model = this.modelsByFileId.get(state.activeFileId);
       if (model) {
         api.setModel(model.getDocument());
-        if (!this.viewStateStore.applyRuntimeToEditor(api, this.activeFileId)) {
-          const file = this.filesRegistry?.getFile(this.activeFileId);
+        if (!this.viewStateStore.applyRuntimeToEditor(api, state.activeFileId)) {
+          const file = this.filesRegistry?.getFile(state.activeFileId);
           if (file) {
             this.viewStateStore.applyToEditor(api, file);
           }
@@ -210,36 +335,40 @@ export class TextEditorRegistry {
       }
     }
 
-    if (this.pendingFileForEditor) {
-      const file = this.pendingFileForEditor;
+    if (state.pendingFileForEditor) {
+      const file = state.pendingFileForEditor;
       const pendingModel = this.modelsByFileId.get(file.fileId ?? "");
       if (pendingModel) {
-        this.pendingFileForEditor = null;
+        state.pendingFileForEditor = null;
         api.setModel(pendingModel.getDocument());
         this.viewStateStore.applyToEditor(api, file);
-        api.focus();
+        if (state.pendingFileShouldFocus) {
+          api.focus();
+        }
+        state.pendingFileShouldFocus = true;
       }
     }
 
     this.notifyListeners();
   }
 
-  private applyEditorStateForActiveFile(fileId: string): void {
-    if (!this.editorApi) {
+  private applyEditorStateForActiveFile(fileId: string, editorInstanceId?: string): void {
+    const state = this.peekEditorState(editorInstanceId);
+    if (!state?.editorApi) {
       return;
     }
-    if (!this.viewStateStore.applyRuntimeToEditor(this.editorApi, fileId)) {
+    if (!this.viewStateStore.applyRuntimeToEditor(state.editorApi, fileId)) {
       const file = this.filesRegistry?.getFile(fileId);
       if (file) {
-        this.viewStateStore.applyToEditor(this.editorApi, file);
+        this.viewStateStore.applyToEditor(state.editorApi, file);
       }
     }
   }
 
-  markDirty(fileId: string): void {
+  markDirty(fileId: string, editorInstanceId?: string): void {
     this.filesRegistry?.markDirty(fileId);
     try {
-      const text = this.editorApi?.getContent();
+      const text = this.peekEditorState(editorInstanceId)?.editorApi?.getContent();
       if (text === undefined) {
         return;
       }
@@ -289,34 +418,41 @@ export class TextEditorRegistry {
     }
   }
 
-  onEditorDisposed(capturedViewState?: unknown): void {
-    this.captureActiveViewState(capturedViewState);
-    for (const disposable of this.editorFocusDisposables) {
+  onEditorDisposed(capturedViewState?: unknown, editorInstanceId?: string): void {
+    const resolvedInstanceId = this.resolveInstanceId(editorInstanceId);
+    const state = this.getEditorState(resolvedInstanceId);
+    this.captureActiveViewState(capturedViewState, resolvedInstanceId);
+    for (const disposable of state.editorFocusDisposables) {
       disposable.dispose();
     }
-    this.editorFocusDisposables = [];
-    this.scopeUnregister?.();
-    this.scopeUnregister = null;
-    if (this.scopeId) {
-      globalEditorByScopeId.delete(this.scopeId);
-      this.scopeId = null;
+    state.editorFocusDisposables = [];
+    state.scopeUnregister?.();
+    state.scopeUnregister = null;
+    if (state.scopeId) {
+      globalEditorByScopeId.delete(state.scopeId);
+      state.scopeId = null;
     }
-    this.editorApi = null;
-    this.pendingFileForEditor = null;
-    this.activeFileId = null;
+    state.editorApi = null;
+    state.pendingFileForEditor = null;
+    state.pendingFileShouldFocus = true;
+    state.activeFileId = null;
+    state.editorFocusContext = null;
+    this.instanceStateByInstanceId.delete(resolvedInstanceId);
   }
 
-  captureActiveViewState(capturedViewState?: unknown): void {
-    if (!this.activeFileId) {
+  captureActiveViewState(capturedViewState?: unknown, editorInstanceId?: string): void {
+    const state = this.peekEditorState(editorInstanceId);
+    if (!state?.activeFileId) {
       return;
     }
-    this.viewStateStore.captureForFile(this.activeFileId, this.editorApi, capturedViewState);
+    this.viewStateStore.captureForFile(state.activeFileId, state.editorApi, capturedViewState);
   }
 
-  openFile(file: FileEntity): void {
-    const previousActiveFileId = this.activeFileId;
+  openFile(file: FileEntity, editorInstanceId?: string, options: OpenFileOptions = {}): void {
+    const state = this.getEditorState(editorInstanceId);
+    const previousActiveFileId = state.activeFileId;
     if (previousActiveFileId && previousActiveFileId !== file.fileId) {
-      this.viewStateStore.captureForFile(previousActiveFileId, this.editorApi);
+      this.viewStateStore.captureForFile(previousActiveFileId, state.editorApi);
     }
 
     let model = this.modelsByUri.get(file.uri);
@@ -329,19 +465,23 @@ export class TextEditorRegistry {
       this.modelsByFileId.set(file.fileId, model);
       this.consumePendingRecoveredContent(file.fileId, model);
     }
-    this.activeFileId = file.fileId ?? null;
-    if (this.editorApi) {
-      this.editorApi.setModel(model.getDocument());
-      this.viewStateStore.applyToEditor(this.editorApi, file);
-      this.editorApi.focus();
+    state.activeFileId = file.fileId ?? null;
+    this.publishEditorInstanceContext(editorInstanceId);
+    if (state.editorApi) {
+      state.editorApi.setModel(model.getDocument());
+      this.viewStateStore.applyToEditor(state.editorApi, file);
+      if (options.focus !== false) {
+        state.editorApi.focus();
+      }
     }
     this.notifyListeners();
   }
 
-  async openFileAsync(file: FileEntity): Promise<void> {
-    const previousActiveFileId = this.activeFileId;
+  async openFileAsync(file: FileEntity, editorInstanceId?: string, options: OpenFileOptions = {}): Promise<void> {
+    const state = this.getEditorState(editorInstanceId);
+    const previousActiveFileId = state.activeFileId;
     if (previousActiveFileId && previousActiveFileId !== file.fileId) {
-      this.viewStateStore.captureForFile(previousActiveFileId, this.editorApi);
+      this.viewStateStore.captureForFile(previousActiveFileId, state.editorApi);
     }
 
     let model = this.modelsByUri.get(file.uri);
@@ -373,20 +513,30 @@ export class TextEditorRegistry {
       } catch {
         // File not yet readable, will populate on next open
       }
-      model = new TextEditorModel(file.uri, file.mimeType, content);
-      this.modelsByUri.set(file.uri, model);
+
+      const existingModel = this.modelsByUri.get(file.uri);
+      if (existingModel) {
+        model = existingModel;
+      } else {
+        model = new TextEditorModel(file.uri, file.mimeType, content);
+        this.modelsByUri.set(file.uri, model);
+      }
     }
     if (file.fileId) {
       this.modelsByFileId.set(file.fileId, model);
       this.consumePendingRecoveredContent(file.fileId, model);
     }
-    this.activeFileId = file.fileId ?? null;
-    if (this.editorApi) {
-      this.editorApi.setModel(model.getDocument());
-      this.viewStateStore.applyToEditor(this.editorApi, file);
-      this.editorApi.focus();
+    state.activeFileId = file.fileId ?? null;
+    this.publishEditorInstanceContext(editorInstanceId);
+    if (state.editorApi) {
+      state.editorApi.setModel(model.getDocument());
+      this.viewStateStore.applyToEditor(state.editorApi, file);
+      if (options.focus !== false) {
+        state.editorApi.focus();
+      }
     } else {
-      this.pendingFileForEditor = file;
+      state.pendingFileForEditor = file;
+      state.pendingFileShouldFocus = options.focus !== false;
     }
     this.notifyListeners();
   }
@@ -399,35 +549,39 @@ export class TextEditorRegistry {
     return this.modelsByUri.get(uri);
   }
 
-  getActiveModel(): TextEditorModel | null {
-    if (!this.activeFileId) return null;
-    return this.modelsByFileId.get(this.activeFileId) ?? null;
+  getActiveModel(editorInstanceId?: string): TextEditorModel | null {
+    const activeFileId = this.peekEditorState(editorInstanceId)?.activeFileId;
+    if (!activeFileId) return null;
+    return this.modelsByFileId.get(activeFileId) ?? null;
   }
 
-  getActiveEditor(): TextEditorApi | null {
-    return this.editorApi;
+  getActiveEditor(editorInstanceId?: string): TextEditorApi | null {
+    return this.peekEditorState(editorInstanceId)?.editorApi ?? null;
   }
 
-  getActiveFile(): FileEntity | null {
-    if (!this.activeFileId) return null;
-    return this.filesRegistry?.getFile(this.activeFileId) ?? null;
+  getActiveFile(editorInstanceId?: string): FileEntity | null {
+    const activeFileId = this.peekEditorState(editorInstanceId)?.activeFileId;
+    if (!activeFileId) return null;
+    return this.filesRegistry?.getFile(activeFileId) ?? null;
   }
 
-  setActiveFileId(fileId: string | null): void {
-    if (this.activeFileId && this.activeFileId !== fileId) {
-      this.viewStateStore.captureForFile(this.activeFileId, this.editorApi);
+  setActiveFileId(fileId: string | null, editorInstanceId?: string): void {
+    const state = this.getEditorState(editorInstanceId);
+    if (state.activeFileId && state.activeFileId !== fileId) {
+      this.viewStateStore.captureForFile(state.activeFileId, state.editorApi);
     }
-    this.activeFileId = fileId;
-    if (this.editorApi) {
+    state.activeFileId = fileId;
+    this.publishEditorInstanceContext(editorInstanceId);
+    if (state.editorApi) {
       if (fileId) {
         const model = this.modelsByFileId.get(fileId);
         if (model) {
-          this.editorApi.setModel(model.getDocument());
-          this.applyEditorStateForActiveFile(fileId);
-          this.editorApi.focus();
+          state.editorApi.setModel(model.getDocument());
+          this.applyEditorStateForActiveFile(fileId, editorInstanceId);
+          state.editorApi.focus();
         }
       } else {
-        this.editorApi.setModel(null);
+        state.editorApi.setModel(null);
       }
     }
     this.notifyListeners();
@@ -436,15 +590,33 @@ export class TextEditorRegistry {
   updateModelContent(uri: string, content: string): void {
     const model = this.modelsByUri.get(uri);
     if (model) {
-      const activeFile = this.getActiveFile();
-      const shouldCapture = Boolean(activeFile?.uri === uri && this.editorApi);
-      if (shouldCapture) {
-        this.captureActiveViewState();
+      const activeByInstance = [...this.instanceStateByInstanceId.entries()]
+        .map(([instanceId, state]) => {
+          const activeFileId = state.activeFileId;
+          if (!activeFileId || !state.editorApi) {
+            return null;
+          }
+          const activeFile = this.filesRegistry?.getFile(activeFileId);
+          if (!activeFile || activeFile.uri !== uri) {
+            return null;
+          }
+          return { instanceId, activeFileId };
+        })
+        .filter((value): value is { instanceId: string; activeFileId: string } => Boolean(value));
+
+      for (const active of activeByInstance) {
+        this.captureActiveViewState(undefined, active.instanceId);
       }
+
       model.setContent(content);
-      if (activeFile?.uri === uri && this.editorApi) {
-        this.editorApi.setModel(model.getDocument());
-        this.applyEditorStateForActiveFile(activeFile.fileId);
+
+      for (const active of activeByInstance) {
+        const editor = this.peekEditorState(active.instanceId)?.editorApi;
+        if (!editor) {
+          continue;
+        }
+        editor.setModel(model.getDocument());
+        this.applyEditorStateForActiveFile(active.activeFileId, active.instanceId);
       }
     }
   }
@@ -461,15 +633,20 @@ export class TextEditorRegistry {
       return;
     }
     this.viewStateStore.putRuntime(fileId, viewState);
-    if (this.editorApi) {
-      this.editorApi.setViewState(viewState);
+    for (const state of this.instanceStateByInstanceId.values()) {
+      if (state.activeFileId === fileId && state.editorApi) {
+        state.editorApi.setViewState(viewState);
+      }
     }
   }
 
   disposeModel(fileId: string): void {
-    if (this.activeFileId === fileId) {
-      this.viewStateStore.captureForFile(fileId, this.editorApi);
+    for (const state of this.instanceStateByInstanceId.values()) {
+      if (state.activeFileId === fileId) {
+        this.viewStateStore.captureForFile(fileId, state.editorApi);
+      }
     }
+
     const model = this.modelsByFileId.get(fileId);
     if (model) {
       const uri = model.getUri();
@@ -480,8 +657,12 @@ export class TextEditorRegistry {
         model.dispose();
       }
     }
-    if (this.activeFileId === fileId) {
-      this.activeFileId = null;
+
+    for (const state of this.instanceStateByInstanceId.values()) {
+      if (state.activeFileId === fileId) {
+        state.activeFileId = null;
+        this.publishEditorInstanceContextForState(state);
+      }
     }
   }
 
@@ -491,8 +672,23 @@ export class TextEditorRegistry {
     }
     this.modelsByFileId.clear();
     this.modelsByUri.clear();
-    this.editorApi = null;
-    this.activeFileId = null;
+    for (const state of this.instanceStateByInstanceId.values()) {
+      for (const disposable of state.editorFocusDisposables) {
+        disposable.dispose();
+      }
+      state.editorFocusDisposables = [];
+      state.scopeUnregister?.();
+      if (state.scopeId) {
+        globalEditorByScopeId.delete(state.scopeId);
+      }
+      state.scopeId = null;
+      state.scopeUnregister = null;
+      state.editorApi = null;
+      state.activeFileId = null;
+      state.editorFocusContext = null;
+      state.pendingFileForEditor = null;
+    }
+    this.instanceStateByInstanceId.clear();
   }
 
   subscribe(listener: () => void): Disposable {
@@ -520,4 +716,9 @@ function isEmptySelection(selection: {
 }): boolean {
   return selection.selectionStartLineNumber === selection.positionLineNumber
     && selection.selectionStartColumn === selection.positionColumn;
+}
+
+function parseEditorGroupId(editorInstanceId: string): string | undefined {
+  const separatorIndex = editorInstanceId.indexOf(":");
+  return separatorIndex > 0 ? editorInstanceId.slice(0, separatorIndex) : undefined;
 }

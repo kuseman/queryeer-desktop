@@ -51,6 +51,20 @@
   background: var(--surface-editor-active);
 }
 
+.shell-main.is-editor-group-maximized .shell-editor-group.is-maximized {
+  flex-basis: 0;
+}
+
+.shell-main.is-editor-group-maximized .shell-editor-group.is-hidden-while-maximized {
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  border: 0;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .shell-editor-group:focus {
   outline: none;
 }
@@ -74,6 +88,10 @@
 .shell-editor-split-divider:hover,
 body.is-resizing-editor-split .shell-editor-split-divider {
   background: linear-gradient(to right, transparent 0, transparent 2px, var(--accent-muted) 2px, var(--accent-muted) 3px, transparent 3px);
+}
+
+.shell-editor-split-divider.is-hidden-while-maximized {
+  display: none;
 }
 
 .shell-panel {

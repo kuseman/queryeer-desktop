@@ -47,15 +47,6 @@ export function registerTextEditorKeybindings(context: PluginContext): void {
   });
 
   context.keybindings.registerKeybinding({
-    id: "core.editor.text.keybinding.closeFindWidget",
-    commandId: "core.editor.text.closeFindWidget",
-    key: "Escape",
-    when: "editorFocus",
-    scope: "editor",
-    order: 33
-  });
-
-  context.keybindings.registerKeybinding({
     id: "core.editor.text.keybinding.toggleComment",
     commandId: "core.editor.text.toggleCommentLine",
     key: "CmdOrCtrl+/",

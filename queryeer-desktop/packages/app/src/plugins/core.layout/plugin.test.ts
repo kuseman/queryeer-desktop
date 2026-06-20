@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { coreLayoutPlugin } from "./plugin";
 import type { PluginContext } from "@queryeer/api/plugin/Plugin";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
+import { subscribeToggleMaximizeActiveEditorGroupRequests } from "../../renderer/shell/layout-editor-events";
 
 function makeFile(overrides: Partial<FileEntity> = {}): FileEntity {
   return {
@@ -18,7 +19,9 @@ function makeFile(overrides: Partial<FileEntity> = {}): FileEntity {
 }
 
 function createContext(file?: FileEntity) {
+  type RegisteredCommand = Parameters<PluginContext["commands"]["registerCommand"]>[0];
   const commands = new Map<string, () => void | Promise<void>>();
+  const registeredCommands = new Map<string, RegisteredCommand>();
   const registerKeybinding = vi.fn();
   const closeFile = vi.fn(async () => {});
   const showMessage = vi.fn(async () => ({ action: "discard" }));
@@ -26,11 +29,8 @@ function createContext(file?: FileEntity) {
 
   const context = {
     commands: {
-      registerCommand: (command: {
-        id: string;
-        title: string;
-        handler: () => void | Promise<void>;
-      }) => {
+      registerCommand: (command: RegisteredCommand) => {
+        registeredCommands.set(command.id, command);
         commands.set(command.id, command.handler);
       },
       executeCommand: vi.fn(async () => ({ commandId: "x", executed: true })),
@@ -166,6 +166,7 @@ function createContext(file?: FileEntity) {
   return {
     context,
     commands,
+    registeredCommands,
     registerKeybinding,
     closeFile,
     showMessage,
@@ -201,6 +202,47 @@ describe("core.layout close editor", () => {
     expect(closeFile).not.toHaveBeenCalled();
     expect(listener).toHaveBeenCalledTimes(1);
     window.removeEventListener("shell:closeActiveEditor", listener);
+  });
+
+  it("registers tab move actions", () => {
+    const { context } = createContext();
+    coreLayoutPlugin.activate(context);
+
+    expect(context.layout.registerTabContextMenu).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actions: expect.arrayContaining([
+          expect.objectContaining({
+            id: "core.layout.tab.moveLeft",
+            label: "Move to Left Group",
+            enabledWhen: "canMoveToLeftGroup"
+          }),
+          expect.objectContaining({
+            id: "core.layout.tab.moveRight",
+            label: "Move to Right Group",
+            enabledWhen: "canMoveToRightGroup"
+          })
+        ])
+      })
+    );
+  });
+
+  it("registers a command to toggle maximize state for the active editor group", async () => {
+    const { context, commands, registeredCommands } = createContext();
+    const listener = vi.fn();
+    const unsubscribe = subscribeToggleMaximizeActiveEditorGroupRequests(listener);
+    coreLayoutPlugin.activate(context);
+
+    const command = registeredCommands.get("core.layout.toggleMaximizeActiveEditorGroup");
+    expect(command).toMatchObject({
+      title: "Toggle Maximize Active Editor Group",
+      category: "View",
+      enablement: "hasMultipleEditorGroups"
+    });
+
+    await commands.get("core.layout.toggleMaximizeActiveEditorGroup")?.();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
   });
 
   it("closes focused value preview before closing files", async () => {

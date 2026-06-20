@@ -1,4 +1,5 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
+import type { LayoutToolbarContext } from "@queryeer/api/extensions/LayoutExtension";
 import { registerQueryExecutableEngine } from "../core.queryengine/engine-registration";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import { QUERY_PLAN_ARTIFACT_REQUEST, QUERY_PLAN_OUTPUT_ID as PLAN_OUTPUT_ID } from "../core.queryengine/query-plan/constants";
@@ -42,9 +43,10 @@ import {
   JDBC_SCHEMA_GRAPH_EXTENSION,
   JDBC_SCHEMA_GRAPH_MIME_TYPE
 } from "./jdbc-schema-graph-constants";
-import { requestOpenEditorToSide } from "../../renderer/shell/layout-editor-events";
 import { registerQueryEditorStatusItem } from "@queryeer/api/queryengine/QueryEditorStatusExtension";
 import { JdbcConnectionStatus } from "./JdbcConnectionStatus";
+import { getCommandContext } from "../core.commands/command-context-accessor";
+import { toQueryOutputSessionId } from "../core.queryengine/query-session";
 
 const JDBC_SESSION_ID_METADATA_KEY = "core.queryengine.jdbc.sessionId";
 const JDBC_SESSION_CONNECTION_TITLE_KEY = "core.queryengine.jdbc.sessionConnection";
@@ -54,6 +56,16 @@ const JDBC_QUERY_PLAN_ENABLEMENT = `backendHealthy && ${JDBC_QUERY_PLAN_WHEN}`;
 // Tracks which connectionId (UUID) each file's session was established with.
 // Kept in memory — same lifetime as metadata, which is also not persisted.
 const sessionConnectionUuidMap = new Map<string, string>();
+
+function getToolbarSessionId(toolbarContext: LayoutToolbarContext, fallbackFileId: string): string {
+  return toQueryOutputSessionId(toolbarContext.activeEditorGroupId, fallbackFileId);
+}
+
+function getCommandSessionId(fallbackFileId: string): string {
+  const activeEditorGroupId = getCommandContext().activeEditorGroupId;
+  return toQueryOutputSessionId(typeof activeEditorGroupId === "string" ? activeEditorGroupId : undefined, fallbackFileId);
+}
+
 export const coreQueryEngineJdbcPlugin: Plugin = {
   manifest: {
     id: "core.queryengine.jdbc",
@@ -196,10 +208,19 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       return match?.title?.trim() || connectionId;
     };
 
+    const getCommandActiveFileId = (): string | null => {
+      const commandContext = getCommandContext();
+      return typeof commandContext.activeFileId === "string" && commandContext.activeFileId.length > 0
+        ? commandContext.activeFileId
+        : context.fileMediator.getActiveFileId();
+    };
+
     const getActiveQueryFile = () => {
-      const fileId = context.fileMediator.getActiveFileId();
+      const fileId = getCommandActiveFileId();
       return fileId ? context.files.getFile(fileId) : undefined;
     };
+
+    const getToolbarQueryFile = (toolbarContext: LayoutToolbarContext) => toolbarContext.activeFile ?? getActiveQueryFile();
 
     context.commands.registerCommand({
       id: "core.queryengine.jdbc.navigation.refresh",
@@ -237,8 +258,9 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
           return;
         }
         const store = getQueryViewStateStore();
-        const current = store.read(file.fileId).includeActualPlan === true;
-        store.setIncludeActualPlan(file.fileId, !current);
+        const sessionId = getCommandSessionId(file.fileId);
+        const current = store.read(file.fileId, sessionId).includeActualPlan === true;
+        store.setIncludeActualPlan(file.fileId, sessionId, !current);
       }
     });
 
@@ -256,9 +278,13 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       order: 45,
       commandId: "core.queryengine.jdbc.toggleActualPlan",
       when: JDBC_QUERY_PLAN_WHEN,
-      pressed: () => {
-        const file = getActiveQueryFile();
-        return file ? getQueryViewStateStore().read(file.fileId).includeActualPlan === true : false;
+      pressed: (toolbarContext) => {
+        const file = getToolbarQueryFile(toolbarContext);
+        if (!file) {
+          return false;
+        }
+        const sessionId = getToolbarSessionId(toolbarContext, file.fileId);
+        return getQueryViewStateStore().read(file.fileId, sessionId).includeActualPlan === true;
       }
     });
 
@@ -356,7 +382,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       }
     });
 
-    const createSchemaDiagram = async (node: JdbcTreeNode, options: { openToSide: boolean }): Promise<void> => {
+    const createSchemaDiagram = async (node: JdbcTreeNode): Promise<void> => {
       const snapshot = await loadDeepSnapshot(node.connectionId);
       const graph = buildSchemaGraph(snapshot, node.name);
       const file = await context.fileMediator.createUntitledFile({
@@ -374,9 +400,6 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       });
       getGraphDocumentRepository().seedFile(file, graph, { notifyDirty: true });
       context.files.markDirty(file.fileId);
-      if (options.openToSide) {
-        requestOpenEditorToSide({ fileId: file.fileId, removeFromOtherGroups: true });
-      }
     };
 
     treeContextMenu.registerContribution({
@@ -386,18 +409,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       order: 150,
       matches: (node) => node.kind === "database",
       run: async (node) => {
-        await createSchemaDiagram(node, { openToSide: false });
-      }
-    });
-
-    treeContextMenu.registerContribution({
-      id: "core.queryengine.jdbc.showSchemaDiagram.toSide",
-      label: "Schema Diagram to Side",
-      section: "diagram",
-      order: 151,
-      matches: (node) => node.kind === "database",
-      run: async (node) => {
-        await createSchemaDiagram(node, { openToSide: true });
+        await createSchemaDiagram(node);
       }
     });
 
@@ -509,7 +521,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       setFileEngineBinding: (fileId, connectionId, database) => {
         initJdbcFileBinding(fileId, connectionId, database, context.files);
       },
-      getActiveFileId: () => context.fileMediator.getActiveFileId()
+      getActiveFileId: () => getCommandActiveFileId()
     });
 
     // Tree Actions: settings

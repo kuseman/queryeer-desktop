@@ -20,7 +20,14 @@ function getArtifactViewStateKey(context: OutputContext, artifact: OutputContext
     instanceId = nextArtifactViewStateId++;
     artifactViewStateIds.set(artifact, instanceId);
   }
-  return ["query-plan", context.fileId ?? "unknown-file", artifact.id, artifact.graph.id, instanceId].join(":");
+  return [
+    "query-plan",
+    context.outputSessionId ?? "default-session",
+    context.fileId ?? "unknown-file",
+    artifact.id,
+    artifact.graph.id,
+    instanceId
+  ].join(":");
 }
 
 export function registerQueryPlanOutput(context: PluginContext): void {
