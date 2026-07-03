@@ -30,6 +30,8 @@ import {
   type QueryCancelResult,
   type QueryExecuteParams,
   type QueryExecuteResult,
+  type QueryLargeValueReadParams,
+  type QueryLargeValueReadResult,
   type AboutPluginChangelogsResult
 } from "@queryeer/api/backend/index.js";
 import { BackendExecutionStore } from "./backend-execution-store.js";
@@ -154,6 +156,9 @@ export class BackendGateway {
     ipcMain.handle("backend:cancel-query", async (_event, params: QueryCancelParams) => {
       return this.cancelQuery(params);
     });
+    ipcMain.handle("backend:read-large-value", async (_event, params: QueryLargeValueReadParams) => {
+      return this.readLargeValue(params);
+    });
     ipcMain.handle("backend:engine-invoke", async (_event, params: EngineInvokeParams) => {
       return this.invokeEngine(params);
     });
@@ -244,6 +249,16 @@ export class BackendGateway {
       throw new Error("queryengine.cancel failed: missing result");
     }
     return response.result as QueryCancelResult;
+  }
+
+  public async readLargeValue(params: QueryLargeValueReadParams): Promise<QueryLargeValueReadResult> {
+    const envelope = this.createRequest("queryengine.largeValue.read", params);
+    this.appendLog("debug", "gateway", `Sending request ${envelope.id} queryengine.largeValue.read`);
+    const response = await this.sendRequest(envelope, 30_000);
+    if (!response.result) {
+      throw new Error("queryengine.largeValue.read failed: missing result");
+    }
+    return response.result as QueryLargeValueReadResult;
   }
 
   public async invokeEngine(params: EngineInvokeParams): Promise<EngineInvokeResult> {
@@ -559,6 +574,7 @@ export class BackendGateway {
       | "health.ping"
       | "queryengine.execute"
       | "queryengine.cancel"
+      | "queryengine.largeValue.read"
       | "queryengine.invoke"
       | "file.open"
       | "file.close"

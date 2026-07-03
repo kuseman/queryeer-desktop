@@ -1,0 +1,9 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "request",
+  "id": "req-fixture-large-value-1",
+  "method": "queryengine.largeValue.read",
+  "params": {
+    "ref": "550e8400-e29b-41d4-a716-446655440000"
+  }
+}

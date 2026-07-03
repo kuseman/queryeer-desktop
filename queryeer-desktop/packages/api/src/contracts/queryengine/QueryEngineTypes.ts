@@ -1,9 +1,9 @@
 import type { Column } from "./OutputExtension.js";
-import type { QueryExecuteOptions } from "../backend/Types.js";
+import type { QueryExecuteOptions, QueryResultCell } from "../backend/Types.js";
 
 export type CollectedResultSet = {
   schema: { columns: Column[] };
-  rows: unknown[][];
+  rows: QueryResultCell[][];
 };
 
 export type CollectedResults = {

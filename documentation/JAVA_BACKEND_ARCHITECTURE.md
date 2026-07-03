@@ -70,7 +70,7 @@ Contains application/use-case orchestration and plugin runtime:
 
 ## 3.4 `backend-transport-stdio`
 
-Adapter layer that maps NDJSON/JSON-RPC envelopes to core use-cases.
+Adapter layer that maps `Content-Length` framed JSON envelopes to core use-cases.
 
 - parse/validate input envelopes
 - dispatch methods to `backend-core`

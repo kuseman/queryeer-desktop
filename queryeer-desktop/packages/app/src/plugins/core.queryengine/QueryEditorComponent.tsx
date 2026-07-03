@@ -5,6 +5,7 @@ import { QueryEditorStatusBar } from "./output/QueryEditorStatusBar";
 import type { OutputContext, OutputMessage, ResultSet, ColumnType, Column } from "@queryeer/api/queryengine/OutputExtension";
 import { IDLE_OUTPUT_CONTEXT } from "@queryeer/api/queryengine/OutputExtension";
 import type { ExecuteRequestOptions } from "@queryeer/api/queryengine/QueryEngineTypes.js";
+import type { QueryResultCell } from "@queryeer/api/backend/Types.js";
 import { getQueryEngineService } from "./QueryEngineService";
 import { resolveOutputMaxRows } from "./output-limits";
 import { getOutputRegistry } from "./output/OutputRegistry";
@@ -475,7 +476,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
           } else if (event.method === "queryengine.chunkRows") {
             const p = event.params as {
               resultSetIndex: number;
-              rows: unknown[][];
+              rows: QueryResultCell[][];
               messages?: Array<{ severity: string; message: string; line?: number; column?: number }>;
             };
             const registry = getOutputRegistry();
@@ -664,7 +665,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
                         .trim()
                         .split("\n")
                         .filter(Boolean)
-                        .map((line) => JSON.parse(line) as unknown[]);
+                        .map((line) => JSON.parse(line) as QueryResultCell[]);
                       return { resultSetIndex: rs.resultSetIndex, schema: { columns }, rows, rowLimitExceeded: false as const };
                     })
                   );

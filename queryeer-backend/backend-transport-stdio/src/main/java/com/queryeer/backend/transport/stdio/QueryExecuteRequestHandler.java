@@ -1,5 +1,6 @@
 package com.queryeer.backend.transport.stdio;
 
+import com.queryeer.backend.api.LargeValueStore;
 import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
@@ -13,13 +14,16 @@ final class QueryExecuteRequestHandler implements RequestHandler
     private final EnvelopeCodec codec;
     private final QueryExecutionService queryExecutionService;
     private final NotificationPublisher notificationPublisher;
+    private final LargeValueStore largeValueStore;
 
-    public QueryExecuteRequestHandler(ResponseWriter responseWriter, EnvelopeCodec codec, QueryExecutionService queryExecutionService, NotificationPublisher notificationPublisher)
+    public QueryExecuteRequestHandler(ResponseWriter responseWriter, EnvelopeCodec codec, QueryExecutionService queryExecutionService, NotificationPublisher notificationPublisher,
+            LargeValueStore largeValueStore)
     {
         this.responseWriter = responseWriter;
         this.codec = codec;
         this.queryExecutionService = queryExecutionService;
         this.notificationPublisher = notificationPublisher;
+        this.largeValueStore = largeValueStore;
     }
 
     @Override
@@ -33,6 +37,8 @@ final class QueryExecuteRequestHandler implements RequestHandler
     {
         QueryExecuteParams params = codec.objectMapper()
                 .convertValue(envelope.params(), QueryExecuteParams.class);
+        largeValueStore.cleanupFile(params.fileId());
+        largeValueStore.registerExecution(params.queryExecutionId(), params.fileId());
 
         responseWriter.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.RESPONSE, envelope.id(), null, null, null, new QueryExecuteResult(true, params.queryExecutionId()), null));
 

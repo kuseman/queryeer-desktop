@@ -8,6 +8,7 @@ export const BACKEND_REQUEST_CAPABILITIES: ReadonlyArray<Capability> = [
   "health.ping",
   "queryengine.execute",
   "queryengine.cancel",
+  "queryengine.largeValue.read",
   "queryengine.invoke",
   "file.open",
   "file.close"

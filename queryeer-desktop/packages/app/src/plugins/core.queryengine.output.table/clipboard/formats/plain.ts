@@ -1,4 +1,5 @@
 import type { ClipboardFormat } from "../ClipboardFormat";
+import { cellValueToString } from "../../large-value-cell";
 
 export const plainFormat: ClipboardFormat = {
   id: "plain",
@@ -7,6 +8,6 @@ export const plainFormat: ClipboardFormat = {
   format: ({ grid }) =>
     grid
       .filter((row) => row.some((cell) => cell.selected))
-      .map((row) => row.map((cell) => (cell.selected ? String(cell.value ?? "") : "")).join("\t"))
+      .map((row) => row.map((cell) => (cell.selected ? cellValueToString(cell.value) : "")).join("\t"))
       .join("\n"),
 };

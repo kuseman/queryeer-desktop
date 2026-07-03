@@ -1,0 +1,12 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "response",
+  "id": "req-fixture-large-value-1",
+  "result": {
+    "ref": "550e8400-e29b-41d4-a716-446655440000",
+    "logicalType": "json",
+    "byteLength": 524288000,
+    "contentType": "application/json",
+    "content": "{\"large\":true}"
+  }
+}

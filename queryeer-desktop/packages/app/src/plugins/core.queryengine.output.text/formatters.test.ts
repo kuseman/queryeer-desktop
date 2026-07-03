@@ -82,6 +82,34 @@ describe("text output formatters", () => {
     expect(lines.join("\n")).toContain('"id": 1');
   });
 
+  it("formats large-value cells as previews in json formatter", () => {
+    const formatter = resolveTextOutputFormatter("json");
+    const lines = formatter.format(
+      makeContext({
+        resultSets: [
+          {
+            resultSetIndex: 0,
+            schema: { columns: [{ name: "payload", type: "string" }] },
+            rows: [[{
+              kind: "largeValue",
+              logicalType: "json",
+              byteLength: 5000,
+              preview: "{\"a\":1}",
+              ref: "ref-1",
+              contentType: "application/json"
+            }]],
+            rowLimitExceeded: false
+          }
+        ],
+        rowsTargetPrimaryId: "core.queryengine.output.text"
+      })
+    );
+    const output = lines.join("\n");
+
+    expect(output).toContain('"payload": "{\\"a\\":1}"');
+    expect(output).not.toContain("ref-1");
+  });
+
   it("formats rows in csv formatter", () => {
     const formatter = resolveTextOutputFormatter("csv");
     const lines = formatter.format(
@@ -195,6 +223,29 @@ describe("text output formatters", () => {
         { name: "alice", age: 30 },
         { name: "bob", age: 25 }
       ]);
+    });
+
+    it("json formatFile writes large-value previews", () => {
+      const formatter = resolveTextOutputFormatter("json");
+      const content = formatter.formatFile([
+        {
+          resultSetIndex: 0,
+          schema: { columns: [{ name: "payload", type: "string" as const }] },
+          rows: [[{
+            kind: "largeValue",
+            logicalType: "text",
+            byteLength: 5000,
+            preview: "preview",
+            ref: "ref-1",
+            contentType: "text/plain"
+          }]],
+          rowLimitExceeded: false
+        }
+      ]);
+      const parsed = JSON.parse(content);
+
+      expect(parsed[0].rows[0].payload).toBe("preview");
+      expect(content).not.toContain("ref-1");
     });
 
     it("plain formatFile produces plain text content", () => {

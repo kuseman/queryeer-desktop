@@ -872,8 +872,8 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
       const indices = Array.from({ length: count }, (_, i) => i);
       const sortStart = performance.now();
       indices.sort((a, b) => {
-        const valA = allRows[a]?.[dataIndex] ?? null;
-        const valB = allRows[b]?.[dataIndex] ?? null;
+        const valA = resolveCellDisplayValueRef.current(column.type, allRows[a]?.[dataIndex] ?? null);
+        const valB = resolveCellDisplayValueRef.current(column.type, allRows[b]?.[dataIndex] ?? null);
         return compareValues(valA, valB) * (ascending ? 1 : -1);
       });
       const sortElapsed = performance.now() - sortStart;

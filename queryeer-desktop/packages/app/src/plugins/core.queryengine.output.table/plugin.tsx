@@ -39,6 +39,7 @@ import { getTableActionRegistry } from "./table-action-registry";
 import { createTableActionProvider } from "./table-action-provider";
 import { TableActionsSettingsEditor } from "./table-action-settings";
 import { getTableResultStore } from "./table-result-store";
+import { cellValueToString, formatLargeValueTitle, isLargeValueCell } from "./large-value-cell";
 import { GridComponent } from "../../renderer/components/GridComponent";
 import type { GridComponentColumn, GridComponentRow, GridComponentSelectionSnapshot, GridComponentState, GridSearchHandle } from "../../renderer/components/GridComponent";
 
@@ -72,8 +73,7 @@ function toGridColumns(columns: Column[]): GridColumn[] {
 }
 
 export function toCsvScalar(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  const text = typeof value === "string" ? value : String(value);
+  const text = cellValueToString(value);
   if (/[",\r\n]/.test(text)) {
     return `"${text.replace(/"/g, '""')}"`;
   }
@@ -235,7 +235,7 @@ export function getCellValueForCopy(rowData: GridRowData | undefined, columnInde
   if (!rowData || !Array.isArray(rowData.__values)) {
     return null;
   }
-  return rowData.__values[columnIndex] ?? null;
+  return previewValue(rowData.__values[columnIndex] ?? null);
 }
 
 export function buildClipboardGridFromRows(
@@ -267,6 +267,10 @@ export function resolveCellDisplayValue(type: string, value: unknown): string {
     return "";
   }
 
+  if (isLargeValueCell(value)) {
+    return value.preview;
+  }
+
   if (type === "decimal") {
     return typeof value === "string" ? value : String(value);
   }
@@ -284,6 +288,10 @@ export function resolveCellDisplayValue(type: string, value: unknown): string {
   }
 
   return String(value);
+}
+
+function previewValue(value: unknown): unknown {
+  return isLargeValueCell(value) ? value.preview : value;
 }
 
 type TableGridProps = {
@@ -362,8 +370,22 @@ const TableGrid = forwardRef<GridSearchHandle, TableGridProps>(function TableGri
         getInitialGridState={handleGetInitialGridState}
         onGridStateChange={handleOnGridStateChange}
         resolveCellDisplayValue={resolveCellDisplayValue}
-        resolveCellLink={({ value, columnType }) => resolveTableLinkAction({ value, columnType: columnType as Column["type"] })}
+        resolveCellLink={({ value, columnType }) => isLargeValueCell(value) ? { kind: "preview" } : resolveTableLinkAction({ value, columnType: columnType as Column["type"] })}
         onCellPrimaryAction={({ value, columnType }) => {
+          if (isLargeValueCell(value)) {
+            void window.appShell.readBackendLargeValue({ ref: value.ref }).then((result) => {
+              onPreviewValue({
+                title: formatLargeValueTitle(value),
+                value: formatPreviewValue(result.content, result.contentType ?? value.contentType ?? "text/plain"),
+                mimeType: result.contentType ?? value.contentType,
+              });
+            }).catch((error) => {
+              const message = error instanceof Error ? error.message : String(error);
+              onPreviewValue({ title: "Large Value Error", value: message, mimeType: "text/plain" });
+            });
+            return true;
+          }
+
           const action = resolveTableLinkAction({ value, columnType: columnType as Column["type"] });
           if (action) {
             if (action.kind === "external") {

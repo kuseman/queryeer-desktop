@@ -26,6 +26,8 @@ import com.queryeer.backend.contract.query.QueryCompletedNotification;
 import com.queryeer.backend.contract.query.QueryExecuteParams;
 import com.queryeer.backend.contract.query.QueryExecuteResult;
 import com.queryeer.backend.contract.query.QueryFailedNotification;
+import com.queryeer.backend.contract.query.QueryLargeValueReadParams;
+import com.queryeer.backend.contract.query.QueryLargeValueReadResult;
 import com.queryeer.backend.contract.query.QueryProgressNotification;
 import com.queryeer.backend.contract.runtime.RuntimeStatusResult;
 
@@ -51,6 +53,10 @@ class ProtocolFixtureCompatibilityTest
         Assertions.assertEquals("queryeer-java-backend", result.server()
                 .name());
         Assertions.assertEquals(ProtocolVersion.V1_0_0, result.selectedProtocolVersion());
+        Assertions.assertTrue(result.supportedCapabilities()
+                .contains("queryengine.largeValue.read"));
+        Assertions.assertFalse(result.supportedCapabilities()
+                .contains("file.bind"));
     }
 
     @Test
@@ -216,6 +222,27 @@ class ProtocolFixtureCompatibilityTest
     }
 
     @Test
+    void queryLargeValueReadFixturesAreCompatible() throws IOException
+    {
+        BackendEnvelope request = readFixture("request-large-value-read.json");
+        BackendEnvelope response = readFixture("response-large-value-read.json");
+
+        assertEnvelopeBase(request);
+        assertEnvelopeBase(response);
+        Assertions.assertEquals(EnvelopeType.REQUEST, request.type());
+        Assertions.assertEquals(EnvelopeType.RESPONSE, response.type());
+        Assertions.assertEquals("queryengine.largeValue.read", request.method());
+        Assertions.assertEquals(request.id(), response.id());
+        Assertions.assertNotNull(response.result());
+
+        QueryLargeValueReadParams params = objectMapper.convertValue(request.params(), QueryLargeValueReadParams.class);
+        QueryLargeValueReadResult result = objectMapper.convertValue(response.result(), QueryLargeValueReadResult.class);
+        Assertions.assertEquals(params.ref(), result.ref());
+        Assertions.assertEquals("json", result.logicalType());
+        Assertions.assertEquals("{\"large\":true}", result.content());
+    }
+
+    @Test
     void engineInvokeFixturesAreCompatible() throws IOException
     {
         BackendEnvelope request = readFixture("request-engine-invoke.json");
@@ -266,12 +293,16 @@ class ProtocolFixtureCompatibilityTest
         QueryChunkStartNotification params = objectMapper.convertValue(notification.params(), QueryChunkStartNotification.class);
         Assertions.assertEquals("exec-fixture-1", params.queryExecutionId());
         Assertions.assertEquals(0, params.resultSetIndex());
-        Assertions.assertEquals(1, params.schema()
+        Assertions.assertEquals(2, params.schema()
                 .columns()
                 .size());
         Assertions.assertEquals("int", params.schema()
                 .columns()
                 .get(0)
+                .type());
+        Assertions.assertEquals("json", params.schema()
+                .columns()
+                .get(1)
                 .type());
     }
 
@@ -290,6 +321,15 @@ class ProtocolFixtureCompatibilityTest
         Assertions.assertEquals(0, params.resultSetIndex());
         Assertions.assertEquals(2, params.rows()
                 .size());
+        Assertions.assertTrue(params.rows()
+                .get(0)
+                .get(1) instanceof Map);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> largeValue = (Map<String, Object>) params.rows()
+                .get(0)
+                .get(1);
+        Assertions.assertEquals("largeValue", largeValue.get("kind"));
+        Assertions.assertEquals("{\"large\":true}", largeValue.get("preview"));
         Assertions.assertNotNull(params.messages());
         Assertions.assertEquals(1, params.messages()
                 .size());
