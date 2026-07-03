@@ -11,7 +11,9 @@ import type {
   QueryCancelParams,
   QueryCancelResult,
   QueryExecuteParams,
-  QueryExecuteResult
+  QueryExecuteResult,
+  QueryLargeValueReadParams,
+  QueryLargeValueReadResult
 } from "@queryeer/api/backend/index.js";
 import type {
   FileWatcherEvent,
@@ -102,6 +104,7 @@ type AppShellApi = {
   uninstallPlugin: (params: { pluginId: string }) => Promise<ManagedPluginUninstallResult>;
   executeBackendQuery: (params: QueryExecuteParams) => Promise<QueryExecuteResult>;
   cancelBackendQuery: (params: QueryCancelParams) => Promise<QueryCancelResult>;
+  readBackendLargeValue: (params: QueryLargeValueReadParams) => Promise<QueryLargeValueReadResult>;
   invokeBackendEngine: (params: EngineInvokeParams) => Promise<EngineInvokeResult>;
   openBackendFile: (params: FileOpenParams) => Promise<FileOpenResult>;
   closeBackendFile: (params: FileCloseParams) => Promise<FileCloseResult>;
@@ -282,6 +285,9 @@ const appShellApi: AppShellApi = {
   },
   cancelBackendQuery: async (params) => {
     return ipcRenderer.invoke("backend:cancel-query", params);
+  },
+  readBackendLargeValue: async (params) => {
+    return ipcRenderer.invoke("backend:read-large-value", params);
   },
   invokeBackendEngine: async (params) => {
     return ipcRenderer.invoke("backend:engine-invoke", params);

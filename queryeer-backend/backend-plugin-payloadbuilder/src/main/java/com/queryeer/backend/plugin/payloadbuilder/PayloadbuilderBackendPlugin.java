@@ -7,6 +7,7 @@ import org.apache.commons.io.IOUtils;
 
 import com.queryeer.backend.api.BackendPlugin;
 import com.queryeer.backend.api.BackendPluginContext;
+import com.queryeer.backend.api.LargeValueStore;
 import com.queryeer.backend.api.PluginDescriptor;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
@@ -29,8 +30,12 @@ public final class PayloadbuilderBackendPlugin implements BackendPlugin
         context.services()
                 .register(com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderRegistry.class, registry);
 
+        LargeValueStore largeValueStore = context.services()
+                .get(LargeValueStore.class);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(context.config(), context.payloadMapper(), registry, context.services()
-                .get(IncrementalParseSessionService.class), new TreeSitterSqlParseFunction());
+                .get(IncrementalParseSessionService.class), new TreeSitterSqlParseFunction(),
+                largeValueStore != null ? largeValueStore
+                        : LargeValueStore.inlineOnly());
         context.queryEngines()
                 .register(provider);
         context.fileSessions()

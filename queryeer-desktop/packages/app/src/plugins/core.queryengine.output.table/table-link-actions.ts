@@ -1,4 +1,5 @@
 import type { TableLinkAction, TableLinkActionContext, TableLinkActionContribution } from "@queryeer/api/queryengine/TableLinkActionExtension.js";
+import { cellValueToString } from "./large-value-cell";
 
 const contributions = new Map<string, TableLinkActionContribution>();
 
@@ -43,16 +44,7 @@ export function formatPreviewValue(value: unknown, mimeType: string): string {
 }
 
 function valueToString(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "string") return value;
-  if (typeof value === "object") {
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return String(value);
-    }
-  }
-  return String(value);
+  return cellValueToString(value);
 }
 
 function tryFormatJson(text: string): string | null {

@@ -1,7 +1,8 @@
 import type { ClipboardFormat } from "../ClipboardFormat";
+import { cellValueToString } from "../../large-value-cell";
 
 function esc(value: unknown): string {
-  return String(value ?? "")
+  return cellValueToString(value)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");

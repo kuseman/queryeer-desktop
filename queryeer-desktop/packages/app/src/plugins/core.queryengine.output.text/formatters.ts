@@ -16,6 +16,7 @@ export type TextOutputFormatter = QueryResultFormatter;
 
 function stringifyCell(cell: unknown): string {
   if (cell === null || cell === undefined) return "NULL";
+  if (isLargeValueCell(cell)) return cell.preview;
   if (typeof cell === "string") return cell;
   if (typeof cell === "number" || typeof cell === "boolean" || typeof cell === "bigint") {
     return String(cell);
@@ -25,6 +26,20 @@ function stringifyCell(cell: unknown): string {
   } catch {
     return String(cell);
   }
+}
+
+function isLargeValueCell(value: unknown): value is { kind: "largeValue"; preview: string } {
+  return typeof value === "object"
+    && value !== null
+    && !Array.isArray(value)
+    && (value as { kind?: unknown }).kind === "largeValue"
+    && typeof (value as { preview?: unknown }).preview === "string";
+}
+
+function toJsonCell(cell: unknown): unknown {
+  if (cell === undefined || cell === null) return null;
+  if (isLargeValueCell(cell)) return cell.preview;
+  return cell;
 }
 
 function escapeCsv(value: string): string {
@@ -90,7 +105,7 @@ function formatRowsJson(context: OutputContext): string[] {
   const sets = context.resultSets.map((set) => ({
     resultSetIndex: set.resultSetIndex,
     rows: set.rows.map((row) =>
-      Object.fromEntries(set.schema.columns.map((col, i) => [col.name, row[i] ?? null]))
+      Object.fromEntries(set.schema.columns.map((col, i) => [col.name, toJsonCell(row[i])]))
     )
   }));
   return JSON.stringify(sets, null, 2).split("\n");
@@ -100,7 +115,7 @@ function jsonFileContent(resultSets: ResultSet[]): string {
   const sets = resultSets.map((set) => ({
     resultSetIndex: set.resultSetIndex,
     rows: set.rows.map((row) =>
-      Object.fromEntries(set.schema.columns.map((col, i) => [col.name, row[i] ?? null]))
+      Object.fromEntries(set.schema.columns.map((col, i) => [col.name, toJsonCell(row[i])]))
     )
   }));
   return JSON.stringify(sets, null, 2);

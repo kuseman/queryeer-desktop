@@ -26,6 +26,14 @@ describe("Protocol fixture compatibility", () => {
     expect(response.type).toBe("response");
     expect(request.method).toBe("backend.handshake");
     expect(request.id).toBe(response.id);
+    const requestedCapabilities = ((request.params as Record<string, unknown>).requestedCapabilities ?? []) as string[];
+    const supportedCapabilities = ((response.result as Record<string, unknown>).supportedCapabilities ?? []) as string[];
+    expect(requestedCapabilities).toContain("queryengine.largeValue.read");
+    expect(requestedCapabilities).toContain("queryengine.chunkStart");
+    expect(requestedCapabilities).toContain("queryengine.chunkRows");
+    expect(requestedCapabilities).not.toContain("queryengine.resultChunk");
+    expect(supportedCapabilities).toContain("queryengine.largeValue.read");
+    expect(supportedCapabilities).not.toContain("file.bind");
   });
 
   it("ping fixtures", () => {
@@ -75,6 +83,21 @@ describe("Protocol fixture compatibility", () => {
     const params = request.params as Record<string, unknown>;
     const result = response.result as Record<string, unknown>;
     expect(params.queryExecutionId).toBe(result.queryExecutionId);
+  });
+
+  it("large-value read fixtures", () => {
+    const request = readFixture("request-large-value-read.json");
+    const response = readFixture("response-large-value-read.json");
+    assertEnvelopeBase(request);
+    assertEnvelopeBase(response);
+    expect(request.method).toBe("queryengine.largeValue.read");
+    expect(request.id).toBe(response.id);
+
+    const params = request.params as Record<string, unknown>;
+    const result = response.result as Record<string, unknown>;
+    expect(params.ref).toBe(result.ref);
+    expect(result.logicalType).toBe("json");
+    expect(typeof result.content).toBe("string");
   });
 
   it("file open fixtures", () => {
@@ -152,9 +175,15 @@ describe("Protocol fixture compatibility", () => {
     expect(progress.type).toBe("notification");
     expect(progress.method).toBe("queryengine.progress");
 
-    const chunk = readFixture("notification-query-result-chunk.json");
-    assertEnvelopeBase(chunk);
-    expect(chunk.method).toBe("queryengine.resultChunk");
+    const chunkStart = readFixture("notification-query-chunk-start.json");
+    assertEnvelopeBase(chunkStart);
+    expect(chunkStart.method).toBe("queryengine.chunkStart");
+
+    const chunkRows = readFixture("notification-query-chunk-rows.json");
+    assertEnvelopeBase(chunkRows);
+    expect(chunkRows.method).toBe("queryengine.chunkRows");
+    const rows = (chunkRows.params as Record<string, unknown>).rows as unknown[][];
+    expect(rows[0]?.[1]).toMatchObject({ kind: "largeValue", preview: "{\"large\":true}" });
 
     const failed = readFixture("notification-query-failed.json");
     assertEnvelopeBase(failed);

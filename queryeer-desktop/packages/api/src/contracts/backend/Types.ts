@@ -13,6 +13,7 @@ export type Capability =
   | "health.ping"
   | "queryengine.execute"
   | "queryengine.cancel"
+  | "queryengine.largeValue.read"
   | "queryengine.invoke"
   | "queryengine.progress"
   | "queryengine.chunkStart"
@@ -139,6 +140,29 @@ export type QueryExecuteOptions = {
 export type QueryExecuteResult = {
   accepted: boolean;
   queryExecutionId: string;
+};
+
+export type QueryLargeValueCell = {
+  kind: "largeValue";
+  logicalType: "json" | "xml" | "text" | "binary" | string;
+  byteLength: number;
+  preview: string;
+  ref: string;
+  contentType?: string;
+};
+
+export type QueryResultCell = null | string | number | boolean | QueryLargeValueCell;
+
+export type QueryLargeValueReadParams = {
+  ref: string;
+};
+
+export type QueryLargeValueReadResult = {
+  ref: string;
+  logicalType: string;
+  byteLength: number;
+  content: string;
+  contentType?: string;
 };
 
 export type QueryCancelParams = {
@@ -272,7 +296,7 @@ export type MessagePayload = {
 export type QueryChunkRowsNotification = {
   queryExecutionId: string;
   resultSetIndex: number;
-  rows: unknown[][];
+  rows: QueryResultCell[][];
   messages?: MessagePayload[];
 };
 
@@ -443,6 +467,7 @@ export type BackendMethodParamsMap = {
   "health.ping": PingParams;
   "queryengine.execute": QueryExecuteParams;
   "queryengine.cancel": QueryCancelParams;
+  "queryengine.largeValue.read": QueryLargeValueReadParams;
   "queryengine.invoke": EngineInvokeParams;
   "file.open": FileOpenParams;
   "file.close": FileCloseParams;
@@ -458,6 +483,7 @@ export type BackendMethodResultMap = {
   "health.ping": PingResult;
   "queryengine.execute": QueryExecuteResult;
   "queryengine.cancel": QueryCancelResult;
+  "queryengine.largeValue.read": QueryLargeValueReadResult;
   "queryengine.invoke": EngineInvokeResult;
   "file.open": FileOpenResult;
   "file.close": FileCloseResult;
