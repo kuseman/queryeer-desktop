@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.queryeer.backend.api.LargeValueStore;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.QueryPublisher;
@@ -32,7 +33,7 @@ class QueryExecutionTransportIntegrationTest
 
         QueryEngineRegistry registry = new SingleProviderRegistry(new FakeQueryProvider());
         QueryExecutionService queryExecutionService = new QueryExecutionService(registry);
-        QueryExecuteRequestHandler handler = new QueryExecuteRequestHandler(responseWriter, codec, queryExecutionService, notifications);
+        QueryExecuteRequestHandler handler = new QueryExecuteRequestHandler(responseWriter, codec, queryExecutionService, notifications, LargeValueStore.inlineOnly());
 
         handler.handle(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.REQUEST, "req-exec-1", null, "queryengine.execute",
                 Map.of("queryExecutionId", "exec-int-1", "engineId", "fake", "fileId", "file-1", "text", "select 1", "engineState", Map.of()), null, null));

@@ -94,7 +94,7 @@ public final class BackendRunnerModule
                 .collect(Collectors.toMap(plugin -> plugin.descriptor()
                         .id(), BackendPlugin::descriptor));
         StdioTransportModule.RunningTransport transportServer = new StdioTransportModule().create(input, output, MapperUtils.MAPPER, services.queryEngines(), services.fileRegistryView(),
-                services.events(), () -> runtimeStatusSnapshot(runtime), startedAt, services.config(), securitySession, services.changelogRegistry(), descriptorMap::get);
+                services.events(), () -> runtimeStatusSnapshot(runtime), startedAt, services.config(), securitySession, services.changelogRegistry(), descriptorMap::get, services.largeValues());
         System.err.println(withCorrelation("Queryeer backend runner started (stdio mode).", null));
 
         Thread selfDestruct = new Thread(() ->

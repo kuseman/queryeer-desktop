@@ -1,5 +1,5 @@
 import { BackendNotReadyError } from "@queryeer/api/backend/BackendNotReadyError";
-import type { QueryExecuteOptions } from "@queryeer/api/backend/Types.js";
+import type { QueryExecuteOptions, QueryResultCell } from "@queryeer/api/backend/Types.js";
 import type { Column } from "@queryeer/api/queryengine/OutputExtension.js";
 import type { CollectedResultSet, CollectedResults, ExecuteRequestOptions } from "@queryeer/api/queryengine/QueryEngineTypes.js";
 import { getCoreSecurityService } from "../core.security/service";
@@ -244,7 +244,7 @@ export class QueryEngineService {
             }
 
             if (event.method === "queryengine.chunkRows") {
-              const p = event.params as { resultSetIndex: number; rows: unknown[][] };
+              const p = event.params as { resultSetIndex: number; rows: QueryResultCell[][] };
               const rs = collector.get(p.resultSetIndex);
               if (rs) {
                 rs.rows.push(...p.rows);

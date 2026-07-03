@@ -2,6 +2,7 @@ package com.queryeer.backend.plugin.payloadbuilder;
 
 import static java.util.Objects.requireNonNull;
 
+import java.io.IOException;
 import java.io.Writer;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -19,6 +20,8 @@ import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.ErrorMessages;
 import com.queryeer.backend.api.FileSession;
 import com.queryeer.backend.api.FileSessionHandler;
+import com.queryeer.backend.api.LargeValueStore;
+import com.queryeer.backend.api.LargeValueWriter;
 import com.queryeer.backend.api.OutputEvent;
 import com.queryeer.backend.api.OutputSeverity;
 import com.queryeer.backend.api.PayloadMapper;
@@ -69,6 +72,10 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
     private static final String TYPE_ARRAY = "array";
     private static final String TYPE_TABLE = "table";
     private static final String TYPE_ANY = "any";
+    private static final String LARGE_TYPE_JSON = "json";
+    private static final String LARGE_TYPE_TEXT = "text";
+    private static final String CONTENT_TYPE_JSON = "application/json";
+    private static final String CONTENT_TYPE_TEXT = "text/plain";
     private static final String METADATA_KEY_EXECUTION_TIME = "Execution Time";
     private static final String ENV_MODULE_ID = "core.queryengine.payloadbuilder.environments";
     private static final String ENV_VALUES_KEY = "core.queryengine.payloadbuilder.environments.values";
@@ -82,6 +89,7 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
     private final ConfigService configService;
     private final PayloadbuilderCatalogProviderRegistry catalogProviders;
     private final PayloadMapper payloadMapper;
+    private final LargeValueStore largeValueStore;
     private final IncrementalParseSessionService parseSessions;
     private final IncrementalParseFunction parseFunction;
     private final PayloadbuilderSqlSemanticHandler sqlSemanticHandler;
@@ -95,9 +103,23 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
             IncrementalParseFunction parseFunction)
     //@formatter:on
     {
+        this(configService, payloadMapper, catalogProviders, parseSessions, parseFunction, LargeValueStore.inlineOnly());
+    }
+
+    //@formatter:off
+    PayloadbuilderQueryEngineProvider(
+            ConfigService configService,
+            PayloadMapper payloadMapper,
+            PayloadbuilderCatalogProviderRegistry catalogProviders,
+            IncrementalParseSessionService parseSessions,
+            IncrementalParseFunction parseFunction,
+            LargeValueStore largeValueStore)
+    //@formatter:on
+    {
         this.configService = requireNonNull(configService, "configService");
         this.payloadMapper = requireNonNull(payloadMapper, "payloadMapper");
         this.catalogProviders = requireNonNull(catalogProviders, "catalogProviders");
+        this.largeValueStore = requireNonNull(largeValueStore, "largeValueStore");
         this.parseSessions = requireNonNull(parseSessions, "parseSessions");
         this.parseFunction = requireNonNull(parseFunction, "parseFunction");
         this.sqlSemanticHandler = new PayloadbuilderSqlSemanticHandler(payloadMapper, parseSessions, engineId(), catalogProviders);
@@ -186,7 +208,7 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
                         {
                             return true;
                         }
-                        rowCounter.value += publishTupleVectorInChunks(publisher, tupleVector, ROW_CHUNK_SIZE);
+                        rowCounter.value += publishTupleVectorInChunks(publisher, tupleVector, ROW_CHUNK_SIZE, largeValueStore, queryExecutionId);
                         return !cancelledExecutionIds.contains(queryExecutionId);
                     }
                 });
@@ -432,6 +454,11 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
 
     static int publishTupleVectorInChunks(QueryPublisher publisher, TupleVector tupleVector, int chunkSize)
     {
+        return publishTupleVectorInChunks(publisher, tupleVector, chunkSize, LargeValueStore.inlineOnly(), "inline");
+    }
+
+    static int publishTupleVectorInChunks(QueryPublisher publisher, TupleVector tupleVector, int chunkSize, LargeValueStore largeValueStore, String queryExecutionId)
+    {
         if (tupleVector == null
                 || tupleVector.getRowCount() == 0)
         {
@@ -448,7 +475,7 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
             List<Object> row = new ArrayList<>(columnCount);
             for (int columnIndex = 0; columnIndex < columnCount; columnIndex++)
             {
-                row.add(rowValueAsSerializableObject(tupleVector.getColumn(columnIndex), rowIndex));
+                row.add(rowValueAsSerializableObject(tupleVector.getColumn(columnIndex), rowIndex, largeValueStore, queryExecutionId));
             }
             batch.add(row);
             if (batch.size() == effectiveChunkSize)
@@ -470,6 +497,11 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
 
     static Object rowValueAsSerializableObject(ValueVector valueVector, int rowIndex)
     {
+        return rowValueAsSerializableObject(valueVector, rowIndex, LargeValueStore.inlineOnly(), "inline");
+    }
+
+    private static Object rowValueAsSerializableObject(ValueVector valueVector, int rowIndex, LargeValueStore largeValueStore, String queryExecutionId)
+    {
         if (valueVector.isNull(rowIndex))
         {
             return null;
@@ -479,20 +511,20 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
                 .getType();
         if (type == Column.Type.Table)
         {
-            return toTableRows(valueVector.getTable(rowIndex));
+            return storeJsonCell(largeValueStore, queryExecutionId, writer -> writeTableJson(writer, valueVector.getTable(rowIndex)));
         }
         if (type == Column.Type.Array)
         {
-            return toArrayValues(valueVector.getArray(rowIndex));
+            return storeJsonCell(largeValueStore, queryExecutionId, writer -> writeArrayJson(writer, valueVector.getArray(rowIndex)));
         }
         if (type == Column.Type.Object)
         {
-            return toObjectMap(valueVector.getObject(rowIndex));
+            return storeJsonCell(largeValueStore, queryExecutionId, writer -> writeObjectJson(writer, valueVector.getObject(rowIndex)));
         }
         if (type == Column.Type.String)
         {
-            return valueVector.getString(rowIndex)
-                    .toString();
+            return largeValueStore.storeText(queryExecutionId, LARGE_TYPE_TEXT, CONTENT_TYPE_TEXT, valueVector.getString(rowIndex)
+                    .toString());
         }
         if (type == Column.Type.Boolean)
         {
@@ -531,77 +563,25 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
         }
         if (type == Column.Type.Any)
         {
-            return normalizeAnyValue(valueVector.getAny(rowIndex));
+            return anyValueAsSerializableObject(valueVector.getAny(rowIndex), largeValueStore, queryExecutionId);
         }
 
-        return normalizeAnyValue(valueVector.valueAsObject(rowIndex));
+        return anyValueAsSerializableObject(valueVector.valueAsObject(rowIndex), largeValueStore, queryExecutionId);
     }
 
-    private static List<Map<String, Object>> toTableRows(TupleVector table)
-    {
-        List<Map<String, Object>> rows = new ArrayList<>(table.getRowCount());
-        int columnCount = table.getSchema()
-                .getSize();
-        for (int rowIndex = 0; rowIndex < table.getRowCount(); rowIndex++)
-        {
-            Map<String, Object> row = new java.util.LinkedHashMap<>(columnCount);
-            for (int columnIndex = 0; columnIndex < columnCount; columnIndex++)
-            {
-                String name = table.getSchema()
-                        .getColumns()
-                        .get(columnIndex)
-                        .getName();
-                row.put(name, rowValueAsSerializableObject(table.getColumn(columnIndex), rowIndex));
-            }
-            rows.add(row);
-        }
-        return rows;
-    }
-
-    private static List<Object> toArrayValues(ValueVector arrayVector)
-    {
-        List<Object> values = new ArrayList<>(arrayVector.size());
-        for (int i = 0; i < arrayVector.size(); i++)
-        {
-            values.add(rowValueAsSerializableObject(arrayVector, i));
-        }
-        return values;
-    }
-
-    private static Map<String, Object> toObjectMap(ObjectVector object)
-    {
-        int columnCount = object.getSchema()
-                .getSize();
-        Map<String, Object> values = new java.util.LinkedHashMap<>(columnCount);
-        int rowIndex = object.getRow();
-        for (int columnIndex = 0; columnIndex < columnCount; columnIndex++)
-        {
-            String name = object.getSchema()
-                    .getColumns()
-                    .get(columnIndex)
-                    .getName();
-            values.put(name, rowValueAsSerializableObject(object.getValue(columnIndex), rowIndex));
-        }
-        return values;
-    }
-
-    private static Object normalizeAnyValue(Object value)
+    private static Object anyValueAsSerializableObject(Object value, LargeValueStore largeValueStore, String queryExecutionId)
     {
         if (value == null)
         {
             return null;
         }
-        if (value instanceof TupleVector table)
-        {
-            return toTableRows(table);
-        }
-        if (value instanceof ObjectVector object)
-        {
-            return toObjectMap(object);
-        }
         if (value instanceof UTF8String s)
         {
-            return s.toString();
+            return largeValueStore.storeText(queryExecutionId, LARGE_TYPE_TEXT, CONTENT_TYPE_TEXT, s.toString());
+        }
+        if (value instanceof String s)
+        {
+            return largeValueStore.storeText(queryExecutionId, LARGE_TYPE_TEXT, CONTENT_TYPE_TEXT, s);
         }
         if (value instanceof Decimal d)
         {
@@ -616,34 +596,341 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
             return d.getZonedDateTime();
         }
 
-        // Recurse into Map/Iterable containers: a literal-typed column with a Map/List/Set value lands here, and payloadbuilder-internal
-        // types (UTF8String/Decimal/EpochDateTime/EpochDateTimeOffset) inside those containers would otherwise reach Jackson unchanged. The
-        // transport mapper is in a different classloader and cannot resolve those types, so the row-level normalizer must reach every leaf.
-        if (value instanceof Map<?, ?> map)
+        if (value instanceof TupleVector
+                || value instanceof ObjectVector
+                || value instanceof ValueVector
+                || value instanceof Map<?, ?>
+                || value instanceof Iterable<?>)
         {
-            Map<Object, Object> result = new LinkedHashMap<>(map.size());
-            for (Map.Entry<?, ?> entry : map.entrySet())
-            {
-                result.put(entry.getKey(), normalizeAnyValue(entry.getValue()));
-            }
-            return result;
-        }
-        if (value instanceof Iterable<?> iterable)
-        {
-            List<Object> result = new ArrayList<>();
-            for (Object element : iterable)
-            {
-                result.add(normalizeAnyValue(element));
-            }
-            return result;
+            return storeJsonCell(largeValueStore, queryExecutionId, writer -> writeAnyJson(writer, value));
         }
 
-        // NOTE! We need to check ValueVector last since UTF8String/Decimal/EpochDateTime/EpochDateTimeOffset implements that interface
-        if (value instanceof ValueVector v)
-        {
-            return toArrayValues(v);
-        }
         return value;
+    }
+
+    private static Object storeJsonCell(LargeValueStore largeValueStore, String queryExecutionId, JsonWriteAction action)
+    {
+        LargeValueWriter largeValueWriter = null;
+        try
+        {
+            largeValueWriter = largeValueStore.create(queryExecutionId, LARGE_TYPE_JSON, CONTENT_TYPE_JSON);
+            action.write(largeValueWriter.writer());
+            return largeValueWriter.closeToCell();
+        }
+        catch (IOException e)
+        {
+            abortQuietly(largeValueWriter);
+            throw new IllegalStateException("Could not encode result cell", e);
+        }
+    }
+
+    private static void abortQuietly(LargeValueWriter largeValueWriter)
+    {
+        if (largeValueWriter == null)
+        {
+            return;
+        }
+        try
+        {
+            largeValueWriter.abort();
+        }
+        catch (IOException e)
+        {
+            // Preserve the original serialization/write failure.
+        }
+    }
+
+    private static void writeTableJson(Writer writer, TupleVector table) throws IOException
+    {
+        if (table == null)
+        {
+            writer.write("null");
+            return;
+        }
+        writer.write('[');
+        for (int rowIndex = 0; rowIndex < table.getRowCount(); rowIndex++)
+        {
+            if (rowIndex > 0)
+            {
+                writer.write(',');
+            }
+            writeTupleRowJson(writer, table, rowIndex);
+        }
+        writer.write(']');
+    }
+
+    private static void writeTupleRowJson(Writer writer, TupleVector table, int rowIndex) throws IOException
+    {
+        writer.write('{');
+        int columnCount = table.getSchema()
+                .getSize();
+        for (int columnIndex = 0; columnIndex < columnCount; columnIndex++)
+        {
+            if (columnIndex > 0)
+            {
+                writer.write(',');
+            }
+            String name = table.getSchema()
+                    .getColumns()
+                    .get(columnIndex)
+                    .getName();
+            writeJsonString(writer, name);
+            writer.write(':');
+            writeValueVectorCellJson(writer, table.getColumn(columnIndex), rowIndex);
+        }
+        writer.write('}');
+    }
+
+    private static void writeArrayJson(Writer writer, ValueVector arrayVector) throws IOException
+    {
+        writer.write('[');
+        for (int i = 0; i < arrayVector.size(); i++)
+        {
+            if (i > 0)
+            {
+                writer.write(',');
+            }
+            writeValueVectorCellJson(writer, arrayVector, i);
+        }
+        writer.write(']');
+    }
+
+    private static void writeObjectJson(Writer writer, ObjectVector object) throws IOException
+    {
+        writer.write('{');
+        int columnCount = object.getSchema()
+                .getSize();
+        int rowIndex = object.getRow();
+        for (int columnIndex = 0; columnIndex < columnCount; columnIndex++)
+        {
+            if (columnIndex > 0)
+            {
+                writer.write(',');
+            }
+            String name = object.getSchema()
+                    .getColumns()
+                    .get(columnIndex)
+                    .getName();
+            writeJsonString(writer, name);
+            writer.write(':');
+            writeValueVectorCellJson(writer, object.getValue(columnIndex), rowIndex);
+        }
+        writer.write('}');
+    }
+
+    private static void writeValueVectorCellJson(Writer writer, ValueVector valueVector, int rowIndex) throws IOException
+    {
+        if (valueVector.isNull(rowIndex))
+        {
+            writer.write("null");
+            return;
+        }
+        Column.Type type = valueVector.type()
+                .getType();
+        if (type == Column.Type.Table)
+        {
+            writeTableJson(writer, valueVector.getTable(rowIndex));
+        }
+        else if (type == Column.Type.Array)
+        {
+            writeArrayJson(writer, valueVector.getArray(rowIndex));
+        }
+        else if (type == Column.Type.Object)
+        {
+            writeObjectJson(writer, valueVector.getObject(rowIndex));
+        }
+        else if (type == Column.Type.String)
+        {
+            writeJsonString(writer, valueVector.getString(rowIndex)
+                    .toString());
+        }
+        else if (type == Column.Type.Boolean)
+        {
+            writer.write(Boolean.toString(valueVector.getBoolean(rowIndex)));
+        }
+        else if (type == Column.Type.Int)
+        {
+            writer.write(Integer.toString(valueVector.getInt(rowIndex)));
+        }
+        else if (type == Column.Type.Long)
+        {
+            writer.write(Long.toString(valueVector.getLong(rowIndex)));
+        }
+        else if (type == Column.Type.Decimal)
+        {
+            writer.write(valueVector.getDecimal(rowIndex)
+                    .asBigDecimal()
+                    .toPlainString());
+        }
+        else if (type == Column.Type.Float)
+        {
+            float value = valueVector.getFloat(rowIndex);
+            if (Float.isFinite(value))
+            {
+                writer.write(Float.toString(value));
+            }
+            else
+            {
+                writeJsonString(writer, Float.toString(value));
+            }
+        }
+        else if (type == Column.Type.Double)
+        {
+            double value = valueVector.getDouble(rowIndex);
+            if (Double.isFinite(value))
+            {
+                writer.write(Double.toString(value));
+            }
+            else
+            {
+                writeJsonString(writer, Double.toString(value));
+            }
+        }
+        else if (type == Column.Type.DateTime)
+        {
+            writeJsonString(writer, valueVector.getDateTime(rowIndex)
+                    .getLocalDateTime()
+                    .toString());
+        }
+        else if (type == Column.Type.DateTimeOffset)
+        {
+            writeJsonString(writer, valueVector.getDateTimeOffset(rowIndex)
+                    .getZonedDateTime()
+                    .toString());
+        }
+        else if (type == Column.Type.Any)
+        {
+            writeAnyJson(writer, valueVector.getAny(rowIndex));
+        }
+        else
+        {
+            writeAnyJson(writer, valueVector.valueAsObject(rowIndex));
+        }
+    }
+
+    private static void writeAnyJson(Writer writer, Object value) throws IOException
+    {
+        if (value == null)
+        {
+            writer.write("null");
+        }
+        else if (value instanceof TupleVector table)
+        {
+            writeTableJson(writer, table);
+        }
+        else if (value instanceof ObjectVector object)
+        {
+            writeObjectJson(writer, object);
+        }
+        else if (value instanceof UTF8String s)
+        {
+            writeJsonString(writer, s.toString());
+        }
+        else if (value instanceof Decimal d)
+        {
+            writer.write(d.asBigDecimal()
+                    .toPlainString());
+        }
+        else if (value instanceof EpochDateTime d)
+        {
+            writeJsonString(writer, d.getLocalDateTime()
+                    .toString());
+        }
+        else if (value instanceof EpochDateTimeOffset d)
+        {
+            writeJsonString(writer, d.getZonedDateTime()
+                    .toString());
+        }
+        else if (value instanceof Map<?, ?> map)
+        {
+            writer.write('{');
+            boolean first = true;
+            for (Map.Entry<?, ?> entry : map.entrySet())
+            {
+                if (!first)
+                {
+                    writer.write(',');
+                }
+                first = false;
+                writeJsonString(writer, String.valueOf(entry.getKey()));
+                writer.write(':');
+                writeAnyJson(writer, entry.getValue());
+            }
+            writer.write('}');
+        }
+        else if (value instanceof Iterable<?> iterable)
+        {
+            writer.write('[');
+            boolean first = true;
+            for (Object item : iterable)
+            {
+                if (!first)
+                {
+                    writer.write(',');
+                }
+                first = false;
+                writeAnyJson(writer, item);
+            }
+            writer.write(']');
+        }
+        else if (value instanceof ValueVector vector)
+        {
+            writeArrayJson(writer, vector);
+        }
+        else if (value instanceof Boolean b)
+        {
+            writer.write(Boolean.toString(b));
+        }
+        else if (value instanceof Number number)
+        {
+            writer.write(number.toString());
+        }
+        else
+        {
+            writeJsonString(writer, value.toString());
+        }
+    }
+
+    private static void writeJsonString(Writer writer, String value) throws IOException
+    {
+        writer.write('"');
+        int segmentStart = 0;
+        for (int i = 0; i < value.length(); i++)
+        {
+            char c = value.charAt(i);
+            String escape = switch (c)
+            {
+                case '"' -> "\\\"";
+                case '\\' -> "\\\\";
+                case '\b' -> "\\b";
+                case '\f' -> "\\f";
+                case '\n' -> "\\n";
+                case '\r' -> "\\r";
+                case '\t' -> "\\t";
+                default -> c < 0x20 ? String.format("\\u%04x", (int) c)
+                        : null;
+            };
+            if (escape != null)
+            {
+                if (segmentStart < i)
+                {
+                    writer.write(value, segmentStart, i - segmentStart);
+                }
+                writer.write(escape);
+                segmentStart = i + 1;
+            }
+        }
+        if (segmentStart < value.length())
+        {
+            writer.write(value, segmentStart, value.length() - segmentStart);
+        }
+        writer.write('"');
+    }
+
+    @FunctionalInterface
+    private interface JsonWriteAction
+    {
+        void write(Writer writer) throws IOException;
     }
 
     private static List<String> toColumnNames(Schema schema)

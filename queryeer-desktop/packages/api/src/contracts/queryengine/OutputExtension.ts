@@ -1,4 +1,4 @@
-import type { OutputSeverity, QueryOutputArtifact } from "../backend/Types.js";
+import type { OutputSeverity, QueryOutputArtifact, QueryResultCell } from "../backend/Types.js";
 import type { ReactNode } from "react";
 
 export type ExecutionState = "idle" | "running" | "completed" | "failed" | "cancelled";
@@ -24,7 +24,7 @@ export type Column = { name: string; type: ColumnType };
 export type ResultSet = {
   resultSetIndex: number;
   schema: { columns: Column[] };
-  rows: unknown[][];
+  rows: QueryResultCell[][];
   rowCount?: number;
   /**
    * Optional metadata key/value pairs describing this result set
@@ -82,7 +82,7 @@ export type RowChunk = {
   outputSessionId?: string;
   fileId?: string;
   resultSetIndex: number;
-  rows: unknown[][];
+  rows: QueryResultCell[][];
 };
 
 export type OutputExecutionStart = {

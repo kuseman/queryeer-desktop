@@ -20,11 +20,25 @@ describe("table output value formatting", () => {
     expect(resolveCellDisplayValue("datetime", "2026-04-29T14:43:00.260")).toBe("2026-04-29T14:43:00.260");
     expect(resolveCellDisplayValue("datetimeoffset", "2026-04-29T12:43:00.260Z[UTC]")).toBe("2026-04-29T12:43:00.260Z[UTC]");
   });
+
+  it("formats large values using previews", () => {
+    expect(resolveCellDisplayValue("object", {
+      kind: "largeValue",
+      logicalType: "json",
+      byteLength: 100_000,
+      preview: "{\"a\":1}",
+      ref: "ref-1",
+    })).toBe("{\"a\":1}");
+  });
 });
 
 describe("table output copy value extraction", () => {
   it("reads value from indexed __values row storage", () => {
     expect(getCellValueForCopy({ __values: ["a", "b", "10.100000"] }, 2)).toBe("10.100000");
+  });
+
+  it("reads large values as previews for copy", () => {
+    expect(getCellValueForCopy({ __values: [{ kind: "largeValue", logicalType: "json", byteLength: 10, preview: "preview", ref: "r" }] }, 0)).toBe("preview");
   });
 
   it("returns null for missing row data", () => {

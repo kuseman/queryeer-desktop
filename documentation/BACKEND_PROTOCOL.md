@@ -20,8 +20,8 @@ Out of scope in this version:
 
 - Transport: process stdio (Electron main process <-> Java process)
 - Encoding: UTF-8 JSON
-- Framing: newline-delimited JSON objects (NDJSON)
-- One JSON envelope per line
+- Framing: `Content-Length: <bytes>\r\n\r\n` followed by one UTF-8 JSON envelope body
+- One JSON envelope per frame
 
 ### 2.1 Envelope requirements
 
@@ -121,8 +121,10 @@ Request params:
     "queryengine.execute",
     "queryengine.cancel",
     "queryengine.invoke",
+    "queryengine.largeValue.read",
     "queryengine.progress",
-    "queryengine.resultChunk"
+    "queryengine.chunkStart",
+    "queryengine.chunkRows"
   ]
 }
 ```
@@ -175,8 +177,10 @@ Notes:
     "queryengine.execute",
     "queryengine.cancel",
     "queryengine.invoke",
+    "queryengine.largeValue.read",
     "queryengine.progress",
-    "queryengine.resultChunk",
+    "queryengine.chunkStart",
+    "queryengine.chunkRows",
     "queryengine.completed",
     "queryengine.failed"
   ]
@@ -264,7 +268,8 @@ Success result:
 
 Behavior:
 
-- Execution updates are sent via notifications (`queryengine.progress`, `queryengine.resultChunk`, `queryengine.completed`, `queryengine.failed`).
+- Execution updates are sent via notifications (`queryengine.progress`, `queryengine.chunkStart`, `queryengine.chunkRows`, `queryengine.completed`, `queryengine.failed`).
+- Large cell payloads may be sent as `largeValue` references inside row chunks. Clients fetch full content with `queryengine.largeValue.read` only when needed.
 - `engineState` is an engine-owned opaque blob. Core protocol forwards it without interpretation.
 - `options.intent` is optional. Omitted or `execute` means normal execution. `plan.estimated` requests a non-executing estimate/explain plan where supported. `plan.actual` requests normal execution plus plan artifacts where supported.
 - `options.requestedArtifacts` lets the client request non-row outputs such as `{ "capability": "plan", "kind": "graph" }`.
@@ -295,6 +300,39 @@ Success result:
   "queryExecutionId": "qx-001"
 }
 ```
+
+## 5.4b `queryengine.largeValue.read`
+
+Purpose: fetch the full content behind a large cell reference. Normal grid rendering, search, and sort use the preview included in `queryengine.chunkRows`; this request is used for explicit user actions such as opening a value preview.
+
+Request params:
+
+```json
+{
+  "ref": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+Success result:
+
+```json
+{
+  "ref": "550e8400-e29b-41d4-a716-446655440000",
+  "logicalType": "json",
+  "byteLength": 524288000,
+  "contentType": "application/json",
+  "content": "{\"large\":true}"
+}
+```
+
+Rules:
+
+- `ref` values are opaque and scoped to the current backend process.
+- Backends SHOULD retain large values until the owning file/session starts a new execution, is closed, or backend cleanup removes the query output.
+- Backends MAY store large values on disk in a dedicated cache directory. Because refs are process-local and not durable, the backend SHOULD clear stale spill files from that directory on startup.
+- The Java backend defaults to spilling cells above 16 KiB (`queryeer.largeValues.inlineMaxBytes`) and keeping a 16 KiB preview (`queryeer.largeValues.previewMaxChars`).
+- Missing refs fail with `LARGE_VALUE_NOT_FOUND`.
+- The read result may be large; clients SHOULD call this only after explicit user action.
 
 ## 5.2.1 `security.session.open`
 
@@ -460,32 +498,38 @@ Rules:
 }
 ```
 
-## 6.2 `queryengine.resultChunk`
+## 6.2 `queryengine.chunkRows`
 
 ```json
 {
   "queryExecutionId": "qx-001",
-  "chunkIndex": 0,
-  "schema": {
-    "columns": [
-      { "name": "id", "type": "int" },
-      { "name": "name", "type": "string" }
-    ]
-  },
+  "resultSetIndex": 0,
   "rows": [
     [1, "alpha"],
-    [2, "beta"]
-  ],
-  "isLastChunk": false
+    [
+      2,
+      {
+        "kind": "largeValue",
+        "logicalType": "json",
+        "byteLength": 524288000,
+        "preview": "{\"payload\":...",
+        "ref": "550e8400-e29b-41d4-a716-446655440000",
+        "contentType": "application/json"
+      }
+    ]
+  ]
 }
 ```
 
 Rules:
 
-- `schema` SHOULD be present in first chunk and MAY be omitted in subsequent chunks.
-- `chunkIndex` MUST be monotonically increasing per `queryExecutionId`.
-- `schema.columns[*].type` MUST be one of: `string`, `boolean`, `int`, `long`, `decimal`, `float`, `double`, `datetime`, `datetimeoffset`, `object`, `array`, `table`, `any`, `null`.
-- Backends with richer/native type systems MUST map to this canonical set before emitting notifications.
+- `resultSetIndex` refers to a result set previously announced by `queryengine.chunkStart`.
+- Rows are positional arrays aligned to `schema.columns`.
+- Normal scalar cells are JSON `null`, string, number, or boolean values.
+- Complex object/array/table cells SHOULD be emitted as canonical JSON text when inline.
+- Cells larger than the backend inline threshold SHOULD be emitted as `largeValue` refs.
+- `largeValue.preview` is the only value used for normal grid render/search/sort.
+- Clients fetch full `largeValue` content with `queryengine.largeValue.read` only on explicit user action.
 
 ## 6.3 `queryengine.completed`
 
@@ -848,6 +892,7 @@ Rules:
 - `UNSUPPORTED_PROTOCOL`: no compatible protocol major
 - `ENGINE_NOT_FOUND`: requested engine unavailable
 - `QUERY_NOT_FOUND`: cancellation or progress target missing
+- `LARGE_VALUE_NOT_FOUND`: requested large-value reference is unavailable
 - `TIMEOUT`: operation exceeded deadline
 - `CANCELLED`: operation canceled
 - `SECURITY_SESSION_CLOSED`: operation required an open security session but the vault is locked
@@ -904,7 +949,7 @@ Error payload schema:
 
 1. Electron sends `queryengine.execute` (`queryExecutionId=qx-001`).
 2. Java responds `accepted=true`.
-3. Java emits `queryengine.progress` and one or more `queryengine.resultChunk` notifications.
+3. Java emits `queryengine.progress`, `queryengine.chunkStart`, and one or more `queryengine.chunkRows` notifications.
 4. Java emits `queryengine.completed`.
 
 ### 11.3 Cancel
@@ -916,7 +961,7 @@ Error payload schema:
 ## 12. Implementation checklist
 
 - Add TypeScript types in `queryeer-desktop/src/contracts/backend/*` from this spec.
-- Implement gateway serializer/parser with NDJSON framing.
+- Implement gateway serializer/parser with `Content-Length` framing.
 - Implement Java protocol adapter with the same schema.
 - Add contract tests with golden JSON fixtures for each method and notification.
 - Add structured logging format that includes `id` and `queryExecutionId`.

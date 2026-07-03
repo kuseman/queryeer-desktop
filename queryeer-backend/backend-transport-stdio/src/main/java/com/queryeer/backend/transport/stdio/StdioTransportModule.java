@@ -13,6 +13,7 @@ import com.queryeer.backend.api.ChangelogRegistry;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.EventBus;
 import com.queryeer.backend.api.FileRegistry;
+import com.queryeer.backend.api.LargeValueStore;
 import com.queryeer.backend.api.PluginDescriptor;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.contract.runtime.RuntimeStatusResult;
@@ -24,11 +25,12 @@ public final class StdioTransportModule
 {
     public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry, EventBus events,
             Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt, ConfigService configService, SecuritySession securitySession, ChangelogRegistry changelogRegistry,
-            Function<String, PluginDescriptor> descriptorLookup)
+            Function<String, PluginDescriptor> descriptorLookup, LargeValueStore largeValueStore)
     {
         requireNonNull(configService, "configService");
         requireNonNull(events, "events");
         requireNonNull(changelogRegistry, "changelogRegistry");
+        requireNonNull(largeValueStore, "largeValueStore");
 
         EnvelopeCodec codec = new EnvelopeCodec(objectMapper);
         ResponseWriter responseWriter = new ResponseWriter(output, codec);
@@ -39,9 +41,10 @@ public final class StdioTransportModule
         List<RequestHandler> handlers = List.of(new HandshakeRequestHandler(responseWriter), new RuntimeStatusRequestHandler(responseWriter, codec, runtimeStatusSupplier),
                 new SecuritySessionOpenRequestHandler(responseWriter, codec, securitySession, events), new SecuritySessionCloseRequestHandler(responseWriter, securitySession, events),
                 new SecurityVaultChangedRequestHandler(responseWriter, codec, securitySession), new HealthPingRequestHandler(startedAt, responseWriter, codec),
-                new QueryExecuteRequestHandler(responseWriter, codec, queryExecutionService, notificationPublisher), new QueryCancelRequestHandler(responseWriter, codec, queryExecutionService),
+                new QueryExecuteRequestHandler(responseWriter, codec, queryExecutionService, notificationPublisher, largeValueStore),
+                new QueryCancelRequestHandler(responseWriter, codec, queryExecutionService), new QueryLargeValueReadRequestHandler(responseWriter, codec, largeValueStore),
                 new EngineInvokeRequestHandler(responseWriter, codec, engineInvokeService), new FileOpenRequestHandler(responseWriter, codec, fileRegistry),
-                new FileCloseRequestHandler(responseWriter, codec, fileRegistry), new AboutPluginChangelogsRequestHandler(responseWriter, changelogRegistry, descriptorLookup));
+                new FileCloseRequestHandler(responseWriter, codec, fileRegistry, largeValueStore), new AboutPluginChangelogsRequestHandler(responseWriter, changelogRegistry, descriptorLookup));
 
         RequestDispatcher requestDispatcher = new RequestDispatcher(responseWriter, handlers);
 
@@ -56,19 +59,22 @@ public final class StdioTransportModule
     public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry, EventBus events,
             Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt)
     {
-        return create(input, output, objectMapper, queryEngines, fileRegistry, events, runtimeStatusSupplier, startedAt, null, new SecuritySession(), new EmptyChangelogRegistry(), _ -> null);
+        return create(input, output, objectMapper, queryEngines, fileRegistry, events, runtimeStatusSupplier, startedAt, null, new SecuritySession(), new EmptyChangelogRegistry(), _ -> null,
+                LargeValueStore.inlineOnly());
     }
 
     public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry, EventBus events,
             Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt, ConfigService configService)
     {
-        return create(input, output, objectMapper, queryEngines, fileRegistry, events, runtimeStatusSupplier, startedAt, configService, new SecuritySession(), new EmptyChangelogRegistry(), _ -> null);
+        return create(input, output, objectMapper, queryEngines, fileRegistry, events, runtimeStatusSupplier, startedAt, configService, new SecuritySession(), new EmptyChangelogRegistry(), _ -> null,
+                LargeValueStore.inlineOnly());
     }
 
     public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry, EventBus events,
             Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt, ConfigService configService, SecuritySession securitySession)
     {
-        return create(input, output, objectMapper, queryEngines, fileRegistry, events, runtimeStatusSupplier, startedAt, configService, securitySession, new EmptyChangelogRegistry(), _ -> null);
+        return create(input, output, objectMapper, queryEngines, fileRegistry, events, runtimeStatusSupplier, startedAt, configService, securitySession, new EmptyChangelogRegistry(), _ -> null,
+                LargeValueStore.inlineOnly());
     }
 
     private static final class EmptyChangelogRegistry implements ChangelogRegistry

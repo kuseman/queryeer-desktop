@@ -3,6 +3,7 @@ package com.queryeer.backend.plugin.payloadbuilder;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.math.BigDecimal;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
@@ -25,6 +26,8 @@ import com.queryeer.backend.api.SettingsModule;
 import com.queryeer.backend.api.parse.IncrementalParseFunction;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 import com.queryeer.backend.api.parse.ParseSessionSnapshot;
+import com.queryeer.backend.contract.query.QueryLargeValueCell;
+import com.queryeer.backend.core.DefaultLargeValueStore;
 import com.queryeer.backend.core.JacksonPayloadMapper;
 import com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderQueryEngineProvider.SessionHolder;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
@@ -329,7 +332,7 @@ class PayloadbuilderQueryEngineProviderTest
     }
 
     @Test
-    void publishTupleVectorInChunksConvertsComplexTypesToNestedJavaStructures()
+    void publishTupleVectorInChunksConvertsComplexTypesToJsonText()
     {
         ChunkRowsPublisher publisher = new ChunkRowsPublisher();
 
@@ -355,10 +358,34 @@ class PayloadbuilderQueryEngineProviderTest
         Assertions.assertEquals(1, publisher.rows.size());
 
         List<Object> row = publisher.rows.get(0);
-        Assertions.assertEquals(List.of(1, 2, 3), row.get(0));
-        Assertions.assertEquals(Map.of("objectField", 42, "objectText", "obj"), row.get(1));
-        Assertions.assertEquals(List.of(Map.of("nestedId", 10, "nestedText", "n"), Map.of("nestedId", 11, "nestedText", "n")), row.get(2));
+        Assertions.assertEquals("[1,2,3]", row.get(0));
+        Assertions.assertEquals("{\"objectField\":42,\"objectText\":\"obj\"}", row.get(1));
+        Assertions.assertEquals("[{\"nestedId\":10,\"nestedText\":\"n\"},{\"nestedId\":11,\"nestedText\":\"n\"}]", row.get(2));
         Assertions.assertNull(row.get(3));
+    }
+
+    @Test
+    void publishTupleVectorInChunksSpillsLargeComplexCells(@org.junit.jupiter.api.io.TempDir Path tempDir) throws Exception
+    {
+        ChunkRowsPublisher publisher = new ChunkRowsPublisher();
+        DefaultLargeValueStore store = new DefaultLargeValueStore(tempDir, 12, 7);
+        store.registerExecution("exec-large", "file-large");
+
+        TupleVector objectTuple = TupleVector.of(Schema.of(Column.of("objectText", ResolvedType.STRING)), ValueVector.literalString("abcdef", 1));
+        ValueVector objectVector = ValueVector.literalObject(ObjectVector.wrap(objectTuple), 1);
+        TupleVector tupleVector = TupleVector.of(Schema.of(Column.of("obj", ResolvedType.object(objectTuple.getSchema()))), objectVector);
+
+        int publishedRows = PayloadbuilderQueryEngineProvider.publishTupleVectorInChunks(publisher, tupleVector, 100, store, "exec-large");
+
+        Assertions.assertEquals(1, publishedRows);
+        Object cell = publisher.rows.get(0)
+                .get(0);
+        Assertions.assertTrue(cell instanceof QueryLargeValueCell);
+        QueryLargeValueCell large = (QueryLargeValueCell) cell;
+        Assertions.assertEquals("json", large.logicalType());
+        Assertions.assertEquals("{\"objec", large.preview());
+        Assertions.assertEquals("{\"objectText\":\"abcdef\"}", store.read(large.ref())
+                .content());
     }
 
     @Test
@@ -466,21 +493,8 @@ class PayloadbuilderQueryEngineProviderTest
         Assertions.assertEquals("hello", row.get(0));
         Assertions.assertFalse(row.get(0) instanceof UTF8String);
 
-        //@formatter:off
-        @SuppressWarnings("unchecked")
-        Map<String, Object> mapValue = (Map<String, Object>) row.get(1);
-        //@formatter:on
-        Assertions.assertEquals("hello", mapValue.get("k"));
-        Assertions.assertFalse(mapValue.get("k") instanceof UTF8String);
-
-        @SuppressWarnings("unchecked")
-        List<Object> listValue = (List<Object>) row.get(2);
-        Assertions.assertEquals(new BigDecimal("3.14"), listValue.get(0));
-        Assertions.assertFalse(listValue.get(0) instanceof Decimal);
-        Assertions.assertEquals(LocalDateTime.parse("2025-01-02T03:04:05"), listValue.get(1));
-        Assertions.assertFalse(listValue.get(1) instanceof EpochDateTime);
-        Assertions.assertEquals(ZonedDateTime.parse("2025-01-02T03:04:05Z"), listValue.get(2));
-        Assertions.assertFalse(listValue.get(2) instanceof EpochDateTimeOffset);
+        Assertions.assertEquals("{\"k\":\"hello\"}", row.get(1));
+        Assertions.assertEquals("[3.14,\"2025-01-02T03:04:05\",\"2025-01-02T03:04:05Z\"]", row.get(2));
     }
 
     @Test

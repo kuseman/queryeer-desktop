@@ -6,8 +6,18 @@
     "queryExecutionId": "exec-fixture-1",
     "resultSetIndex": 0,
     "rows": [
-      [1],
-      [2]
+      [
+        1,
+        {
+          "kind": "largeValue",
+          "logicalType": "json",
+          "byteLength": 524288000,
+          "preview": "{\"large\":true}",
+          "ref": "550e8400-e29b-41d4-a716-446655440000",
+          "contentType": "application/json"
+        }
+      ],
+      [2, "inline"]
     ],
     "messages": [
       {

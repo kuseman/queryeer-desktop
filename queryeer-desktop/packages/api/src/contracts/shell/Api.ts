@@ -1,6 +1,6 @@
 import type { BackendGatewayStatus } from "../backend/index.js";
 export type { BackendGatewayStatus };
-import type { QueryExecuteOptions } from "../backend/Types.js";
+import type { QueryExecuteOptions, QueryLargeValueReadParams, QueryLargeValueReadResult } from "../backend/Types.js";
 import type { WorkspaceSnapshot } from "../workspace/WorkspaceSnapshot.js";
 import type { UserKeybindingsDocument } from "../commands/Keybindings.js";
 import type { ExternalFrontendPluginManifest } from "../plugin/ExternalFrontendPluginManifest.js";
@@ -64,6 +64,7 @@ export interface ShellApi {
     queryExecutionId: string;
     reason?: string;
   }) => Promise<{ accepted: boolean; queryExecutionId: string }>;
+  readBackendLargeValue: (params: QueryLargeValueReadParams) => Promise<QueryLargeValueReadResult>;
   invokeBackendEngine: (params: {
     engineId: string;
     fileId?: string;
