@@ -24,7 +24,7 @@ export function registerPayloadbuilderJdbcCatalogContribution(): void {
       connectionId: asText(properties.connectionId),
       database: asText(properties.database)
     }),
-    resolveRuntimeProperties: (properties) => properties,
+    resolveRuntimeProperties: (properties) => resolveRuntimeProperties(properties),
     flowMappingFields: [
       {
         id: "connectionId",
@@ -58,10 +58,12 @@ export function registerPayloadbuilderJdbcCatalogContribution(): void {
 
 function PayloadbuilderJdbcPanel({ alias, properties, setProperty }: PayloadbuilderCatalogPanelProps): JSX.Element {
   const connections = getConfiguredJdbcConnections().filter((connection) => connection.enabled);
+  const hasConfiguredConnectionProperty = Object.prototype.hasOwnProperty.call(properties, "connectionId");
   const configuredConnectionId = asText(properties.connectionId);
-  const selectedConnection = connections.find((connection) => connection.connectionId === configuredConnectionId) ?? connections[0];
+  const configuredConnection = connections.find((connection) => connection.connectionId === configuredConnectionId);
+  const selectedConnection = configuredConnection ?? (!hasConfiguredConnectionProperty ? connections[0] : undefined);
   const selectedConnectionId = selectedConnection?.connectionId ?? "";
-  const selectedDatabase = asText(properties.database);
+  const selectedDatabase = configuredConnection ? asText(properties.database) : "";
   const [databases, setDatabases] = useState<string[]>([]);
   const [loadingDatabases, setLoadingDatabases] = useState(false);
 
@@ -80,10 +82,14 @@ function PayloadbuilderJdbcPanel({ alias, properties, setProperty }: Payloadbuil
   }, [databases, selectedDatabase]);
 
   useEffect(() => {
-    if (selectedConnectionId && configuredConnectionId !== selectedConnectionId) {
+    if (!hasConfiguredConnectionProperty && selectedConnectionId) {
       setProperty("connectionId", selectedConnectionId);
     }
-  }, [configuredConnectionId, selectedConnectionId, setProperty]);
+    if (configuredConnectionId && !configuredConnection) {
+      setProperty("connectionId", "");
+      setProperty("database", "");
+    }
+  }, [configuredConnection, configuredConnectionId, hasConfiguredConnectionProperty, selectedConnectionId, setProperty]);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,7 +136,7 @@ function PayloadbuilderJdbcPanel({ alias, properties, setProperty }: Payloadbuil
           setDatabases([]);
         }}
       >
-        {connections.length === 0 && <option value="">No connections configured</option>}
+        <option value="">{connections.length === 0 ? "No connections configured" : "Select connection"}</option>
         {connections.map((connection) => (
           <option key={connection.connectionId} value={connection.connectionId}>
             {connection.title?.trim() || "Untitled connection"}
@@ -162,4 +168,21 @@ function PayloadbuilderJdbcPanel({ alias, properties, setProperty }: Payloadbuil
 
 function asText(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function resolveRuntimeProperties(properties: Record<string, unknown>): Record<string, unknown> {
+  const connectionId = asText(properties.connectionId);
+  if (!connectionId) {
+    return {};
+  }
+  const connection = getConfiguredJdbcConnections().find(
+    (candidate) => candidate.enabled && candidate.connectionId === connectionId
+  );
+  if (!connection) {
+    return {};
+  }
+  return {
+    connectionId,
+    ...(asText(properties.database) ? { database: asText(properties.database) } : {})
+  };
 }

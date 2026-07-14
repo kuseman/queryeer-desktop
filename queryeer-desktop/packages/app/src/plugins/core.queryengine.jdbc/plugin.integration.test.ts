@@ -79,6 +79,11 @@ import { coreQueryEngineJdbcPlugin } from "./plugin";
 
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 
+const defaultJdbcConnections = [
+  { connectionId: "conn-a", title: "DB Alpha", dialectId: "jdbc", enabled: true, url: "jdbc:a" },
+  { connectionId: "conn-b", title: "DB Beta", dialectId: "jdbc", enabled: true, url: "jdbc:b" }
+];
+
 function createContext(): PluginContext {
   const filesById = new Map<string, FileEntity>([
     [
@@ -266,6 +271,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
     mocks.invokeMock.mockResolvedValue([]);
     mocks.loadConnectionRootsMock.mockReset();
     mocks.getConfiguredJdbcConnectionsMock.mockReset();
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue(defaultJdbcConnections);
     mocks.getCoreSettingsServiceMock.mockReset();
     mocks.onSettingsInitializedMock.mockReset();
     mocks.readViewStateMock.mockReset();
@@ -658,6 +664,65 @@ describe("core.queryengine.jdbc plugin integration", () => {
     expect(patch).toEqual({
       engineState: { connectionId: "conn-b" }
     });
+  });
+
+  it("does not wire disabled JDBC connection into execute context", () => {
+    const context = createContext();
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([
+      { connectionId: "conn-a", title: "DB Alpha", dialectId: "jdbc", enabled: true, url: "jdbc:a" },
+      { connectionId: "conn-disabled", title: "Disabled", dialectId: "jdbc", enabled: false, url: "jdbc:disabled" }
+    ]);
+    const file = context.files.getFile("file-1");
+    if (file) {
+      file.engineBinding = { engineId: "jdbc", connectionId: "conn-disabled" };
+      file.persistentViewState = {
+        "jdbc.navigation.selectedDatabase": { connectionId: "conn-disabled", database: "old-db" }
+      };
+    }
+
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[0] as
+      | ((params: { engineId: string; text: string; fileId?: string }) => unknown)
+      | undefined;
+    expect(provider).toBeTypeOf("function");
+
+    expect(provider?.({ engineId: "jdbc", text: "select 1", fileId: "file-1" })).toBeUndefined();
+  });
+
+  it("clears disabled restored JDBC binding and database during metadata sync", () => {
+    const context = createContext();
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([
+      { connectionId: "conn-disabled", title: "Disabled", dialectId: "jdbc", enabled: false, url: "jdbc:disabled" }
+    ]);
+    const file = context.files.getFile("file-1");
+    if (file) {
+      file.engineBinding = { engineId: "jdbc", connectionId: "conn-disabled" };
+      file.persistentViewState = {
+        "jdbc.navigation.selectedDatabase": { connectionId: "conn-disabled", database: "old-db" }
+      };
+      file.metadata = {
+        "core.queryengine.jdbc.connectionTitle": "Disabled",
+        "core.queryengine.jdbc.database": "old-db"
+      };
+    }
+
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const fileSubscriber = (context.files.subscribe as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as
+      | ((files: FileEntity[]) => void)
+      | undefined;
+    expect(fileSubscriber).toBeTypeOf("function");
+    fileSubscriber?.(context.files.listFiles());
+
+    expect(context.files.setEditorState).toHaveBeenCalledWith(
+      "file-1",
+      "jdbc.navigation.selectedDatabase",
+      undefined
+    );
+    expect(context.files.getFile("file-1")?.engineBinding).toEqual({ engineId: "jdbc" });
+    expect(context.files.getFile("file-1")?.metadata?.["core.queryengine.jdbc.connectionTitle"]).toBeUndefined();
+    expect(context.files.getFile("file-1")?.metadata?.["core.queryengine.jdbc.database"]).toBeUndefined();
   });
 
   it("applies completed engineState database back into editor state", () => {

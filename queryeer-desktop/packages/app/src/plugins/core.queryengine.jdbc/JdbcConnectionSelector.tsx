@@ -25,6 +25,27 @@ function readSelectedDatabase(
   return undefined;
 }
 
+function resolveEnabledConnectionId(
+  connectionId: string | undefined,
+  connections: ReturnType<typeof getConfiguredJdbcConnections>
+): string {
+  if (!connectionId) {
+    return "";
+  }
+  return connections.some((connection) => connection.enabled && connection.connectionId === connectionId)
+    ? connectionId
+    : "";
+}
+
+function resolveSelectedDatabase(
+  filesRegistry: FilesRegistry,
+  fileId: string,
+  connectionId: string
+): string {
+  const persisted = readSelectedDatabase(filesRegistry, fileId);
+  return connectionId && persisted?.connectionId === connectionId ? persisted.database : "";
+}
+
 type Props = {
   fileId: string;
   fileMediator: FileMediator;
@@ -32,12 +53,13 @@ type Props = {
 };
 
 export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: Props) {
+  const configuredConnections = getConfiguredJdbcConnections().filter((c) => c.enabled);
   const file = filesRegistry.getFile(fileId);
-  const [connectionId, setConnectionId] = useState<string>(
-    file?.engineBinding?.connectionId ?? ""
-  );
+  const restoredConnectionId = file?.engineBinding?.connectionId ?? "";
+  const initialConnectionId = resolveEnabledConnectionId(restoredConnectionId, configuredConnections);
+  const [connectionId, setConnectionId] = useState<string>(initialConnectionId);
   const [selectedDatabase, setSelectedDatabase] = useState<string>(
-    readSelectedDatabase(filesRegistry, fileId)?.database ?? ""
+    resolveSelectedDatabase(filesRegistry, fileId, initialConnectionId)
   );
   const [databases, setDatabases] = useState<string[]>([]);
   const [loadingDatabases, setLoadingDatabases] = useState(false);
@@ -70,6 +92,18 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
 
   // Sync context metadata on mount so restored workspace state is immediately visible.
   useEffect(() => {
+    const persisted = readSelectedDatabase(filesRegistry, fileId);
+    if (restoredConnectionId && !initialConnectionId) {
+      filesRegistry.setEditorState(fileId, JDBC_NAV_DB_KEY, undefined);
+      void fileMediator.bindEngine(fileId, "jdbc", undefined);
+      writeJdbcContextMetadata(fileId, undefined, undefined, filesRegistry);
+      return;
+    }
+    if (persisted && (!initialConnectionId || persisted.connectionId !== initialConnectionId)) {
+      filesRegistry.setEditorState(fileId, JDBC_NAV_DB_KEY, undefined);
+      writeJdbcContextMetadata(fileId, initialConnectionId || undefined, undefined, filesRegistry);
+      return;
+    }
     writeJdbcContextMetadata(fileId, connectionId || undefined, selectedDatabase || undefined, filesRegistry);
   }, []);
 
@@ -88,10 +122,12 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
     return filesRegistry.subscribe((files) => {
       const updated = files.find((f) => f.fileId === fileId);
       if (updated) {
-        const newConnId = updated.engineBinding?.connectionId ?? "";
-        setConnectionId(newConnId);
-        const persisted = readSelectedDatabase(filesRegistry, fileId);
-        setSelectedDatabase(persisted?.database ?? "");
+        const nextConnectionId = resolveEnabledConnectionId(
+          updated.engineBinding?.connectionId,
+          getConfiguredJdbcConnections()
+        );
+        setConnectionId(nextConnectionId);
+        setSelectedDatabase(resolveSelectedDatabase(filesRegistry, fileId, nextConnectionId));
       }
     });
   }, [filesRegistry, fileId]);
@@ -135,8 +171,6 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
       writeJdbcContextMetadata(fileId, currentConnId || undefined, undefined, filesRegistry);
     }
   };
-
-  const configuredConnections = getConfiguredJdbcConnections().filter((c) => c.enabled);
 
   return (
     <div className="jdbc-nav-selector">

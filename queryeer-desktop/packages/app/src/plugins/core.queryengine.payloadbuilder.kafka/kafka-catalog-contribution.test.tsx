@@ -3,6 +3,15 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const invokeMock = vi.fn();
+const configuredConnectionsMock = vi.hoisted(() => vi.fn(() => [
+  {
+    connectionId: "550e8400-e29b-41d4-a716-446655440300",
+    title: "Broker One",
+    bootstrapServers: "localhost:9092",
+    securityProtocol: "PLAINTEXT",
+    enabled: true
+  }
+]));
 
 vi.mock("../core.queryengine/QueryEngineService", () => ({
   getQueryEngineService: () => ({
@@ -11,15 +20,7 @@ vi.mock("../core.queryengine/QueryEngineService", () => ({
 }));
 
 vi.mock("./kafka-settings", () => ({
-  getConfiguredKafkaConnections: () => [
-    {
-      connectionId: "550e8400-e29b-41d4-a716-446655440300",
-      title: "Broker One",
-      bootstrapServers: "localhost:9092",
-      securityProtocol: "PLAINTEXT",
-      enabled: true
-    }
-  ]
+  getConfiguredKafkaConnections: configuredConnectionsMock
 }));
 
 import { getPayloadbuilderCatalogContribution } from "../core.queryengine.payloadbuilder/catalog-contributions";
@@ -38,6 +39,16 @@ describe("payloadbuilder kafka catalog contribution", () => {
     (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     vi.stubGlobal("React", React);
     invokeMock.mockReset();
+    configuredConnectionsMock.mockReset();
+    configuredConnectionsMock.mockReturnValue([
+      {
+        connectionId: "550e8400-e29b-41d4-a716-446655440300",
+        title: "Broker One",
+        bootstrapServers: "localhost:9092",
+        securityProtocol: "PLAINTEXT",
+        enabled: true
+      }
+    ]);
     rootElement = document.createElement("div");
     document.body.appendChild(rootElement);
     root = createRoot(rootElement);
@@ -136,5 +147,71 @@ describe("payloadbuilder kafka catalog contribution", () => {
     });
 
     expect(setPropertyMock).toHaveBeenCalledWith("connectionId", "550e8400-e29b-41d4-a716-446655440300");
+  });
+
+  it("clears stale topic when persisted connection is disabled", async () => {
+    configuredConnectionsMock.mockReturnValue([
+      {
+        connectionId: "550e8400-e29b-41d4-a716-446655440300",
+        title: "Broker One",
+        bootstrapServers: "localhost:9092",
+        securityProtocol: "PLAINTEXT",
+        enabled: true
+      },
+      {
+        connectionId: "broker-disabled",
+        title: "Disabled",
+        bootstrapServers: "disabled:9092",
+        securityProtocol: "PLAINTEXT",
+        enabled: false
+      }
+    ]);
+    registerPayloadbuilderKafkaCatalogContribution();
+    const contribution = getPayloadbuilderCatalogContribution("kafka");
+    const renderPanel = contribution?.renderPanel;
+    if (!renderPanel) {
+      throw new Error("Expected kafka contribution renderPanel");
+    }
+
+    const setPropertyMock = vi.fn();
+    await act(async () => {
+      root.render(
+        renderPanel({
+          fileId: "file-1",
+          alias: "kfk1",
+          catalogId: "kafka",
+          properties: { connectionId: "broker-disabled", topic: "old-topic" },
+          setProperty: setPropertyMock
+        }) as React.ReactElement
+      );
+      await flush();
+    });
+
+    expect(setPropertyMock).toHaveBeenCalledWith("connectionId", "");
+    expect(setPropertyMock).toHaveBeenCalledWith("topic", "");
+    expect(setPropertyMock).not.toHaveBeenCalledWith("connectionId", "550e8400-e29b-41d4-a716-446655440300");
+    const topicSelect = rootElement.querySelector("#payloadbuilder-kafka-topic-kfk1") as HTMLSelectElement;
+    const options = Array.from(topicSelect.querySelectorAll("option")).map((option) => option.value);
+    expect(topicSelect.value).toBe("");
+    expect(options).not.toContain("old-topic");
+  });
+
+  it("does not resolve disabled kafka connection into runtime properties", () => {
+    configuredConnectionsMock.mockReturnValue([
+      {
+        connectionId: "broker-disabled",
+        title: "Disabled",
+        bootstrapServers: "disabled:9092",
+        securityProtocol: "PLAINTEXT",
+        enabled: false
+      }
+    ]);
+    registerPayloadbuilderKafkaCatalogContribution();
+    const contribution = getPayloadbuilderCatalogContribution("kafka");
+
+    expect(contribution?.resolveRuntimeProperties?.({
+      connectionId: "broker-disabled",
+      topic: "old-topic"
+    })).toEqual({});
   });
 });

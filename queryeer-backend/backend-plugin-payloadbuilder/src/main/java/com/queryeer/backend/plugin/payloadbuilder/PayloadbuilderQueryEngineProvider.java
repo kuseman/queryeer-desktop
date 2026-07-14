@@ -6,10 +6,13 @@ import java.io.IOException;
 import java.io.Writer;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -139,6 +142,7 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
         String sessionId = null;
         AccumulatingOutputWriter outputWriter = new AccumulatingOutputWriter();
         PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState catalogState = null;
+        List<String> environmentVariableKeys = List.of();
         try
         {
             PayloadbuilderEngineState typedState = payloadMapper.convert(engineState, PayloadbuilderEngineState.class);
@@ -147,25 +151,19 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
                 throw new IllegalArgumentException("Engine state is required");
             }
             catalogState = PayloadbuilderEngineStateSupport.parse(typedState);
-            CatalogRegistry catalogRegistry = buildCatalogRegistry(catalogState);
-
-            SessionHolder holder = sessionByFileId.computeIfAbsent(fileId, _ ->
-            {
-                String newSessionId = String.valueOf(sessionCounter.incrementAndGet());
-                QuerySession newSession = new QuerySession(catalogRegistry, Map.of());
-                newSession.setGenericCache(GENERIC_CACHE);
-                return new SessionHolder(newSession, newSessionId);
-            });
+            SessionHolder holder = getOrCreateSessionHolder(fileId, catalogState);
             session = holder.session;
             sessionId = holder.sessionId;
 
-            injectEnvironmentVariables(session, catalogState.selectedEnvironmentId());
+            environmentVariableKeys = injectEnvironmentVariables(session, catalogState.selectedEnvironmentId());
+            clearRemovedInputCatalogProperties(session, holder, catalogState);
             injectCatalogProperties(session, catalogState);
 
             session.setAbortSupplier(() -> cancelledExecutionIds.contains(queryExecutionId));
             sessionByExecutionId.put(queryExecutionId, holder);
 
             PayloadbuilderEngineStateSupport.applyToSession(session, catalogState);
+            rememberInputCatalogProperties(holder, catalogState);
 
             session.setPrintWriter(outputWriter);
             session.setExceptionHandler(e -> outputWriter.addError(ErrorMessages.buildFailureMessage(e)));
@@ -252,8 +250,68 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
             sessionByExecutionId.remove(queryExecutionId);
             if (catalogState != null)
             {
-                removeEnvironmentVariables(session, catalogState.selectedEnvironmentId());
+                removeEnvironmentVariables(session, environmentVariableKeys);
             }
+        }
+    }
+
+    private SessionHolder getOrCreateSessionHolder(String fileId, PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState catalogState)
+    {
+        CatalogTopologyKey catalogTopologyKey = catalogTopologyKey(catalogState);
+        return sessionByFileId.compute(fileId, (_, existing) ->
+        {
+            if (existing != null
+                    && Objects.equals(existing.catalogTopologyKey(), catalogTopologyKey))
+            {
+                return existing;
+            }
+
+            QuerySession newSession = new QuerySession(buildCatalogRegistry(catalogState), Map.of());
+            newSession.setGenericCache(GENERIC_CACHE);
+            return new SessionHolder(newSession, String.valueOf(sessionCounter.incrementAndGet()), catalogTopologyKey, new HashMap<>());
+        });
+    }
+
+    private static CatalogTopologyKey catalogTopologyKey(PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
+    {
+        List<CatalogTopologyEntry> entries = state.instancesByAlias()
+                .values()
+                .stream()
+                .map(instance -> new CatalogTopologyEntry(instance.alias(), instance.catalogId()))
+                .sorted(Comparator.comparing(CatalogTopologyEntry::alias))
+                .toList();
+        return new CatalogTopologyKey(entries);
+    }
+
+    private static void clearRemovedInputCatalogProperties(QuerySession session, SessionHolder holder, PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
+    {
+        for (Map.Entry<String, Set<String>> previousEntry : holder.inputPropertyKeysByAlias()
+                .entrySet())
+        {
+            PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState.Instance current = state.instancesByAlias()
+                    .get(previousEntry.getKey());
+            Set<String> currentKeys = current != null ? current.properties()
+                    .keySet()
+                    : Set.of();
+            for (String previousKey : previousEntry.getValue())
+            {
+                if (!currentKeys.contains(previousKey))
+                {
+                    session.setCatalogProperty(previousEntry.getKey(), previousKey, (Object) null);
+                }
+            }
+        }
+    }
+
+    private static void rememberInputCatalogProperties(SessionHolder holder, PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
+    {
+        Map<String, Set<String>> inputPropertyKeysByAlias = holder.inputPropertyKeysByAlias();
+        inputPropertyKeysByAlias.clear();
+        for (PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState.Instance instance : state.instancesByAlias()
+                .values())
+        {
+            inputPropertyKeysByAlias.put(instance.alias(), new HashSet<>(instance.properties()
+                    .keySet()));
         }
     }
 
@@ -398,26 +456,33 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
         return result;
     }
 
-    private void injectEnvironmentVariables(QuerySession session, String selectedEnvironmentId)
+    private List<String> injectEnvironmentVariables(QuerySession session, String selectedEnvironmentId)
     {
         Map<String, Object> variables = resolveEnvironmentVariables(selectedEnvironmentId);
         Map<String, ValueVector> sessionVariables = session.getVariables();
+        List<String> keys = new ArrayList<>(variables.size());
         for (Map.Entry<String, Object> entry : variables.entrySet())
         {
             ValueVector vector = entry.getValue() == null ? ValueVector.literalNull(ResolvedType.ANY, 1)
                     : ValueVector.literalAny(1, entry.getValue());
-            sessionVariables.put(entry.getKey()
-                    .toLowerCase(), vector);
+            String key = entry.getKey()
+                    .toLowerCase();
+            sessionVariables.put(key, vector);
+            keys.add(key);
         }
+        return keys;
     }
 
-    private void removeEnvironmentVariables(QuerySession session, String selectedEnvironmentId)
+    private void removeEnvironmentVariables(QuerySession session, List<String> keys)
     {
-        Map<String, Object> variables = resolveEnvironmentVariables(selectedEnvironmentId);
-        Map<String, ValueVector> sessionVariables = session.getVariables();
-        for (String key : variables.keySet())
+        if (session == null)
         {
-            sessionVariables.remove(key.toLowerCase());
+            return;
+        }
+        Map<String, ValueVector> sessionVariables = session.getVariables();
+        for (String key : keys)
+        {
+            sessionVariables.remove(key);
         }
     }
 
@@ -1109,12 +1174,31 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
     {
     }
 
-    record SessionHolder(QuerySession session, String sessionId)
+    record CatalogTopologyKey(List<CatalogTopologyEntry> entries)
     {
+        CatalogTopologyKey
+        {
+            entries = List.copyOf(entries);
+        }
+    }
+
+    record CatalogTopologyEntry(String alias, String catalogId)
+    {
+    }
+
+    record SessionHolder(QuerySession session, String sessionId, CatalogTopologyKey catalogTopologyKey, Map<String, Set<String>> inputPropertyKeysByAlias)
+    {
+        SessionHolder(QuerySession session, String sessionId)
+        {
+            this(session, sessionId, new CatalogTopologyKey(List.of()), new HashMap<>());
+        }
+
         SessionHolder
         {
             requireNonNull(session);
             requireNonNull(sessionId);
+            requireNonNull(catalogTopologyKey);
+            requireNonNull(inputPropertyKeysByAlias);
         }
     }
 }

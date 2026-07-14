@@ -19,9 +19,12 @@ export function writeJdbcContextMetadata(
 
   const metadata = { ...(file.metadata ?? {}) };
 
-  if (connectionId) {
-    const conn = getConfiguredJdbcConnections().find((c) => c.connectionId === connectionId);
-    const dialectId = conn?.dialectId ?? "jdbc";
+  const conn = connectionId
+    ? getConfiguredJdbcConnections().find((c) => c.connectionId === connectionId && c.enabled !== false)
+    : undefined;
+
+  if (conn) {
+    const dialectId = conn.dialectId ?? "jdbc";
     metadata[JDBC_CTX_CONNECTION_TITLE] = conn?.title?.trim() || connectionId;
     metadata[JDBC_CTX_DIALECT_ID] = dialectId;
     metadata[JDBC_CTX_SUPPORTS_QUERY_PLAN] = supportsQueryPlanForJdbcDialect(dialectId);
@@ -31,7 +34,7 @@ export function writeJdbcContextMetadata(
     delete metadata[JDBC_CTX_SUPPORTS_QUERY_PLAN];
   }
 
-  if (database) {
+  if (conn && database) {
     metadata[JDBC_CTX_DATABASE] = database;
   } else {
     delete metadata[JDBC_CTX_DATABASE];

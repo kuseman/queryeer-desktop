@@ -3,17 +3,18 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const loadMock = vi.fn();
+const configuredConnectionsMock = vi.hoisted(() => vi.fn(() => [
+  {
+    connectionId: "conn-a",
+    title: "Reports",
+    dialectId: "jdbc",
+    url: "jdbc:postgresql://localhost/reports",
+    enabled: true
+  }
+]));
 
 vi.mock("../core.queryengine.jdbc/jdbc-settings", () => ({
-  getConfiguredJdbcConnections: () => [
-    {
-      connectionId: "conn-a",
-      title: "Reports",
-      dialectId: "jdbc",
-      url: "jdbc:postgresql://localhost/reports",
-      enabled: true
-    }
-  ]
+  getConfiguredJdbcConnections: configuredConnectionsMock
 }));
 
 vi.mock("../core.queryengine.jdbc/jdbc-database-cache", () => ({
@@ -38,6 +39,16 @@ describe("payloadbuilder jdbc catalog contribution", () => {
     (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     vi.stubGlobal("React", React);
     loadMock.mockReset();
+    configuredConnectionsMock.mockReset();
+    configuredConnectionsMock.mockReturnValue([
+      {
+        connectionId: "conn-a",
+        title: "Reports",
+        dialectId: "jdbc",
+        url: "jdbc:postgresql://localhost/reports",
+        enabled: true
+      }
+    ]);
     rootElement = document.createElement("div");
     document.body.appendChild(rootElement);
     root = createRoot(rootElement);
@@ -113,5 +124,105 @@ describe("payloadbuilder jdbc catalog contribution", () => {
     });
 
     expect(setPropertyMock).toHaveBeenCalledWith("connectionId", "conn-a");
+  });
+
+  it("clears stale database when persisted connection is disabled", async () => {
+    configuredConnectionsMock.mockReturnValue([
+      {
+        connectionId: "conn-a",
+        title: "Reports",
+        dialectId: "jdbc",
+        url: "jdbc:postgresql://localhost/reports",
+        enabled: true
+      },
+      {
+        connectionId: "conn-disabled",
+        title: "Disabled",
+        dialectId: "jdbc",
+        url: "jdbc:postgresql://localhost/disabled",
+        enabled: false
+      }
+    ]);
+    registerPayloadbuilderJdbcCatalogContribution();
+    const contribution = getPayloadbuilderCatalogContribution("jdbc");
+    expect(contribution).toBeDefined();
+    const renderPanel = contribution?.renderPanel;
+    if (!renderPanel) {
+      throw new Error("Expected jdbc contribution renderPanel");
+    }
+
+    loadMock.mockResolvedValue(["reporting"]);
+    const setPropertyMock = vi.fn();
+
+    await act(async () => {
+      root.render(
+        renderPanel({
+          fileId: "file-1",
+          alias: "jdbc1",
+          catalogId: "jdbc",
+          properties: { connectionId: "conn-disabled", database: "old-db" },
+          setProperty: setPropertyMock
+        }) as React.ReactElement
+      );
+      await flush();
+    });
+
+    expect(setPropertyMock).toHaveBeenCalledWith("connectionId", "");
+    expect(setPropertyMock).toHaveBeenCalledWith("database", "");
+    expect(setPropertyMock).not.toHaveBeenCalledWith("connectionId", "conn-a");
+
+    const dbSelect = rootElement.querySelector("#payloadbuilder-jdbc-database-jdbc1") as HTMLSelectElement;
+    const options = Array.from(dbSelect.querySelectorAll("option")).map((option) => option.value);
+    expect(dbSelect.value).toBe("");
+    expect(options).not.toContain("old-db");
+  });
+
+  it("does not auto-select first connection after connection was explicitly cleared", async () => {
+    registerPayloadbuilderJdbcCatalogContribution();
+    const contribution = getPayloadbuilderCatalogContribution("jdbc");
+    expect(contribution).toBeDefined();
+    const renderPanel = contribution?.renderPanel;
+    if (!renderPanel) {
+      throw new Error("Expected jdbc contribution renderPanel");
+    }
+
+    loadMock.mockResolvedValue(["reporting"]);
+    const setPropertyMock = vi.fn();
+
+    await act(async () => {
+      root.render(
+        renderPanel({
+          fileId: "file-1",
+          alias: "jdbc1",
+          catalogId: "jdbc",
+          properties: { connectionId: "", database: "" },
+          setProperty: setPropertyMock
+        }) as React.ReactElement
+      );
+      await flush();
+    });
+
+    expect(setPropertyMock).not.toHaveBeenCalledWith("connectionId", "conn-a");
+    const connectionSelect = rootElement.querySelector("#payloadbuilder-jdbc-connection-jdbc1") as HTMLSelectElement;
+    expect(connectionSelect.value).toBe("");
+  });
+
+  it("does not resolve disabled jdbc connection into runtime properties", () => {
+    configuredConnectionsMock.mockReturnValue([
+      {
+        connectionId: "conn-disabled",
+        title: "Disabled",
+        dialectId: "jdbc",
+        url: "jdbc:postgresql://localhost/disabled",
+        enabled: false
+      }
+    ]);
+    registerPayloadbuilderJdbcCatalogContribution();
+    const contribution = getPayloadbuilderCatalogContribution("jdbc");
+
+    expect(contribution?.resolveRuntimeProperties?.({
+      connectionId: "conn-disabled",
+      database: "old-db"
+    })).toEqual({});
   });
 });

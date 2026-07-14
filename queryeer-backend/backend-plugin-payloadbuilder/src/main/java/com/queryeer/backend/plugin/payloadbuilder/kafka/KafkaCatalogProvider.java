@@ -2,6 +2,10 @@ package com.queryeer.backend.plugin.payloadbuilder.kafka;
 
 import static com.queryeer.backend.api.PayloadUtils.stringValue;
 import static se.kuseman.payloadbuilder.catalog.kafka.KafkaCatalog.BOOTSTRAP_SERVERS;
+import static se.kuseman.payloadbuilder.catalog.kafka.KafkaCatalog.SASL_JAAS_CONFIG;
+import static se.kuseman.payloadbuilder.catalog.kafka.KafkaCatalog.SASL_MECHANISM;
+import static se.kuseman.payloadbuilder.catalog.kafka.KafkaCatalog.SCHEMA_REGISTRY_URL;
+import static se.kuseman.payloadbuilder.catalog.kafka.KafkaCatalog.SECURITY_PROTOCOL;
 import static se.kuseman.payloadbuilder.catalog.kafka.KafkaCatalog.TOPIC;
 
 import java.util.LinkedHashMap;
@@ -49,6 +53,7 @@ public final class KafkaCatalogProvider implements PayloadbuilderCatalogProvider
     @Override
     public void injectProperties(IQuerySession session, String alias, Map<String, Object> properties)
     {
+        clearCatalogProperties(session, alias);
         String connectionId = stringValue(properties, KEY_CONNECTION_ID);
         KafkaConnection connection = getConnection(connectionId);
         if (connection == null)
@@ -90,12 +95,24 @@ public final class KafkaCatalogProvider implements PayloadbuilderCatalogProvider
 
         for (KafkaConnection con : connections)
         {
-            if (connectionId.equals(con.connectionId()))
+            if (con.isEnabled()
+                    && connectionId.equals(con.connectionId()))
             {
                 return con;
             }
         }
         return null;
+    }
+
+    private static void clearCatalogProperties(IQuerySession session, String alias)
+    {
+        session.setCatalogProperty(alias, KEY_CONNECTION_ID, (Object) null);
+        session.setCatalogProperty(alias, TOPIC, (Object) null);
+        session.setCatalogProperty(alias, BOOTSTRAP_SERVERS, (Object) null);
+        session.setCatalogProperty(alias, SCHEMA_REGISTRY_URL, (Object) null);
+        session.setCatalogProperty(alias, SECURITY_PROTOCOL, (Object) null);
+        session.setCatalogProperty(alias, SASL_MECHANISM, (Object) null);
+        session.setCatalogProperty(alias, SASL_JAAS_CONFIG, (Object) null);
     }
 
     @Override
@@ -152,7 +169,8 @@ public final class KafkaCatalogProvider implements PayloadbuilderCatalogProvider
                 .get(KAFKA_CONNECTIONS_SETTING_ID), KafkaConnection.class);
         for (KafkaConnection con : connections)
         {
-            if (bootstrapServers.equals(con.bootstrapServers()))
+            if (con.isEnabled()
+                    && bootstrapServers.equals(con.bootstrapServers()))
             {
                 return con.connectionId();
             }
