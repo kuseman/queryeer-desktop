@@ -27,7 +27,7 @@ export function registerPayloadbuilderElasticsearchCatalogContribution(): void {
       connectionId: asText(properties.connectionId),
       index: asText(properties.index)
     }),
-    resolveRuntimeProperties: (properties) => properties,
+    resolveRuntimeProperties: (properties) => resolveRuntimeProperties(properties),
     flowMappingFields: [
       {
         id: "connectionId",
@@ -58,11 +58,12 @@ export function registerPayloadbuilderElasticsearchCatalogContribution(): void {
 
 function ElasticsearchPanel({ fileId, alias, properties, setProperty }: PayloadbuilderCatalogPanelProps): JSX.Element {
   const connections = getConfiguredElasticsearchConnections().filter((connection) => connection.enabled);
+  const hasConfiguredConnectionProperty = Object.prototype.hasOwnProperty.call(properties, "connectionId");
   const configuredConnectionId = asText(properties.connectionId);
-  const selectedConnection =
-    connections.find((connection) => connection.connectionId === configuredConnectionId) ?? connections[0];
+  const configuredConnection = connections.find((connection) => connection.connectionId === configuredConnectionId);
+  const selectedConnection = configuredConnection ?? (!hasConfiguredConnectionProperty ? connections[0] : undefined);
   const selectedConnectionId = selectedConnection?.connectionId ?? "";
-  const selectedIndex = asText(properties.index);
+  const selectedIndex = configuredConnection ? asText(properties.index) : "";
   const [indices, setIndices] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -82,10 +83,14 @@ function ElasticsearchPanel({ fileId, alias, properties, setProperty }: Payloadb
   }, [indices, selectedIndex]);
 
   useEffect(() => {
-    if (selectedConnectionId && configuredConnectionId !== selectedConnectionId) {
+    if (!hasConfiguredConnectionProperty && selectedConnectionId) {
       setProperty("connectionId", selectedConnectionId);
     }
-  }, [configuredConnectionId, selectedConnectionId, setProperty]);
+    if (configuredConnectionId && !configuredConnection) {
+      setProperty("connectionId", "");
+      setProperty("index", "");
+    }
+  }, [configuredConnection, configuredConnectionId, hasConfiguredConnectionProperty, selectedConnectionId, setProperty]);
 
   const loadIndices = async (): Promise<void> => {
     setLoading(true);
@@ -137,7 +142,7 @@ function ElasticsearchPanel({ fileId, alias, properties, setProperty }: Payloadb
           setError(undefined);
         }}
       >
-        {connections.length === 0 && <option value="">No connections configured</option>}
+        <option value="">{connections.length === 0 ? "No connections configured" : "Select connection"}</option>
         {connections.map((connection) => (
           <option key={connection.connectionId} value={connection.connectionId}>
             {connection.title?.trim() || "Untitled connection"}
@@ -177,4 +182,21 @@ function ElasticsearchPanel({ fileId, alias, properties, setProperty }: Payloadb
 
 function asText(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function resolveRuntimeProperties(properties: Record<string, unknown>): Record<string, unknown> {
+  const connectionId = asText(properties.connectionId);
+  if (!connectionId) {
+    return {};
+  }
+  const connection = getConfiguredElasticsearchConnections().find(
+    (candidate) => candidate.enabled && candidate.connectionId === connectionId
+  );
+  if (!connection) {
+    return {};
+  }
+  return {
+    connectionId,
+    ...(asText(properties.index) ? { index: asText(properties.index) } : {})
+  };
 }

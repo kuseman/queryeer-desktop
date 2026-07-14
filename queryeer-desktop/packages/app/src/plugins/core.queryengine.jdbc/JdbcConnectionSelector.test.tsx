@@ -5,6 +5,7 @@ import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import type { FileMediator } from "@queryeer/api/files/FileMediator";
 import type { FilesRegistry } from "@queryeer/api/files/FilesRegistry";
 import type { JdbcConnectionDefinition } from "./jdbc-settings";
+import { JDBC_NAV_DB_KEY } from "./jdbc-navigation-types";
 
 const mocks = vi.hoisted(() => ({
   invokeMock: vi.fn(),
@@ -46,6 +47,11 @@ const topSnapshot = [
     attributes: {}
   }
 ];
+
+async function flush(): Promise<void> {
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 function makeFile(overrides: Partial<FileEntity> = {}): FileEntity {
   return {
@@ -143,6 +149,54 @@ describe("JdbcConnectionSelector", () => {
 
     const select = container.querySelector<HTMLSelectElement>("[data-testid='jdbc-connection-select']");
     expect(select?.value).toBe("conn-a");
+  });
+
+  it("clears disabled restored connection and database", async () => {
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([
+      ...connections,
+      { connectionId: "conn-disabled", title: "Disabled", dialectId: "jdbc", url: "jdbc:h2:disabled", enabled: false }
+    ]);
+    const file = makeFile({ engineBinding: { engineId: "jdbc", connectionId: "conn-disabled" } });
+    const filesRegistry = makeFilesRegistry(file, {
+      [JDBC_NAV_DB_KEY]: { connectionId: "conn-disabled", database: "old-db" }
+    });
+    const fileMediator = makeFileMediator(file);
+
+    await act(async () => {
+      root.render(
+        <JdbcConnectionSelector fileId="file-1" fileMediator={fileMediator} filesRegistry={filesRegistry} />
+      );
+      await flush();
+    });
+
+    expect(fileMediator.bindEngine).toHaveBeenCalledWith("file-1", "jdbc", undefined);
+    expect(filesRegistry.setEditorState).toHaveBeenCalledWith("file-1", JDBC_NAV_DB_KEY, undefined);
+    const connectionSelect = container.querySelector<HTMLSelectElement>("[data-testid='jdbc-connection-select']");
+    expect(connectionSelect?.value).toBe("");
+    const databaseSelect = container.querySelector<HTMLSelectElement>("[data-testid='jdbc-database-select']");
+    const databaseOptions = Array.from(databaseSelect?.querySelectorAll("option") ?? []).map((option) => option.value);
+    expect(databaseSelect?.value).toBe("");
+    expect(databaseOptions).not.toContain("old-db");
+  });
+
+  it("clears restored database when it belongs to another connection", async () => {
+    const file = makeFile({ engineBinding: { engineId: "jdbc", connectionId: "conn-a" } });
+    const filesRegistry = makeFilesRegistry(file, {
+      [JDBC_NAV_DB_KEY]: { connectionId: "conn-b", database: "old-db" }
+    });
+    const fileMediator = makeFileMediator(file);
+    mocks.invokeMock.mockResolvedValue([]);
+
+    await act(async () => {
+      root.render(
+        <JdbcConnectionSelector fileId="file-1" fileMediator={fileMediator} filesRegistry={filesRegistry} />
+      );
+      await flush();
+    });
+
+    expect(filesRegistry.setEditorState).toHaveBeenCalledWith("file-1", JDBC_NAV_DB_KEY, undefined);
+    const databaseSelect = container.querySelector<HTMLSelectElement>("[data-testid='jdbc-database-select']");
+    expect(databaseSelect?.value).toBe("");
   });
 
   it("loads databases silently on initial render", async () => {

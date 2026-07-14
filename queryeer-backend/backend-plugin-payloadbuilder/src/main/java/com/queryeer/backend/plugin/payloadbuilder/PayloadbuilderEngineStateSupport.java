@@ -101,10 +101,7 @@ final class PayloadbuilderEngineStateSupport
 
     static void applyToSession(QuerySession session, PayloadbuilderCatalogState state)
     {
-        if (state.defaultCatalogAlias() != null)
-        {
-            session.setDefaultCatalogAlias(state.defaultCatalogAlias());
-        }
+        session.setDefaultCatalogAlias(state.defaultCatalogAlias());
         for (PayloadbuilderCatalogState.Instance instance : state.instancesByAlias()
                 .values())
         {

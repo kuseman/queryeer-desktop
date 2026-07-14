@@ -4,18 +4,21 @@ import { JDBC_NAV_DB_KEY, type JdbcSelectedDatabase } from "./jdbc-navigation-ty
 import { getJdbcNavigationStore } from "./jdbc-navigation-store";
 import { JdbcConnectionSelector } from "./JdbcConnectionSelector";
 import { JdbcNavigationTree } from "./JdbcNavigationTree";
+import { getConfiguredJdbcConnections } from "./jdbc-settings";
 import "./jdbc-navigation.css";
 
 function resolveSelectedDatabase(
   files: PluginContext["files"],
-  fileId: string | null
+  fileId: string | null,
+  connectionId: string | undefined
 ): string | undefined {
-  if (!fileId) return undefined;
+  if (!fileId || !connectionId) return undefined;
   const raw = files.getEditorState(fileId, JDBC_NAV_DB_KEY);
   if (
     raw !== null &&
     typeof raw === "object" &&
     !Array.isArray(raw) &&
+    (raw as Record<string, unknown>).connectionId === connectionId &&
     typeof (raw as Record<string, unknown>).database === "string"
   ) {
     return (raw as JdbcSelectedDatabase).database;
@@ -38,8 +41,10 @@ export function JdbcNavigationView({ context }: Props) {
 
   const store = getJdbcNavigationStore();
   const activeFile = activeFileId ? context.files.getFile(activeFileId) : undefined;
-  const connectionId = activeFile?.engineBinding?.connectionId;
-  const selectedDatabase = resolveSelectedDatabase(context.files, activeFileId);
+  const connectionId = getConfiguredJdbcConnections().find(
+    (connection) => connection.enabled && connection.connectionId === activeFile?.engineBinding?.connectionId
+  )?.connectionId;
+  const selectedDatabase = resolveSelectedDatabase(context.files, activeFileId, connectionId);
 
   return (
     <div className="jdbc-nav-view">

@@ -62,6 +62,7 @@ public final class JdbcCatalogProvider implements PayloadbuilderCatalogProviderC
     @Override
     public void injectProperties(IQuerySession querySession, String alias, Map<String, Object> properties)
     {
+        clearCatalogProperties(querySession, alias);
         String connectionId = stringValue(properties, KEY_CONNECTION_ID);
 
         JdbcConnection jdbcConnection = jdbcRuntimeService.connections()
@@ -86,5 +87,16 @@ public final class JdbcCatalogProvider implements PayloadbuilderCatalogProviderC
 
         querySession.setCatalogProperty(alias, JdbcCatalog.USERNAME, username);
         querySession.setCatalogProperty(alias, JdbcCatalog.PASSWORD, password);
+    }
+
+    private static void clearCatalogProperties(IQuerySession querySession, String alias)
+    {
+        querySession.setCatalogProperty(alias, KEY_CONNECTION_ID, (Object) null);
+        querySession.setCatalogProperty(alias, KEY_DATABASE, (Object) null);
+        querySession.setCatalogProperty(alias, JdbcCatalog.DRIVER_CLASSNAME, (Object) null);
+        querySession.setCatalogProperty(alias, JdbcCatalog.URL, (Object) null);
+        querySession.setCatalogProperty(alias, JdbcCatalog.DATABASE, (Object) null);
+        querySession.setCatalogProperty(alias, JdbcCatalog.USERNAME, (Object) null);
+        querySession.setCatalogProperty(alias, JdbcCatalog.PASSWORD, (Object) null);
     }
 }

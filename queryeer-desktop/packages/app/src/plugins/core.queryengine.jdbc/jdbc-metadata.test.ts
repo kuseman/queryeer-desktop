@@ -29,8 +29,8 @@ describe("jdbc metadata", () => {
 
     const updates: Array<Record<string, unknown>> = [];
     mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([
-      { connectionId: "conn-sql", title: "Sql", dialectId: "sqlserver" },
-      { connectionId: "conn-pg", title: "Pg", dialectId: "postgresql" }
+      { connectionId: "conn-sql", title: "Sql", dialectId: "sqlserver", enabled: true },
+      { connectionId: "conn-pg", title: "Pg", dialectId: "postgresql", enabled: true }
     ]);
 
     writeJdbcContextMetadata("file-1", "conn-sql", "db", {
@@ -51,5 +51,41 @@ describe("jdbc metadata", () => {
 
     expect(updates[0]?.["core.queryengine.jdbc.supportsQueryPlan"]).toBe(true);
     expect(updates[1]?.["core.queryengine.jdbc.supportsQueryPlan"]).toBe(false);
+  });
+
+  it("clears context metadata for disabled connections", () => {
+    const file: FileEntity = {
+      fileId: "file-1",
+      version: 1,
+      uri: "file:///tmp/a.sql",
+      mimeType: "application/sql",
+      dirtyVsBackend: false,
+      dirtyVsDisk: false,
+      diskState: "inSync",
+      openedAt: new Date().toISOString(),
+      metadata: {
+        "core.queryengine.jdbc.connectionTitle": "Disabled",
+        "core.queryengine.jdbc.dialectId": "jdbc",
+        "core.queryengine.jdbc.supportsQueryPlan": true,
+        "core.queryengine.jdbc.database": "old-db"
+      }
+    };
+    const updates: Array<Record<string, unknown>> = [];
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([
+      { connectionId: "conn-disabled", title: "Disabled", dialectId: "jdbc", enabled: false }
+    ]);
+
+    writeJdbcContextMetadata("file-1", "conn-disabled", "old-db", {
+      getFile: () => file,
+      updateFile: (_fileId, update) => {
+        updates.push(update.metadata as Record<string, unknown>);
+        return file;
+      }
+    });
+
+    expect(updates[0]?.["core.queryengine.jdbc.connectionTitle"]).toBeUndefined();
+    expect(updates[0]?.["core.queryengine.jdbc.dialectId"]).toBeUndefined();
+    expect(updates[0]?.["core.queryengine.jdbc.supportsQueryPlan"]).toBeUndefined();
+    expect(updates[0]?.["core.queryengine.jdbc.database"]).toBeUndefined();
   });
 });

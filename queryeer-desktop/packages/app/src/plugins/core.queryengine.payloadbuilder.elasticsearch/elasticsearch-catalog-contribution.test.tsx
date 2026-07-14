@@ -3,6 +3,19 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const invokeMock = vi.fn();
+const configuredConnectionsMock = vi.hoisted(() => vi.fn(() => [
+  {
+    connectionId: "550e8400-e29b-41d4-a716-446655440100",
+    title: "Cluster One",
+    endpoint: "https://localhost:9200",
+    authType: "BASIC",
+    authUsername: "elastic",
+    authPassword: {
+      secretRef: "secret-ref"
+    },
+    enabled: true
+  }
+]));
 
 vi.mock("../core.queryengine/QueryEngineService", () => ({
   getQueryEngineService: () => ({
@@ -11,19 +24,7 @@ vi.mock("../core.queryengine/QueryEngineService", () => ({
 }));
 
 vi.mock("./elasticsearch-settings", () => ({
-  getConfiguredElasticsearchConnections: () => [
-    {
-      connectionId: "550e8400-e29b-41d4-a716-446655440100",
-      title: "Cluster One",
-      endpoint: "https://localhost:9200",
-      authType: "BASIC",
-      authUsername: "elastic",
-      authPassword: {
-        secretRef: "secret-ref"
-      },
-      enabled: true
-    }
-  ]
+  getConfiguredElasticsearchConnections: configuredConnectionsMock
 }));
 
 import { getPayloadbuilderCatalogContribution } from "../core.queryengine.payloadbuilder/catalog-contributions";
@@ -42,6 +43,20 @@ describe("payloadbuilder elasticsearch catalog contribution", () => {
     (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     vi.stubGlobal("React", React);
     invokeMock.mockReset();
+    configuredConnectionsMock.mockReset();
+    configuredConnectionsMock.mockReturnValue([
+      {
+        connectionId: "550e8400-e29b-41d4-a716-446655440100",
+        title: "Cluster One",
+        endpoint: "https://localhost:9200",
+        authType: "BASIC",
+        authUsername: "elastic",
+        authPassword: {
+          secretRef: "secret-ref"
+        },
+        enabled: true
+      }
+    ]);
     rootElement = document.createElement("div");
     document.body.appendChild(rootElement);
     root = createRoot(rootElement);
@@ -139,5 +154,77 @@ describe("payloadbuilder elasticsearch catalog contribution", () => {
     });
 
     expect(setPropertyMock).toHaveBeenCalledWith("connectionId", "550e8400-e29b-41d4-a716-446655440100");
+  });
+
+  it("clears stale index when persisted connection is disabled", async () => {
+    configuredConnectionsMock.mockReturnValue([
+      {
+        connectionId: "550e8400-e29b-41d4-a716-446655440100",
+        title: "Cluster One",
+        endpoint: "https://localhost:9200",
+        authType: "NONE",
+        authUsername: "",
+        authPassword: { secretRef: "" },
+        enabled: true
+      },
+      {
+        connectionId: "cluster-disabled",
+        title: "Disabled",
+        endpoint: "https://disabled:9200",
+        authType: "NONE",
+        authUsername: "",
+        authPassword: { secretRef: "" },
+        enabled: false
+      }
+    ]);
+    registerPayloadbuilderElasticsearchCatalogContribution();
+    const contribution = getPayloadbuilderCatalogContribution("elasticsearch");
+    const renderPanel = contribution?.renderPanel;
+    if (!renderPanel) {
+      throw new Error("Expected elasticsearch contribution renderPanel");
+    }
+
+    const setPropertyMock = vi.fn();
+    await act(async () => {
+      root.render(
+        renderPanel({
+          fileId: "file-1",
+          alias: "es1",
+          catalogId: "elasticsearch",
+          properties: { connectionId: "cluster-disabled", index: "old-*" },
+          setProperty: setPropertyMock
+        }) as React.ReactElement
+      );
+      await flush();
+    });
+
+    expect(setPropertyMock).toHaveBeenCalledWith("connectionId", "");
+    expect(setPropertyMock).toHaveBeenCalledWith("index", "");
+    expect(setPropertyMock).not.toHaveBeenCalledWith("connectionId", "550e8400-e29b-41d4-a716-446655440100");
+    const indexSelect = rootElement.querySelector("#payloadbuilder-es-index-es1") as HTMLSelectElement;
+    const options = Array.from(indexSelect.querySelectorAll("option")).map((option) => option.value);
+    expect(indexSelect.value).toBe("");
+    expect(options).not.toContain("old-*");
+  });
+
+  it("does not resolve disabled elasticsearch connection into runtime properties", () => {
+    configuredConnectionsMock.mockReturnValue([
+      {
+        connectionId: "cluster-disabled",
+        title: "Disabled",
+        endpoint: "https://disabled:9200",
+        authType: "NONE",
+        authUsername: "",
+        authPassword: { secretRef: "" },
+        enabled: false
+      }
+    ]);
+    registerPayloadbuilderElasticsearchCatalogContribution();
+    const contribution = getPayloadbuilderCatalogContribution("elasticsearch");
+
+    expect(contribution?.resolveRuntimeProperties?.({
+      connectionId: "cluster-disabled",
+      index: "old-*"
+    })).toEqual({});
   });
 });

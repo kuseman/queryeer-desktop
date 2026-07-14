@@ -17,8 +17,7 @@ export function JdbcConnectionStatus({ file }: Props): JSX.Element | null {
     return null;
   }
 
-  const connections = getConfiguredJdbcConnections();
-  const match = connections.find((c) => c.connectionId === connectionId);
+  const match = getConfiguredJdbcConnections().find((c) => c.enabled && c.connectionId === connectionId);
   if (!match) {
     return null;
   }

@@ -184,6 +184,115 @@ class PayloadbuilderQueryEngineProviderTest
     }
 
     @Test
+    void executeRebuildsSessionWhenCatalogSelectionChanges()
+    {
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new AliasEchoCatalogProvider());
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+
+        ChunkRowsPublisher first = new ChunkRowsPublisher();
+        provider.execute("exec-alias-first", "file-alias", "select alias from items", aliasEchoEngineState("first"), first);
+
+        Assertions.assertNull(first.errorCode, first.errorMessage);
+        Assertions.assertEquals("first", first.rows.get(0)
+                .get(0));
+
+        ChunkRowsPublisher second = new ChunkRowsPublisher();
+        provider.execute("exec-alias-second", "file-alias", "select alias from items", aliasEchoEngineState("second"), second);
+
+        Assertions.assertNull(second.errorCode, second.errorMessage);
+        Assertions.assertEquals("second", second.rows.get(0)
+                .get(0));
+    }
+
+    @Test
+    void executePreservesSessionAndTempTablesWhenCatalogPropertiesChange()
+    {
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new PropertyEchoCatalogProvider());
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+
+        RecordingPublisher create = new RecordingPublisher();
+        provider.execute("exec-temp-create", "file-temp", "select value into #cached from items", propertyEchoEngineState(Map.of("value", "alpha")), create);
+
+        Assertions.assertNull(create.errorCode, create.errorMessage);
+        String sessionId = sessionId(create.engineState);
+
+        ChunkRowsPublisher read = new ChunkRowsPublisher();
+        provider.execute("exec-temp-read", "file-temp", "select value from #cached", propertyEchoEngineState(Map.of("value", "beta")), read);
+
+        Assertions.assertNull(read.errorCode, read.errorMessage);
+        Assertions.assertEquals(sessionId, sessionId(read.engineState));
+        Assertions.assertEquals("alpha", read.rows.get(0)
+                .get(0));
+    }
+
+    @Test
+    void executeClearsRemovedCatalogInputPropertiesWithoutRebuildingSession()
+    {
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new PropertyEchoCatalogProvider());
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+
+        ChunkRowsPublisher first = new ChunkRowsPublisher();
+        provider.execute("exec-property-first", "file-property-clear", "select value from items", propertyEchoEngineState(Map.of("value", "alpha")), first);
+
+        Assertions.assertNull(first.errorCode, first.errorMessage);
+        Assertions.assertEquals("alpha", first.rows.get(0)
+                .get(0));
+
+        ChunkRowsPublisher second = new ChunkRowsPublisher();
+        provider.execute("exec-property-second", "file-property-clear", "select value from items", propertyEchoEngineState(Map.of()), second);
+
+        Assertions.assertNull(second.errorCode, second.errorMessage);
+        Assertions.assertEquals(sessionId(first.engineState), sessionId(second.engineState));
+        Assertions.assertNull(second.rows.get(0)
+                .get(0));
+    }
+
+    @Test
+    void executeSwitchesEnvironmentVariablesBetweenRuns()
+    {
+        ConfigService config = new ConfigService()
+        {
+            @Override
+            public String get(String key)
+            {
+                return null;
+            }
+
+            @Override
+            public SettingsModule getModule(String moduleId)
+            {
+                return new SettingsModule("core.queryengine.payloadbuilder.environments", 1L, "2026-01-01T00:00:00Z",
+                        Map.of("core.queryengine.payloadbuilder.environments.values", List.of(Map.of("id", "dev", "title", "Dev", "variables", List.of(Map.of("key", "tenant", "value", "alpha"))),
+                                Map.of("id", "prod", "title", "Prod", "variables", List.of(Map.of("key", "tenant", "value", "beta"))))));
+            }
+
+            @Override
+            public Object materializeSecrets(Object payload)
+            {
+                return null;
+            }
+        };
+        PayloadbuilderQueryEngineProvider provider = createProvider(config);
+
+        ChunkRowsPublisher dev = new ChunkRowsPublisher();
+        provider.execute("exec-env-dev", "file-env-switch", "select @tenant tenant", Map.of("payloadbuilder", Map.of("selectedEnvironmentId", "dev")), dev);
+
+        Assertions.assertNull(dev.errorCode, dev.errorMessage);
+        Assertions.assertEquals("alpha", dev.rows.get(0)
+                .get(0));
+
+        ChunkRowsPublisher prod = new ChunkRowsPublisher();
+        provider.execute("exec-env-prod", "file-env-switch", "select @tenant tenant", Map.of("payloadbuilder", Map.of("selectedEnvironmentId", "prod")), prod);
+
+        Assertions.assertNull(prod.errorCode, prod.errorMessage);
+        Assertions.assertEquals("beta", prod.rows.get(0)
+                .get(0));
+    }
+
+    @Test
     void executeIncludesExceptionTypeInFailureMessage()
     {
         PayloadbuilderQueryEngineProvider provider = createProvider(NOOP_CONFIG);
@@ -1370,6 +1479,27 @@ class PayloadbuilderQueryEngineProviderTest
         return Map.of("payloadbuilder", Map.of("catalogs", Map.of("jdbc", Map.of("catalogId", "jdbc", "properties", Map.of("connectionId", "conn-1", "database", "appdb")))));
     }
 
+    private static Map<String, Object> aliasEchoEngineState(String alias)
+    {
+        return Map.of("payloadbuilder", Map.of("defaultCatalogAlias", alias, "catalogs", Map.of(alias, Map.of("catalogId", AliasEchoCatalog.CATALOG_ID, "properties", Map.of()))));
+    }
+
+    private static Map<String, Object> propertyEchoEngineState(Map<String, Object> properties)
+    {
+        return Map.of("payloadbuilder", Map.of("defaultCatalogAlias", "prop", "catalogs", Map.of("prop", Map.of("catalogId", PropertyEchoCatalog.CATALOG_ID, "properties", properties))));
+    }
+
+    private static String sessionId(Object engineState)
+    {
+        Assertions.assertTrue(engineState instanceof Map<?, ?>, "Expected engine state patch map");
+        Map<?, ?> root = (Map<?, ?>) engineState;
+        Object payloadbuilder = root.get("payloadbuilder");
+        Assertions.assertTrue(payloadbuilder instanceof Map<?, ?>, "Expected payloadbuilder patch map");
+        Object sessionId = ((Map<?, ?>) payloadbuilder).get("sessionId");
+        Assertions.assertTrue(sessionId instanceof String, "Expected sessionId patch");
+        return (String) sessionId;
+    }
+
     private static JdbcRuntimeService jdbcRuntimeServiceFor(String connectionId)
     {
         JdbcDialect dialect = Mockito.mock(JdbcDialect.class);
@@ -1406,6 +1536,107 @@ class PayloadbuilderQueryEngineProviderTest
         {
             return optIn ? PayloadbuilderSystemTableSqlEditorServices.INSTANCE
                     : PayloadbuilderCatalogSqlEditorServices.NONE;
+        }
+    }
+
+    private record AliasEchoCatalogProvider() implements PayloadbuilderCatalogProviderContributor
+    {
+        @Override
+        public String catalogId()
+        {
+            return AliasEchoCatalog.CATALOG_ID;
+        }
+
+        @Override
+        public Catalog createCatalog()
+        {
+            return new AliasEchoCatalog();
+        }
+    }
+
+    private record PropertyEchoCatalogProvider() implements PayloadbuilderCatalogProviderContributor
+    {
+        @Override
+        public String catalogId()
+        {
+            return PropertyEchoCatalog.CATALOG_ID;
+        }
+
+        @Override
+        public Catalog createCatalog()
+        {
+            return new PropertyEchoCatalog();
+        }
+    }
+
+    private static final class AliasEchoCatalog extends Catalog
+    {
+        private static final String CATALOG_ID = "test.aliasEcho";
+        private static final String ITEMS_TABLE = "items";
+        private static final Schema ITEMS_SCHEMA = Schema.of(Column.of("alias", ResolvedType.STRING));
+
+        AliasEchoCatalog()
+        {
+            super(CATALOG_ID);
+        }
+
+        @Override
+        public TableSchema getTableSchema(IExecutionContext context, String catalogAlias, QualifiedName table)
+        {
+            if (ITEMS_TABLE.equalsIgnoreCase(table.getLast()))
+            {
+                return new TableSchema(ITEMS_SCHEMA);
+            }
+            return TableSchema.EMPTY;
+        }
+
+        @Override
+        public IDatasource getScanDataSource(IQuerySession session, String catalogAlias, QualifiedName table, DatasourceData data)
+        {
+            if (!ITEMS_TABLE.equalsIgnoreCase(table.getLast()))
+            {
+                return _ -> TupleIterator.EMPTY;
+            }
+            return _ -> TupleIterator.singleton(new se.kuseman.payloadbuilder.api.execution.ObjectTupleVector(ITEMS_SCHEMA, 1, (_, _) -> catalogAlias));
+        }
+    }
+
+    private static final class PropertyEchoCatalog extends Catalog
+    {
+        private static final String CATALOG_ID = "test.propertyEcho";
+        private static final String ITEMS_TABLE = "items";
+        private static final String VALUE_PROPERTY = "value";
+        private static final Schema ITEMS_SCHEMA = Schema.of(Column.of(VALUE_PROPERTY, ResolvedType.STRING));
+
+        PropertyEchoCatalog()
+        {
+            super(CATALOG_ID);
+        }
+
+        @Override
+        public TableSchema getTableSchema(IExecutionContext context, String catalogAlias, QualifiedName table)
+        {
+            if (ITEMS_TABLE.equalsIgnoreCase(table.getLast()))
+            {
+                return new TableSchema(ITEMS_SCHEMA);
+            }
+            return TableSchema.EMPTY;
+        }
+
+        @Override
+        public IDatasource getScanDataSource(IQuerySession session, String catalogAlias, QualifiedName table, DatasourceData data)
+        {
+            if (!ITEMS_TABLE.equalsIgnoreCase(table.getLast()))
+            {
+                return _ -> TupleIterator.EMPTY;
+            }
+            return _ -> TupleIterator.singleton(new se.kuseman.payloadbuilder.api.execution.ObjectTupleVector(ITEMS_SCHEMA, 1, (_, _) ->
+            {
+                ValueVector value = session.getCatalogProperty(catalogAlias, VALUE_PROPERTY);
+                return value == null
+                        || value.isNull(0) ? null
+                                : value.valueAsObject(0);
+            }));
         }
     }
 
@@ -1516,6 +1747,7 @@ class PayloadbuilderQueryEngineProviderTest
         private String errorCode;
         private String errorMessage;
         private Map<String, Object> errorDetails = Map.of();
+        private Object engineState;
 
         @Override
         public void progress(int percent, String message)
@@ -1548,6 +1780,7 @@ class PayloadbuilderQueryEngineProviderTest
         {
             completed = true;
             completedWithPatchCalled = true;
+            this.engineState = engineState;
         }
 
         @Override
@@ -1606,6 +1839,9 @@ class PayloadbuilderQueryEngineProviderTest
     private static final class ChunkRowsPublisher implements QueryPublisher
     {
         private List<List<Object>> rows;
+        private String errorCode;
+        private String errorMessage;
+        private Object engineState;
 
         @Override
         public void progress(int percent, String message)
@@ -1634,8 +1870,23 @@ class PayloadbuilderQueryEngineProviderTest
         }
 
         @Override
+        public void completed(long durationMs, long rowCount, Object engineState)
+        {
+            this.engineState = engineState;
+        }
+
+        @Override
         public void failed(String errorCode, String errorMessage)
         {
+            this.errorCode = errorCode;
+            this.errorMessage = errorMessage;
+        }
+
+        @Override
+        public void failed(String errorCode, String errorMessage, Map<String, Object> details)
+        {
+            this.errorCode = errorCode;
+            this.errorMessage = errorMessage;
         }
     }
 

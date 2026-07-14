@@ -2,6 +2,7 @@ import type { PluginContext } from "@queryeer/api/plugin/Plugin";
 import type { AssistantToolContribution, AssistantToolInvocation, AssistantToolResult } from "@queryeer/api/assistant/Assistant";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import { JDBC_NAV_DB_KEY, type JdbcSchemaObject, type JdbcSelectedDatabase } from "./jdbc-navigation-types";
+import { getConfiguredJdbcConnections } from "./jdbc-settings";
 
 type JdbcAssistantContext = {
   connectionId: string;
@@ -146,11 +147,14 @@ function resolveJdbcContext(
   }
   const file = context.files.getFile(fileId);
   const connectionId = file?.engineBinding?.engineId === "jdbc" ? file.engineBinding.connectionId : undefined;
-  if (!connectionId) {
+  const connection = getConfiguredJdbcConnections().find(
+    (candidate) => candidate.enabled && candidate.connectionId === connectionId
+  );
+  if (!connection) {
     return { ok: false, message: "The active SQL file is not bound to a JDBC connection." };
   }
-  const selected = readSelectedDatabase(context, fileId, connectionId);
-  return { ok: true, value: { connectionId, database: selected } };
+  const selected = readSelectedDatabase(context, fileId, connection.connectionId);
+  return { ok: true, value: { connectionId: connection.connectionId, database: selected } };
 }
 
 function readSelectedDatabase(context: PluginContext, fileId: string, connectionId: string): string | undefined {

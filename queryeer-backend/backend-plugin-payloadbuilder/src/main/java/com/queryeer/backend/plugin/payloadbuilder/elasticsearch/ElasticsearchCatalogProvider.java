@@ -46,6 +46,7 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
     @Override
     public void injectProperties(IQuerySession session, String alias, Map<String, Object> properties)
     {
+        clearCatalogProperties(session, alias);
         String connectionId = stringValue(properties, KEY_CONNECTION_ID);
         ElasticsearchConnection connection = getConnection(connectionId);
         if (connection == null)
@@ -85,12 +86,24 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
 
         for (ElasticsearchConnection con : connections)
         {
-            if (connectionId.equals(con.connectionId()))
+            if (con.isEnabled()
+                    && connectionId.equals(con.connectionId()))
             {
                 return con;
             }
         }
         return null;
+    }
+
+    private static void clearCatalogProperties(IQuerySession session, String alias)
+    {
+        session.setCatalogProperty(alias, KEY_CONNECTION_ID, (Object) null);
+        session.setCatalogProperty(alias, KEY_INDEX, (Object) null);
+        session.setCatalogProperty(alias, ESCatalog.INDEX_KEY, (Object) null);
+        session.setCatalogProperty(alias, ESCatalog.ENDPOINT_KEY, (Object) null);
+        session.setCatalogProperty(alias, ESCatalog.AUTH_TYPE_KEY, (Object) null);
+        session.setCatalogProperty(alias, ESCatalog.AUTH_USERNAME_KEY, (Object) null);
+        session.setCatalogProperty(alias, ESCatalog.AUTH_PASSWORD_KEY, (Object) null);
     }
 
     @Override
@@ -149,7 +162,8 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
                 .get(ES_CONNECTIONS_SETTING_ID), ElasticsearchConnection.class);
         for (ElasticsearchConnection con : connections)
         {
-            if (endpoint.equals(con.endpoint()))
+            if (con.isEnabled()
+                    && endpoint.equals(con.endpoint()))
             {
                 return con.connectionId();
             }
