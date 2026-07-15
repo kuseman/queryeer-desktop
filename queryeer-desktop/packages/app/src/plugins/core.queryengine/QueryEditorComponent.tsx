@@ -556,6 +556,23 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
               }
 
               updateOutputContextForFile(targetFileId, (prev) => {
+                if (currentSet === undefined) {
+                  // chunkStart was missed (e.g. rapid re-execution race).
+                  // Create the resultSet entry on-the-fly so the grid has schema + rowCount
+                  return {
+                    ...prev,
+                    resultSets: [
+                      ...prev.resultSets,
+                      {
+                        resultSetIndex: p.resultSetIndex,
+                        schema: { columns: [] },
+                        rows: [],
+                        rowCount: retainedRows.length,
+                        rowLimitExceeded: maxRows !== -1 && retainedRows.length < p.rows.length
+                      }
+                    ]
+                  };
+                }
                 const sets = prev.resultSets.map((rs): ResultSet => {
                   if (rs.resultSetIndex !== p.resultSetIndex) return rs;
                   const rowCount = (rs.rowCount ?? rs.rows.length) + retainedRows.length;

@@ -11,13 +11,7 @@ public final class SqlServerDialectContributor implements JdbcDialectContributor
     @Override
     public void contribute(JdbcDialectRegistry registry)
     {
-        ClassLoader classLoader = Thread.currentThread()
-                .getContextClassLoader();
-        if (classLoader == null)
-        {
-            classLoader = getClass().getClassLoader();
-        }
-        JdbcDriverLoader.loadDriver(DRIVER_CLASS_NAME, classLoader);
+        JdbcDriverLoader.loadDriver(DRIVER_CLASS_NAME, getClass().getClassLoader());
         registry.register(new SqlServerDialect());
     }
 }

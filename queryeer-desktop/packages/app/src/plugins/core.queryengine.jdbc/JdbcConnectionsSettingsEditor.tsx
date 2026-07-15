@@ -397,11 +397,14 @@ function renderDialectForm(row: Row, readonly: boolean, onChange: (patch: { prop
 function buildSubtitle(row: Row): string {
   const dialect = getJdbcDialect(row.dialectId);
   if (dialect?.ConnectionForm && row.properties) {
-    const host = String(row.properties.host ?? "");
-    const port = row.properties.port ?? 1433;
-    const database = String(row.properties.database ?? "");
+    const filePath = String(row.properties.filePath ?? "").trim();
+    if (filePath) return filePath;
+    const host = String(row.properties.host ?? "").trim();
+    const port = String(row.properties.port ?? "").trim();
+    const database = String(row.properties.database ?? "").trim();
     if (!host) return "Host required";
-    return database ? `${host}:${port}/${database}` : `${host}:${port}`;
+    const base = port ? `${host}:${port}` : host;
+    return database ? `${base}/${database}` : base;
   }
   return row.url || "URL required";
 }
@@ -453,14 +456,21 @@ function buildRowErrors(rows: Row[]): Record<string, { url?: string; host?: stri
 
     const dialect = getJdbcDialect(row.dialectId);
     if (dialect?.ConnectionForm) {
-      const host = String(row.properties?.host ?? "").trim();
-      if (!host) {
-        rowError.host = "Host is required";
-      }
-      if (row.properties && "database" in row.properties) {
-        const database = String(row.properties.database ?? "").trim();
-        if (!database) {
-          rowError.database = "Database is required";
+      if (row.properties && "filePath" in row.properties) {
+        const filePath = String(row.properties.filePath ?? "").trim();
+        if (!filePath) {
+          rowError.host = "Database file is required";
+        }
+      } else {
+        const host = String(row.properties?.host ?? "").trim();
+        if (!host) {
+          rowError.host = "Host is required";
+        }
+        if (row.properties && "database" in row.properties) {
+          const database = String(row.properties.database ?? "").trim();
+          if (!database) {
+            rowError.database = "Database is required";
+          }
         }
       }
     } else if (!row.url.trim()) {

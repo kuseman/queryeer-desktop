@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "queryengine.jdbc.dialect.sqlite",
+  "name": "SQLite JDBC Dialect",
+  "version": "${project.version}",
+  "description": "SQLite dialect runtime contribution.",
+  "dependencies": ["queryengine.jdbc"],
+  "providesCapabilities": ["queryengine.jdbc.dialect.sqlite"],
+  "requiredCapabilities": ["queryengine.jdbc.connection"],
+  "backend": {
+    "entrypointClass": "com.queryeer.backend.plugin.jdbc.sqlite.SqliteBackendPlugin"
+  }
+}

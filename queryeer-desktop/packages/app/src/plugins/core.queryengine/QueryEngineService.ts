@@ -67,6 +67,7 @@ export class QueryEngineService {
   private readonly executionContextProviders = new Set<ExecutionContextProvider>();
   private readonly engineResolvers: EngineResolverEntry[] = [];
   private readonly executionContextById = new Map<string, ExecuteParams>();
+  private readonly pendingEventBuffers = new Map<string, QueryEvent[]>();
   private initialized = false;
   private pendingExecuteOptions: ExecuteRequestOptions | null = null;
 
@@ -83,6 +84,12 @@ export class QueryEngineService {
       if (listeners) {
         for (const listener of listeners) {
           listener(event);
+        }
+      } else {
+        // No listener yet — buffer event for replay when subscribe() is called
+        const buffer = this.pendingEventBuffers.get(executionId);
+        if (buffer) {
+          buffer.push(event);
         }
       }
 
@@ -102,6 +109,15 @@ export class QueryEngineService {
       this.executionListeners.set(executionId, new Set());
     }
     this.executionListeners.get(executionId)!.add(listener);
+
+    // Replay any events that arrived before subscribe() was called
+    const buffer = this.pendingEventBuffers.get(executionId);
+    if (buffer) {
+      this.pendingEventBuffers.delete(executionId);
+      for (const event of buffer) {
+        listener(event);
+      }
+    }
 
     return () => {
       const set = this.executionListeners.get(executionId);
@@ -130,6 +146,14 @@ export class QueryEngineService {
       decoratedParams.targetOutputSessionId = targetOutputSessionId;
     }
     this.executionContextById.set(queryExecutionId, decoratedParams);
+    // Pre-register event buffer before IPC call so early-arriving events are captured
+    this.pendingEventBuffers.set(queryExecutionId, []);
+    // Clean up orphaned buffers whose execution context was already deleted
+    for (const id of this.pendingEventBuffers.keys()) {
+      if (!this.executionContextById.has(id)) {
+        this.pendingEventBuffers.delete(id);
+      }
+    }
     for (const listener of this.globalEventListeners) {
       listener(
         {
@@ -152,6 +176,7 @@ export class QueryEngineService {
       });
     } catch (error) {
       this.executionContextById.delete(queryExecutionId);
+      this.pendingEventBuffers.delete(queryExecutionId);
       const message = error instanceof Error ? error.message : String(error);
       for (const listener of this.globalEventListeners) {
         listener(

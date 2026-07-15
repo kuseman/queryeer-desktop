@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "queryengine.jdbc.dialect.sqlite",
+  "name": "SQLite JDBC Dialect",
+  "version": "0.1.0",
+  "description": "SQLite dialect runtime contribution.",
+  "dependencies": ["queryengine.jdbc"],
+  "providesCapabilities": ["queryengine.jdbc.dialect.sqlite"],
+  "requiredCapabilities": ["queryengine.jdbc.connection"],
+  "backend": {
+    "entrypointClass": "com.queryeer.backend.plugin.jdbc.sqlite.SqliteBackendPlugin",
+    "classpath": {
+      "root": "../../../queryeer-backend/backend-plugin-dialect-sqlite",
+      "include": ["target/classes", "@target/queryeer-plugin-deps.txt"]
+    }
+  }
+}

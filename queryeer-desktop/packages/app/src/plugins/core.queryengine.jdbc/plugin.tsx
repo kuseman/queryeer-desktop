@@ -571,6 +571,8 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
         if (Array.isArray(current)) {
           getTreeActionRegistry().setActions(current as TreeAction[]);
         }
+        // Reload navigation tree when connections or any other setting changes
+        getJdbcNavigationStore().loadConnectionRoots();
       });
 
       settingsService.refreshSchemaFromRegistry();
