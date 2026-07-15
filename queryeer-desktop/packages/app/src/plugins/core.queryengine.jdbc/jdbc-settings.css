@@ -93,3 +93,26 @@
   background: rgba(255, 255, 255, 0.12);
   color: var(--text-0);
 }
+
+.jdbc-settings-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-2);
+  color: var(--text-0);
+  font-size: var(--ui-font-size-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 28px;
+}
+
+.jdbc-settings-button:hover:not(:disabled) {
+  background: var(--bg-3);
+}
+
+.jdbc-settings-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

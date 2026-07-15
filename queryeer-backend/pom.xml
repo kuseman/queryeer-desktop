@@ -260,6 +260,7 @@
         <module>backend-plugin-jdbc</module>
         <module>backend-plugin-dialect-sqlserver</module>
         <module>backend-plugin-dialect-postgres</module>
+        <module>backend-plugin-dialect-sqlite</module>
     </modules>
 
     <build>

@@ -6,6 +6,7 @@ import static com.queryeer.backend.api.PayloadUtils.trimToNull;
 import static com.queryeer.backend.plugin.jdbc.JdbcUtils.closeQuietly;
 import static com.queryeer.backend.plugin.jdbc.JdbcUtils.rollbackAndClose;
 
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
@@ -38,6 +39,7 @@ import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaNavigator;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaRouter;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaStore;
 import com.queryeer.backend.queryengine.jdbc.CancellableJdbcQueryExecutor;
+import com.queryeer.backend.queryengine.jdbc.FileFormatDetector;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
 import com.queryeer.backend.queryengine.jdbc.JdbcSqlEditorServices;
@@ -68,6 +70,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
     private static final String ACTION_SQL_COMPLETE = "sql.complete";
     private static final String ACTION_SQL_SYMBOL_AT_POSITION = "sql.symbolAtPosition";
     private static final String ACTION_SQL_HOVER = "sql.hover";
+    private static final String ACTION_FILE_PROBE = "jdbc.file.probe";
 
     private static final String ERROR_CODE_VALIDATION = "VALIDATION";
     private static final String ERROR_CODE_CANCELLED = "CANCELLED";
@@ -177,6 +180,10 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             }
 
             JdbcEngineState state = payloadMapper.convert(engineState, JdbcEngineState.class);
+            if (state == null)
+            {
+                throw new IllegalArgumentException("No connection is associated with this file. The connection may have been removed or the file session has expired.");
+            }
             resolved = connections.resolve(state.connectionId());
 
             // For dialects that cannot switch databases on an existing connection (e.g. PostgreSQL),
@@ -347,6 +354,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             case ACTION_SQL_COMPLETE -> sqlSemanticHandler.completeInvoke(fileId, payload);
             case ACTION_SQL_SYMBOL_AT_POSITION -> sqlSemanticHandler.symbolAtPosition(fileId, payload);
             case ACTION_SQL_HOVER -> sqlSemanticHandler.hoverInvoke(fileId, payload);
+            case ACTION_FILE_PROBE -> fileProbe(payload);
             case ACTION_ENGINE_CAPABILITIES -> engineCapabilities();
             default -> QueryEngineProvider.super.invoke(fileId, action, payload);
         };
@@ -370,6 +378,23 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         return Map.of(KEY_OK, true, KEY_MESSAGE, "Connection successful");
     }
 
+    private Object fileProbe(Object payload)
+    {
+        if (!(payload instanceof Map<?, ?> map))
+        {
+            return Map.of("error", "Payload must be an object with a 'filePath' property");
+        }
+        Object filePathRaw = map.get("filePath");
+        if (!(filePathRaw instanceof String filePath)
+                || filePath.isBlank())
+        {
+            return Map.of("error", "filePath is required");
+        }
+        return FileFormatDetector.detect(Path.of(filePath))
+                .<Object>map(format -> Map.of("dialectId", format.dialectId(), "displayName", format.displayName()))
+                .orElse(Map.of("error", "Unknown or unsupported file format"));
+    }
+
     private Object engineCapabilities()
     {
         //@formatter:off
@@ -387,7 +412,8 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                 ACTION_SQL_PARSE_SNAPSHOT,
                 ACTION_SQL_COMPLETE,
                 ACTION_SQL_SYMBOL_AT_POSITION,
-                ACTION_SQL_HOVER));
+                ACTION_SQL_HOVER,
+                ACTION_FILE_PROBE));
         //@formatter:on
     }
 

@@ -621,4 +621,67 @@ describe("QueryEngineService backend readiness", () => {
     expect(consumed).toEqual(expect.objectContaining({ textOverride: "select 2" }));
     expect(service.peekExecuteOptions()).toBeNull();
   });
+
+  it("buffers events arriving before subscribe and replays them", async () => {
+    const queryListeners = new Set<(event: { method: string; params: unknown }) => void>();
+    const onQueryEvent = vi.fn((listener: (event: { method: string; params: unknown }) => void) => {
+      queryListeners.add(listener);
+      return () => {
+        queryListeners.delete(listener);
+      };
+    });
+    const executeBackendQuery = vi.fn(async (params: { queryExecutionId: string }) => ({
+      accepted: true,
+      queryExecutionId: params.queryExecutionId
+    }));
+    window.appShell = {
+      ...originalAppShell,
+      getBackendStatus: async () => ({
+        mode: "mock-stdio",
+        state: "healthy",
+        supportedCapabilities: [],
+        activeExecutionIds: [],
+        recentExecutions: [],
+        backendLogs: []
+      }),
+      executeBackendQuery,
+      onQueryEvent
+    };
+
+    const service = new QueryEngineService();
+    service.initialize();
+
+    const executionId = await service.execute({
+      engineId: "jdbc",
+      fileId: "file-1",
+      text: "select * from t"
+    });
+
+    // Send events before subscribe() is called — they should be buffered
+    const listener = [...queryListeners][0];
+    listener?.({
+      method: "queryengine.chunkStart",
+      params: { queryExecutionId: executionId, resultSetIndex: 0, schema: { columns: [{ name: "id", type: "integer" }] } }
+    });
+    listener?.({
+      method: "queryengine.chunkRows",
+      params: { queryExecutionId: executionId, resultSetIndex: 0, rows: [[1], [2]] }
+    });
+    listener?.({
+      method: "queryengine.completed",
+      params: { queryExecutionId: executionId, metrics: { durationMs: 10, rowCount: 2 } }
+    });
+
+    // Now subscribe — should receive the buffered events
+    const received: Array<{ method: string }> = [];
+    service.subscribe(executionId, (event) => {
+      received.push({ method: event.method });
+    });
+
+    expect(received).toEqual([
+      { method: "queryengine.chunkStart" },
+      { method: "queryengine.chunkRows" },
+      { method: "queryengine.completed" }
+    ]);
+  });
 });

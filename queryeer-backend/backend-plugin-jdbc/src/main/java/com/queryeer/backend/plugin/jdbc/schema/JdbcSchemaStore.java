@@ -1708,7 +1708,7 @@ public final class JdbcSchemaStore
                 : object.attributes()
                         .get("schema"));
         return schema != null ? schema
-                : "public";
+                : "";
     }
 
     private static TableLookup parseTableLookup(String value)
