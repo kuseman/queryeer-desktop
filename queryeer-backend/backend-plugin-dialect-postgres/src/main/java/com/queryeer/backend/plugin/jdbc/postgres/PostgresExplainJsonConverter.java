@@ -5,8 +5,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.contract.graph.GraphDocument;
 import com.queryeer.backend.contract.graph.GraphEdge;
 import com.queryeer.backend.contract.graph.GraphEdgeStyle;
@@ -17,9 +15,13 @@ import com.queryeer.backend.contract.graph.GraphVertex;
 import com.queryeer.backend.contract.graph.GraphVertexOverlay;
 import com.queryeer.backend.contract.graph.GraphVertexStyle;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
 final class PostgresExplainJsonConverter
 {
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final JsonMapper MAPPER = JsonMapper.builder()
+            .build();
 
     private PostgresExplainJsonConverter()
     {
@@ -221,7 +223,7 @@ final class PostgresExplainJsonConverter
         for (int i = 0; i < output.size(); i++)
         {
             addStringProp(props, "outputColumn-" + (i + 1), "Output column " + (i + 1), output.get(i)
-                    .asText(), false);
+                    .asString(), false);
         }
         return props;
     }
@@ -252,7 +254,7 @@ final class PostgresExplainJsonConverter
         for (int i = 0; i < sortKeys.size(); i++)
         {
             addStringProp(props, "sortKey-" + (i + 1), "Sort key " + (i + 1), sortKeys.get(i)
-                    .asText(), true);
+                    .asString(), true);
         }
         return props;
     }
@@ -270,12 +272,12 @@ final class PostgresExplainJsonConverter
             for (int i = 0; i < groupKeys.size(); i++)
             {
                 addStringProp(props, "groupKey-" + (i + 1), "Group key " + (i + 1), groupKeys.get(i)
-                        .asText(), true);
+                        .asString(), true);
             }
         }
         else
         {
-            addStringProp(props, "groupKey", "Group key", groupKeys.asText(), true);
+            addStringProp(props, "groupKey", "Group key", groupKeys.asString(), true);
         }
         return props;
     }
@@ -426,7 +428,7 @@ final class PostgresExplainJsonConverter
         }
         JsonNode value = node.get(field);
         return value.isNull() ? null
-                : value.asText();
+                : value.asString();
     }
 
     private static Double jsonNum(JsonNode node, String field)

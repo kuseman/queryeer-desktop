@@ -1765,6 +1765,12 @@ class PayloadbuilderQueryEngineProviderTest
         }
     }
 
+    @Test
+    void jackson2CoreClassesAvailable()
+    {
+        Assertions.assertDoesNotThrow(() -> Class.forName("com.fasterxml.jackson.core.StreamReadConstraints"));
+    }
+
     private static final class RecordingPublisher implements QueryPublisher
     {
         private boolean completed;

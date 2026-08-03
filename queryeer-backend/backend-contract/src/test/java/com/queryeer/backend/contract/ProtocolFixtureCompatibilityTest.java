@@ -9,7 +9,6 @@ import java.util.Map;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.contract.engine.EngineInvokeParams;
 import com.queryeer.backend.contract.engine.EngineInvokeResult;
 import com.queryeer.backend.contract.file.FileChangeNotification;
@@ -30,6 +29,8 @@ import com.queryeer.backend.contract.query.QueryLargeValueReadParams;
 import com.queryeer.backend.contract.query.QueryLargeValueReadResult;
 import com.queryeer.backend.contract.query.QueryProgressNotification;
 import com.queryeer.backend.contract.runtime.RuntimeStatusResult;
+
+import tools.jackson.databind.ObjectMapper;
 
 class ProtocolFixtureCompatibilityTest
 {
@@ -120,7 +121,7 @@ class ProtocolFixtureCompatibilityTest
         Assertions.assertTrue(result.accepted());
         Assertions.assertEquals("exec-fixture-1", result.queryExecutionId());
 
-        Assertions.assertThrows(IllegalArgumentException.class,
+        Assertions.assertThrows(tools.jackson.databind.exc.ValueInstantiationException.class,
                 () -> objectMapper.convertValue(Map.of("queryExecutionId", "exec-missing-file", "engineId", "payloadbuilder", "text", "select 1"), QueryExecuteParams.class));
     }
 

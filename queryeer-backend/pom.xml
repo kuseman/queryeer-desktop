@@ -17,7 +17,9 @@
         <checkstyle.version>10.26.1</checkstyle.version>
         <spotless.plugin.version>2.44.5</spotless.plugin.version>
         <surefire.plugin.version>3.5.5</surefire.plugin.version>
-        <jackson.version>2.19.4</jackson.version>
+        <jackson.version>3.1.4</jackson.version>
+        <jackson2.version>2.16.1</jackson2.version>
+        <jackson.annotations.version>2.22</jackson.annotations.version>
         <junit.jupiter.version>6.1.0</junit.jupiter.version>
         <mockito.core.version>5.23.0</mockito.core.version>
         <payloadbuilder.version>1.12.0</payloadbuilder.version>
@@ -207,16 +209,16 @@
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-annotations</artifactId>
-                <version>${jackson.version}</version>
+                <version>${jackson.annotations.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
-                <artifactId>jackson-databind</artifactId>
-                <version>${jackson.version}</version>
+                <artifactId>jackson-core</artifactId>
+                <version>${jackson2.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.fasterxml.jackson.datatype</groupId>
-                <artifactId>jackson-datatype-jsr310</artifactId>
+                <groupId>tools.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
                 <version>${jackson.version}</version>
             </dependency>
             <dependency>

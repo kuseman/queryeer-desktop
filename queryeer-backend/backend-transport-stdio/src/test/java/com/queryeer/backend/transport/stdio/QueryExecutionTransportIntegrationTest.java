@@ -9,7 +9,6 @@ import java.util.Map;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.LargeValueStore;
 import com.queryeer.backend.api.QueryEngineProvider;
 import com.queryeer.backend.api.QueryEngineRegistry;
@@ -19,6 +18,8 @@ import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.core.MapperUtils;
 import com.queryeer.backend.core.query.QueryExecutionService;
+
+import tools.jackson.databind.ObjectMapper;
 
 class QueryExecutionTransportIntegrationTest
 {

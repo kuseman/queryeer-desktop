@@ -9,7 +9,6 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.EventBus;
 import com.queryeer.backend.api.Events;
@@ -17,6 +16,8 @@ import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.core.MapperUtils;
+
+import tools.jackson.databind.ObjectMapper;
 
 class SettingsModuleChangedNotificationHandlerTest
 {

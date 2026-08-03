@@ -10,18 +10,22 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.EnvelopeType;
 import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.core.MapperUtils;
 
+import tools.jackson.databind.ObjectMapper;
+
 class ResponseWriterTest
 {
-    private static final class CyclicPayload
+    private static final class FailingPayload
     {
         @SuppressWarnings("unused")
-        private CyclicPayload self;
+        public Object getFail()
+        {
+            throw new RuntimeException("serialization fails");
+        }
     }
 
     @Test
@@ -145,8 +149,7 @@ class ResponseWriterTest
         ResponseWriter writer = new ResponseWriter(new ByteArrayOutputStream(), codec);
         writer.onBrokenPipe(() -> listenerInvoked.set(true));
 
-        CyclicPayload payload = new CyclicPayload();
-        payload.self = payload;
+        FailingPayload payload = new FailingPayload();
 
         IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
                 () -> writer.write(new BackendEnvelope(ProtocolVersion.V1_0_0, EnvelopeType.NOTIFICATION, null, null, "queryengine.chunkRows", payload, null, null)));

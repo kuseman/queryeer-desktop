@@ -9,13 +9,14 @@ import java.util.Map;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.ChangelogRegistry;
 import com.queryeer.backend.api.PluginDescriptor;
 import com.queryeer.backend.contract.BackendEnvelope;
 import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.about.PluginChangelogsResult;
 import com.queryeer.backend.core.MapperUtils;
+
+import tools.jackson.databind.ObjectMapper;
 
 class AboutPluginChangelogsRequestHandlerTest
 {

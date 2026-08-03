@@ -11,6 +11,8 @@ import com.queryeer.backend.contract.ProtocolVersion;
 import com.queryeer.backend.contract.query.QueryLargeValueReadParams;
 import com.queryeer.backend.contract.query.QueryLargeValueReadResult;
 
+import tools.jackson.core.JacksonException;
+
 final class QueryLargeValueReadRequestHandler implements RequestHandler
 {
     private final ResponseWriter responseWriter;
@@ -39,7 +41,7 @@ final class QueryLargeValueReadRequestHandler implements RequestHandler
             params = codec.objectMapper()
                     .convertValue(envelope.params(), QueryLargeValueReadParams.class);
         }
-        catch (IllegalArgumentException e)
+        catch (IllegalArgumentException | JacksonException e)
         {
             writeError(envelope.id(), BackendErrorCode.VALIDATION, "large value params are invalid", Map.of());
             return;
