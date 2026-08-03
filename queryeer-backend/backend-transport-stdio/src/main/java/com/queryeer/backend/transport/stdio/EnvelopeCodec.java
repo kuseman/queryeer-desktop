@@ -1,8 +1,9 @@
 package com.queryeer.backend.transport.stdio;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.contract.BackendEnvelope;
+
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 final class EnvelopeCodec
 {
@@ -13,12 +14,12 @@ final class EnvelopeCodec
         this.objectMapper = objectMapper;
     }
 
-    public BackendEnvelope decode(String line) throws JsonProcessingException
+    public BackendEnvelope decode(String line) throws JacksonException
     {
         return objectMapper.readValue(line, BackendEnvelope.class);
     }
 
-    public String encode(BackendEnvelope envelope) throws JsonProcessingException
+    public String encode(BackendEnvelope envelope) throws JacksonException
     {
         return objectMapper.writeValueAsString(envelope);
     }

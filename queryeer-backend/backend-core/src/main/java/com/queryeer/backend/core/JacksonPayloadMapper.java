@@ -5,17 +5,24 @@ import static com.queryeer.backend.core.MapperUtils.MAPPER;
 
 import java.util.List;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.type.CollectionType;
-import com.fasterxml.jackson.databind.type.TypeFactory;
 import com.queryeer.backend.api.PayloadMapper;
+
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.type.CollectionType;
 
 public record JacksonPayloadMapper() implements PayloadMapper
 {
     @Override
     public <T> T convert(Object fromValue, Class<T> toValueType)
     {
-        return MAPPER.convertValue(fromValue, toValueType);
+        try
+        {
+            return MAPPER.convertValue(fromValue, toValueType);
+        }
+        catch (JacksonException e)
+        {
+            throw new IllegalArgumentException("Could not convert value to " + toValueType.getSimpleName() + ": " + e.getMessage(), e);
+        }
     }
 
     @Override
@@ -28,9 +35,16 @@ public record JacksonPayloadMapper() implements PayloadMapper
         @SuppressWarnings("unchecked")
         List<Object> list = fromValue instanceof List lst ? lst
                 : List.of(fromValue);
-        CollectionType type = TypeFactory.defaultInstance()
+        CollectionType type = MAPPER.getTypeFactory()
                 .constructCollectionType(List.class, toValueType);
-        return MAPPER.convertValue(list, type);
+        try
+        {
+            return MAPPER.convertValue(list, type);
+        }
+        catch (JacksonException e)
+        {
+            throw new IllegalArgumentException("Could not convert list to " + toValueType.getSimpleName() + ": " + e.getMessage(), e);
+        }
     }
 
     @Override
@@ -45,7 +59,7 @@ public record JacksonPayloadMapper() implements PayloadMapper
         {
             return MAPPER.readValue(json, toValueType);
         }
-        catch (JsonProcessingException e)
+        catch (JacksonException e)
         {
             throw new RuntimeException("Error reading JSON value: " + json, e);
         }
@@ -58,7 +72,7 @@ public record JacksonPayloadMapper() implements PayloadMapper
         {
             return MAPPER.writeValueAsString(value);
         }
-        catch (JsonProcessingException e)
+        catch (JacksonException e)
         {
             throw new RuntimeException("Error writing JSON from: " + value, e);
         }

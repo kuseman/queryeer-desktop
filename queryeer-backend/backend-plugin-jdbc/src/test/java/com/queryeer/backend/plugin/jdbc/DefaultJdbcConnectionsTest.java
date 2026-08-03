@@ -127,22 +127,15 @@ class DefaultJdbcConnectionsTest
                 {
                     return null;
                 }
-                try
-                {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> module = new com.fasterxml.jackson.databind.ObjectMapper().readValue(settingsDir.resolve("core.queryengine.jdbc.json")
-                            .toFile(), Map.class);
-                    long version = ((Number) module.getOrDefault("version", 1)).longValue();
-                    String updatedAt = String.valueOf(module.getOrDefault("updatedAt", ""));
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> values = module.get("values") instanceof Map<?, ?> map ? (Map<String, Object>) map
-                            : Map.of();
-                    return new SettingsModule(moduleId, version, updatedAt, values);
-                }
-                catch (IOException e)
-                {
-                    throw new RuntimeException(e);
-                }
+                @SuppressWarnings("unchecked")
+                Map<String, Object> module = new tools.jackson.databind.json.JsonMapper().readValue(settingsDir.resolve("core.queryengine.jdbc.json")
+                        .toFile(), Map.class);
+                long version = ((Number) module.getOrDefault("version", 1)).longValue();
+                String updatedAt = String.valueOf(module.getOrDefault("updatedAt", ""));
+                @SuppressWarnings("unchecked")
+                Map<String, Object> values = module.get("values") instanceof Map<?, ?> map ? (Map<String, Object>) map
+                        : Map.of();
+                return new SettingsModule(moduleId, version, updatedAt, values);
             }
         };
 

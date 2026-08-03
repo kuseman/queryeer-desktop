@@ -13,9 +13,10 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.SecuritySessionClosedException;
+
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 public final class SecretRefPayloadResolver
 {
@@ -187,7 +188,7 @@ public final class SecretRefPayloadResolver
     {
         if (value instanceof JsonNode node)
         {
-            return node.isTextual() ? node.asText()
+            return node.isString() ? node.asString()
                     : null;
         }
         return value instanceof String text ? text

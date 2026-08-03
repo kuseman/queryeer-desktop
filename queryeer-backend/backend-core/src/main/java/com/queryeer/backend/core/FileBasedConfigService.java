@@ -6,12 +6,13 @@ import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.LoggerService;
 import com.queryeer.backend.api.SettingsModule;
 import com.queryeer.backend.core.security.SecretRefPayloadResolver;
 import com.queryeer.backend.core.security.SecuritySession;
+
+import tools.jackson.core.type.TypeReference;
 
 /**
  * {@link ConfigService} that reads settings module files from disk with lazy mtime-based reload and transparent secret resolution.
