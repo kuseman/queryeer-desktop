@@ -39,6 +39,7 @@ public final class PayloadbuilderSystemTableSqlEditorServices implements Payload
     private static final String COLUMN_NAME = "name";
     private static final String COLUMN_TYPE = "type";
     private static final String FUNCTION_TYPE_TABLE = "TABLE";
+    private static final Pattern SIMPLE_IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
     private static final int MAX_METADATA_ROWS = 5_000;
     private static final long CACHE_TTL_MS = 30_000;
 
@@ -141,7 +142,7 @@ public final class PayloadbuilderSystemTableSqlEditorServices implements Payload
         {
             return null;
         }
-        return new CompletionItem(label, "table", "Payloadbuilder table", null, label, "plain", source(request));
+        return new CompletionItem(label, "table", "Payloadbuilder table", null, quoteInvalidIdentifierParts(label), "plain", source(request));
     }
 
     private List<CompletionItem> completeFunctions(CompletionRequest request, Metadata metadata, boolean tableFunctionsOnly)
@@ -174,7 +175,7 @@ public final class PayloadbuilderSystemTableSqlEditorServices implements Payload
     {
         List<ColumnMatch> matches = resolveColumnCompletionCandidates(request, metadata);
         return matches.stream()
-                .map(column -> new CompletionItem(column.displayName(), "column", "Payloadbuilder column", null, column.displayName(), "plain", source(request)))
+                .map(column -> new CompletionItem(column.displayName(), "column", "Payloadbuilder column", null, quoteInvalidIdentifierParts(column.displayName()), "plain", source(request)))
                 .sorted(Comparator.comparing(CompletionItem::label, String.CASE_INSENSITIVE_ORDER))
                 .limit(request.maxItems())
                 .toList();
@@ -871,6 +872,25 @@ public final class PayloadbuilderSystemTableSqlEditorServices implements Payload
     private static boolean startsWithIgnoreCase(String value, String prefix)
     {
         return value.regionMatches(true, 0, prefix, 0, prefix.length());
+    }
+
+    private static String quoteInvalidIdentifierParts(String value)
+    {
+        int catalogSeparator = value.indexOf(PayloadbuilderCatalogSqlEditorServices.CATALOG_PREFIX_SEPARATOR);
+        String prefix = catalogSeparator < 0 ? ""
+                : value.substring(0, catalogSeparator + 1);
+        String qualifiedName = catalogSeparator < 0 ? value
+                : value.substring(catalogSeparator + 1);
+        String[] parts = qualifiedName.split("\\.", -1);
+        for (int i = 0; i < parts.length; i++)
+        {
+            if (!SIMPLE_IDENTIFIER.matcher(parts[i])
+                    .matches())
+            {
+                parts[i] = "\"" + parts[i].replace("\"", "\"\"") + "\"";
+            }
+        }
+        return prefix + String.join(".", parts);
     }
 
     private static String stringValue(Object value)

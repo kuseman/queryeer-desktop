@@ -266,7 +266,8 @@ public final class SqlCompletionSupport
         }
         String rawIdentifier = identifierTextAtCursor(text, line, column);
         if (rawIdentifier != null
-                && rawIdentifier.contains("#"))
+                && (rawIdentifier.contains(".")
+                        || rawIdentifier.contains("#")))
         {
             return rawIdentifier;
         }

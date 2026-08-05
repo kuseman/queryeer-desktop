@@ -289,6 +289,37 @@ class JdbcSchemaStoreTest
     }
 
     @Test
+    void findSymbol_PreservesExplicitSchemaWhenCachedObjectHasNoSchema(@TempDir Path tempDir)
+    {
+        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
+        JdbcSchemaObject table = new JdbcSchemaObject("table:variantsku", "variantsku", "table", List.of(), Map.of());
+        store.persistSnapshot("conn-1", JdbcSchemaCrawlScope.DEEP, List.of(table));
+
+        JdbcSchemaStore.SymbolLookupEntry symbol = store.findSymbol("conn-1", "m3.variantsku", null);
+
+        Assertions.assertNotNull(symbol);
+        Assertions.assertEquals("m3.variantsku", symbol.name());
+        Assertions.assertEquals("m3.variantsku", symbol.fullName());
+        Assertions.assertEquals("m3", symbol.schema());
+        Assertions.assertEquals("variantsku", symbol.objectName());
+    }
+
+    @Test
+    void objectDetail_PreservesExplicitSchemaWhenCachedObjectHasNoSchema(@TempDir Path tempDir)
+    {
+        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
+        JdbcSchemaObject table = new JdbcSchemaObject("table:variantsku", "variantsku", "table", List.of(), Map.of());
+        store.persistSnapshot("conn-1", JdbcSchemaCrawlScope.DEEP, List.of(table));
+
+        JdbcSchemaStore.ObjectDetail detail = store.objectDetail("conn-1", "m3.variantsku", null, List.of("table", "view"));
+
+        Assertions.assertNotNull(detail);
+        Assertions.assertEquals("m3", detail.schema());
+        Assertions.assertEquals("variantsku", detail.object()
+                .name());
+    }
+
+    @Test
     void persistDeepSnapshotTarget_ReplacesOnlyTargetSchema(@TempDir Path tempDir)
     {
         JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
