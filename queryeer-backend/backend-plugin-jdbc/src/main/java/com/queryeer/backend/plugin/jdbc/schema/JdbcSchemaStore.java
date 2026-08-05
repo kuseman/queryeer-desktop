@@ -1007,8 +1007,12 @@ public final class JdbcSchemaStore
                 return null;
             }
             String kind = normalizeTableKind(entry.kind());
-            return new SymbolLookupEntry(kind, displayTableName(entry.schema(), entry.name()), displayFullTableName(entry.database(), entry.schema(), entry.name()), kind.toUpperCase(),
-                    entry.database(), entry.schema(), entry.name());
+            String effectiveDatabase = entry.database() != null ? entry.database()
+                    : normalizedDatabase;
+            String effectiveSchema = entry.schema() != null ? entry.schema()
+                    : lookup.normalizedSchema();
+            return new SymbolLookupEntry(kind, displayTableName(effectiveSchema, entry.name()), displayFullTableName(effectiveDatabase, effectiveSchema, entry.name()), kind.toUpperCase(),
+                    effectiveDatabase, effectiveSchema, entry.name());
         }
         catch (SQLException e)
         {
@@ -1035,8 +1039,15 @@ public final class JdbcSchemaStore
                 return null;
             }
             JdbcSchemaObject object = loadObjectTree(connection, entry.objectId());
-            return object == null ? null
-                    : new ObjectDetail(object, entry.database(), entry.schema());
+            if (object == null)
+            {
+                return null;
+            }
+            String effectiveDatabase = entry.database() != null ? entry.database()
+                    : normalizedDatabase;
+            String effectiveSchema = entry.schema() != null ? entry.schema()
+                    : lookup.normalizedSchema();
+            return new ObjectDetail(object, effectiveDatabase, effectiveSchema);
         }
         catch (SQLException e)
         {

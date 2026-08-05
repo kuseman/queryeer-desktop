@@ -417,10 +417,13 @@ public final class JdbcSchemaNavigator
                     {
                         continue;
                     }
-                    String displayName = effectiveSchema != null ? effectiveSchema + "." + tableName
+                    String resultDatabase = effectiveDatabase != null ? effectiveDatabase
+                            : filterDatabase;
+                    String resultSchema = effectiveSchema != null ? effectiveSchema
+                            : filterSchema;
+                    String displayName = resultSchema != null ? resultSchema + "." + tableName
                             : tableName;
-                    return symbolResult(kind.toLowerCase(), displayName, displayFullName(effectiveDatabase, effectiveSchema, tableName), kind.toUpperCase(), effectiveDatabase, effectiveSchema,
-                            tableName);
+                    return symbolResult(kind.toLowerCase(), displayName, displayFullName(resultDatabase, resultSchema, tableName), kind.toUpperCase(), resultDatabase, resultSchema, tableName);
                 }
             }
 

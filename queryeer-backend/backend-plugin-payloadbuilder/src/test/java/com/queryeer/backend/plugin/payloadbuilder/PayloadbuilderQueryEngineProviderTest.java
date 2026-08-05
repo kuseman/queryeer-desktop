@@ -770,6 +770,25 @@ class PayloadbuilderQueryEngineProviderTest
 
     @SuppressWarnings("unchecked")
     @Test
+    void invokeSqlCompleteQuotesInvalidQualifiedTableNameParts()
+    {
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new TestSemanticCatalogProvider(true));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete",
+                Map.of("fileId", "file-1", "version", 1L, "text", "SELECT * FROM ", "engineState", semanticEngineState(), "cursor", Map.of("line", 1, "column", 15), "limits", Map.of("maxItems", 50)));
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+        Map<String, Object> item = items.stream()
+                .filter(candidate -> "sales.order-items".equals(candidate.get("label")))
+                .findFirst()
+                .orElseThrow();
+        Assertions.assertEquals("sales.\"order-items\"", item.get("insertText"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
     void invokeSqlCompleteIncludesOptedInPayloadbuilderCatalogColumns()
     {
         PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
@@ -783,6 +802,9 @@ class PayloadbuilderQueryEngineProviderTest
         Assertions.assertTrue(items.stream()
                 .anyMatch(item -> "p.id".equals(item.get("label"))
                         && "column".equals(item.get("kind"))));
+        Assertions.assertTrue(items.stream()
+                .anyMatch(item -> "p.external-id".equals(item.get("label"))
+                        && "p.\"external-id\"".equals(item.get("insertText"))));
     }
 
     @SuppressWarnings("unchecked")
@@ -1644,8 +1666,10 @@ class PayloadbuilderQueryEngineProviderTest
     {
         private static final String CATALOG_ID = "test.semantic";
         private static final String PRODUCTS_TABLE = "products";
+        private static final String DASHED_TABLE = "sales.order-items";
         private static final String PRODUCTS_BY_CATEGORY_FUNCTION = "products_by_category";
-        private static final Schema PRODUCTS_SCHEMA = Schema.of(Column.of("id", ResolvedType.INT), Column.of("name", ResolvedType.STRING), Column.of("category", ResolvedType.STRING));
+        private static final Schema PRODUCTS_SCHEMA = Schema.of(Column.of("id", ResolvedType.INT), Column.of("name", ResolvedType.STRING), Column.of("category", ResolvedType.STRING),
+                Column.of("external-id", ResolvedType.STRING));
 
         TestSemanticCatalog()
         {
@@ -1679,7 +1703,8 @@ class PayloadbuilderQueryEngineProviderTest
             if (SYS_TABLES.equalsIgnoreCase(systemTable))
             {
                 Schema schema = Schema.of(Column.of(SYS_TABLES_NAME, Column.Type.String));
-                return _ -> TupleIterator.singleton(new se.kuseman.payloadbuilder.api.execution.ObjectTupleVector(schema, 1, (_, _) -> PRODUCTS_TABLE));
+                return _ -> TupleIterator.singleton(new se.kuseman.payloadbuilder.api.execution.ObjectTupleVector(schema, 2, (row, _) -> row == 0 ? PRODUCTS_TABLE
+                        : DASHED_TABLE));
             }
             if (SYS_COLUMNS.equalsIgnoreCase(systemTable))
             {

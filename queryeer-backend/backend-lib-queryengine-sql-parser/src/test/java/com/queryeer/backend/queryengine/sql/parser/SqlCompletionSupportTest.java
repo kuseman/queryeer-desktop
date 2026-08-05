@@ -228,6 +228,26 @@ class SqlCompletionSupportTest
     }
 
     @Test
+    void identifierAtPositionReturnsQualifiedNameAcrossTerminalIdentifier()
+    {
+        String sql = "select *\r\nfrom M3.VariantSku ";
+        for (int column = 9; column <= 18; column++)
+        {
+            assertEquals("M3.VariantSku", SqlCompletionSupport.identifierAtPosition(new EmptyParseSessionService(), "jdbc", "file-1", sql, 2, column), "column " + column);
+        }
+    }
+
+    @Test
+    void identifierAtPositionReturnsThreePartNameAcrossTerminalIdentifier()
+    {
+        String sql = "select *\r\nfrom ProductMasterProd.M3.VariantSku";
+        for (int column = 27; column <= 36; column++)
+        {
+            assertEquals("ProductMasterProd.M3.VariantSku", SqlCompletionSupport.identifierAtPosition(new EmptyParseSessionService(), "jdbc", "file-1", sql, 2, column), "column " + column);
+        }
+    }
+
+    @Test
     void identifierAtPositionReturnsCatalogQualifiedName()
     {
         // Cursor on 'tables' in 'jdbc#sys.tables' (column 27 = 't' of tables)
