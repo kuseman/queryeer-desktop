@@ -92,7 +92,7 @@ class PayloadbuilderQueryEngineProviderTest
         Assertions.assertEquals(
                 Set.of("engine.capabilities", "sql.parse.snapshot", "sql.complete", "sql.hover", "sql.symbolAtPosition", "payloadbuilder.es.listIndices", "payloadbuilder.kafka.listTopics"),
                 Set.copyOf((List<String>) asMap.get("actions")));
-        Assertions.assertEquals(Set.of("jdbc", "elasticsearch", "kafka", "filesystem", "http"), Set.copyOf((Set<String>) asMap.get("catalogIds")));
+        Assertions.assertEquals(Set.of("jdbc", "elasticsearch", "kafka", "mongodb", "filesystem", "http"), Set.copyOf((Set<String>) asMap.get("catalogIds")));
     }
 
     @Test

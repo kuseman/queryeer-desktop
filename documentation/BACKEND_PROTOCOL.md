@@ -276,6 +276,8 @@ Behavior:
 - `options.dialectOptions` is an optional dialect-owned settings bag. For SQL Server, `sqlserverPlanXmlOutput` may be `suppress` or `include` to control whether raw ShowPlan XML result sets are also streamed as row output alongside graph artifacts.
 - Payloadbuilder engine state may include `payloadbuilder.defaultCatalogAlias` to request session default catalog alias.
 - Payloadbuilder engine state may include `payloadbuilder.selectedEnvironmentId`. Backend reads environment variables from settings module `core.queryengine.payloadbuilder.environments` (`core.queryengine.payloadbuilder.environments.json`) and injects them into the query session as runtime variables before execution.
+- A Payloadbuilder MongoDB catalog instance uses `catalogId: "mongodb"` and carries only `{ "connectionId": "..." }` in its properties. The backend resolves that ID from settings module `core.queryengine.payloadbuilder.mongodb`, setting `core.queryengine.payloadbuilder.mongodb.connections`, and materializes any password secret reference before injecting MongoDB connection properties. Connection strings and credentials are not persisted in file engine state.
+- MongoDB tables use two-part `<database>.<collection>` names, for example `select * from mongo#sales.orders`. The catalog is read-only and also exposes `mongo#aggregate('<database>.<collection>', '<pipeline JSON array>')` for raw aggregation pipelines.
 - Payloadbuilder maintains a persistent `QuerySession` per file. Sessions persist across queries within the same file, allowing variables and temp tables to be maintained. Environment variables are re-resolved and reset on each query execution to keep them in sync with the current environment selection. The session is cleaned up when the file is closed. If the selected environment changes, the session is recreated to avoid stale variable values. After execution, the backend reflects the current session counter in `queryengine.completed.engineState.payloadbuilder.sessionId` so the UI can display the session identifier in the tab title (e.g., `(1) filename.plbsql`).
 - JDBC engine state carries `connectionId`, optional `database`, and optional `sessionId`. When `database` is present, the backend switches the JDBC connection to that catalog (via dialect-specific `setCatalog`/`setSchema`) before executing statements. After execution, the backend reflects the current database back in `queryengine.completed.engineState.database` and the active RDBMS session in `queryengine.completed.engineState.sessionId` so the UI stays synchronized.
 
@@ -575,7 +577,7 @@ Success result:
 {
   "result": {
     "actions": ["engine.capabilities", "sql.complete", "sql.hover", "sql.symbolAtPosition", "payloadbuilder.es.listIndices", "payloadbuilder.kafka.listTopics"],
-    "catalogIds": ["jdbc", "elasticsearch", "kafka", "filesystem", "http"]
+    "catalogIds": ["jdbc", "elasticsearch", "kafka", "mongodb", "filesystem", "http"]
   },
   "features": ["rows", "plan"],
   "artifacts": [
@@ -976,7 +978,7 @@ Current Java stdio scaffold implementation status:
 - `queryengine.cancel` implemented (mocked cancellation notification)
 - `backend.runtimeStatus` implemented
 - JDBC provider actions include `jdbc.schema.snapshot` (latest cached snapshot by `connectionId` and optional `scope`), `jdbc.schema.refresh` (synchronous refresh + cache persist with scope-aware behavior), `sql.complete` (schema-aware SQL completions from the cached snapshot), `sql.symbolAtPosition` (returns symbol `name`, `fullName`, `detail`, and attributes for table/view names under the cursor), and `sql.hover` (returns pre-formatted markdown for table/column names under the cursor, resolved from H2 DEEP snapshot only)
-- Payloadbuilder provider actions include `sql.complete`, `sql.hover`, and `sql.symbolAtPosition`. These actions are backed by opt-in catalog developer tools; built-in `jdbc` delegates to the shared JDBC schema developer-tools service, while `elasticsearch`, `kafka`, `filesystem`, and `http` opt into the generic system-table implementation.
+- Payloadbuilder provider actions include `sql.complete`, `sql.hover`, and `sql.symbolAtPosition`. These actions are backed by opt-in catalog developer tools; built-in `jdbc` delegates to the shared JDBC schema developer-tools service, while `elasticsearch`, `kafka`, `mongodb`, `filesystem`, and `http` opt into the generic system-table implementation.
 - JDBC provider action `jdbc.schema.fetch` resolves connection settings by `connectionId` only; fetch payload supports `connectionId`, `scope`, and optional `target` (no inline connection overrides).
 - JDBC provider action `jdbc.schema.status` returns crawl status/statistics for all configured connections (or a single connection when `connectionId` is provided). Each status entry includes: `connectionId`, `connectionTitle`, `scope` (`top`|`deep`), `databaseKey` (null for top), `lastSuccessAt`, `lastAttemptAt`, `lastFailureAt`, `nextDueAt`, `consecutiveFailures`, `usageScore`, `enabled`, `objectCount`, `lastError`.
 - JDBC provider action `jdbc.connection.test` accepts `{ "connectionId": "..." }` whole body for a connection.
