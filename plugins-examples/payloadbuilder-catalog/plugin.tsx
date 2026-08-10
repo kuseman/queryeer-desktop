@@ -3,7 +3,7 @@ import type {
   PayloadbuilderCatalogContribution,
   PayloadbuilderCatalogPanelProps
 } from "@queryeer/api/queryengine/PayloadbuilderCatalogExtension";
-import { WeatherCatalogPanel, injectWeatherCatalogStyles } from "./WeatherCatalogPanel";
+import { WeatherCatalogPanel, injectWeatherCatalogStyles } from "./WeatherCatalogPanel.js";
 
 const weatherCatalogContribution: PayloadbuilderCatalogContribution = {
   catalogId: "example.fake",

@@ -1,8 +1,8 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
 import type { OutlineSymbol } from "@queryeer/api/extensions/OutlineExtension";
-import { registerFooMimeTypes } from "./mime-types";
-import { registerFooEditorContextMenu } from "./context-menu";
-import { FooEditor, injectFooEditorStyles } from "./FooEditor";
+import { registerFooMimeTypes } from "./mime-types.js";
+import { registerFooEditorContextMenu } from "./context-menu.js";
+import { FooEditor, injectFooEditorStyles } from "./FooEditor.js";
 
 export const customEditorPlugin: Plugin = {
   manifest: {
@@ -56,7 +56,7 @@ export const customEditorPlugin: Plugin = {
       provider: (content: string): OutlineSymbol[] => {
         const lines = content.split("\n");
         return lines
-          .map((line, index) => {
+          .map<OutlineSymbol | null>((line, index) => {
             const trimmed = line.trim();
             if (trimmed.length === 0) return null;
             const headerMatch = trimmed.match(/^(\w+):/);

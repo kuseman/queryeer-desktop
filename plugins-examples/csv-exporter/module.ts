@@ -1,5 +1,5 @@
 import type { PluginModule } from "@queryeer/api/plugin/PluginModule";
-import { csvExporterPlugin } from "./plugin";
+import { csvExporterPlugin } from "./plugin.js";
 
 export const pluginModule: PluginModule = {
   manifest: csvExporterPlugin.manifest,

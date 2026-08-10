@@ -1,5 +1,5 @@
 import type { PluginModule } from "@queryeer/api/plugin/PluginModule";
-import { weatherCatalogPlugin } from "./plugin";
+import { weatherCatalogPlugin } from "./plugin.js";
 
 export const pluginModule: PluginModule = {
   manifest: weatherCatalogPlugin.manifest,
