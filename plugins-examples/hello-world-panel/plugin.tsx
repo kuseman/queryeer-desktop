@@ -1,6 +1,6 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
 import type { PluginContext } from "@queryeer/api/plugin/Plugin";
-import { HelloWorldPanel, injectHelloWorldStyles } from "./HelloWorldPanel";
+import { HelloWorldPanel, injectHelloWorldStyles } from "./HelloWorldPanel.js";
 
 export const helloWorldPlugin: Plugin = {
   manifest: {

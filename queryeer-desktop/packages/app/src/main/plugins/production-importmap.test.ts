@@ -16,6 +16,8 @@ describe("production import map harness", () => {
     expect(importMapContent).toBe(JSON.stringify(PRODUCTION_PLUGIN_IMPORT_MAP));
     expect(transformedHtml).toContain("script-src 'self' 'sha256-");
     expect(transformedHtml).not.toContain("script-src 'self' 'unsafe-inline'");
+    expect(transformedHtml).toContain("worker-src 'self' blob:");
+    expect(transformedHtml).not.toContain("script-src 'self' blob:");
   });
 
   it("defines required external module bridges", () => {

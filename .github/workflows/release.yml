@@ -39,7 +39,7 @@ jobs:
 
       - name: Set up JDK 25 (dry run)
         if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: "25"
           distribution: zulu
@@ -47,7 +47,7 @@ jobs:
 
       - name: Set up JDK 25 (publish)
         if: github.event_name == 'push'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: "25"
           distribution: zulu
@@ -126,7 +126,7 @@ jobs:
           mode: cache
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: "25"
           distribution: zulu
@@ -183,7 +183,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 25 (publish)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: "25"
           distribution: zulu

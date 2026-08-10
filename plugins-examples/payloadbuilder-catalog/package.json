@@ -12,13 +12,13 @@
   "peerDependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "@queryeer/api": "^0.10.0"
+    "@queryeer/api": "^0.12.0"
   },
   "devDependencies": {
-    "@queryeer/api": "^0.10.0",
-    "@types/react": "^18.3.0",
-    "esbuild": "^0.23.0",
+    "@queryeer/api": "^0.12.0",
+    "@types/react": "^18.3.31",
+    "esbuild": "^0.28.2",
     "react": "^18.3.1",
-    "typescript": "^5.5.0"
+    "typescript": "^5.9.3"
   }
 }

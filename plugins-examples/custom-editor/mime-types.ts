@@ -17,6 +17,6 @@ export function registerFooMimeTypes(files: FilesRegistry): void {
   });
   files.capabilities.registerCapabilities("application/x-foo", ["viewable", "editable"]);
   files.capabilities.registerContentCategory("application/x-foo", "text");
-  files.capabilities.registerPreferredExtension("application/x-foo", "foo");
-  files.capabilities.registerLabel("application/x-foo", "X-Foo");
+  files.capabilities.registerPreferredExtension?.("application/x-foo", "foo");
+  files.capabilities.registerLabel?.("application/x-foo", "X-Foo");
 }

@@ -37,7 +37,7 @@ jobs:
           cache-dependency-path: queryeer-desktop/package-lock.json
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: "25"
           distribution: zulu
