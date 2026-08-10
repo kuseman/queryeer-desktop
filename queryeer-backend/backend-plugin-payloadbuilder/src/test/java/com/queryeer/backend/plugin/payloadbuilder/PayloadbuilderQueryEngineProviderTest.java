@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.FileSession;
 import com.queryeer.backend.api.OutputEvent;
@@ -1766,9 +1767,10 @@ class PayloadbuilderQueryEngineProviderTest
     }
 
     @Test
-    void jackson2CoreClassesAvailable()
+    void jackson2DependenciesAreBinaryCompatible()
     {
-        Assertions.assertDoesNotThrow(() -> Class.forName("com.fasterxml.jackson.core.StreamReadConstraints"));
+        var node = Assertions.assertDoesNotThrow(() -> new ObjectMapper().readTree("1.25"));
+        Assertions.assertEquals(1.25D, node.doubleValue());
     }
 
     private static final class RecordingPublisher implements QueryPublisher
