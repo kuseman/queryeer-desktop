@@ -78,6 +78,12 @@ public final class KafkaCatalogProvider implements PayloadbuilderCatalogProvider
         }
     }
 
+    @Override
+    public void clearProperties(IQuerySession session, String alias, Map<String, Object> inputProperties)
+    {
+        clearCatalogProperties(session, alias);
+    }
+
     KafkaConnection getConnection(String connectionId)
     {
         if (connectionId == null

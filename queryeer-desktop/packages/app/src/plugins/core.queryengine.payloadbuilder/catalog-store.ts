@@ -1,6 +1,7 @@
 import type { FilesRegistry } from "@queryeer/api/files/FilesRegistry";
 import {
   applyEngineStatePatch,
+  isEngineStateCurrent,
   emptyCatalogDocument,
   readDocumentFromFile,
   setSelectedEnvironmentId,
@@ -150,9 +151,14 @@ export class PayloadbuilderCatalogStore {
     this.writeDocument(fileId, next);
   }
 
-  applyEngineStatePatch(fileId: string, engineStatePatch: unknown): void {
-    const next = applyEngineStatePatch(this.readDocument(fileId), engineStatePatch);
+  applyEngineStatePatch(fileId: string, engineStatePatch: unknown, submittedEngineState?: unknown): boolean {
+    const current = this.readDocument(fileId);
+    if (submittedEngineState !== undefined && !isEngineStateCurrent(current, submittedEngineState, engineStatePatch)) {
+      return false;
+    }
+    const next = applyEngineStatePatch(current, engineStatePatch);
     this.writeDocument(fileId, next);
+    return true;
   }
 
   private readDocument(fileId: string | undefined): PayloadbuilderCatalogsDocument {

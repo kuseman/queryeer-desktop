@@ -291,4 +291,41 @@ describe("payloadbuilder catalog store", () => {
     ] as { selectedEnvironmentId?: string };
     expect(persisted.selectedEnvironmentId).toBe("prod");
   });
+
+  it("does not apply a completion patch after the submitted connection changed", () => {
+    getConfiguredCatalogAliasesMock.mockReturnValue([
+      { alias: "jdbc1", catalogId: "Jdbc", enabled: true }
+    ]);
+    const filesRegistry = new FileRegistry().createFilesRegistry();
+    const store = getPayloadbuilderCatalogStore();
+    store.initialize(filesRegistry);
+    const file = filesRegistry.openFile({
+      uri: "untitled:file-stale-completion",
+      mimeType: "application/plbsql"
+    });
+    store.setProperty(file.fileId, "jdbc1", "connectionId", "first");
+    store.setProperty(file.fileId, "jdbc1", "database", "appdb");
+    const submittedEngineState = store.buildEngineState(file.fileId);
+
+    store.setProperty(file.fileId, "jdbc1", "connectionId", "second");
+    store.setProperty(file.fileId, "jdbc1", "database", "production");
+    const applied = store.applyEngineStatePatch(
+      file.fileId,
+      {
+        payloadbuilder: {
+          sessionId: "old-session",
+          catalogs: {
+            jdbc1: { catalogId: "Jdbc", properties: { database: "reporting" } }
+          }
+        }
+      },
+      submittedEngineState
+    );
+
+    expect(applied).toBe(false);
+    expect(store.listInstances(file.fileId)[0]?.properties).toEqual({
+      connectionId: "second",
+      database: "production"
+    });
+  });
 });

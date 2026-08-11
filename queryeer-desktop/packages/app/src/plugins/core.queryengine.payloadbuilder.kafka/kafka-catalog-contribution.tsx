@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import type { PayloadbuilderCatalogPanelProps } from "../core.queryengine.payloadbuilder/catalog-contributions";
 import { registerPayloadbuilderCatalogContribution } from "../core.queryengine.payloadbuilder/catalog-contributions";
@@ -67,6 +67,7 @@ function KafkaPanel({ fileId, alias, properties, setProperty }: PayloadbuilderCa
   const [topics, setTopics] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const reloadGeneration = useRef(0);
 
   const selectableTopics = useMemo(() => {
     const seen = new Set<string>();
@@ -92,7 +93,15 @@ function KafkaPanel({ fileId, alias, properties, setProperty }: PayloadbuilderCa
     }
   }, [configuredConnection, configuredConnectionId, hasConfiguredConnectionProperty, selectedConnectionId, setProperty]);
 
+  useEffect(() => {
+    reloadGeneration.current += 1;
+    setTopics([]);
+    setLoading(false);
+    setError(undefined);
+  }, [alias, fileId, selectedConnectionId]);
+
   const loadTopics = async (): Promise<void> => {
+    const generation = ++reloadGeneration.current;
     setLoading(true);
     setError(undefined);
     try {
@@ -113,14 +122,21 @@ function KafkaPanel({ fileId, alias, properties, setProperty }: PayloadbuilderCa
       const next = Array.isArray(result?.topics)
         ? result.topics.filter((entry): entry is string => typeof entry === "string")
         : [];
+      if (generation !== reloadGeneration.current) {
+        return;
+      }
       setTopics(next);
       if (next.length > 0 && !next.includes(selectedTopic)) {
         setProperty("topic", next[0]);
       }
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : String(loadError));
+      if (generation === reloadGeneration.current) {
+        setError(loadError instanceof Error ? loadError.message : String(loadError));
+      }
     } finally {
-      setLoading(false);
+      if (generation === reloadGeneration.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -134,8 +150,9 @@ function KafkaPanel({ fileId, alias, properties, setProperty }: PayloadbuilderCa
         className="payloadbuilder-catalog-select"
         value={selectedConnectionId}
         disabled={connections.length === 0 || loading}
-        onChange={(event) => {
-          const nextConnectionId = event.target.value;
+        onInput={(event) => {
+          reloadGeneration.current += 1;
+          const nextConnectionId = event.currentTarget.value;
           setProperty("connectionId", nextConnectionId);
           setProperty("topic", "");
           setTopics([]);
@@ -158,7 +175,7 @@ function KafkaPanel({ fileId, alias, properties, setProperty }: PayloadbuilderCa
         className="payloadbuilder-catalog-select"
         value={selectedTopic}
         disabled={loading || selectableTopics.length === 0}
-        onChange={(event) => setProperty("topic", event.target.value)}
+        onInput={(event) => setProperty("topic", event.currentTarget.value)}
       >
         {selectableTopics.length === 0 && <option value="">No topics loaded</option>}
         {selectableTopics.length > 0 && <option value="">Select topic</option>}

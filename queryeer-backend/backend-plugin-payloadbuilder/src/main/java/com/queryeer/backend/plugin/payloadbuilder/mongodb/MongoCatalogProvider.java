@@ -62,6 +62,12 @@ public final class MongoCatalogProvider implements PayloadbuilderCatalogProvider
     }
 
     @Override
+    public void clearProperties(IQuerySession session, String alias, Map<String, Object> inputProperties)
+    {
+        clearCatalogProperties(session, alias);
+    }
+
+    @Override
     public PayloadbuilderCatalogSqlEditorServices editorServices()
     {
         return PayloadbuilderSystemTableSqlEditorServices.INSTANCE;

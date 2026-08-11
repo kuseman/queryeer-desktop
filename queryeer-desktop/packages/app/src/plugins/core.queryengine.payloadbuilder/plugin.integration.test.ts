@@ -249,6 +249,7 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
     mocks.executeQueryForFlowMock.mockReset();
     mocks.buildEngineStateMock.mockReset();
     mocks.applyEngineStatePatchMock.mockReset();
+    mocks.applyEngineStatePatchMock.mockReturnValue(true);
     mocks.initializeStoreMock.mockReset();
     mocks.getCoreSettingsServiceMock.mockReset();
     mocks.listContributionsMock.mockReset();
@@ -941,17 +942,21 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
       { engineId: "payloadbuilder", fileId: "file-1" }
     );
 
-    expect(mocks.applyEngineStatePatchMock).toHaveBeenCalledWith("file-1", {
-      payloadbuilder: {
-        catalogs: {
-          jdbc1: {
-            properties: {
-              database: "reporting"
+    expect(mocks.applyEngineStatePatchMock).toHaveBeenCalledWith(
+      "file-1",
+      {
+        payloadbuilder: {
+          catalogs: {
+            jdbc1: {
+              properties: {
+                database: "reporting"
+              }
             }
           }
         }
-      }
-    });
+      },
+      undefined
+    );
 
     listener?.(
       { method: "queryengine.completed", params: { engineState: { ignored: true } } },
@@ -1042,6 +1047,41 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
         })
       })
     );
+  });
+
+  it("does not apply stale session metadata when the catalog patch is rejected", () => {
+    const context = createContext();
+    mocks.applyEngineStatePatchMock.mockReturnValue(false);
+    coreQueryEnginePayloadbuilderPlugin.activate(context);
+
+    const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+      | ((
+          event: { method: string; params?: { engineState?: unknown } },
+          executeContext?: { engineId?: string; fileId?: string; engineState?: unknown }
+        ) => void)
+      | undefined;
+    const submittedEngineState = {
+      payloadbuilder: {
+        catalogs: { jdbc1: { catalogId: "Jdbc", properties: { connectionId: "first" } } }
+      }
+    };
+    const updateFileMock = context.files.updateFile as ReturnType<typeof vi.fn>;
+    updateFileMock.mockClear();
+
+    listener?.(
+      {
+        method: "queryengine.completed",
+        params: { engineState: { payloadbuilder: { sessionId: "old-session" } } }
+      },
+      { engineId: "payloadbuilder", fileId: "file-1", engineState: submittedEngineState }
+    );
+
+    expect(mocks.applyEngineStatePatchMock).toHaveBeenCalledWith(
+      "file-1",
+      { payloadbuilder: { sessionId: "old-session" } },
+      submittedEngineState
+    );
+    expect(updateFileMock).not.toHaveBeenCalled();
   });
 
   it("adapts catalog instance setting with newly contributed catalogs", async () => {

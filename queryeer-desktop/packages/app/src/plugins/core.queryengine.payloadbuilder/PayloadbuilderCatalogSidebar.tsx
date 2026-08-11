@@ -80,10 +80,10 @@ export function PayloadbuilderCatalogSidebar({ editorRegistryHost }: Props): JSX
               <select
                 className="payloadbuilder-catalog-select"
                 value={selectedEnvironmentId}
-                onChange={(event) =>
+                onInput={(event) =>
                   getPayloadbuilderCatalogStore().setSelectedEnvironmentId(
                     activeFile.fileId,
-                    event.target.value || undefined
+                    event.currentTarget.value || undefined
                   )
                 }
               >

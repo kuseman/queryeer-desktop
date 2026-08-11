@@ -1,5 +1,6 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
 import type { FilesRegistry } from "@queryeer/api/files/FilesRegistry";
+import type { PayloadbuilderEngineState } from "@queryeer/api/backend/Types";
 import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";
 import { registerWhenExpressionTemplates } from "../core.commands/when-expression-template-registry";
 import { registerSymbolActionTemplate } from "../core.queryengine/symbol-action-template-registry";
@@ -284,11 +285,16 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
         return;
       }
       const catalogStore = getPayloadbuilderCatalogStore();
-      const es = params.engineState as Record<string, unknown> | null;
-      const pbState = es?.payloadbuilder as Record<string, unknown> | null;
-      const sessionId = typeof pbState?.sessionId === "string" ? pbState.sessionId : undefined;
-      catalogStore.applyEngineStatePatch(executeContext.fileId, params.engineState);
-      syncPayloadbuilderMetadata(executeContext.fileId, context.files, catalogStore, sessionId);
+      const payloadbuilderState = params.engineState as PayloadbuilderEngineState;
+      const sessionId = payloadbuilderState.payloadbuilder?.sessionId;
+      const applied = catalogStore.applyEngineStatePatch(
+        executeContext.fileId,
+        params.engineState,
+        executeContext.engineState
+      );
+      if (applied) {
+        syncPayloadbuilderMetadata(executeContext.fileId, context.files, catalogStore, sessionId);
+      }
     });
 
     const catalogStore = getPayloadbuilderCatalogStore();

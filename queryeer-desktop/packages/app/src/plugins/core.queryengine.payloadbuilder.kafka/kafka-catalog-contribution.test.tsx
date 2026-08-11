@@ -31,6 +31,14 @@ async function flush(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolver) => {
+    resolve = resolver;
+  });
+  return { promise, resolve };
+}
+
 describe("payloadbuilder kafka catalog contribution", () => {
   let rootElement: HTMLDivElement;
   let root: Root;
@@ -120,6 +128,85 @@ describe("payloadbuilder kafka catalog contribution", () => {
     const optionValues = Array.from(topicSelect?.querySelectorAll("option") ?? []).map((option) => option.getAttribute("value"));
     expect(optionValues).toEqual(["", "orders", "shipments"]);
     expect(setPropertyMock).toHaveBeenCalledWith("topic", "orders");
+  });
+
+  it("ignores an out-of-order reload after switching connection, file, and alias", async () => {
+    configuredConnectionsMock.mockReturnValue([
+      {
+        connectionId: "broker-a",
+        title: "Broker A",
+        bootstrapServers: "a:9092",
+        securityProtocol: "PLAINTEXT",
+        enabled: true
+      },
+      {
+        connectionId: "broker-b",
+        title: "Broker B",
+        bootstrapServers: "b:9092",
+        securityProtocol: "PLAINTEXT",
+        enabled: true
+      }
+    ]);
+    registerPayloadbuilderKafkaCatalogContribution();
+    const renderPanel = getPayloadbuilderCatalogContribution("kafka")?.renderPanel;
+    if (!renderPanel) {
+      throw new Error("Expected kafka contribution renderPanel");
+    }
+
+    const responseA = deferred<{ topics: string[] }>();
+    const responseB = deferred<{ topics: string[] }>();
+    invokeMock.mockReturnValueOnce(responseA.promise).mockReturnValueOnce(responseB.promise);
+    const setPropertyMock = vi.fn();
+
+    await act(async () => {
+      root.render(renderPanel({
+        fileId: "file-a",
+        alias: "kafka-a",
+        catalogId: "kafka",
+        properties: { connectionId: "broker-a" },
+        setProperty: setPropertyMock
+      }) as React.ReactElement);
+      await flush();
+    });
+    await act(async () => {
+      rootElement.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flush();
+    });
+
+    await act(async () => {
+      root.render(renderPanel({
+        fileId: "file-b",
+        alias: "kafka-b",
+        catalogId: "kafka",
+        properties: { connectionId: "broker-b" },
+        setProperty: setPropertyMock
+      }) as React.ReactElement);
+      await flush();
+    });
+    expect((rootElement.querySelector("button") as HTMLButtonElement).disabled).toBe(false);
+    await act(async () => {
+      rootElement.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flush();
+    });
+
+    await act(async () => {
+      responseB.resolve({ topics: ["b-topic"] });
+      await flush();
+      responseA.resolve({ topics: ["a-topic"] });
+      await flush();
+    });
+
+    expect(invokeMock).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      fileId: "file-b",
+      payload: expect.objectContaining({
+        alias: "kafka-b",
+        properties: { connectionId: "broker-b" }
+      })
+    }));
+    const topicSelect = rootElement.querySelector("#payloadbuilder-kafka-topic-kafka-b") as HTMLSelectElement;
+    expect(Array.from(topicSelect.options).map((option) => option.value)).toEqual(["", "b-topic"]);
+    expect(setPropertyMock).toHaveBeenCalledWith("topic", "b-topic");
+    expect(setPropertyMock).not.toHaveBeenCalledWith("topic", "a-topic");
   });
 
   it("persists default connectionId when missing", async () => {

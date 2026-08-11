@@ -53,7 +53,7 @@ function MongoPanel({ alias, properties, setProperty }: PayloadbuilderCatalogPan
         className="payloadbuilder-catalog-select"
         value={selectedConnectionId}
         disabled={connections.length === 0}
-        onChange={(event) => setProperty("connectionId", event.target.value)}
+        onInput={(event) => setProperty("connectionId", event.currentTarget.value)}
       >
         <option value="">{connections.length === 0 ? "No connections configured" : "Select connection"}</option>
         {connections.map((connection) => (

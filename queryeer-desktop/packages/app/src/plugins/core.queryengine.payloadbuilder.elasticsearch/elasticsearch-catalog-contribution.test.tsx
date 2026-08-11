@@ -35,6 +35,14 @@ async function flush(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolver) => {
+    resolve = resolver;
+  });
+  return { promise, resolve };
+}
+
 describe("payloadbuilder elasticsearch catalog contribution", () => {
   let rootElement: HTMLDivElement;
   let root: Root;
@@ -127,6 +135,89 @@ describe("payloadbuilder elasticsearch catalog contribution", () => {
     const options = Array.from(indexSelect.querySelectorAll("option")).map((option) => option.value);
     expect(options).toEqual(["", "logs-2026", "metrics-2026"]);
     expect(setPropertyMock).toHaveBeenCalledWith("index", "logs-2026");
+  });
+
+  it("ignores an out-of-order reload after switching connection, file, and alias", async () => {
+    configuredConnectionsMock.mockReturnValue([
+      {
+        connectionId: "cluster-a",
+        title: "Cluster A",
+        endpoint: "https://a:9200",
+        authType: "NONE",
+        authUsername: "",
+        authPassword: { secretRef: "" },
+        enabled: true
+      },
+      {
+        connectionId: "cluster-b",
+        title: "Cluster B",
+        endpoint: "https://b:9200",
+        authType: "NONE",
+        authUsername: "",
+        authPassword: { secretRef: "" },
+        enabled: true
+      }
+    ]);
+    registerPayloadbuilderElasticsearchCatalogContribution();
+    const renderPanel = getPayloadbuilderCatalogContribution("elasticsearch")?.renderPanel;
+    if (!renderPanel) {
+      throw new Error("Expected elasticsearch contribution renderPanel");
+    }
+
+    const responseA = deferred<{ indices: string[] }>();
+    const responseB = deferred<{ indices: string[] }>();
+    invokeMock.mockReturnValueOnce(responseA.promise).mockReturnValueOnce(responseB.promise);
+    const setPropertyMock = vi.fn();
+
+    await act(async () => {
+      root.render(renderPanel({
+        fileId: "file-a",
+        alias: "es-a",
+        catalogId: "elasticsearch",
+        properties: { connectionId: "cluster-a" },
+        setProperty: setPropertyMock
+      }) as React.ReactElement);
+      await flush();
+    });
+    await act(async () => {
+      rootElement.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flush();
+    });
+
+    await act(async () => {
+      root.render(renderPanel({
+        fileId: "file-b",
+        alias: "es-b",
+        catalogId: "elasticsearch",
+        properties: { connectionId: "cluster-b" },
+        setProperty: setPropertyMock
+      }) as React.ReactElement);
+      await flush();
+    });
+    expect((rootElement.querySelector("button") as HTMLButtonElement).disabled).toBe(false);
+    await act(async () => {
+      rootElement.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flush();
+    });
+
+    await act(async () => {
+      responseB.resolve({ indices: ["b-index"] });
+      await flush();
+      responseA.resolve({ indices: ["a-index"] });
+      await flush();
+    });
+
+    expect(invokeMock).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      fileId: "file-b",
+      payload: expect.objectContaining({
+        alias: "es-b",
+        properties: { connectionId: "cluster-b" }
+      })
+    }));
+    const indexSelect = rootElement.querySelector("#payloadbuilder-es-index-es-b") as HTMLSelectElement;
+    expect(Array.from(indexSelect.options).map((option) => option.value)).toEqual(["", "b-index"]);
+    expect(setPropertyMock).toHaveBeenCalledWith("index", "b-index");
+    expect(setPropertyMock).not.toHaveBeenCalledWith("index", "a-index");
   });
 
   it("persists default connectionId when missing", async () => {

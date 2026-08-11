@@ -156,6 +156,8 @@ class ProtocolFixtureCompatibilityTest
         @SuppressWarnings("unchecked")
         Map<String, Object> payloadbuilder = (Map<String, Object>) engineState.get("payloadbuilder");
         Assertions.assertNotNull(payloadbuilder);
+        Assertions.assertFalse(engineState.containsKey("sessionId"));
+        Assertions.assertEquals("7", payloadbuilder.get("sessionId"));
         Assertions.assertEquals("test", payloadbuilder.get("selectedEnvironmentId"));
         Assertions.assertEquals("es1", payloadbuilder.get("defaultCatalogAlias"));
 
@@ -189,6 +191,8 @@ class ProtocolFixtureCompatibilityTest
         Map<String, Object> engineState = objectMapper.convertValue(params.engineState(), Map.class);
         @SuppressWarnings("unchecked")
         Map<String, Object> pb = (Map<String, Object>) engineState.get("payloadbuilder");
+        Assertions.assertFalse(engineState.containsKey("sessionId"));
+        Assertions.assertEquals("8", pb.get("sessionId"));
         @SuppressWarnings("unchecked")
         Map<String, Object> catalogs = (Map<String, Object>) pb.get("catalogs");
         @SuppressWarnings("unchecked")

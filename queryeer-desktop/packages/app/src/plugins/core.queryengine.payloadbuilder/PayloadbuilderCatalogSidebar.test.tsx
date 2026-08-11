@@ -277,7 +277,7 @@ describe("PayloadbuilderCatalogSidebar", () => {
 
     await act(async () => {
       select.value = "prod";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
+      select.dispatchEvent(new Event("input", { bubbles: true }));
       await flush();
     });
 

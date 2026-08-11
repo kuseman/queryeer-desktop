@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyEngineStatePatch,
   emptyCatalogDocument,
+  isEngineStateCurrent,
   parseCatalogDocument,
   setSelectedEnvironmentId,
   setInstanceProperty,
@@ -150,5 +151,77 @@ describe("payloadbuilder catalog state", () => {
     });
 
     expect(patched.defaultCatalogAlias).toBe("jdbc1");
+  });
+
+  it("rejects a completion patch after its connection changed", () => {
+    const current = parseCatalogDocument({
+      instancesByAlias: {
+        jdbc1: { catalogId: "Jdbc", properties: { connectionId: "second", database: "production" } }
+      }
+    });
+    const submitted = {
+      payloadbuilder: {
+        catalogs: {
+          jdbc1: { catalogId: "Jdbc", properties: { connectionId: "first", database: "appdb" } }
+        }
+      }
+    };
+    const patch = {
+      payloadbuilder: {
+        catalogs: {
+          jdbc1: { catalogId: "Jdbc", properties: { database: "reporting" } }
+        }
+      }
+    };
+
+    expect(isEngineStateCurrent(current, submitted, patch)).toBe(false);
+  });
+
+  it("accepts a completion patch when submitted catalog state is still current", () => {
+    const current = parseCatalogDocument({
+      selectedEnvironmentId: "prod",
+      instancesByAlias: {
+        jdbc1: { catalogId: "Jdbc", properties: { connectionId: "first", database: "appdb" } }
+      }
+    });
+    const submitted = {
+      payloadbuilder: {
+        selectedEnvironmentId: "prod",
+        catalogs: {
+          jdbc1: {
+            catalogId: "Jdbc",
+            properties: { connectionId: "first", database: "appdb", password: "runtime-only" }
+          }
+        }
+      }
+    };
+    const patch = {
+      payloadbuilder: {
+        catalogs: {
+          jdbc1: { catalogId: "Jdbc", properties: { database: "reporting" } }
+        }
+      }
+    };
+
+    expect(isEngineStateCurrent(current, submitted, patch)).toBe(true);
+  });
+
+  it("accepts session-only completion metadata independently of catalog property normalization", () => {
+    const current = parseCatalogDocument({
+      instancesByAlias: {
+        mongo: { catalogId: "mongodb", properties: { connectionId: "current", legacyProperty: "persisted" } }
+      }
+    });
+    const submitted = {
+      payloadbuilder: {
+        catalogs: {
+          mongo: { catalogId: "mongodb", properties: { connectionId: "submitted" } }
+        }
+      }
+    };
+
+    expect(isEngineStateCurrent(current, submitted, {
+      payloadbuilder: { sessionId: "12" }
+    })).toBe(true);
   });
 });

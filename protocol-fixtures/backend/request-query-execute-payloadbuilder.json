@@ -10,6 +10,7 @@
     "text": "select 1",
     "engineState": {
       "payloadbuilder": {
+        "sessionId": "7",
         "selectedEnvironmentId": "test",
         "defaultCatalogAlias": "es1",
         "catalogs": {

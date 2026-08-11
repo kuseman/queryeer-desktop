@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import type { PayloadbuilderCatalogPanelProps } from "../core.queryengine.payloadbuilder/catalog-contributions";
 import { registerPayloadbuilderCatalogContribution } from "../core.queryengine.payloadbuilder/catalog-contributions";
@@ -67,6 +67,7 @@ function ElasticsearchPanel({ fileId, alias, properties, setProperty }: Payloadb
   const [indices, setIndices] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const reloadGeneration = useRef(0);
 
   const selectableIndices = useMemo(() => {
     const seen = new Set<string>();
@@ -92,7 +93,15 @@ function ElasticsearchPanel({ fileId, alias, properties, setProperty }: Payloadb
     }
   }, [configuredConnection, configuredConnectionId, hasConfiguredConnectionProperty, selectedConnectionId, setProperty]);
 
+  useEffect(() => {
+    reloadGeneration.current += 1;
+    setIndices([]);
+    setLoading(false);
+    setError(undefined);
+  }, [alias, fileId, selectedConnectionId]);
+
   const loadIndices = async (): Promise<void> => {
+    const generation = ++reloadGeneration.current;
     setLoading(true);
     setError(undefined);
     try {
@@ -113,14 +122,21 @@ function ElasticsearchPanel({ fileId, alias, properties, setProperty }: Payloadb
       const next = Array.isArray(result?.indices)
         ? result.indices.filter((entry): entry is string => typeof entry === "string")
         : [];
+      if (generation !== reloadGeneration.current) {
+        return;
+      }
       setIndices(next);
       if (next.length > 0 && !next.includes(selectedIndex)) {
         setProperty("index", next[0]);
       }
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : String(loadError));
+      if (generation === reloadGeneration.current) {
+        setError(loadError instanceof Error ? loadError.message : String(loadError));
+      }
     } finally {
-      setLoading(false);
+      if (generation === reloadGeneration.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -134,8 +150,9 @@ function ElasticsearchPanel({ fileId, alias, properties, setProperty }: Payloadb
         className="payloadbuilder-catalog-select"
         value={selectedConnectionId}
         disabled={connections.length === 0 || loading}
-        onChange={(event) => {
-          const nextConnectionId = event.target.value;
+        onInput={(event) => {
+          reloadGeneration.current += 1;
+          const nextConnectionId = event.currentTarget.value;
           setProperty("connectionId", nextConnectionId);
           setProperty("index", "");
           setIndices([]);
@@ -158,7 +175,7 @@ function ElasticsearchPanel({ fileId, alias, properties, setProperty }: Payloadb
         className="payloadbuilder-catalog-select"
         value={selectedIndex}
         disabled={loading || selectableIndices.length === 0}
-        onChange={(event) => setProperty("index", event.target.value)}
+        onInput={(event) => setProperty("index", event.currentTarget.value)}
       >
         {selectableIndices.length === 0 && <option value="">No indices loaded</option>}
         {selectableIndices.length > 0 && <option value="">Select index</option>}
