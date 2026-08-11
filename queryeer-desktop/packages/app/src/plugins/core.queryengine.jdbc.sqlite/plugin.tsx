@@ -1,4 +1,5 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
+import { fileUriToPath } from "@queryeer/api/files/Resolvers";
 import { registerJdbcDialect } from "../core.queryengine.jdbc/jdbc-dialect-registry";
 import { SqliteConnectionForm } from "./SqliteConnectionForm";
 import { SqliteDatabaseWelcomeEditor } from "./SqliteDatabaseWelcomeEditor";
@@ -46,8 +47,7 @@ export const coreQueryEngineJdbcSqlitePlugin: Plugin = {
       render: (renderCtx) => {
         const activeFile = renderCtx?.activeFile;
         if (!activeFile) return null;
-        const uri = activeFile.uri;
-        const filePath = uri.startsWith("file:///") ? decodeURIComponent(uri.slice(8)) : decodeURIComponent(uri);
+        const filePath = fileUriToPath(activeFile.uri);
         return (
           <SqliteDatabaseWelcomeEditor
             filePath={filePath}

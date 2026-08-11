@@ -12,20 +12,35 @@ export type EditorResolver = (file: FileEntity) => string | undefined;
 export const DEFAULT_MIME_TYPE = "application/octet-stream";
 
 export function fileUriToPath(uri: string): string {
-  const decoded = decodeURIComponent(uri);
-  if (!decoded.startsWith("file://")) {
-    return decoded;
+  if (!uri.startsWith("file:")) {
+    return decodeURIComponent(uri);
   }
-  const withoutScheme = decoded.startsWith("file:///")
-    ? decoded.slice(8)
-    : decoded.slice("file://".length);
-  const isWindows = /^[A-Za-z]:/.test(withoutScheme);
-  if (isWindows) {
-    return withoutScheme.replace(/\//g, "\\");
+
+  const fileUrl = new URL(uri);
+  const pathname = decodeURIComponent(fileUrl.pathname);
+  if (fileUrl.hostname) {
+    return `\\\\${decodeURIComponent(fileUrl.hostname)}${pathname.replace(/\//g, "\\")}`;
   }
-  return withoutScheme;
+  if (/^\/[A-Za-z]:/.test(pathname)) {
+    return pathname.slice(1).replace(/\//g, "\\");
+  }
+  return pathname;
 }
 
 export function pathToFileUri(filePath: string): string {
-  return "file:///" + filePath.replace(/\\/g, "/");
+  const normalized = filePath.replace(/\\/g, "/");
+  if (normalized.startsWith("//")) {
+    const withoutPrefix = normalized.slice(2);
+    const separatorIndex = withoutPrefix.indexOf("/");
+    const hostname = separatorIndex >= 0 ? withoutPrefix.slice(0, separatorIndex) : withoutPrefix;
+    const pathname = separatorIndex >= 0 ? withoutPrefix.slice(separatorIndex) : "/";
+    const fileUrl = new URL(`file://${hostname}/`);
+    fileUrl.pathname = pathname.replace(/%/g, "%25");
+    return fileUrl.href;
+  }
+
+  const pathname = normalized.startsWith("/") ? normalized : `/${normalized}`;
+  const fileUrl = new URL("file:///");
+  fileUrl.pathname = pathname.replace(/%/g, "%25");
+  return fileUrl.href;
 }
