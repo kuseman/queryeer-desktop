@@ -76,4 +76,21 @@ describe("coreQueryEngineJdbcSqlitePlugin", () => {
       })
     );
   });
+
+  it("preserves an absolute POSIX path when rendering the SQLite editor", () => {
+    const context = createContext();
+    coreQueryEngineJdbcSqlitePlugin.activate(context);
+    const registeredEditor = (context.layout.registerEditor as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+      render: (renderContext: { activeFile: { fileId: string; uri: string } }) => { props: { filePath: string } };
+    };
+
+    const rendered = registeredEditor.render({
+      activeFile: {
+        fileId: "sqlite-file",
+        uri: "file:///Users/alice/My%20Database.sqlite"
+      }
+    });
+
+    expect(rendered.props.filePath).toBe("/Users/alice/My Database.sqlite");
+  });
 });
