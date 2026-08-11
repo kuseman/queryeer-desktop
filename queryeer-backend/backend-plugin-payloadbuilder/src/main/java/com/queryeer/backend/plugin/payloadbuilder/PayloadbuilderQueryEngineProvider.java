@@ -8,7 +8,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +15,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.commons.lang3.ObjectUtils;
 
@@ -87,7 +87,7 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
     private static final InMemoryGenericCache GENERIC_CACHE = new InMemoryGenericCache("QuerySession", true);
     private final AtomicLong sessionCounter = new AtomicLong(0);
     private final Set<String> cancelledExecutionIds = ConcurrentHashMap.newKeySet();
-    private final Map<String, SessionHolder> sessionByFileId = new ConcurrentHashMap<>();
+    private final Map<String, FileSessionHolder> sessionByFileId = new ConcurrentHashMap<>();
     final Map<String, SessionHolder> sessionByExecutionId = new ConcurrentHashMap<>();
     private final ConfigService configService;
     private final PayloadbuilderCatalogProviderRegistry catalogProviders;
@@ -140,6 +140,8 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
         long startMs = System.currentTimeMillis();
         QuerySession session = null;
         String sessionId = null;
+        FileSessionHolder fileSessionHolder = null;
+        boolean fileSessionLocked = false;
         AccumulatingOutputWriter outputWriter = new AccumulatingOutputWriter();
         PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState catalogState = null;
         List<String> environmentVariableKeys = List.of();
@@ -151,19 +153,20 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
                 throw new IllegalArgumentException("Engine state is required");
             }
             catalogState = PayloadbuilderEngineStateSupport.parse(typedState);
-            SessionHolder holder = getOrCreateSessionHolder(fileId, catalogState);
+            fileSessionHolder = sessionByFileId.computeIfAbsent(fileId, _ -> new FileSessionHolder());
+            fileSessionHolder.lock.lock();
+            fileSessionLocked = true;
+            SessionHolder holder = getOrCreateSessionHolder(fileSessionHolder, catalogState);
             session = holder.session;
             sessionId = holder.sessionId;
 
             environmentVariableKeys = injectEnvironmentVariables(session, catalogState.selectedEnvironmentId());
-            clearRemovedInputCatalogProperties(session, holder, catalogState);
             injectCatalogProperties(session, catalogState);
 
             session.setAbortSupplier(() -> cancelledExecutionIds.contains(queryExecutionId));
             sessionByExecutionId.put(queryExecutionId, holder);
 
             PayloadbuilderEngineStateSupport.applyToSession(session, catalogState);
-            rememberInputCatalogProperties(holder, catalogState);
 
             session.setPrintWriter(outputWriter);
             session.setExceptionHandler(e -> outputWriter.addError(ErrorMessages.buildFailureMessage(e)));
@@ -248,28 +251,46 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
         {
             cancelledExecutionIds.remove(queryExecutionId);
             sessionByExecutionId.remove(queryExecutionId);
-            if (catalogState != null)
+            try
             {
-                removeEnvironmentVariables(session, environmentVariableKeys);
+                if (catalogState != null
+                        && session != null)
+                {
+                    try
+                    {
+                        clearExecutionCatalogProperties(session, catalogState);
+                    }
+                    finally
+                    {
+                        removeEnvironmentVariables(session, environmentVariableKeys);
+                    }
+                }
+            }
+            finally
+            {
+                if (fileSessionLocked)
+                {
+                    fileSessionHolder.lock.unlock();
+                }
             }
         }
     }
 
-    private SessionHolder getOrCreateSessionHolder(String fileId, PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState catalogState)
+    private SessionHolder getOrCreateSessionHolder(FileSessionHolder fileSessionHolder, PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState catalogState)
     {
         CatalogTopologyKey catalogTopologyKey = catalogTopologyKey(catalogState);
-        return sessionByFileId.compute(fileId, (_, existing) ->
+        SessionHolder existing = fileSessionHolder.sessionHolder;
+        if (existing != null
+                && Objects.equals(existing.catalogTopologyKey(), catalogTopologyKey))
         {
-            if (existing != null
-                    && Objects.equals(existing.catalogTopologyKey(), catalogTopologyKey))
-            {
-                return existing;
-            }
+            return existing;
+        }
 
-            QuerySession newSession = new QuerySession(buildCatalogRegistry(catalogState), Map.of());
-            newSession.setGenericCache(GENERIC_CACHE);
-            return new SessionHolder(newSession, String.valueOf(sessionCounter.incrementAndGet()), catalogTopologyKey, new HashMap<>());
-        });
+        QuerySession newSession = new QuerySession(buildCatalogRegistry(catalogState), Map.of());
+        newSession.setGenericCache(GENERIC_CACHE);
+        SessionHolder result = new SessionHolder(newSession, String.valueOf(sessionCounter.incrementAndGet()), catalogTopologyKey);
+        fileSessionHolder.sessionHolder = result;
+        return result;
     }
 
     private static CatalogTopologyKey catalogTopologyKey(PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
@@ -283,35 +304,25 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
         return new CatalogTopologyKey(entries);
     }
 
-    private static void clearRemovedInputCatalogProperties(QuerySession session, SessionHolder holder, PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
+    private void clearExecutionCatalogProperties(QuerySession session, PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
     {
-        for (Map.Entry<String, Set<String>> previousEntry : holder.inputPropertyKeysByAlias()
-                .entrySet())
-        {
-            PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState.Instance current = state.instancesByAlias()
-                    .get(previousEntry.getKey());
-            Set<String> currentKeys = current != null ? current.properties()
-                    .keySet()
-                    : Set.of();
-            for (String previousKey : previousEntry.getValue())
-            {
-                if (!currentKeys.contains(previousKey))
-                {
-                    session.setCatalogProperty(previousEntry.getKey(), previousKey, (Object) null);
-                }
-            }
-        }
-    }
-
-    private static void rememberInputCatalogProperties(SessionHolder holder, PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
-    {
-        Map<String, Set<String>> inputPropertyKeysByAlias = holder.inputPropertyKeysByAlias();
-        inputPropertyKeysByAlias.clear();
+        Map<String, PayloadbuilderCatalogProviderContributor> providersByAlias = buildProvidersByAlias(state);
         for (PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState.Instance instance : state.instancesByAlias()
                 .values())
         {
-            inputPropertyKeysByAlias.put(instance.alias(), new HashSet<>(instance.properties()
-                    .keySet()));
+            PayloadbuilderCatalogProviderContributor provider = providersByAlias.get(instance.alias());
+            if (provider != null)
+            {
+                provider.clearProperties(session, instance.alias(), instance.properties());
+            }
+            else
+            {
+                for (String propertyKey : instance.properties()
+                        .keySet())
+                {
+                    session.setCatalogProperty(instance.alias(), propertyKey, (Object) null);
+                }
+            }
         }
     }
 
@@ -514,7 +525,19 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
     public void onClose(FileSession session)
     {
         parseSessions.close(engineId(), session.fileId());
-        sessionByFileId.remove(session.fileId());
+        FileSessionHolder holder = sessionByFileId.remove(session.fileId());
+        if (holder != null)
+        {
+            holder.lock.lock();
+            try
+            {
+                holder.sessionHolder = null;
+            }
+            finally
+            {
+                holder.lock.unlock();
+            }
+        }
     }
 
     static int publishTupleVectorInChunks(QueryPublisher publisher, TupleVector tupleVector, int chunkSize)
@@ -1186,11 +1209,17 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
     {
     }
 
-    record SessionHolder(QuerySession session, String sessionId, CatalogTopologyKey catalogTopologyKey, Map<String, Set<String>> inputPropertyKeysByAlias)
+    static final class FileSessionHolder
+    {
+        private final ReentrantLock lock = new ReentrantLock(true);
+        private SessionHolder sessionHolder;
+    }
+
+    record SessionHolder(QuerySession session, String sessionId, CatalogTopologyKey catalogTopologyKey)
     {
         SessionHolder(QuerySession session, String sessionId)
         {
-            this(session, sessionId, new CatalogTopologyKey(List.of()), new HashMap<>());
+            this(session, sessionId, new CatalogTopologyKey(List.of()));
         }
 
         SessionHolder
@@ -1198,7 +1227,6 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
             requireNonNull(session);
             requireNonNull(sessionId);
             requireNonNull(catalogTopologyKey);
-            requireNonNull(inputPropertyKeysByAlias);
         }
     }
 }

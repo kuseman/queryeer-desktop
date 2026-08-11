@@ -10,6 +10,7 @@
     },
     "engineState": {
       "payloadbuilder": {
+        "sessionId": "8",
         "catalogs": {
           "es1": {
             "catalogId": "elasticsearch",

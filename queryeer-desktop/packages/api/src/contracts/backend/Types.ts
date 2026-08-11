@@ -224,6 +224,7 @@ export type JdbcEngineState = {
 
 export type PayloadbuilderEngineState = {
   payloadbuilder?: {
+    sessionId?: string;
     defaultCatalogAlias?: string;
     selectedEnvironmentId?: string;
     catalogs?: Record<string, { catalogId: string; properties?: Record<string, unknown> }>;

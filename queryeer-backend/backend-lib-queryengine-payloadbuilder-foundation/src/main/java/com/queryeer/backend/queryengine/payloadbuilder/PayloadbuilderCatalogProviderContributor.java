@@ -64,6 +64,17 @@ public interface PayloadbuilderCatalogProviderContributor
     }
 
     /**
+     * Clear properties injected for this catalog / alias after query execution. Implementations that translate input properties to native catalog properties must clear both forms here.
+     */
+    default void clearProperties(IQuerySession session, String alias, Map<String, Object> inputProperties)
+    {
+        for (String propertyKey : inputProperties.keySet())
+        {
+            session.setCatalogProperty(alias, propertyKey, (Object) null);
+        }
+    }
+
+    /**
      * After query execution, allows the provider to contribute catalog property changes to the engine state patch.
      */
     default Map<String, Object> buildCatalogPatch(IQuerySession session, String alias, Map<String, Object> inputProperties)

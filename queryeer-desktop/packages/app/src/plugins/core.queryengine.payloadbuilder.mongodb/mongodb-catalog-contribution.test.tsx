@@ -91,4 +91,51 @@ describe("payloadbuilder mongodb catalog contribution", () => {
       connectionId: "mongo-disabled"
     })).toEqual({});
   });
+
+  it("writes and resolves a newly selected connection", async () => {
+    configuredConnectionsMock.mockReturnValue([
+      {
+        connectionId: "mongo-1",
+        title: "First",
+        connectionString: "mongodb://first:27017",
+        enabled: true
+      },
+      {
+        connectionId: "mongo-2",
+        title: "Second",
+        connectionString: "mongodb://second:27017",
+        enabled: true
+      }
+    ]);
+    registerPayloadbuilderMongoCatalogContribution();
+    const contribution = getPayloadbuilderCatalogContribution("mongodb");
+    const renderPanel = contribution?.renderPanel;
+    if (!renderPanel) {
+      throw new Error("Expected MongoDB catalog panel");
+    }
+    const setProperty = vi.fn();
+
+    await act(async () => {
+      root.render(renderPanel({
+        fileId: "file-1",
+        alias: "mongo",
+        catalogId: "mongodb",
+        properties: { connectionId: "mongo-1" },
+        setProperty
+      }) as React.ReactElement);
+    });
+    const select = rootElement.querySelector("select");
+    if (!select) {
+      throw new Error("Expected MongoDB connection select");
+    }
+    await act(async () => {
+      select.value = "mongo-2";
+      select.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    expect(setProperty).toHaveBeenCalledWith("connectionId", "mongo-2");
+    expect(contribution?.resolveRuntimeProperties?.({ connectionId: "mongo-2" })).toEqual({
+      connectionId: "mongo-2"
+    });
+  });
 });

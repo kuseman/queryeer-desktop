@@ -176,6 +176,87 @@ export function applyEngineStatePatch(
   return merged;
 }
 
+export function isEngineStateCurrent(
+  document: PayloadbuilderCatalogsDocument,
+  submittedEngineState: unknown,
+  engineStatePatch: unknown
+): boolean {
+  if (!isRecord(submittedEngineState) || !isRecord(engineStatePatch)) {
+    return false;
+  }
+  const submitted = submittedEngineState.payloadbuilder;
+  const patch = engineStatePatch.payloadbuilder;
+  if (!isRecord(submitted) || !isRecord(patch)) {
+    return false;
+  }
+
+  const patchCatalogs = isRecord(patch.catalogs) ? patch.catalogs : {};
+  const patchesDefaultCatalog = Object.prototype.hasOwnProperty.call(patch, "defaultCatalogAlias");
+  if (Object.keys(patchCatalogs).length === 0 && !patchesDefaultCatalog) {
+    return true;
+  }
+
+  const submittedEnvironment = typeof submitted.selectedEnvironmentId === "string"
+    ? submitted.selectedEnvironmentId
+    : undefined;
+  if (document.selectedEnvironmentId !== submittedEnvironment) {
+    return false;
+  }
+
+  if (patchesDefaultCatalog) {
+    const submittedDefault = typeof submitted.defaultCatalogAlias === "string"
+      ? submitted.defaultCatalogAlias
+      : undefined;
+    if (document.defaultCatalogAlias !== submittedDefault) {
+      return false;
+    }
+  }
+
+  const submittedCatalogs = isRecord(submitted.catalogs) ? submitted.catalogs : {};
+  for (const [alias, patchInstance] of Object.entries(patchCatalogs)) {
+    const currentInstance = document.instancesByAlias[alias];
+    const submittedInstance = submittedCatalogs[alias];
+    if (!currentInstance || !isRecord(submittedInstance)) {
+      return false;
+    }
+    if (currentInstance.catalogId !== submittedInstance.catalogId) {
+      return false;
+    }
+
+    const currentProperties = currentInstance.properties ?? {};
+    const submittedProperties = isRecord(submittedInstance.properties)
+      ? submittedInstance.properties
+      : {};
+    const patchProperties = isRecord(patchInstance) && isRecord(patchInstance.properties)
+      ? patchInstance.properties
+      : {};
+    const comparedKeys = new Set([...Object.keys(currentProperties), ...Object.keys(patchProperties), "connectionId"]);
+    for (const key of comparedKeys) {
+      if (!propertyValuesEqual(currentProperties[key], submittedProperties[key])) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function propertyValuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) {
+    return true;
+  }
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((value, index) => propertyValuesEqual(value, right[index]));
+  }
+  if (isRecord(left) && isRecord(right)) {
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+    return leftKeys.length === rightKeys.length
+      && leftKeys.every((key) => Object.prototype.hasOwnProperty.call(right, key)
+        && propertyValuesEqual(left[key], right[key]));
+  }
+  return false;
+}
+
 export function upsertInstance(
   document: PayloadbuilderCatalogsDocument,
   input: { alias: string; catalogId: string; properties?: Record<string, unknown> }

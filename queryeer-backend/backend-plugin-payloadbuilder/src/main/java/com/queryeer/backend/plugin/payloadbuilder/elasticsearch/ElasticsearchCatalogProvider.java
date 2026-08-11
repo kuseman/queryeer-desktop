@@ -69,6 +69,12 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
         }
     }
 
+    @Override
+    public void clearProperties(IQuerySession session, String alias, Map<String, Object> inputProperties)
+    {
+        clearCatalogProperties(session, alias);
+    }
+
     ElasticsearchConnection getConnection(String connectionId)
     {
         if (connectionId == null

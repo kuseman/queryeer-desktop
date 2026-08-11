@@ -89,6 +89,12 @@ public final class JdbcCatalogProvider implements PayloadbuilderCatalogProviderC
         querySession.setCatalogProperty(alias, JdbcCatalog.PASSWORD, password);
     }
 
+    @Override
+    public void clearProperties(IQuerySession session, String alias, Map<String, Object> inputProperties)
+    {
+        clearCatalogProperties(session, alias);
+    }
+
     private static void clearCatalogProperties(IQuerySession querySession, String alias)
     {
         querySession.setCatalogProperty(alias, KEY_CONNECTION_ID, (Object) null);

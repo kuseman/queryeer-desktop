@@ -130,8 +130,8 @@ function PayloadbuilderJdbcPanel({ alias, properties, setProperty }: Payloadbuil
         className="payloadbuilder-catalog-select"
         value={selectedConnectionId}
         disabled={connections.length === 0}
-        onChange={(event) => {
-          setProperty("connectionId", event.target.value);
+        onInput={(event) => {
+          setProperty("connectionId", event.currentTarget.value);
           setProperty("database", "");
           setDatabases([]);
         }}
@@ -152,7 +152,7 @@ function PayloadbuilderJdbcPanel({ alias, properties, setProperty }: Payloadbuil
         className="payloadbuilder-catalog-select"
         value={selectedDatabase}
         disabled={loadingDatabases || selectableDatabases.length === 0}
-        onChange={(event) => setProperty("database", event.target.value)}
+        onInput={(event) => setProperty("database", event.currentTarget.value)}
       >
         {selectableDatabases.length === 0 && <option value="">No databases available</option>}
         {selectableDatabases.length > 0 && <option value="">Select database</option>}

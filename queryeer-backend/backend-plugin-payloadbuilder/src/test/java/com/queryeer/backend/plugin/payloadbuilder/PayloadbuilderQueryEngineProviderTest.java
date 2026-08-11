@@ -11,6 +11,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -229,7 +233,57 @@ class PayloadbuilderQueryEngineProviderTest
     }
 
     @Test
-    void executeClearsRemovedCatalogInputPropertiesWithoutRebuildingSession()
+    void executeReusesSessionAndAppliesNewConnectionState()
+    {
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new PropertyEchoCatalogProvider());
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+
+        RecordingPublisher first = new RecordingPublisher();
+        provider.execute("exec-connection-first", "file-connection", "select value into #cached from items", propertyEchoEngineState(Map.of("connectionId", "first", "value", "alpha")), first);
+
+        ChunkRowsPublisher second = new ChunkRowsPublisher();
+        provider.execute("exec-connection-second", "file-connection", "select value from items", propertyEchoEngineState(Map.of("connectionId", "second", "value", "beta")), second);
+
+        Assertions.assertNull(first.errorCode, first.errorMessage);
+        Assertions.assertNull(second.errorCode, second.errorMessage);
+        Assertions.assertEquals(sessionId(first.engineState), sessionId(second.engineState));
+        Assertions.assertEquals("beta", second.rows.get(0)
+                .get(0));
+    }
+
+    @Test
+    void executeSerializesConcurrentQueriesForSameFile() throws Exception
+    {
+        BlockingPropertyEchoCatalog catalog = new BlockingPropertyEchoCatalog();
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new BlockingPropertyEchoCatalogProvider(catalog));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+
+        try (var executor = Executors.newFixedThreadPool(2))
+        {
+            ChunkRowsPublisher first = new ChunkRowsPublisher();
+            ChunkRowsPublisher second = new ChunkRowsPublisher();
+            var firstFuture = executor.submit(() -> provider.execute("exec-concurrent-first", "file-concurrent", "select value from items", propertyEchoEngineState(Map.of("value", "alpha")), first));
+            Assertions.assertTrue(catalog.firstEntered.await(5, TimeUnit.SECONDS));
+
+            var secondFuture = executor
+                    .submit(() -> provider.execute("exec-concurrent-second", "file-concurrent", "select value from items", propertyEchoEngineState(Map.of("value", "beta")), second));
+            Assertions.assertFalse(catalog.secondEntered.await(200, TimeUnit.MILLISECONDS));
+            catalog.releaseFirst.countDown();
+
+            firstFuture.get(5, TimeUnit.SECONDS);
+            secondFuture.get(5, TimeUnit.SECONDS);
+            Assertions.assertEquals(1, catalog.maxActive.get());
+            Assertions.assertEquals("alpha", first.rows.get(0)
+                    .get(0));
+            Assertions.assertEquals("beta", second.rows.get(0)
+                    .get(0));
+        }
+    }
+
+    @Test
+    void executeClearsSubmittedCatalogInputPropertiesBetweenRuns()
     {
         PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         registry.registerContributor(new PropertyEchoCatalogProvider());
@@ -244,6 +298,29 @@ class PayloadbuilderQueryEngineProviderTest
 
         ChunkRowsPublisher second = new ChunkRowsPublisher();
         provider.execute("exec-property-second", "file-property-clear", "select value from items", propertyEchoEngineState(Map.of()), second);
+
+        Assertions.assertNull(second.errorCode, second.errorMessage);
+        Assertions.assertEquals(sessionId(first.engineState), sessionId(second.engineState));
+        Assertions.assertNull(second.rows.get(0)
+                .get(0));
+    }
+
+    @Test
+    void executeClearsCatalogTranslatedPropertiesBetweenRuns()
+    {
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new TranslatedPropertyEchoCatalogProvider());
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+
+        ChunkRowsPublisher first = new ChunkRowsPublisher();
+        provider.execute("exec-translated-first", "file-translated-clear", "select value from items", propertyEchoEngineState(Map.of("inputValue", "alpha")), first);
+
+        Assertions.assertNull(first.errorCode, first.errorMessage);
+        Assertions.assertEquals("alpha", first.rows.get(0)
+                .get(0));
+
+        ChunkRowsPublisher second = new ChunkRowsPublisher();
+        provider.execute("exec-translated-second", "file-translated-clear", "select value from items", propertyEchoEngineState(Map.of()), second);
 
         Assertions.assertNull(second.errorCode, second.errorMessage);
         Assertions.assertEquals(sessionId(first.engineState), sessionId(second.engineState));
@@ -284,6 +361,7 @@ class PayloadbuilderQueryEngineProviderTest
         Assertions.assertNull(dev.errorCode, dev.errorMessage);
         Assertions.assertEquals("alpha", dev.rows.get(0)
                 .get(0));
+        String devSessionId = sessionId(dev.engineState);
 
         ChunkRowsPublisher prod = new ChunkRowsPublisher();
         provider.execute("exec-env-prod", "file-env-switch", "select @tenant tenant", Map.of("payloadbuilder", Map.of("selectedEnvironmentId", "prod")), prod);
@@ -291,6 +369,7 @@ class PayloadbuilderQueryEngineProviderTest
         Assertions.assertNull(prod.errorCode, prod.errorMessage);
         Assertions.assertEquals("beta", prod.rows.get(0)
                 .get(0));
+        Assertions.assertEquals(devSessionId, sessionId(prod.engineState));
     }
 
     @Test
@@ -1592,6 +1671,52 @@ class PayloadbuilderQueryEngineProviderTest
         }
     }
 
+    private record BlockingPropertyEchoCatalogProvider(BlockingPropertyEchoCatalog catalog) implements PayloadbuilderCatalogProviderContributor
+    {
+        @Override
+        public String catalogId()
+        {
+            return PropertyEchoCatalog.CATALOG_ID;
+        }
+
+        @Override
+        public Catalog createCatalog()
+        {
+            return catalog;
+        }
+    }
+
+    private record TranslatedPropertyEchoCatalogProvider() implements PayloadbuilderCatalogProviderContributor
+    {
+        @Override
+        public String catalogId()
+        {
+            return PropertyEchoCatalog.CATALOG_ID;
+        }
+
+        @Override
+        public Catalog createCatalog()
+        {
+            return new PropertyEchoCatalog();
+        }
+
+        @Override
+        public void injectProperties(IQuerySession session, String alias, Map<String, Object> properties)
+        {
+            if (properties.containsKey("inputValue"))
+            {
+                session.setCatalogProperty(alias, PropertyEchoCatalog.VALUE_PROPERTY, properties.get("inputValue"));
+            }
+        }
+
+        @Override
+        public void clearProperties(IQuerySession session, String alias, Map<String, Object> inputProperties)
+        {
+            PayloadbuilderCatalogProviderContributor.super.clearProperties(session, alias, inputProperties);
+            session.setCatalogProperty(alias, PropertyEchoCatalog.VALUE_PROPERTY, (Object) null);
+        }
+    }
+
     private static final class AliasEchoCatalog extends Catalog
     {
         private static final String CATALOG_ID = "test.aliasEcho";
@@ -1660,6 +1785,65 @@ class PayloadbuilderQueryEngineProviderTest
                         || value.isNull(0) ? null
                                 : value.valueAsObject(0);
             }));
+        }
+    }
+
+    private static final class BlockingPropertyEchoCatalog extends Catalog
+    {
+        private final CountDownLatch firstEntered = new CountDownLatch(1);
+        private final CountDownLatch secondEntered = new CountDownLatch(1);
+        private final CountDownLatch releaseFirst = new CountDownLatch(1);
+        private final AtomicInteger invocations = new AtomicInteger();
+        private final AtomicInteger active = new AtomicInteger();
+        private final AtomicInteger maxActive = new AtomicInteger();
+
+        BlockingPropertyEchoCatalog()
+        {
+            super(PropertyEchoCatalog.CATALOG_ID);
+        }
+
+        @Override
+        public TableSchema getTableSchema(IExecutionContext context, String catalogAlias, QualifiedName table)
+        {
+            return new TableSchema(PropertyEchoCatalog.ITEMS_SCHEMA);
+        }
+
+        @Override
+        public IDatasource getScanDataSource(IQuerySession session, String catalogAlias, QualifiedName table, DatasourceData data)
+        {
+            return _ ->
+            {
+                int invocation = invocations.incrementAndGet();
+                int activeCount = active.incrementAndGet();
+                maxActive.accumulateAndGet(activeCount, Math::max);
+                if (invocation == 1)
+                {
+                    firstEntered.countDown();
+                    try
+                    {
+                        if (!releaseFirst.await(5, TimeUnit.SECONDS))
+                        {
+                            throw new IllegalStateException("Timed out waiting to release first execution");
+                        }
+                    }
+                    catch (InterruptedException e)
+                    {
+                        Thread.currentThread()
+                                .interrupt();
+                        throw new IllegalStateException(e);
+                    }
+                }
+                else
+                {
+                    secondEntered.countDown();
+                }
+                ValueVector value = session.getCatalogProperty(catalogAlias, PropertyEchoCatalog.VALUE_PROPERTY);
+                Object result = value == null
+                        || value.isNull(0) ? null
+                                : value.valueAsObject(0);
+                active.decrementAndGet();
+                return TupleIterator.singleton(new se.kuseman.payloadbuilder.api.execution.ObjectTupleVector(PropertyEchoCatalog.ITEMS_SCHEMA, 1, (_, _) -> result));
+            };
         }
     }
 

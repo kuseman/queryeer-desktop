@@ -17,7 +17,7 @@ class PayloadbuilderEngineStateSupportTest
         // When Jackson converts a Map to PayloadbuilderEngineState, a non-object catalog value becomes null
         Map<String, PayloadbuilderCatalogInstance> catalogs = new LinkedHashMap<>();
         catalogs.put("jdbc1", null);
-        PayloadbuilderEngineState invalidState = new PayloadbuilderEngineState(new PayloadbuilderEngineState.PayloadbuilderCatalogState(null, null, catalogs), null);
+        PayloadbuilderEngineState invalidState = new PayloadbuilderEngineState(new PayloadbuilderEngineState.PayloadbuilderCatalogState(null, null, catalogs, null));
 
         IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class, () -> PayloadbuilderEngineStateSupport.parse(invalidState));
 
@@ -28,7 +28,7 @@ class PayloadbuilderEngineStateSupportTest
     void parseRejectsMissingCatalogId()
     {
         PayloadbuilderEngineState invalidState = new PayloadbuilderEngineState(
-                new PayloadbuilderEngineState.PayloadbuilderCatalogState(null, null, Map.of("jdbc1", new PayloadbuilderCatalogInstance(null, Map.of("database", "appdb")))), null);
+                new PayloadbuilderEngineState.PayloadbuilderCatalogState(null, null, Map.of("jdbc1", new PayloadbuilderCatalogInstance(null, Map.of("database", "appdb"))), null));
 
         IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class, () -> PayloadbuilderEngineStateSupport.parse(invalidState));
 
@@ -38,9 +38,8 @@ class PayloadbuilderEngineStateSupportTest
     @Test
     void buildEngineStatePatchIncludesOnlyChangedProperties()
     {
-        PayloadbuilderEngineState engineState = new PayloadbuilderEngineState(
-                new PayloadbuilderEngineState.PayloadbuilderCatalogState(null, null, Map.of("jdbc1", new PayloadbuilderCatalogInstance("Jdbc", Map.of("database", "appdb", "schema", "public")))),
-                null);
+        PayloadbuilderEngineState engineState = new PayloadbuilderEngineState(new PayloadbuilderEngineState.PayloadbuilderCatalogState(null, null,
+                Map.of("jdbc1", new PayloadbuilderCatalogInstance("Jdbc", Map.of("database", "appdb", "schema", "public"))), null));
         PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state = PayloadbuilderEngineStateSupport.parse(engineState);
         QuerySession session = new QuerySession(new CatalogRegistry());
 
@@ -56,7 +55,7 @@ class PayloadbuilderEngineStateSupportTest
     void buildEngineStatePatchIncludesDefaultCatalogAliasWhenSwitched()
     {
         PayloadbuilderEngineState engineState = new PayloadbuilderEngineState(
-                new PayloadbuilderEngineState.PayloadbuilderCatalogState("jdbc1", null, Map.of("jdbc1", new PayloadbuilderCatalogInstance("Jdbc", Map.of("database", "appdb")))), null);
+                new PayloadbuilderEngineState.PayloadbuilderCatalogState("jdbc1", null, Map.of("jdbc1", new PayloadbuilderCatalogInstance("Jdbc", Map.of("database", "appdb"))), null));
         PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state = PayloadbuilderEngineStateSupport.parse(engineState);
         QuerySession session = new QuerySession(new CatalogRegistry());
 
@@ -75,7 +74,7 @@ class PayloadbuilderEngineStateSupportTest
         properties.put("database", "appdb");
         properties.put("timeoutMs", null);
         PayloadbuilderEngineState stateRoot = new PayloadbuilderEngineState(
-                new PayloadbuilderEngineState.PayloadbuilderCatalogState(null, null, Map.of("jdbc1", new PayloadbuilderCatalogInstance("Jdbc", properties))), null);
+                new PayloadbuilderEngineState.PayloadbuilderCatalogState(null, null, Map.of("jdbc1", new PayloadbuilderCatalogInstance("Jdbc", properties)), null));
         PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state = PayloadbuilderEngineStateSupport.parse(stateRoot);
         QuerySession session = new QuerySession(new CatalogRegistry());
 
@@ -93,7 +92,7 @@ class PayloadbuilderEngineStateSupportTest
     void parseRejectsUnknownDefaultCatalogAlias()
     {
         PayloadbuilderEngineState invalidState = new PayloadbuilderEngineState(
-                new PayloadbuilderEngineState.PayloadbuilderCatalogState("jdbc2", null, Map.of("jdbc1", new PayloadbuilderCatalogInstance("Jdbc", Map.of()))), null);
+                new PayloadbuilderEngineState.PayloadbuilderCatalogState("jdbc2", null, Map.of("jdbc1", new PayloadbuilderCatalogInstance("Jdbc", Map.of())), null));
 
         IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class, () -> PayloadbuilderEngineStateSupport.parse(invalidState));
 
@@ -104,7 +103,7 @@ class PayloadbuilderEngineStateSupportTest
     void applyToSessionSetsDefaultCatalogAlias()
     {
         PayloadbuilderEngineState stateRoot = new PayloadbuilderEngineState(
-                new PayloadbuilderEngineState.PayloadbuilderCatalogState("jdbc1", null, Map.of("jdbc1", new PayloadbuilderCatalogInstance("Jdbc", Map.of()))), null);
+                new PayloadbuilderEngineState.PayloadbuilderCatalogState("jdbc1", null, Map.of("jdbc1", new PayloadbuilderCatalogInstance("Jdbc", Map.of())), null));
         PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state = PayloadbuilderEngineStateSupport.parse(stateRoot);
         QuerySession session = new QuerySession(new CatalogRegistry());
 
@@ -117,7 +116,9 @@ class PayloadbuilderEngineStateSupportTest
     void buildEngineStatePatchIncludesSessionId()
     {
         PayloadbuilderEngineState engineState = new PayloadbuilderEngineState(
-                new PayloadbuilderEngineState.PayloadbuilderCatalogState(null, null, Map.of("jdbc1", new PayloadbuilderCatalogInstance("Jdbc", Map.of()))), null);
+                new PayloadbuilderEngineState.PayloadbuilderCatalogState(null, null, Map.of("jdbc1", new PayloadbuilderCatalogInstance("Jdbc", Map.of())), "41"));
+        Assertions.assertEquals("41", engineState.payloadbuilder()
+                .sessionId());
         PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state = PayloadbuilderEngineStateSupport.parse(engineState);
         QuerySession session = new QuerySession(new CatalogRegistry());
 

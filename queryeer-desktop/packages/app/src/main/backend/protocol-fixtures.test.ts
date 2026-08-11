@@ -144,6 +144,8 @@ describe("Protocol fixture compatibility", () => {
     expect(request.method).toBe("queryengine.execute");
     const engineState = (request.params as Record<string, unknown>).engineState as Record<string, unknown>;
     const payloadbuilder = engineState?.payloadbuilder as Record<string, unknown>;
+    expect(engineState?.sessionId).toBeUndefined();
+    expect(payloadbuilder?.sessionId).toBe("7");
     expect(payloadbuilder?.selectedEnvironmentId).toBe("test");
     expect(payloadbuilder?.defaultCatalogAlias).toBe("es1");
     const catalogs = payloadbuilder?.catalogs as Record<string, Record<string, unknown>>;
@@ -166,7 +168,9 @@ describe("Protocol fixture compatibility", () => {
     const params = notification.params as Record<string, unknown>;
     expect(params.engineState).toBeDefined();
     const es = params.engineState as Record<string, unknown>;
-    expect(typeof es.payloadbuilder).toBe("object");
+    const payloadbuilder = es.payloadbuilder as Record<string, unknown>;
+    expect(es.sessionId).toBeUndefined();
+    expect(payloadbuilder.sessionId).toBe("8");
   });
 
   it("notification fixtures", () => {
