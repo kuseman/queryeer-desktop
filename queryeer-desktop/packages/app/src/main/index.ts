@@ -106,7 +106,10 @@ const beforeQuitHandler = createBeforeQuitHandler({
 });
 
 const dockIconPath = join(__dirname, "../../resources/icons/icon-128.png");
-const windowIconPath = join(__dirname, "../../resources/icons/icon-256.png");
+const windowIconPath = join(
+  __dirname,
+  process.platform === "win32" ? "../../resources/icons/icon.ico" : "../../resources/icons/icon-256.png"
+);
 const dockIcon = nativeImage.createFromPath(dockIconPath);
 const windowIcon = nativeImage.createFromPath(windowIconPath);
 

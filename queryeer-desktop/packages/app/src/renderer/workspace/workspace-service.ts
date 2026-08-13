@@ -167,7 +167,8 @@ export class RendererWorkspaceService {
 
     const restoredActiveFileUri = resolveRestoredActiveFileUri(snapshot);
     if (restoredActiveFileUri) {
-      const entity = fileEntities.find((f) => f.uri === restoredActiveFileUri);
+      const restoredActiveFileIndex = snapshot.files.findIndex((f) => f.uri === restoredActiveFileUri);
+      const entity = fileEntities[restoredActiveFileIndex];
       if (entity) {
         this.activeFileId = entity.fileId;
         this.fileMediator.setActiveFileId(entity.fileId);
