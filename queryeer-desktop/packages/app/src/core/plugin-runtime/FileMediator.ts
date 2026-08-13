@@ -1,6 +1,7 @@
 import type { FileMediator } from "@queryeer/api/files/FileMediator";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import type { FilesRegistry } from "@queryeer/api/files/FilesRegistry";
+import { pathToFileUri } from "@queryeer/api/files/Resolvers";
 
 export type FileBackendSync = {
   openFile?: (file: FileEntity, initialText?: string) => void | Promise<void>;
@@ -97,9 +98,16 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
     return `untitled:${encoded}`;
   }
 
+  function normalizeUri(uri: string): string {
+    if (uri.startsWith("file:")) {
+      return new URL(uri).href;
+    }
+    return normalizeUntitledUri(uri);
+  }
+
   return {
     async openFile(rawUri, hint) {
-      const uri = normalizeUntitledUri(rawUri);
+      const uri = normalizeUri(rawUri);
       const existing = filesRegistry
         .listFiles()
         .find((file) => file.uri === uri);
@@ -265,11 +273,7 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
         if (dialogResult.canceled || !dialogResult.filePath) {
           return;
         }
-        let normalizedPath = dialogResult.filePath.replace(/\\/g, "/");
-        if (/^[a-zA-Z]:/.test(normalizedPath)) {
-          normalizedPath = `/${normalizedPath}`;
-        }
-        targetUri = `file://${normalizedPath}`;
+        targetUri = pathToFileUri(dialogResult.filePath);
       }
 
       const latestText = resolveFileContent?.(fileId, file.uri);

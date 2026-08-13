@@ -59,6 +59,21 @@ function setupHarness(options?: {
 }
 
 describe("FileMediator.openFile", () => {
+  it("normalizes legacy file uris containing spaces before backend sync", async () => {
+    const { mediator, sync } = setupHarness();
+
+    const file = await mediator.openFile(
+      "file:///C:/Users/test/OneDrive - Example/Query.sql",
+      {
+        mimeType: "application/sql",
+        engineBinding: { engineId: "payloadbuilder" }
+      }
+    );
+
+    expect(file.uri).toBe("file:///C:/Users/test/OneDrive%20-%20Example/Query.sql");
+    expect(sync.openFile).toHaveBeenCalledWith(file);
+  });
+
   it("classifies mime via resolvers when hint omits it", async () => {
     const editors = [makeEditor("editor.sql", ["application/sql"])];
     const { registry, mediator } = setupHarness({ editors });
@@ -367,7 +382,7 @@ describe("FileMediator.saveFile", () => {
 
     showSaveDialog.mockResolvedValueOnce({
       canceled: false,
-      filePath: "C:\\Users\\test\\Query1.sql"
+      filePath: "C:\\Users\\test\\OneDrive - Example\\Query1.sql"
     });
 
     await mediator.saveFile(file.fileId);
@@ -378,11 +393,11 @@ describe("FileMediator.saveFile", () => {
       filters: [{ name: "File", extensions: ["sql"] }]
     });
     expect(writeFile).toHaveBeenCalledWith(
-      "file:///C:/Users/test/Query1.sql",
+      "file:///C:/Users/test/OneDrive%20-%20Example/Query1.sql",
       "resolved-content"
     );
     const updated = registry.createFilesRegistry().getFile(file.fileId);
-    expect(updated?.uri).toBe("file:///C:/Users/test/Query1.sql");
+    expect(updated?.uri).toBe("file:///C:/Users/test/OneDrive%20-%20Example/Query1.sql");
     expect(updated?.dirtyVsDisk).toBe(false);
   });
 
