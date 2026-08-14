@@ -43,11 +43,24 @@ import { cellValueToString, formatLargeValueTitle, isLargeValueCell } from "./la
 import { GridComponent } from "../../renderer/components/GridComponent";
 import type { GridComponentColumn, GridComponentRow, GridComponentSelectionSnapshot, GridComponentState, GridSearchHandle } from "../../renderer/components/GridComponent";
 
-const GRID_STATE_KEY = defineStateKey<Record<number, GridComponentState>>("core.queryengine.output.table.gridState");
-const ACTIVE_RESULT_SET_KEY = defineStateKey<number>("core.queryengine.output.table.activeResultSet");
+const GRID_STATE_KEY = defineStateKey<Record<string, GridComponentState>>("core.queryengine.output.table.gridState");
+const ACTIVE_RESULT_SET_KEY = defineStateKey<Record<string, number>>("core.queryengine.output.table.activeResultSet");
 
 type SavedSelection = { selection: SelectionModel | null; anchor: SelectionAnchor | null };
-const SELECTION_KEY = defineStateKey<Record<number, SavedSelection>>("core.queryengine.output.table.selection");
+const SELECTION_KEY = defineStateKey<Record<string, SavedSelection>>("core.queryengine.output.table.selection");
+
+export function createTableViewStateKey(outputSessionId: string | undefined, resultSetIndex: number): string {
+  return JSON.stringify([outputSessionId ?? "", resultSetIndex]);
+}
+
+export function isTableViewStateForSession(key: string, outputSessionId: string | undefined): boolean {
+  try {
+    const parsed = JSON.parse(key) as unknown;
+    return Array.isArray(parsed) && parsed[0] === (outputSessionId ?? "");
+  } catch {
+    return false;
+  }
+}
 
 type GridColumn = GridComponentColumn;
 
@@ -319,6 +332,7 @@ type TableGridProps = {
 
 const TableGrid = forwardRef<GridSearchHandle, TableGridProps>(function TableGrid({ resultSetIndex, schema, outputSessionId, fileId, executionStartedAtMs, onPreviewValue, isStreaming, searchText, searchCaseSensitive, searchRegex, searchWholeWord, searchMarkAll, searchActiveMatch, onSearchMatchesUpdate }: TableGridProps, ref): JSX.Element {
   const storeKey = useMemo(() => ({ outputSessionId, fileId, resultSetIndex }), [outputSessionId, fileId, resultSetIndex]);
+  const viewStateKey = useMemo(() => createTableViewStateKey(outputSessionId, resultSetIndex), [outputSessionId, resultSetIndex]);
   const gridColumns = useMemo(() => toGridColumns(schema.columns), [schema.columns]);
   const [isDarkTheme, setIsDarkTheme] = useState<boolean>(() => (getThemeService()?.getActiveThemeMode() ?? "dark") === "dark");
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; sections: TableOutputContextMenuItem[][]; loading?: boolean } | null>(null);
@@ -340,18 +354,18 @@ const TableGrid = forwardRef<GridSearchHandle, TableGridProps>(function TableGri
   const handleGetRowsRange = useCallback((start: number, end: number) => getTableResultStore().getRowsRange(storeKey, start, end), [storeKey]);
   const handleGetRow = useCallback((index: number) => getTableResultStore().getRow(storeKey, index), [storeKey]);
   const handleSubscribeRowsChanged = useCallback((listener: () => void) => getTableResultStore().subscribe(storeKey, listener), [storeKey]);
-  const handleGetInitialSelection = useCallback(() => fileId ? (getFileStateRegistry().get(fileId, SELECTION_KEY)?.[resultSetIndex] ?? { selection: null, anchor: null }) : { selection: null, anchor: null }, [fileId, resultSetIndex]);
+  const handleGetInitialSelection = useCallback(() => fileId ? (getFileStateRegistry().get(fileId, SELECTION_KEY)?.[viewStateKey] ?? { selection: null, anchor: null }) : { selection: null, anchor: null }, [fileId, viewStateKey]);
   const handleOnSelectionChange = useCallback((selection: SelectionModel | null, anchor: SelectionAnchor | null) => {
     if (!fileId) return;
     const map = getFileStateRegistry().get(fileId, SELECTION_KEY) ?? {};
-    getFileStateRegistry().set(fileId, SELECTION_KEY, { ...map, [resultSetIndex]: { selection, anchor } });
-  }, [fileId, resultSetIndex]);
-  const handleGetInitialGridState = useCallback(() => fileId ? getFileStateRegistry().get(fileId, GRID_STATE_KEY)?.[resultSetIndex] : undefined, [fileId, resultSetIndex]);
+    getFileStateRegistry().set(fileId, SELECTION_KEY, { ...map, [viewStateKey]: { selection, anchor } });
+  }, [fileId, viewStateKey]);
+  const handleGetInitialGridState = useCallback(() => fileId ? getFileStateRegistry().get(fileId, GRID_STATE_KEY)?.[viewStateKey] : undefined, [fileId, viewStateKey]);
   const handleOnGridStateChange = useCallback((state: GridComponentState) => {
     if (!fileId) return;
     const map = getFileStateRegistry().get(fileId, GRID_STATE_KEY) ?? {};
-    getFileStateRegistry().set(fileId, GRID_STATE_KEY, { ...map, [resultSetIndex]: state });
-  }, [fileId, resultSetIndex]);
+    getFileStateRegistry().set(fileId, GRID_STATE_KEY, { ...map, [viewStateKey]: state });
+  }, [fileId, viewStateKey]);
 
   const gridCompRef = useRef<GridSearchHandle | null>(null);
   useImperativeHandle(ref, () => ({
@@ -364,7 +378,7 @@ const TableGrid = forwardRef<GridSearchHandle, TableGridProps>(function TableGri
     <>
       <GridComponent
         ref={gridCompRef}
-        key={`${fileId ?? ""}:${resultSetIndex}:${executionStartedAtMs ?? 0}`}
+        key={`${outputSessionId ?? ""}:${fileId ?? ""}:${resultSetIndex}:${executionStartedAtMs ?? 0}`}
         columns={gridColumns}
         rowNumberWidth={ROW_NUMBER_COL_WIDTH_PX}
         getRowCount={handleGetRowCount}
@@ -488,6 +502,7 @@ function ResultSetMetadata({ metadata }: { metadata?: Record<string, string> }):
 function TableOutputView({ context, onPreviewValue }: { context: OutputContext; onPreviewValue: (options: { title: string; value: string; mimeType?: string }) => void }): JSX.Element {
   const tableSettings = resolveOutputTableSettings();
   const outputSessionId = context.outputSessionId;
+  const outputViewStateKey = outputSessionId ?? "";
   const isStacked = tableSettings.viewMode === "stacked";
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeStackedResultSetIndex, setActiveStackedResultSetIndex] = useState<number | null>(null);
@@ -511,10 +526,10 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
   // Restore per-file active tab when the active file changes
   useEffect(() => {
     const saved = context.fileId
-      ? (getFileStateRegistry().get(context.fileId, ACTIVE_RESULT_SET_KEY) ?? 0)
+      ? (getFileStateRegistry().get(context.fileId, ACTIVE_RESULT_SET_KEY)?.[outputViewStateKey] ?? 0)
       : 0;
     setActiveIndex(saved);
-  }, [context.fileId]);
+  }, [context.fileId, outputViewStateKey]);
 
   const clampedIndex = Math.min(activeIndex, Math.max(0, context.resultSets.length - 1));
 
@@ -524,8 +539,11 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
 
   const handleSetActive = useCallback((i: number) => {
     setActiveIndex(i);
-    if (context.fileId) getFileStateRegistry().set(context.fileId, ACTIVE_RESULT_SET_KEY, i);
-  }, [context.fileId]);
+    if (context.fileId) {
+      const map = getFileStateRegistry().get(context.fileId, ACTIVE_RESULT_SET_KEY) ?? {};
+      getFileStateRegistry().set(context.fileId, ACTIVE_RESULT_SET_KEY, { ...map, [outputViewStateKey]: i });
+    }
+  }, [context.fileId, outputViewStateKey]);
 
   useEffect(() => {
     if (!isStacked) {
@@ -1280,11 +1298,17 @@ export const coreQueryEngineOutputTablePlugin: Plugin = {
           getTableResultStore().clearAll();
         }
         if (fileId) {
-          getFileStateRegistry().set(fileId, SELECTION_KEY, {});
+          const selectionState = getFileStateRegistry().get(fileId, SELECTION_KEY) ?? {};
+          const retainedSelectionState = Object.fromEntries(
+            Object.entries(selectionState).filter(([key]) => !isTableViewStateForSession(key, outputSessionId))
+          );
+          getFileStateRegistry().set(fileId, SELECTION_KEY, retainedSelectionState);
           const gridState = getFileStateRegistry().get(fileId, GRID_STATE_KEY) ?? {};
-          const clearedGridState: Record<number, GridComponentState> = {};
+          const clearedGridState: Record<string, GridComponentState> = {};
           for (const [key, state] of Object.entries(gridState)) {
-            clearedGridState[Number(key)] = { columnWidths: state.columnWidths };
+            clearedGridState[key] = isTableViewStateForSession(key, outputSessionId)
+              ? { columnWidths: state.columnWidths }
+              : state;
           }
           getFileStateRegistry().set(fileId, GRID_STATE_KEY, clearedGridState);
         }

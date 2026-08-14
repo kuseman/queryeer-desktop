@@ -56,6 +56,7 @@ export type GridComponentState = {
   columnWidths: Record<string, number>;
   scrollOffset?: { x: number; y: number };
   columnOrder?: string[];
+  sort?: { columnKey: string; direction: "asc" | "desc" };
 };
 
 export type GridComponentRow = {
@@ -442,8 +443,8 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
   const [columnOrder, setColumnOrder] = useState<string[] | undefined>(() => initialGridState?.columnOrder);
   const [imageColumnKeys, setImageColumnKeys] = useState<Set<string>>(() => new Set(columns.filter((column) => column.image).map((column) => column.key)));
   const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number; columnKey: string } | null>(null);
-  const [sortColumnKey, setSortColumnKey] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>(null);
+  const [sortColumnKey, setSortColumnKey] = useState<string | null>(() => initialGridState?.sort?.columnKey ?? null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>(() => initialGridState?.sort?.direction ?? null);
   const sortedRowsRef = useRef<unknown[][] | null>(null);
   const [isSorting, setIsSorting] = useState(false);
   const isSortingGuardRef = useRef(false);
@@ -842,50 +843,22 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
     });
   }, [columns, onGridStateChange]);
 
-  const onHeaderClicked = useCallback((colIndex: number) => {
-    if (isStreaming || isSortingGuardRef.current) return;
-    isSortingGuardRef.current = true;
+  const clearSort = useCallback(() => {
+    setSortColumnKey(null);
+    setSortDirection(null);
+    sortedRowsRef.current = null;
+    const nextState = { ...gridStateRef.current };
+    delete nextState.sort;
+    gridStateRef.current = nextState;
+    onGridStateChange?.(nextState);
+  }, [onGridStateChange]);
 
-    const dataIndex = getDataIndex(colIndex);
-    const column = columns[dataIndex];
-    if (!column) {
-      isSortingGuardRef.current = false;
-      return;
-    }
-
-    const alreadySorted = sortColumnKey === column.key;
-
-    let ascending: boolean;
-    if (!alreadySorted) {
-      setSortColumnKey(column.key);
-      setSortDirection("asc");
-      ascending = true;
-    } else if (sortDirection === "asc") {
-      setSortDirection("desc");
-      ascending = false;
-    } else {
-      setSortColumnKey(null);
-      setSortDirection(null);
-      sortedRowsRef.current = null;
-      isSortingGuardRef.current = false;
-      const visible = visibleRegionRef.current;
-      if (visible && gridRef.current) {
-        refreshVisibleRows(visible.y, visible.y + visible.height + 1);
-        const cells: Array<{ cell: Item }> = [];
-        const rowEnd = Math.min(getRowCount(), visible.y + visible.height + 1);
-        const colEnd = Math.min(columns.length, visible.x + visible.width + 1);
-        for (let row = visible.y; row < rowEnd; row++) {
-          for (let col = visible.x; col < colEnd; col++) {
-            cells.push({ cell: [col, row] });
-          }
-        }
-        if (cells.length > 0) {
-          gridRef.current.updateCells(cells);
-        }
-      }
-      return;
-    }
-
+  const applySort = useCallback((dataIndex: number, columnKey: string, direction: "asc" | "desc") => {
+    setSortColumnKey(columnKey);
+    setSortDirection(direction);
+    const nextState = { ...gridStateRef.current, sort: { columnKey, direction } };
+    gridStateRef.current = nextState;
+    onGridStateChange?.(nextState);
     setIsSorting(true);
 
     if (sortTimeoutRef.current !== null) {
@@ -900,7 +873,7 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
       indices.sort((a, b) => {
         const valA = allRows[a]?.[dataIndex] ?? null;
         const valB = allRows[b]?.[dataIndex] ?? null;
-        return compareValues(valA, valB) * (ascending ? 1 : -1);
+        return compareValues(valA, valB) * (direction === "asc" ? 1 : -1);
       });
       const sortElapsed = performance.now() - sortStart;
       sortedRowsRef.current = indices.map((i) => allRows[i]);
@@ -929,7 +902,61 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
         }, 200);
       }
     }, 0);
-  }, [isStreaming, sortColumnKey, sortDirection, columns, getDataIndex, getRowCount, getRowsRange, refreshVisibleRows]);
+  }, [columns.length, getRowCount, getRowsRange, onGridStateChange, refreshVisibleRows]);
+
+  const initialSortRestoredRef = useRef(false);
+  useEffect(() => {
+    if (initialSortRestoredRef.current) return;
+    initialSortRestoredRef.current = true;
+    const initialSort = initialGridState?.sort;
+    if (initialSort) {
+      const dataIndex = columns.findIndex((column) => column.key === initialSort.columnKey);
+      if (dataIndex < 0) {
+        clearSort();
+      } else {
+        isSortingGuardRef.current = true;
+        applySort(dataIndex, initialSort.columnKey, initialSort.direction);
+      }
+    }
+    return () => {
+      initialSortRestoredRef.current = false;
+    };
+  }, [applySort, clearSort, columns, initialGridState]);
+
+  const onHeaderClicked = useCallback((colIndex: number) => {
+    if (isStreaming || isSortingGuardRef.current) return;
+    isSortingGuardRef.current = true;
+
+    const dataIndex = getDataIndex(colIndex);
+    const column = columns[dataIndex];
+    if (!column) {
+      isSortingGuardRef.current = false;
+      return;
+    }
+
+    const alreadySorted = sortColumnKey === column.key;
+    if (alreadySorted && sortDirection === "desc") {
+      clearSort();
+      isSortingGuardRef.current = false;
+      const visible = visibleRegionRef.current;
+      if (visible && gridRef.current) {
+        refreshVisibleRows(visible.y, visible.y + visible.height + 1);
+        const cells: Array<{ cell: Item }> = [];
+        const rowEnd = Math.min(getRowCount(), visible.y + visible.height + 1);
+        const colEnd = Math.min(columns.length, visible.x + visible.width + 1);
+        for (let row = visible.y; row < rowEnd; row++) {
+          for (let col = visible.x; col < colEnd; col++) {
+            cells.push({ cell: [col, row] });
+          }
+        }
+        if (cells.length > 0) {
+          gridRef.current.updateCells(cells);
+        }
+      }
+      return;
+    }
+    applySort(dataIndex, column.key, alreadySorted ? "desc" : "asc");
+  }, [applySort, clearSort, columns, getDataIndex, getRowCount, isStreaming, refreshVisibleRows, sortColumnKey, sortDirection]);
 
   const onCellClicked = useCallback((cell: Item, event: CellClickedEventArgs) => {
     const [visCol, rowIndex] = cell;
@@ -990,10 +1017,14 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
       const nextRowCount = getRowCount();
       if (!force && nextRowCount === rowCountRef.current) return;
       rowCountRef.current = nextRowCount;
-      if (resetSort && sortedRowsRef.current !== null) {
-        sortedRowsRef.current = null;
-        setSortColumnKey(null);
-        setSortDirection(null);
+      if (resetSort && (sortedRowsRef.current !== null || gridStateRef.current.sort)) {
+        if (sortTimeoutRef.current !== null) {
+          window.clearTimeout(sortTimeoutRef.current);
+          sortTimeoutRef.current = null;
+        }
+        isSortingGuardRef.current = false;
+        setIsSorting(false);
+        clearSort();
       }
       setRowCount(nextRowCount);
       const visible = visibleRegionRef.current;
@@ -1020,7 +1051,7 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
     });
     applyRowsChanged(false);
     return unsubscribe;
-  }, [columns.length, getRowCount, refreshVisibleRows, subscribeRowsChanged]);
+  }, [clearSort, columns.length, getRowCount, refreshVisibleRows, subscribeRowsChanged]);
 
   useEffect(() => {
     return () => {
