@@ -4,6 +4,7 @@
   "private": true,
   "license": "MIT",
   "description": "Queryeer Desktop",
+  "desktopName": "queryeer-desktop.desktop",
   "main": "out/main/index.js",
   "type": "module",
   "scripts": {
@@ -54,7 +55,7 @@
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^3.2.7",
     "electron": "^41.10.4",
-    "electron-builder": "^26.15.3",
+    "electron-builder": "^26.15.7",
     "electron-devtools-installer": "^4.0.0",
     "electron-vite": "^3.1.0",
     "globals": "^16.5.0",
@@ -95,7 +96,7 @@
     ],
     "win": {
       "icon": "resources/icon.ico",
-      "signAndEditExecutable": false,
+      "signExecutable": false,
       "target": [
         "nsis"
       ]
@@ -106,13 +107,15 @@
     ],
     "mac": {
       "icon": "resources/icon.icns",
-      "strictVerify": false,
       "target": [
         "dmg"
       ]
     },
     "linux": {
+      "category": "Development",
+      "executableName": "queryeer-desktop",
       "icon": "resources/icon.png",
+      "syncDesktopName": true,
       "target": [
         "AppImage"
       ]
