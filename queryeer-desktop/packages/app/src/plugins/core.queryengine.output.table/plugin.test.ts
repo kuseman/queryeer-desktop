@@ -4,12 +4,28 @@ import {
   computeNextSelectionFromClick,
   buildSelectionSnapshot,
   createCopyAsCsvTableContextMenuProvider,
+  createTableViewStateKey,
   getCellValueForCopy,
   resolveCellDisplayValue,
   isPrimaryMouseButton,
+  isTableViewStateForSession,
   toGridColumns,
   toCsvScalar,
 } from "./plugin";
+
+describe("table output split view state", () => {
+  it("isolates result state by output session and result set", () => {
+    const left = createTableViewStateKey("left", 0);
+    const right = createTableViewStateKey("right", 0);
+    const leftSecondResult = createTableViewStateKey("left", 1);
+
+    expect(left).not.toBe(right);
+    expect(left).not.toBe(leftSecondResult);
+    expect(isTableViewStateForSession(left, "left")).toBe(true);
+    expect(isTableViewStateForSession(leftSecondResult, "left")).toBe(true);
+    expect(isTableViewStateForSession(right, "left")).toBe(false);
+  });
+});
 
 describe("table output value formatting", () => {
   it("formats decimal as visible string", () => {

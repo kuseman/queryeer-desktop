@@ -1,7 +1,7 @@
 import React, { act, createRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { GridComponent, resolveImageUrl, toGlideSelection, type GridSearchHandle } from "./GridComponent";
+import { GridComponent, resolveImageUrl, toGlideSelection, type GridComponentState, type GridSearchHandle } from "./GridComponent";
 import type { SelectionModel } from "../../plugins/core.queryengine.output.table/clipboard/CellSelectionModel";
 
 void React;
@@ -1310,6 +1310,57 @@ describe("GridComponent", () => {
       vi.advanceTimersByTime(10);
     });
 
+    expect(latestDataEditorProps?.getCellContent([0, 0]).displayData).toBe("a");
+    expect(latestDataEditorProps?.getCellContent([0, 1]).displayData).toBe("b");
+    expect(latestDataEditorProps?.getCellContent([0, 2]).displayData).toBe("c");
+  });
+
+  it("persists and restores the sort state when remounted", async () => {
+    vi.useFakeTimers();
+    const rows = [["c"], ["a"], ["b"]];
+    let savedState: GridComponentState | undefined;
+    const renderGrid = async (key: string) => {
+      await act(async () => {
+        root.render(
+          <React.StrictMode>
+            <GridComponent
+              key={key}
+              columns={[{ key: "name", title: "Name", type: "string" }]}
+              getRowCount={() => rows.length}
+              getRowsRange={(start, end) => rows.slice(start, end)}
+              getRow={(index) => rows[index]}
+              subscribeRowsChanged={() => () => undefined}
+              getInitialGridState={() => savedState}
+              onGridStateChange={(state) => { savedState = state; }}
+              resolveCellDisplayValue={(_type, value) => String(value)}
+              resolveCellLink={() => null}
+              onCellPrimaryAction={() => false}
+              onCopySelection={() => undefined}
+              onContextMenuSelection={() => undefined}
+              isDarkTheme={false}
+            />
+          </React.StrictMode>
+        );
+      });
+      act(() => {
+        latestDataEditorProps?.onVisibleRegionChanged({ x: 0, y: 0, width: 1, height: rows.length }, 0, 0);
+      });
+    };
+
+    await renderGrid("first");
+    act(() => {
+      latestDataEditorProps?.onHeaderClicked(0);
+      vi.advanceTimersByTime(10);
+    });
+
+    expect(savedState?.sort).toEqual({ columnKey: "name", direction: "asc" });
+
+    await renderGrid("second");
+    await act(async () => {
+      vi.advanceTimersByTime(10);
+    });
+
+    expect(latestDataEditorProps?.columns[0]?.title).toBe("\u25B2 Name");
     expect(latestDataEditorProps?.getCellContent([0, 0]).displayData).toBe("a");
     expect(latestDataEditorProps?.getCellContent([0, 1]).displayData).toBe("b");
     expect(latestDataEditorProps?.getCellContent([0, 2]).displayData).toBe("c");
