@@ -40,6 +40,7 @@ public final class PayloadbuilderSystemTableSqlEditorServices implements Payload
     private static final String COLUMN_TYPE = "type";
     private static final String FUNCTION_TYPE_TABLE = "TABLE";
     private static final Pattern SIMPLE_IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
+    private static final Pattern QUOTED_IDENTIFIER = Pattern.compile("\"(?:\"\"|[^\"])*\"");
     private static final int MAX_METADATA_ROWS = 5_000;
     private static final long CACHE_TTL_MS = 30_000;
 
@@ -885,7 +886,9 @@ public final class PayloadbuilderSystemTableSqlEditorServices implements Payload
         for (int i = 0; i < parts.length; i++)
         {
             if (!SIMPLE_IDENTIFIER.matcher(parts[i])
-                    .matches())
+                    .matches()
+                    && !QUOTED_IDENTIFIER.matcher(parts[i])
+                            .matches())
             {
                 parts[i] = "\"" + parts[i].replace("\"", "\"\"") + "\"";
             }
