@@ -885,6 +885,9 @@ class PayloadbuilderQueryEngineProviderTest
         Assertions.assertTrue(items.stream()
                 .anyMatch(item -> "p.external-id".equals(item.get("label"))
                         && "p.\"external-id\"".equals(item.get("insertText"))));
+        Assertions.assertTrue(items.stream()
+                .anyMatch(item -> "p.\"@timestamp\"".equals(item.get("label"))
+                        && "p.\"@timestamp\"".equals(item.get("insertText"))));
     }
 
     @SuppressWarnings("unchecked")
@@ -1854,7 +1857,7 @@ class PayloadbuilderQueryEngineProviderTest
         private static final String DASHED_TABLE = "sales.order-items";
         private static final String PRODUCTS_BY_CATEGORY_FUNCTION = "products_by_category";
         private static final Schema PRODUCTS_SCHEMA = Schema.of(Column.of("id", ResolvedType.INT), Column.of("name", ResolvedType.STRING), Column.of("category", ResolvedType.STRING),
-                Column.of("external-id", ResolvedType.STRING));
+                Column.of("external-id", ResolvedType.STRING), Column.of("\"@timestamp\"", ResolvedType.STRING));
 
         TestSemanticCatalog()
         {
