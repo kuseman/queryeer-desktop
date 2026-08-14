@@ -7,6 +7,7 @@ import {
   getCellValueForCopy,
   resolveCellDisplayValue,
   isPrimaryMouseButton,
+  toGridColumns,
   toCsvScalar,
 } from "./plugin";
 
@@ -29,6 +30,20 @@ describe("table output value formatting", () => {
       preview: "{\"a\":1}",
       ref: "ref-1",
     })).toBe("{\"a\":1}");
+  });
+});
+
+describe("table output image columns", () => {
+  it("recognizes a readable image alias and strips its display suffix", () => {
+    expect(toGridColumns([
+      { name: "Photo [image]", type: "string" },
+      { name: "Website", type: "string" },
+      { name: "ICON [IMAGE] ", type: "string" },
+    ])).toEqual([
+      { key: "Photo", title: "Photo", type: "string", image: true },
+      { key: "Website", title: "Website", type: "string", image: false },
+      { key: "ICON", title: "ICON", type: "string", image: true },
+    ]);
   });
 });
 

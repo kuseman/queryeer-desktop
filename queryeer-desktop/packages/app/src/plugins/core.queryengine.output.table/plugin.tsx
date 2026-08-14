@@ -53,10 +53,15 @@ type GridColumn = GridComponentColumn;
 
 type GridRowData = GridComponentRow;
 
-function toGridColumns(columns: Column[]): GridColumn[] {
+const IMAGE_COLUMN_SUFFIX = /\s*\[image\]\s*$/i;
+
+export function toGridColumns(columns: Column[]): GridColumn[] {
   const used = new Set<string>();
   return columns.map((col, i) => {
-    const base = col.name && col.name.trim().length > 0 ? col.name : `col_${i + 1}`;
+    const rawName = col.name?.trim() ?? "";
+    const image = IMAGE_COLUMN_SUFFIX.test(rawName);
+    const displayName = image ? rawName.replace(IMAGE_COLUMN_SUFFIX, "").trim() : rawName;
+    const base = displayName || `col_${i + 1}`;
     let key = base;
     let suffix = 2;
     while (used.has(key)) {
@@ -66,8 +71,9 @@ function toGridColumns(columns: Column[]): GridColumn[] {
     used.add(key);
     return {
       key,
-      title: col.name && col.name.trim().length > 0 ? col.name : `Column ${i + 1}`,
-      type: col.type
+      title: displayName || `Column ${i + 1}`,
+      type: col.type,
+      image,
     };
   });
 }

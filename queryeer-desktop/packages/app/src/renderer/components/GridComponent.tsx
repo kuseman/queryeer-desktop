@@ -15,12 +15,14 @@ import {
 import { computeSelection, extendSelection, getBoundingBox, isCellSelected } from "../../plugins/core.queryengine.output.table/clipboard/CellSelectionModel";
 import { isPrimaryModifier } from "../../shared/platform-utils";
 import type { SelectionAnchor, SelectionModel } from "../../plugins/core.queryengine.output.table/clipboard/CellSelectionModel";
+import { ContextMenuSurface } from "./ContextMenuSurface";
 
 const DEFAULT_ROW_NUMBER_COL_WIDTH_PX = 78;
 const DEFAULT_COLUMN_WIDTH_PX = 160;
 const MIN_COLUMN_WIDTH_PX = 60;
 const MAX_COLUMN_AUTO_WIDTH_PX = 500;
 const ROW_HEIGHT_PX = 24;
+const IMAGE_ROW_HEIGHT_PX = 100;
 const HEADER_HEIGHT_PX = 26;
 const ROW_REFRESH_THROTTLE_MS = 100;
 const AUTO_SIZE_DEBOUNCE_MS = 500;
@@ -47,6 +49,7 @@ export type GridComponentColumn = {
   key: string;
   title: string;
   type: string;
+  image?: boolean;
 };
 
 export type GridComponentState = {
@@ -124,6 +127,15 @@ function getCellValue(rowData: GridComponentRow | undefined, columnIndex: number
     return null;
   }
   return rowData.__values[columnIndex] ?? null;
+}
+
+export function resolveImageUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
 }
 
 function matchesSearch(
@@ -428,6 +440,8 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
   const clickTimerRef = useRef<number | null>(null);
   const isKeyboardActivationRef = useRef<boolean>(false);
   const [columnOrder, setColumnOrder] = useState<string[] | undefined>(() => initialGridState?.columnOrder);
+  const [imageColumnKeys, setImageColumnKeys] = useState<Set<string>>(() => new Set(columns.filter((column) => column.image).map((column) => column.key)));
+  const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number; columnKey: string } | null>(null);
   const [sortColumnKey, setSortColumnKey] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>(null);
   const sortedRowsRef = useRef<unknown[][] | null>(null);
@@ -614,6 +628,7 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
         id: column.key,
         title,
         width: columnWidths[column.key] ?? DEFAULT_COLUMN_WIDTH_PX,
+        hasMenu: true,
       };
     });
   }, [columnWidths, columns, columnOrder, sortColumnKey, sortDirection]);
@@ -766,6 +781,17 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
       copyData: displayValue,
       themeOverride,
     };
+    if (imageColumnKeys.has(column.key)) {
+      const imageUrl = isNull ? null : resolveImageUrl(displayValue);
+      return {
+        kind: GridCellKind.Image,
+        allowOverlay: false,
+        readonly: true,
+        data: imageUrl ? [imageUrl] : [],
+        copyData: displayValue,
+        themeOverride,
+      };
+    }
     if (link != null) {
       return {
         ...base,
@@ -779,7 +805,7 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
       };
     }
     return { ...base, kind: GridCellKind.Text };
-  }, [columns, getDataIndex, getRowData, resolveCellDisplayValue, resolveCellLink, isDarkTheme, theme.linkColor, internalSearchMatchSet, searchActiveMatch]);
+  }, [columns, getDataIndex, getRowData, resolveCellDisplayValue, resolveCellLink, imageColumnKeys, isDarkTheme, theme.linkColor, internalSearchMatchSet, searchActiveMatch]);
 
   const collectSelectionSnapshot = useCallback((model: SelectionModel): GridComponentSelectionSnapshot | null => {
     const box = getBoundingBox(model, columns.length);
@@ -1093,6 +1119,11 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
         onCellActivated={onCellActivated}
         onCellContextMenu={onCellContextMenu}
         onHeaderClicked={onHeaderClicked}
+        onHeaderMenuClick={(colIndex, bounds) => {
+          const column = columns[getDataIndex(colIndex)];
+          if (!column) return;
+          setHeaderMenu({ x: bounds.x, y: bounds.y + bounds.height, columnKey: column.key });
+        }}
         onVisibleRegionChanged={(range) => {
           visibleRegionRef.current = range;
           refreshVisibleRows(range.y, range.y + range.height + 1);
@@ -1115,7 +1146,7 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
         scrollOffsetX={initialGridState?.scrollOffset?.x}
         scrollOffsetY={initialGridState?.scrollOffset?.y}
         rowMarkers={{ kind: "clickable-number", width: rowNumberWidth, startIndex: 1 }}
-        rowHeight={ROW_HEIGHT_PX}
+        rowHeight={imageColumnKeys.size > 0 ? IMAGE_ROW_HEIGHT_PX : ROW_HEIGHT_PX}
         headerHeight={HEADER_HEIGHT_PX}
         smoothScrollX={true}
         smoothScrollY={true}
@@ -1131,6 +1162,28 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
         maxColumnWidth={5000}
         theme={theme}
       />
+      {headerMenu && (
+        <ContextMenuSurface
+          x={headerMenu.x}
+          y={headerMenu.y}
+          sections={[[{
+            id: "toggle-image-column",
+            label: imageColumnKeys.has(headerMenu.columnKey) ? "Display as text" : "Display as image",
+            info: imageColumnKeys.has(headerMenu.columnKey)
+              ? undefined
+              : "Loads absolute HTTP or HTTPS image URLs in this column. Remote requests occur only while image display is enabled. Add [image] to a SQL column alias to enable this automatically.",
+            onSelect: () => {
+              setImageColumnKeys((current) => {
+                const next = new Set(current);
+                if (next.has(headerMenu.columnKey)) next.delete(headerMenu.columnKey);
+                else next.add(headerMenu.columnKey);
+                return next;
+              });
+            },
+          }]]}
+          onClose={() => setHeaderMenu(null)}
+        />
+      )}
       {isSorting && (
         <div
           style={{

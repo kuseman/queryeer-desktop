@@ -4,6 +4,7 @@ import ReactDOM from "react-dom";
 export type ContextMenuSurfaceItem = {
   id: string;
   label: string;
+  info?: string;
   disabled?: boolean;
   onSelect: () => void | Promise<void>;
 };
@@ -107,7 +108,8 @@ function SubMenu({
             void item.onSelect();
           }}
         >
-          {item.label}
+          <span className="shell-context-menu__item-label">{item.label}</span>
+          {item.info && <span className="shell-context-menu__item-info" title={item.info} aria-label={item.info}>ⓘ</span>}
         </button>
       ))}
     </div>
@@ -146,7 +148,8 @@ function MenuItem({
           void node.item.onSelect();
         }}
       >
-        {node.item.label}
+        <span className="shell-context-menu__item-label">{node.item.label}</span>
+        {node.item.info && <span className="shell-context-menu__item-info" title={node.item.info} aria-label={node.item.info}>ⓘ</span>}
       </button>
     );
   }

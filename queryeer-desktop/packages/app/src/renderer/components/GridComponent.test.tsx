@@ -1,7 +1,7 @@
 import React, { act, createRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { GridComponent, toGlideSelection, type GridSearchHandle } from "./GridComponent";
+import { GridComponent, resolveImageUrl, toGlideSelection, type GridSearchHandle } from "./GridComponent";
 import type { SelectionModel } from "../../plugins/core.queryengine.output.table/clipboard/CellSelectionModel";
 
 void React;
@@ -10,11 +10,14 @@ type GridColumnLike = {
   id?: string;
   title: string;
   width?: number;
+  hasMenu?: boolean;
 };
 
 type GlideCell = {
+  kind?: string;
   displayData?: string;
-  data?: string;
+  data?: string | string[];
+  copyData?: string;
   themeOverride?: Record<string, string>;
 };
 
@@ -27,12 +30,14 @@ type DataEditorProps = {
   onCellActivated: (cell: readonly [number, number]) => void;
   onCellContextMenu: (cell: readonly [number, number], event: CellEvent) => void;
   onHeaderClicked: (colIndex: number) => void;
+  onHeaderMenuClick: (colIndex: number, bounds: { x: number; y: number; width: number; height: number }) => void;
   onGridSelectionChange: (selection: GridSelectionLike) => void;
   onColumnMoved?: (startIndex: number, endIndex: number) => void;
   reorderColumns?: boolean;
   scrollOffsetX?: number;
   scrollOffsetY?: number;
   gridSelection?: GridSelectionLike;
+  rowHeight?: number;
 };
 
 type GridSelectionLike = {
@@ -82,7 +87,7 @@ vi.mock("@glideapps/glide-data-grid", () => {
 
   return {
     CompactSelection: CompactSelectionMock,
-    GridCellKind: { Text: "text", Uri: "uri" },
+    GridCellKind: { Text: "text", Uri: "uri", Image: "image" },
     DataEditor: React.forwardRef((_props: DataEditorProps, _ref: React.Ref<unknown>) => {
       latestDataEditorProps = _props;
       const refObj = { remeasureColumns: vi.fn(), updateCells: vi.fn() };
@@ -114,6 +119,85 @@ describe("GridComponent", () => {
       root.unmount();
     });
     rootElement.remove();
+  });
+
+  it("accepts only absolute HTTP and HTTPS image URLs", () => {
+    expect(resolveImageUrl("https://example.test/photo.png")).toBe("https://example.test/photo.png");
+    expect(resolveImageUrl("http://example.test/photo.png")).toBe("http://example.test/photo.png");
+    expect(resolveImageUrl("file:///tmp/photo.png")).toBeNull();
+    expect(resolveImageUrl("data:image/png;base64,abc")).toBeNull();
+    expect(resolveImageUrl("not a URL")).toBeNull();
+  });
+
+  it("renders aliased image columns as thumbnails with the original URL available for copy", async () => {
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "photo", title: "Photo", type: "string", image: true }]}
+          getRowCount={() => 2}
+          getRowsRange={(start, end) => [["https://example.test/photo.png"], ["not a URL"]].slice(start, end)}
+          getRow={(index) => [["https://example.test/photo.png"], ["not a URL"]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    expect(latestDataEditorProps?.columns[0].hasMenu).toBe(true);
+    expect(latestDataEditorProps?.rowHeight).toBe(100);
+    expect(latestDataEditorProps?.getCellContent([0, 0])).toEqual(expect.objectContaining({
+      kind: "image",
+      data: ["https://example.test/photo.png"],
+      copyData: "https://example.test/photo.png",
+    }));
+    expect(latestDataEditorProps?.getCellContent([0, 1])).toEqual(expect.objectContaining({ kind: "image", data: [] }));
+  });
+
+  it("toggles image display from the reordered column header menu", async () => {
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "id", title: "Id", type: "int" }, { key: "photo", title: "Photo", type: "string" }]}
+          getRowCount={() => 1}
+          getRowsRange={(start, end) => [[1, "https://example.test/photo.png"]].slice(start, end)}
+          getRow={(index) => [[1, "https://example.test/photo.png"]][index]}
+          subscribeRowsChanged={() => () => undefined}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onCopySelection={() => undefined}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => latestDataEditorProps?.onColumnMoved?.(1, 0));
+    act(() => latestDataEditorProps?.onHeaderMenuClick(0, { x: 10, y: 20, width: 100, height: 26 }));
+    const menuItem = [...document.body.querySelectorAll("button")].find((button) => button.textContent?.startsWith("Display as image"));
+    expect(menuItem).toBeDefined();
+    expect(menuItem?.querySelector("[aria-label*='HTTP or HTTPS']")).not.toBeNull();
+    await act(async () => menuItem?.click());
+
+    expect(latestDataEditorProps?.rowHeight).toBe(100);
+    expect(latestDataEditorProps?.getCellContent([0, 0])).toEqual(expect.objectContaining({
+      kind: "image",
+      data: ["https://example.test/photo.png"],
+    }));
+    expect(latestDataEditorProps?.getCellContent([1, 0]).kind).toBe("text");
+
+    act(() => latestDataEditorProps?.onHeaderMenuClick(0, { x: 10, y: 20, width: 100, height: 26 }));
+    const textMenuItem = [...document.body.querySelectorAll("button")].find((button) => button.textContent === "Display as text");
+    expect(textMenuItem).toBeDefined();
+    await act(async () => textMenuItem?.click());
+
+    expect(latestDataEditorProps?.rowHeight).toBe(24);
+    expect(latestDataEditorProps?.getCellContent([0, 0]).kind).toBe("text");
   });
 
   it("feeds Glide row count and cell content from the streaming row accessors", async () => {

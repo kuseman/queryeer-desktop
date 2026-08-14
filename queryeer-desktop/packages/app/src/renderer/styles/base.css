@@ -137,6 +137,25 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
+  gap: 12px;
+}
+
+.shell-context-menu__item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shell-context-menu__item-info {
+  margin-left: auto;
+  flex: 0 0 auto;
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.shell-context-menu__item:hover:not(:disabled) .shell-context-menu__item-info {
+  color: inherit;
 }
 
 .shell-context-menu__item:hover:not(:disabled) {
