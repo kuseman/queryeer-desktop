@@ -169,7 +169,7 @@ GitHub release automation is split into two workflows:
 - `create-release.yml`: manually dispatched with `major`, `minor`, or `patch`. It computes the next `vX.Y.Z`, bumps desktop and backend to that release version, commits and tags the release, then moves the backend Maven reactor to the next `-SNAPSHOT` version.
 - `release.yml`: triggered by `v*` tags. It verifies the backend, publishes the whitelisted public backend artifacts to Maven Central, publishes `@queryeer/api` to npmjs, builds unsigned Windows, macOS, and Linux distributions in a matrix, generates the release changelog, and publishes a real GitHub release with the platform artifacts. Manual `workflow_dispatch` runs are dry-run only and skip Maven Central, npmjs, and GitHub release publishing.
 
-Artifacts are intentionally unsigned for now. macOS downloads may be blocked by Gatekeeper until users explicitly open the app or remove quarantine; public-friendly macOS releases will require Developer ID signing and notarization later.
+Artifacts do not use a trusted publisher certificate for now. macOS builds are ad-hoc signed for application integrity, but downloads may be blocked by Gatekeeper until users explicitly open the app or remove quarantine; public-friendly macOS releases will require Developer ID signing and notarization later.
 
 ## Documentation
 

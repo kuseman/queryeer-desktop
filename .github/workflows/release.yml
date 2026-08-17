@@ -161,6 +161,19 @@ jobs:
         working-directory: queryeer-desktop
         run: npm run dist:release
 
+      - name: Verify macOS application signature
+        if: runner.os == 'macOS'
+        working-directory: queryeer-desktop
+        shell: bash
+        run: |
+          shopt -s nullglob
+          apps=(packages/app/release/mac*/Queryeer.app)
+          if [ "${#apps[@]}" -ne 1 ]; then
+            echo "Expected one packaged macOS application, found ${#apps[@]}."
+            exit 1
+          fi
+          codesign --verify --deep --strict --verbose=2 "${apps[0]}"
+
       - name: Upload platform artifact
         uses: actions/upload-artifact@v4
         with:

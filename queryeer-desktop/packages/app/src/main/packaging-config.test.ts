@@ -17,9 +17,10 @@ describe("packaging configuration", () => {
     });
   });
 
-  it("preserves Windows metadata and macOS verification defaults", () => {
+  it("preserves Windows metadata and explicitly ad-hoc signs macOS builds", () => {
     expect(packageJson.build.win.signExecutable).toBe(false);
     expect(packageJson.build.win.signAndEditExecutable).toBeUndefined();
+    expect(packageJson.build.mac.identity).toBe("-");
     expect(packageJson.build.mac.strictVerify).toBeUndefined();
   });
 });

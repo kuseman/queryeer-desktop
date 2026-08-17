@@ -1,6 +1,6 @@
 # macOS Gatekeeper & Unsigned Apps
 
-Electron apps that aren't notarized by Apple are blocked by Gatekeeper. Since Queryeer builds are currently unsigned, macOS users need to manually bypass this restriction.
+Electron apps that aren't notarized by Apple are blocked by Gatekeeper. Queryeer builds are ad-hoc signed to preserve application integrity but are not Developer ID signed or notarized, so macOS users need to manually bypass this restriction.
 
 ---
 
