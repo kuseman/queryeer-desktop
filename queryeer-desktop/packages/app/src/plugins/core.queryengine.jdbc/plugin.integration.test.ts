@@ -214,6 +214,7 @@ function createContext(): PluginContext {
     contextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
     tableOutputContextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
     jdbcTreeContextMenu: { registerContribution: vi.fn(), unregisterContribution: vi.fn(), getItemsForNode: vi.fn() },
+    jdbcDrivers: { registerDriver: vi.fn(), listDrivers: vi.fn(() => []), getDriver: vi.fn(), subscribe: vi.fn(() => () => {}) },
     graphNodeTypes: { registerNodeType: vi.fn(), unregisterNodeType: vi.fn(), getComponent: vi.fn(), getAll: vi.fn(() => new Map()) },
     outline: {
       registerOutlineProvider: vi.fn(),
@@ -284,6 +285,19 @@ describe("core.queryengine.jdbc plugin integration", () => {
     clearFlowNodeTypeContributionsForTests();
     resetJdbcTreeContextMenuRegistry();
     getGraphDocumentRepository().clearForTests();
+  });
+
+  it("keeps driver management in a dedicated settings section", () => {
+    const context = createContext();
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const contribution = vi.mocked(context.settings.registerSettings).mock.calls[0][0];
+    expect(contribution.settings.find((setting) => setting.title === "JDBC Connections")?.sectionPath)
+      .toEqual(["Query Engine", "JDBC"]);
+    expect(contribution.settings.find((setting) => setting.title === "JDBC Drivers")?.sectionPath)
+      .toEqual(["Query Engine", "JDBC", "Drivers"]);
+    expect(contribution.settings.find((setting) => setting.title === "Check For JDBC Driver Updates")?.sectionPath)
+      .toEqual(["Query Engine", "JDBC", "Drivers"]);
   });
 
   it("contributes JDBC flow query node type", () => {

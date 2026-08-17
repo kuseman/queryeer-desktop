@@ -23,6 +23,15 @@ export const coreQueryEngineJdbcPostgresPlugin: Plugin = {
     providesCapabilities: ["query.engine.jdbc.postgres"]
   },
   activate: (context) => {
+    context.jdbcDrivers.registerDriver({
+      dialectId: POSTGRES_DIALECT_ID,
+      displayName: "PostgreSQL JDBC Driver",
+      groupId: "org.postgresql",
+      artifactId: "postgresql",
+      driverClassName: "org.postgresql.Driver",
+      downloadPageUrl: "https://jdbc.postgresql.org/download/"
+    });
+
     registerJdbcDialect({
       dialectId: POSTGRES_DIALECT_ID,
       supportsQueryPlan: true,

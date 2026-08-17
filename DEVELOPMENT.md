@@ -63,6 +63,8 @@ The backend receives Electron's user-data directory as `QUERYEER_APP_DIR` / `que
 - `libNative/` for native libraries such as `mssql-jdbc_auth-*.dll`
 - `libShared/` for shared runtime jars such as JDBC drivers when supplied outside development dependencies
 
+Builtin PostgreSQL, SQL Server, and SQLite dialects do not package their JDBC drivers. The desktop driver manager downloads verified Maven Central artifacts into `libShared/`, stages replacements while Java is running, and applies them before startup or during a controlled backend-only restart. See `documentation/JDBC_DRIVER_MANAGEMENT.md`.
+
 During repository development, builtin plugin manifests are still loaded from repo `plugins/builtin` as a fallback. This keeps plugin loading production-like while keeping user data out of the repository.
 
 ### Backend Commands

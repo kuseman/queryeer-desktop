@@ -20,6 +20,8 @@ This document defines the longer-term solution.
 Some libraries must be treated as process-wide/runtime-shared instead of plugin-local:
 
 - JDBC drivers with native dependencies (for example `mssql-jdbc` + `mssql-jdbc_auth*.dll`).
+
+The runner inspects known PostgreSQL, SQL Server, and SQLite driver classes while building the shared classpath. It includes at most one JAR for each known provider, preferring a Queryeer-managed JAR and otherwise the newest identifiable implementation version. This is a final safety net for unexpected backend restarts; the desktop artifact service normally moves conflicting files into provider-specific `disabled` folders before Java starts.
 - Libraries where class identity must be shared across plugins.
 - Packages that must resolve from the shared/parent loader to avoid split runtime state.
 
@@ -85,6 +87,8 @@ runtime:
 
 Only trusted builtin plugin manifests are currently collected for parent-first/native rules.
 
+Native preload fails closed on ambiguity. If exactly one Queryeer-managed file matches, only that file is attempted; multiple managed matches produce no selection. Without a managed match, exactly one manual file is accepted and multiple manual matches produce no selection. The desktop artifact service preserves conflicting files in provider-specific disabled storage and normally leaves one matching SQL Server auth DLL active before the runner starts.
+
 ### 3) Runner startup sequence
 
 1. Discover manifests (builtin + external as configured).
@@ -123,6 +127,16 @@ And URL generation for native auth should remain explicit:
 
 - `integratedSecurity=true`
 - `authenticationScheme=NativeAuthentication`
+
+## JDBC Dialect Driver Profiles
+
+Builtin JDBC dialect plugins delegate their driver packages to `libShared`:
+
+- SQL Server: `com.microsoft.sqlserver.jdbc.` / `mssql-jdbc-*.jar`
+- PostgreSQL: `org.postgresql.` / `postgresql-*.jar`
+- SQLite: `org.sqlite.` / `sqlite-jdbc-*.jar`
+
+The dialect plugins do not package these drivers. Electron owns managed download/update state and restarts the backend after staging changes; the runner only loads the resulting shared JARs and applies the parent-first package rules.
 
 ## Security and Governance
 

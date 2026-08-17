@@ -40,7 +40,7 @@ import { redactErrorMessage, redactLogMessage } from "./backend-log-redaction.js
 import { BackendPendingRequestMap } from "./backend-request-pending-map.js";
 import { BackendStatusStore } from "./backend-status-store.js";
 import { WatchdogBackendTransport } from "./backend-transport-watchdog.js";
-import type { BackendTransport, BackendTransportFactory } from "./backend-transport.js";
+import type { BackendTransportFactory } from "./backend-transport.js";
 
 class BackendResponseError extends Error {
   constructor(
@@ -59,8 +59,13 @@ const REQUIRED_SECURITY_CAPABILITIES = [
   "security.vault.changed"
 ] as const;
 
+export type BackendRestartResult = {
+  accepted: boolean;
+  reason?: string;
+};
+
 export class BackendGateway {
-  private readonly transport: BackendTransport;
+  private readonly transport: WatchdogBackendTransport;
   private readonly statusStore = new BackendStatusStore();
   private readonly logBuffer = new BackendLogBuffer(250);
   private readonly pending = new BackendPendingRequestMap();
@@ -70,7 +75,8 @@ export class BackendGateway {
   private pingIntervalHandle: NodeJS.Timeout | null = null;
   private rendererSink: ((method: string, params: unknown) => void) | null = null;
   private statusChangedSink: ((status: BackendGatewayStatus) => void) | null = null;
-  private transportDiedHook: (() => void) | null = null;
+  private transportDiedHook: (() => void | Promise<void>) | null = null;
+  private intentionalRestartPromise: Promise<void> | null = null;
   private tracePayloads = false;
   private logFlowEnabled = true;
 
@@ -118,7 +124,7 @@ export class BackendGateway {
       },
       () => this.doRestartSequence(),
       () => {
-        this.transportDiedHook?.();
+        void this.transportDiedHook?.();
       }
     );
 
@@ -135,7 +141,7 @@ export class BackendGateway {
     this.statusChangedSink = sink;
   }
 
-  public setOnTransportDiedHook(hook: (() => void) | null): void {
+  public setOnTransportDiedHook(hook: (() => void | Promise<void>) | null): void {
     this.transportDiedHook = hook;
   }
 
@@ -215,16 +221,40 @@ export class BackendGateway {
     await this.transport.stop();
   }
 
+  public async restart(beforeStart?: () => void | Promise<void>): Promise<BackendRestartResult> {
+    const activeExecutionIds = this.executionStore.getActiveExecutionIds();
+    if (activeExecutionIds.length > 0) {
+      return {
+        accepted: false,
+        reason: `Backend restart deferred while ${activeExecutionIds.length} query execution(s) are active`
+      };
+    }
+    if (this.intentionalRestartPromise) {
+      return { accepted: false, reason: "Backend restart is already in progress" };
+    }
+
+    const restartPromise = this.doIntentionalRestart(beforeStart);
+    this.intentionalRestartPromise = restartPromise;
+    try {
+      await restartPromise;
+      return { accepted: true };
+    } catch (error) {
+      const reason = redactErrorMessage(error);
+      return { accepted: false, reason };
+    } finally {
+      this.intentionalRestartPromise = null;
+    }
+  }
+
   public async executeQuery(params: QueryExecuteParams): Promise<QueryExecuteResult> {
-    const resolvedParams = this.resolveSecretReferences(params) as QueryExecuteParams;
-
-    this.executionStore.markAccepted(resolvedParams.queryExecutionId, resolvedParams.engineId);
-    this.syncExecutionSnapshot();
-
     await this.waitUntilHealthy(30_000);
     if (this.statusStore.get().state !== "healthy") {
       throw new Error(this.statusStore.get().error ?? "Backend is not healthy yet");
     }
+
+    const resolvedParams = this.resolveSecretReferences(params) as QueryExecuteParams;
+    this.executionStore.markAccepted(resolvedParams.queryExecutionId, resolvedParams.engineId);
+    this.syncExecutionSnapshot();
 
     const envelope = this.createRequest("queryengine.execute", resolvedParams);
     this.appendLog("debug", "gateway", `Sending request ${envelope.id} queryengine.execute`);
@@ -453,11 +483,25 @@ export class BackendGateway {
         const message = redactErrorMessage(error);
         this.appendLog("error", "gateway", `Backend restart sequence failed: ${message}`);
         this.statusStore.setState("unavailable", message);
+        throw error;
       }
     };
 
     this.startupPromise = inner();
     await this.startupPromise;
+  }
+
+  private async doIntentionalRestart(beforeStart?: () => void | Promise<void>): Promise<void> {
+    this.pending.rejectAll(new Error("Backend restarted"));
+    this.statusStore.setState("starting");
+    if (this.pingIntervalHandle) {
+      clearInterval(this.pingIntervalHandle);
+      this.pingIntervalHandle = null;
+    }
+    this.executionStore.clearActive();
+    this.syncExecutionSnapshot();
+    await this.transportDiedHook?.();
+    await this.transport.restart(beforeStart);
   }
 
   private async waitUntilHealthy(timeoutMs: number): Promise<void> {

@@ -20,6 +20,15 @@ export const coreQueryEngineJdbcSqlitePlugin: Plugin = {
     providesCapabilities: ["query.engine.jdbc.sqlite"]
   },
   activate: (context) => {
+    context.jdbcDrivers.registerDriver({
+      dialectId: SQLITE_DIALECT_ID,
+      displayName: "SQLite JDBC Driver",
+      groupId: "org.xerial",
+      artifactId: "sqlite-jdbc",
+      driverClassName: "org.sqlite.JDBC",
+      downloadPageUrl: "https://github.com/xerial/sqlite-jdbc/releases"
+    });
+
     registerJdbcDialect({
       dialectId: SQLITE_DIALECT_ID,
       ConnectionForm: SqliteConnectionForm

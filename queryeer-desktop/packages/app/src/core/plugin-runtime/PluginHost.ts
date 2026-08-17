@@ -25,6 +25,11 @@ import { getGraphNodeTypeRegistry } from "../../plugins/core.graph/graph-node-ty
 import { registerChangelog } from "../../plugins/core.about/about-service.js";
 import { getNotificationService } from "../../plugins/core.notification/notification-service";
 import { createPayloadbuilderCatalogRegistry } from "../../plugins/core.queryengine.payloadbuilder/catalog-contributions";
+import { JdbcDriverRegistryHost } from "../../renderer/plugins/jdbc-driver-registry";
+import type {
+  JdbcDriverSubscriber,
+  RegisteredJdbcManagedDriverContribution
+} from "@queryeer/api/queryengine/JdbcDriverExtension";
 
 export type PluginHostState = {
   startedAt: string;
@@ -55,6 +60,7 @@ export class PluginHost {
   private readonly fileMediator: FileMediator;
   private readonly fileWatcher: FileWatcherService;
   private readonly activePlugins: Plugin[] = [];
+  private readonly jdbcDriverRegistry = new JdbcDriverRegistryHost();
   private startedAt: Date | null = null;
   private diagnostics: PluginDiagnostics = {
     discoveredManifestIds: [],
@@ -109,7 +115,7 @@ export class PluginHost {
       }))
     };
 
-    const context: PluginContext = {
+    const sharedContext: Omit<PluginContext, "jdbcDrivers"> = {
       commands: this.extensionRegistry.createCommandRegistry(),
       filesystems: this.extensionRegistry.createFileSystemRegistry(),
       files: this.extensionRegistry.createFilesRegistry(),
@@ -139,6 +145,10 @@ export class PluginHost {
     };
 
     for (const plugin of orderedPlugins) {
+      const context: PluginContext = {
+        ...sharedContext,
+        jdbcDrivers: this.jdbcDriverRegistry.createRegistry(plugin.manifest.id)
+      };
       await plugin.activate(context);
       this.activePlugins.push(plugin);
     }
@@ -193,6 +203,18 @@ export class PluginHost {
 
   public getFileWatcher(): FileWatcherService {
     return this.fileWatcher;
+  }
+
+  public getJdbcDrivers(): readonly RegisteredJdbcManagedDriverContribution[] {
+    return this.jdbcDriverRegistry.listDrivers();
+  }
+
+  public getJdbcDriver(dialectId: string): RegisteredJdbcManagedDriverContribution | undefined {
+    return this.jdbcDriverRegistry.getDriver(dialectId);
+  }
+
+  public subscribeToJdbcDrivers(subscriber: JdbcDriverSubscriber): () => void {
+    return this.jdbcDriverRegistry.subscribe(subscriber);
   }
 
   public subscribeToFiles(subscriber: (files: FileEntity[]) => void): () => void {

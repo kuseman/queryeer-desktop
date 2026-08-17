@@ -19,7 +19,8 @@ const mocks = vi.hoisted(() => ({
   registerToolbarActionMock: vi.fn(),
   registerSettingsMock: vi.fn(),
   registerAdvancedValidatorMock: vi.fn(),
-  registerAdvancedRendererMock: vi.fn()
+  registerAdvancedRendererMock: vi.fn(),
+  registerDriverMock: vi.fn()
 }));
 
 vi.mock("../core.queryengine.jdbc/jdbc-dialect-registry", () => ({
@@ -142,6 +143,7 @@ function createContext(): PluginContext {
       showInput: vi.fn(),
       registerConfirmDialog: vi.fn()
     },
+    jdbcDrivers: { registerDriver: mocks.registerDriverMock },
   } as unknown as PluginContext;
 }
 
@@ -160,6 +162,36 @@ describe("coreQueryEngineJdbcSqlServerPlugin", () => {
       supportsQueryPlan: true,
       ConnectionForm: expect.any(Function)
     });
+  });
+
+  it("registers the managed SQL Server jre11 JDBC driver", () => {
+    const context = createContext();
+    coreQueryEngineJdbcSqlServerPlugin.activate(context);
+
+    expect(mocks.registerDriverMock).toHaveBeenCalledWith(expect.objectContaining({
+      dialectId: "sqlserver",
+      groupId: "com.microsoft.sqlserver",
+      artifactId: "mssql-jdbc",
+      driverClassName: "com.microsoft.sqlserver.jdbc.SQLServerDriver",
+      compatibleVersionRegex: "\\.jre11$"
+    }));
+    const contribution = mocks.registerDriverMock.mock.calls[0][0] as {
+      compatibleVersionRegex: string;
+      companionArtifacts: Array<{ id: string; versionLockedToDriver: boolean; platforms: Array<{ os: string; arch: string }>; source: { repository: string; assetName: string; archiveEntryTemplate: string } }>;
+    };
+    const compatibleVersion = new RegExp(contribution.compatibleVersionRegex);
+    expect(compatibleVersion.test("12.10.2.jre11")).toBe(true);
+    expect(compatibleVersion.test("12.10.2.jre8")).toBe(false);
+    expect(contribution.companionArtifacts).toEqual([expect.objectContaining({
+      id: "native-auth",
+      versionLockedToDriver: true,
+      platforms: [{ os: "windows", arch: "x64" }, { os: "windows", arch: "x86" }],
+      source: expect.objectContaining({
+        repository: "microsoft/mssql-jdbc",
+        assetName: "mssql-jdbc_auth.zip",
+        archiveEntryTemplate: "{arch}/mssql-jdbc_auth-{releaseVersion}.{arch}.dll"
+      })
+    })]);
   });
 
   it("registers when-expression templates", () => {

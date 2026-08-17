@@ -5,6 +5,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
@@ -80,7 +81,7 @@ final class NativeLibraryPreloader
         }
     }
 
-    private List<Path> findMatches(Path appDir, PluginManifest.NativeLibrary library)
+    List<Path> findMatches(Path appDir, PluginManifest.NativeLibrary library)
     {
         List<Path> matches = new ArrayList<>();
         List<String> searchPaths = library.searchPaths() == null
@@ -113,7 +114,28 @@ final class NativeLibraryPreloader
                 }
             }
         }
-        return matches;
+        matches.sort(Comparator.comparing((Path path) -> !isQueryeerManaged(path))
+                .thenComparing(path -> path.getFileName()
+                        .toString(), String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(Path::toString));
+        List<Path> managed = matches.stream()
+                .filter(this::isQueryeerManaged)
+                .toList();
+        if (!managed.isEmpty())
+        {
+            return managed.size() == 1 ? managed
+                    : List.of();
+        }
+        return matches.size() <= 1 ? matches
+                : List.of();
+    }
+
+    private boolean isQueryeerManaged(Path path)
+    {
+        return path.getFileName()
+                .toString()
+                .toLowerCase(Locale.ROOT)
+                .contains(".queryeer-managed.");
     }
 
     private boolean matchesCurrentRuntime(PluginManifest.NativeLibrary library)

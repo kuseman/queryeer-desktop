@@ -21,6 +21,7 @@ import type { AboutExtension } from "../extensions/AboutExtension.js";
 import type { NotificationService } from "../extensions/NotificationExtension.js";
 import type { AssistantRegistry } from "../assistant/Assistant.js";
 import type { PluginManifest } from "./PluginManifest.js";
+import type { JdbcDriverRegistry } from "../queryengine/JdbcDriverExtension.js";
 
 export type Plugin = {
   manifest: PluginManifest;
@@ -49,6 +50,7 @@ export type PluginContext = {
   contextMenu: ContextMenuRegistry;
   tableOutputContextMenu: TableOutputContextMenuRegistry;
   jdbcTreeContextMenu: JdbcTreeContextMenuRegistry;
+  jdbcDrivers: JdbcDriverRegistry;
   graphNodeTypes: GraphNodeTypeRegistry;
   about: AboutExtension;
   notifications: NotificationService;

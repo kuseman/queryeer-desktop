@@ -9,5 +9,16 @@
   "requiredCapabilities": ["queryengine.jdbc.connection"],
   "backend": {
     "entrypointClass": "com.queryeer.backend.plugin.jdbc.sqlite.SqliteBackendPlugin"
+  },
+  "runtime": {
+    "shared": {
+      "parentFirstPackagePrefixes": ["org.sqlite."],
+      "sharedArtifacts": [
+        {
+          "pattern": "sqlite-jdbc-*.jar",
+          "required": false
+        }
+      ]
+    }
   }
 }

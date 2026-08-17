@@ -345,6 +345,76 @@ describe("BackendGateway", () => {
     await gateway.stop();
   });
 
+  it("defers intentional restart while a query is active", async () => {
+    const { gateway, transport } = createGatewayWithTestTransport();
+    await gateway.start();
+    await gateway.executeQuery({
+      queryExecutionId: "exec-active",
+      engineId: "payloadbuilder",
+      fileId: "file-1",
+      text: "select 1"
+    });
+
+    const result = await gateway.restart();
+
+    expect(result.accepted).toBe(false);
+    expect(result.reason).toContain("1 query execution(s) are active");
+    expect(transport.stop).not.toHaveBeenCalled();
+    expect(transport.start).toHaveBeenCalledTimes(1);
+    await gateway.stop();
+  });
+
+  it("intentionally restarts, invalidates, re-handshakes, and recovers healthy", async () => {
+    const { gateway, transport } = createGatewayWithTestTransport();
+    const onDiedHook = vi.fn();
+    gateway.setOnTransportDiedHook(onDiedHook);
+    await gateway.start();
+    await gateway.executeQuery({
+      queryExecutionId: "exec-completed-before-restart",
+      engineId: "payloadbuilder",
+      fileId: "file-1",
+      text: "select 1"
+    });
+    transport.emitEnvelope({
+      protocolVersion: BACKEND_PROTOCOL_VERSION,
+      type: "notification",
+      method: "queryengine.completed",
+      params: { queryExecutionId: "exec-completed-before-restart" }
+    } satisfies BackendNotificationEnvelope<"queryengine.completed", QueryCompletedNotification>);
+    const beforeStart = vi.fn(async () => {
+      expect(transport.stop).toHaveBeenCalledTimes(1);
+      expect(transport.start).toHaveBeenCalledTimes(1);
+    });
+
+    const result = await gateway.restart(beforeStart);
+
+    expect(result).toEqual({ accepted: true });
+    expect(beforeStart).toHaveBeenCalledTimes(1);
+    expect(onDiedHook).toHaveBeenCalledTimes(1);
+    expect(transport.start).toHaveBeenCalledTimes(2);
+    expect(gateway.getStatus().state).toBe("healthy");
+    expect(gateway.getStatus().activeExecutionIds).toEqual([]);
+    expect(gateway.getStatus().recentExecutions[0]?.state).toBe("completed");
+    const handshakeCount = transport.sendEnvelope.mock.calls.filter(
+      ([envelope]: [BackendEnvelope]) =>
+        envelope.type === "request" && envelope.method === "backend.handshake"
+    ).length;
+    expect(handshakeCount).toBe(2);
+    await gateway.stop();
+  });
+
+  it("reports a failed intentional restart instead of claiming success", async () => {
+    const { gateway } = createGatewayWithTestTransport({ failPingAfterStart: true });
+    await gateway.start();
+
+    const result = await gateway.restart();
+
+    expect(result.accepted).toBe(false);
+    expect(result.reason).toContain("Simulated ping timeout");
+    expect(gateway.getStatus().state).toBe("unavailable");
+    await gateway.stop();
+  });
+
   it("execute query sends request and tracks accepted execution", async () => {
     const { gateway, transport } = createGatewayWithTestTransport();
     await gateway.start();

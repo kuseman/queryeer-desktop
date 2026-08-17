@@ -116,3 +116,102 @@
   opacity: 0.5;
   cursor: default;
 }
+
+.jdbc-driver-settings,
+.jdbc-driver-list {
+  display: grid;
+  gap: 8px;
+}
+
+.jdbc-driver-toolbar,
+.jdbc-driver-actions,
+.jdbc-driver-summary,
+.jdbc-driver-versions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.jdbc-driver-card {
+  display: grid;
+  gap: 6px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-1);
+}
+
+.jdbc-driver-group {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.jdbc-driver-group-active {
+  border-left: 3px solid var(--accent, #4f8cff);
+  background: var(--bg-0);
+}
+
+.jdbc-driver-group-retained {
+  background: color-mix(in srgb, var(--bg-2) 65%, transparent);
+}
+
+.jdbc-driver-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-1);
+  font-size: var(--ui-font-size-sm);
+}
+
+.jdbc-driver-active-version {
+  color: var(--text-0);
+  font-weight: 600;
+}
+
+.jdbc-driver-artifact {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.jdbc-driver-summary strong {
+  margin-right: auto;
+}
+
+.jdbc-driver-source,
+.jdbc-driver-pending {
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--bg-3);
+  color: var(--text-1);
+  font-size: var(--ui-font-size-xs);
+  text-transform: capitalize;
+}
+
+.jdbc-driver-pending {
+  color: #e6b450;
+}
+
+.jdbc-settings-warning {
+  color: #e6b450;
+}
+
+.jdbc-driver-versions {
+  color: var(--text-1);
+  font-size: var(--ui-font-size-sm);
+}
+
+.jdbc-driver-disabled-files {
+  display: grid;
+  gap: 2px;
+  color: var(--text-1);
+  font-family: var(--editor-font-family, monospace);
+  font-size: var(--ui-font-size-xs);
+}
