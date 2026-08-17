@@ -1,7 +1,8 @@
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { basename, delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getModulesByPluginId, getBackendRoot } from "./backend-catalog.mjs";
+import { copyDereferenced } from "./copy-dereferenced.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(here, "..");
@@ -47,6 +48,19 @@ function copyClasspathFileEntries(classpathFile, outputDir) {
   }
 }
 
+function assertNoSymbolicLinks(directory) {
+  for (const entry of readdirSync(directory)) {
+    const entryPath = join(directory, entry);
+    const stats = lstatSync(entryPath);
+    if (stats.isSymbolicLink()) {
+      fail(`Release resources must not contain symbolic links: ${entryPath}`);
+    }
+    if (stats.isDirectory()) {
+      assertNoSymbolicLinks(entryPath);
+    }
+  }
+}
+
 if (!existsSync(join(jlinkHome, "bin"))) {
   fail(`jlink runtime not found. Run npm run backend:jlink first or set QUERYEER_JLINK_OUTPUT: ${jlinkHome}`);
 }
@@ -61,7 +75,7 @@ mkdirSync(backendLibOut, { recursive: true });
 const runnerTarget = join(backendRoot, "backend-runner", "target");
 copyFileSync(findJar(runnerTarget, "backend-runner"), join(backendOut, "backend-runner.jar"));
 copyClasspathFileEntries(join(runnerTarget, "queryeer-runner-classpath.txt"), backendLibOut);
-cpSync(jlinkHome, join(backendOut, "runtime"), { recursive: true });
+copyDereferenced(jlinkHome, join(backendOut, "runtime"));
 
 const pluginsOut = join(stageRoot, "plugins", "builtin");
 mkdirSync(pluginsOut, { recursive: true });
@@ -71,7 +85,9 @@ for (const [pluginId, moduleName] of moduleByPluginId) {
   if (!existsSync(pluginDistribution)) {
     fail(`Backend plugin distribution not found: ${pluginDistribution}`);
   }
-  cpSync(pluginDistribution, join(pluginsOut, pluginId), { recursive: true });
+  copyDereferenced(pluginDistribution, join(pluginsOut, pluginId));
 }
+
+assertNoSymbolicLinks(stageRoot);
 
 console.log(`Staged release resources: ${stageRoot}`);
