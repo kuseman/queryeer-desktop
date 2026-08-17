@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.queryeer.backend</groupId>
         <artifactId>queryeer-backend</artifactId>
-        <version>0.14.2</version>
+        <version>0.14.3-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
     <artifactId>backend-lib-queryengine-sql-parser</artifactId>
