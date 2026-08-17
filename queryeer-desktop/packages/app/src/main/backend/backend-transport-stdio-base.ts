@@ -95,7 +95,8 @@ export abstract class StdioBackendTransportBase implements BackendTransport {
   }
 
   public async stop(): Promise<void> {
-    if (!this.process) {
+    const proc = this.process;
+    if (!proc) {
       return;
     }
 
@@ -104,11 +105,18 @@ export abstract class StdioBackendTransportBase implements BackendTransport {
       this.stderrReader = null;
     }
 
-    const pid = this.process.pid;
+    const pid = proc.pid;
+    const exited = new Promise<void>((resolve) => {
+      if (proc.exitCode !== null || proc.signalCode !== null) {
+        resolve();
+        return;
+      }
+      proc.once("exit", () => resolve());
+    });
     this.stdinBroken = true;
 
     try {
-      this.process.stdin.end();
+      proc.stdin.end();
     } catch {
       // stdin already closed
     }
@@ -116,9 +124,9 @@ export abstract class StdioBackendTransportBase implements BackendTransport {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     try {
-      this.process.stdout?.destroy();
-      this.process.stderr?.destroy();
-      this.process.stdin?.destroy();
+      proc.stdout?.destroy();
+      proc.stderr?.destroy();
+      proc.stdin?.destroy();
     } catch {
       // streams already closed
     }
@@ -141,7 +149,19 @@ export abstract class StdioBackendTransportBase implements BackendTransport {
       }
     }
 
-    this.process = null;
+    const exitedInTime = await Promise.race([
+      exited.then(() => true),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), 5_000))
+    ]);
+    if (!exitedInTime) {
+      try {
+        if (pid && process.platform !== "win32") process.kill(pid, "SIGKILL");
+      } catch {
+        // process already terminated
+      }
+      throw new Error(`Backend process ${pid ?? "unknown"} did not exit after termination`);
+    }
+    if (this.process === proc) this.process = null;
   }
 
   private markDied(message: string): void {

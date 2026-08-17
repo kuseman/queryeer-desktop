@@ -25,7 +25,12 @@ import type {
   AssistantListModelsRequest,
   AssistantListModelsResponse
 } from "../assistant/Assistant.js";
-
+import type {
+  JdbcDriverBackendRestartResult,
+  JdbcDriverOperationResult,
+  JdbcDriverStatus,
+  RegisteredJdbcManagedDriverContribution
+} from "../queryengine/JdbcDriverExtension.js";
 type RecentFileEntry = {
   uri: string;
   lastOpenedAt: string;
@@ -52,6 +57,14 @@ export interface ShellApi {
   setPluginEnabled: (params: { pluginId: string; enabled: boolean }) => Promise<ManagedPluginSetEnabledResult>;
   installPluginFromZip: (params: { zipFilePath: string }) => Promise<ManagedPluginInstallResult>;
   uninstallPlugin: (params: { pluginId: string }) => Promise<ManagedPluginUninstallResult>;
+  listJdbcDrivers: (contributions: RegisteredJdbcManagedDriverContribution[]) => Promise<JdbcDriverStatus[]>;
+  checkJdbcDrivers: (contributions: RegisteredJdbcManagedDriverContribution[]) => Promise<JdbcDriverStatus[]>;
+  installJdbcDriver: (contribution: RegisteredJdbcManagedDriverContribution, artifactId?: string) => Promise<JdbcDriverOperationResult>;
+  updateJdbcDriver: (contribution: RegisteredJdbcManagedDriverContribution, artifactId?: string) => Promise<JdbcDriverOperationResult>;
+  removeJdbcDriver: (contribution: RegisteredJdbcManagedDriverContribution, artifactId?: string) => Promise<JdbcDriverOperationResult>;
+  restoreJdbcDriver: (contribution: RegisteredJdbcManagedDriverContribution, disabledSetId: string) => Promise<JdbcDriverOperationResult>;
+  discardJdbcDriverRetainedSet: (contribution: RegisteredJdbcManagedDriverContribution, disabledSetId: string) => Promise<JdbcDriverOperationResult>;
+  restartBackendForJdbcDrivers: () => Promise<JdbcDriverBackendRestartResult>;
   executeBackendQuery: (params: {
     queryExecutionId: string;
     engineId: string;

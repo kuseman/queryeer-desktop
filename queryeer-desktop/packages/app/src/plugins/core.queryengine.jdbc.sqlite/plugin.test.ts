@@ -24,7 +24,8 @@ function createContext(): PluginContext
     fileMediator: {
       closeFile: vi.fn(),
       createUntitledFile: vi.fn()
-    }
+    },
+    jdbcDrivers: { registerDriver: vi.fn() }
   } as unknown as PluginContext;
 }
 
@@ -46,6 +47,21 @@ describe("coreQueryEngineJdbcSqlitePlugin", () => {
         dialectId: "sqlite"
       })
     );
+  });
+
+  it("registers the managed SQLite JDBC driver", () => {
+    const context = createContext();
+
+    coreQueryEngineJdbcSqlitePlugin.activate(context);
+
+    expect(context.jdbcDrivers.registerDriver).toHaveBeenCalledWith({
+      dialectId: "sqlite",
+      displayName: "SQLite JDBC Driver",
+      groupId: "org.xerial",
+      artifactId: "sqlite-jdbc",
+      driverClassName: "org.sqlite.JDBC",
+      downloadPageUrl: "https://github.com/xerial/sqlite-jdbc/releases"
+    });
   });
 
   it("registers mime resolver for SQLite extensions on activation", () => {

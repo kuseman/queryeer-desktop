@@ -143,7 +143,15 @@ describe("bootstrapShell diagnostics wiring", () => {
       getPluginInventory: async () => ({ pluginsDir: "", lockfilePath: "", safeMode: false, plugins: [] }),
       setPluginEnabled: async () => ({ accepted: true, restartRequired: true }),
       installPluginFromZip: async () => ({ accepted: true, restartRequired: true }),
-      uninstallPlugin: async () => ({ accepted: true, restartRequired: true })
+      uninstallPlugin: async () => ({ accepted: true, restartRequired: true }),
+      listJdbcDrivers: async () => [],
+      checkJdbcDrivers: async () => [],
+      installJdbcDriver: async () => { throw new Error("Not implemented in this test"); },
+      updateJdbcDriver: async () => { throw new Error("Not implemented in this test"); },
+      removeJdbcDriver: async () => { throw new Error("Not implemented in this test"); },
+      restoreJdbcDriver: async () => { throw new Error("Not implemented in this test"); },
+      discardJdbcDriverRetainedSet: async () => { throw new Error("Not implemented in this test"); },
+      restartBackendForJdbcDrivers: async () => ({ accepted: true })
     };
 
     (discoverPluginModules as MockedDiscovery).mockResolvedValue({

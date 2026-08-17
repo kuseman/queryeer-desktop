@@ -13,10 +13,11 @@ const MAX_RESTART_DELAY_MS = 30_000;
 export class WatchdogBackendTransport implements BackendTransport {
   public readonly mode: BackendGatewayMode;
 
-  private current: BackendTransport | null = null;
+  private current: { transport: BackendTransport; intentionalStop: boolean } | null = null;
   private restartAttempts = 0;
   private stopped = false;
   private restartTimer: NodeJS.Timeout | null = null;
+  private lifecyclePromise: Promise<void> = Promise.resolve();
 
   public constructor(
     private readonly factory: BackendTransportFactory,
@@ -28,35 +29,109 @@ export class WatchdogBackendTransport implements BackendTransport {
   }
 
   public async start(): Promise<void> {
-    this.current = this.spawnInner();
-    await this.current.start();
+    this.stopped = false;
+    await this.serialize(async () => {
+      if (this.current) {
+        return;
+      }
+      const next = this.spawnInner();
+      this.current = next;
+      try {
+        await next.transport.start();
+      } catch (error) {
+        if (this.current === next) {
+          this.current = null;
+        }
+        throw error;
+      }
+    });
   }
 
   public async stop(): Promise<void> {
     this.stopped = true;
-    if (this.restartTimer) {
-      clearTimeout(this.restartTimer);
-      this.restartTimer = null;
+    this.clearRestartTimer();
+    if (this.current) {
+      this.current.intentionalStop = true;
     }
-    await this.current?.stop();
-    this.current = null;
+    await this.serialize(async () => {
+      const current = this.current;
+      this.current = null;
+      if (current) {
+        current.intentionalStop = true;
+        await current.transport.stop();
+      }
+    });
+  }
+
+  public async restart(beforeStart?: () => void | Promise<void>): Promise<void> {
+    this.clearRestartTimer();
+    if (this.current) {
+      this.current.intentionalStop = true;
+    }
+    await this.serialize(async () => {
+      if (this.stopped) {
+        throw new Error("Backend transport is stopped");
+      }
+
+      const current = this.current;
+      this.current = null;
+      if (current) {
+        current.intentionalStop = true;
+        await current.transport.stop();
+      }
+
+      let next: { transport: BackendTransport; intentionalStop: boolean } | null = null;
+      try {
+        await beforeStart?.();
+        next = this.spawnInner();
+        this.current = next;
+        await next.transport.start();
+        if (this.stopped) {
+          this.current = null;
+          next.intentionalStop = true;
+          await next.transport.stop();
+          return;
+        }
+        if (this.current !== next) {
+          return;
+        }
+        this.restartAttempts = 0;
+        await this.onRestartReady();
+      } catch (error) {
+        if (next && this.current === next) {
+          this.current = null;
+        }
+        if (!this.stopped) {
+          this.scheduleRestart();
+        }
+        throw error;
+      }
+    });
   }
 
   public sendEnvelope(envelope: BackendEnvelope): void {
     if (!this.current) {
       throw new Error("Backend transport is not running (watchdog: no active instance)");
     }
-    this.current.sendEnvelope(envelope);
+    this.current.transport.sendEnvelope(envelope);
   }
 
-  private spawnInner(): BackendTransport {
-    return this.factory.create({
+  private spawnInner(): { transport: BackendTransport; intentionalStop: boolean } {
+    const inner: { transport: BackendTransport; intentionalStop: boolean } = {
+      transport: null as unknown as BackendTransport,
+      intentionalStop: false
+    };
+    inner.transport = this.factory.create({
       ...this.outerCallbacks,
-      onDied: () => this.handleDied()
+      onDied: () => this.handleDied(inner)
     });
+    return inner;
   }
 
-  private handleDied(): void {
+  private handleDied(inner: { transport: BackendTransport; intentionalStop: boolean }): void {
+    if (inner.intentionalStop || this.current !== inner) {
+      return;
+    }
     this.current = null;
     this.onTransportDied?.();
     if (this.stopped) {
@@ -89,19 +164,24 @@ export class WatchdogBackendTransport implements BackendTransport {
         return;
       }
       this.restartTimer = null;
-      void this.doRestart();
+      void this.serialize(() => this.doRestart());
     }, delay);
   }
 
   private async doRestart(): Promise<void> {
+    let next: { transport: BackendTransport; intentionalStop: boolean } | null = null;
     try {
-      const next = this.spawnInner();
-      await next.start();
+      next = this.spawnInner();
+      this.current = next;
+      await next.transport.start();
       if (this.stopped) {
-        await next.stop();
+        next.intentionalStop = true;
+        await next.transport.stop();
         return;
       }
-      this.current = next;
+      if (this.current !== next) {
+        return;
+      }
       this.restartAttempts = 0;
       this.outerCallbacks.onDiagnostic({
         level: "info",
@@ -110,6 +190,9 @@ export class WatchdogBackendTransport implements BackendTransport {
       });
       await this.onRestartReady();
     } catch (error) {
+      if (this.current === next) {
+        this.current = null;
+      }
       if (this.stopped) {
         return;
       }
@@ -121,5 +204,18 @@ export class WatchdogBackendTransport implements BackendTransport {
       });
       this.scheduleRestart();
     }
+  }
+
+  private clearRestartTimer(): void {
+    if (this.restartTimer) {
+      clearTimeout(this.restartTimer);
+      this.restartTimer = null;
+    }
+  }
+
+  private serialize(operation: () => Promise<void>): Promise<void> {
+    const next = this.lifecyclePromise.then(operation, operation);
+    this.lifecyclePromise = next.catch(() => {});
+    return next;
   }
 }

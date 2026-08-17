@@ -27,7 +27,8 @@ function createContext(): PluginContext
     layout: { registerToolbarAction: vi.fn() },
     fileMediator: { getActiveFileId: vi.fn() },
     files: { getFile: vi.fn() },
-    settings: { registerSettings: vi.fn() }
+    settings: { registerSettings: vi.fn() },
+    jdbcDrivers: { registerDriver: vi.fn() }
   } as unknown as PluginContext;
 }
 
@@ -50,6 +51,21 @@ describe("coreQueryEngineJdbcPostgresPlugin", () => {
         supportsQueryPlan: true
       })
     );
+  });
+
+  it("registers the managed PostgreSQL JDBC driver", () => {
+    const context = createContext();
+
+    coreQueryEngineJdbcPostgresPlugin.activate(context);
+
+    expect(context.jdbcDrivers.registerDriver).toHaveBeenCalledWith({
+      dialectId: "postgres",
+      displayName: "PostgreSQL JDBC Driver",
+      groupId: "org.postgresql",
+      artifactId: "postgresql",
+      driverClassName: "org.postgresql.Driver",
+      downloadPageUrl: "https://jdbc.postgresql.org/download/"
+    });
   });
 
   it("registers describe action using unqualified symbol attribute name", () => {

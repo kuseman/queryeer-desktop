@@ -83,6 +83,14 @@ export class BackendExecutionStore {
     return this.getAll().slice(0, limit);
   }
 
+  public clearActive(): void {
+    for (const [queryExecutionId, execution] of this.executionStatuses) {
+      if (this.isActiveState(execution)) {
+        this.executionStatuses.delete(queryExecutionId);
+      }
+    }
+  }
+
   private getAll(): QueryExecutionStatus[] {
     return [...this.executionStatuses.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }

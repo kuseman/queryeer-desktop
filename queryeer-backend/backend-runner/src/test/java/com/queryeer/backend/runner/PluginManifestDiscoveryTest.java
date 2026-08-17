@@ -186,7 +186,13 @@ class PluginManifestDiscoveryTest
                   "runtime": {
                     "shared": {
                       "parentFirstPackagePrefixes": ["com.queryeer.backend.queryengine.jdbc."],
-                      "nativeLibraries": []
+                      "nativeLibraries": [],
+                      "sharedArtifacts": [
+                        {
+                          "pattern": "jdbc-driver-*.jar",
+                          "required": false
+                        }
+                      ]
                     }
                   }
                 }
@@ -198,6 +204,9 @@ class PluginManifestDiscoveryTest
         Assertions.assertEquals(List.of("com.queryeer.backend.queryengine.jdbc."), manifest.runtime()
                 .shared()
                 .parentFirstPackagePrefixes());
+        Assertions.assertEquals(List.of(new PluginManifest.SharedArtifact("jdbc-driver-*.jar", false)), manifest.runtime()
+                .shared()
+                .sharedArtifacts());
     }
 
     @Test

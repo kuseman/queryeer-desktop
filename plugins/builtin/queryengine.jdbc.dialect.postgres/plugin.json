@@ -13,5 +13,16 @@
       "root": "../../../queryeer-backend/backend-plugin-dialect-postgres",
       "include": ["target/classes", "@target/queryeer-plugin-deps.txt"]
     }
+  },
+  "runtime": {
+    "shared": {
+      "parentFirstPackagePrefixes": ["org.postgresql."],
+      "sharedArtifacts": [
+        {
+          "pattern": "postgresql-*.jar",
+          "required": false
+        }
+      ]
+    }
   }
 }

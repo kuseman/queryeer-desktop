@@ -624,6 +624,12 @@ All contribution points are accessed through the `PluginContext` object passed t
 | `notifications.unreadCount()` | `number` | Unread count |
 | `notifications.markRead(id)` | `void` | Mark notification as read |
 
+### 7.10.1 JDBC Drivers
+
+JDBC dialect frontend plugins can register driver metadata through `jdbcDrivers.registerDriver(contribution)`. The common JDBC settings UI handles status, periodic update checks, notifications, and managed installation. The plugin host records the activating plugin as the contribution owner.
+
+The primary artifact uses Maven Central coordinates. Contributions may add typed, platform-constrained native companion archive declarations. Set `versionLockedToDriver: true` when an applicable companion must share the primary driver's lifecycle and derived release version; the UI keeps separate status rows but exposes one package action. Automatic downloads are currently allowlisted to Queryeer's builtin PostgreSQL, SQL Server, and SQLite contributions, and the main process replaces trusted metadata with canonical descriptors. For those trusted providers, duplicate runtime files are moved to recoverable provider-specific `disabled` folders before Java starts; retained version sets are exposed through `JdbcDriverStatus.disabledSets` and can be restored through the common settings UI. External contributions and companions remain visible but are manual-only. See [`documentation/JDBC_DRIVER_MANAGEMENT.md`](./documentation/JDBC_DRIVER_MANAGEMENT.md).
+
 ### 7.11 Dialog
 
 | Method | Type | Description |

@@ -47,6 +47,11 @@ import { registerQueryEditorStatusItem } from "@queryeer/api/queryengine/QueryEd
 import { JdbcConnectionStatus } from "./JdbcConnectionStatus";
 import { getCommandContext } from "../core.commands/command-context-accessor";
 import { toQueryOutputSessionId } from "../core.queryengine/query-session";
+import { JdbcDriversSettingsEditor } from "./JdbcDriversSettingsEditor";
+import {
+  JDBC_DRIVERS_SETTING_ID,
+  JDBC_DRIVER_UPDATE_CHECK_SETTING_ID
+} from "./jdbc-driver-management-service";
 
 const JDBC_SESSION_ID_METADATA_KEY = "core.queryengine.jdbc.sessionId";
 const JDBC_SESSION_CONNECTION_TITLE_KEY = "core.queryengine.jdbc.sessionConnection";
@@ -194,6 +199,11 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       )
     });
 
+    context.settings.registerAdvancedRenderer({
+      id: "core.queryengine.jdbc.drivers.renderer",
+      render: ({ readonly }) => <JdbcDriversSettingsEditor readonly={readonly} />
+    });
+
     context.settings.registerSettings({
       moduleId: "core.queryengine.jdbc",
       title: "Query Engine JDBC",
@@ -213,6 +223,27 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
             rendererId: "core.queryengine.jdbc.connections.renderer",
             validatorId: "core.queryengine.jdbc.connections.validator"
           }
+        },
+        {
+          id: JDBC_DRIVERS_SETTING_ID,
+          moduleId: "core.queryengine.jdbc",
+          title: "JDBC Drivers",
+          description: "Inspect, install, update, and remove JDBC driver artifacts.",
+          sectionPath: ["Query Engine", "JDBC", "Drivers"],
+          tags: ["jdbc", "driver", "update", "install"],
+          type: "json",
+          defaultValue: [],
+          advanced: { rendererId: "core.queryengine.jdbc.drivers.renderer" }
+        },
+        {
+          id: JDBC_DRIVER_UPDATE_CHECK_SETTING_ID,
+          moduleId: "core.queryengine.jdbc",
+          title: "Check For JDBC Driver Updates",
+          description: "Check for JDBC driver updates at startup and every 24 hours.",
+          sectionPath: ["Query Engine", "JDBC", "Drivers"],
+          tags: ["jdbc", "driver", "updates"],
+          type: "boolean",
+          defaultValue: true
         },
       ]
     });

@@ -42,6 +42,12 @@ import type {
   AssistantListModelsRequest,
   AssistantListModelsResponse
 } from "@queryeer/api/assistant/Assistant.js";
+import type {
+  JdbcDriverOperationResult,
+  JdbcDriverBackendRestartResult,
+  JdbcDriverStatus,
+  RegisteredJdbcManagedDriverContribution
+} from "@queryeer/api/queryengine/JdbcDriverExtension.js";
 
 type DialogShowMessageOptions = {
   title: string;
@@ -102,6 +108,14 @@ type AppShellApi = {
   setPluginEnabled: (params: { pluginId: string; enabled: boolean }) => Promise<ManagedPluginSetEnabledResult>;
   installPluginFromZip: (params: { zipFilePath: string }) => Promise<ManagedPluginInstallResult>;
   uninstallPlugin: (params: { pluginId: string }) => Promise<ManagedPluginUninstallResult>;
+  listJdbcDrivers: (contributions: RegisteredJdbcManagedDriverContribution[]) => Promise<JdbcDriverStatus[]>;
+  checkJdbcDrivers: (contributions: RegisteredJdbcManagedDriverContribution[]) => Promise<JdbcDriverStatus[]>;
+  installJdbcDriver: (contribution: RegisteredJdbcManagedDriverContribution, artifactId?: string) => Promise<JdbcDriverOperationResult>;
+  updateJdbcDriver: (contribution: RegisteredJdbcManagedDriverContribution, artifactId?: string) => Promise<JdbcDriverOperationResult>;
+  removeJdbcDriver: (contribution: RegisteredJdbcManagedDriverContribution, artifactId?: string) => Promise<JdbcDriverOperationResult>;
+  restoreJdbcDriver: (contribution: RegisteredJdbcManagedDriverContribution, disabledSetId: string) => Promise<JdbcDriverOperationResult>;
+  discardJdbcDriverRetainedSet: (contribution: RegisteredJdbcManagedDriverContribution, disabledSetId: string) => Promise<JdbcDriverOperationResult>;
+  restartBackendForJdbcDrivers: () => Promise<JdbcDriverBackendRestartResult>;
   executeBackendQuery: (params: QueryExecuteParams) => Promise<QueryExecuteResult>;
   cancelBackendQuery: (params: QueryCancelParams) => Promise<QueryCancelResult>;
   readBackendLargeValue: (params: QueryLargeValueReadParams) => Promise<QueryLargeValueReadResult>;
@@ -279,6 +293,30 @@ const appShellApi: AppShellApi = {
   },
   uninstallPlugin: async (params) => {
     return ipcRenderer.invoke("plugins:uninstall", params);
+  },
+  listJdbcDrivers: async (contributions) => {
+    return ipcRenderer.invoke("jdbc-drivers:list", contributions);
+  },
+  checkJdbcDrivers: async (contributions) => {
+    return ipcRenderer.invoke("jdbc-drivers:check", contributions);
+  },
+  installJdbcDriver: async (contribution, artifactId) => {
+    return ipcRenderer.invoke("jdbc-drivers:install", contribution, artifactId);
+  },
+  updateJdbcDriver: async (contribution, artifactId) => {
+    return ipcRenderer.invoke("jdbc-drivers:update", contribution, artifactId);
+  },
+  removeJdbcDriver: async (contribution, artifactId) => {
+    return ipcRenderer.invoke("jdbc-drivers:remove", contribution, artifactId);
+  },
+  restoreJdbcDriver: async (contribution, disabledSetId) => {
+    return ipcRenderer.invoke("jdbc-drivers:restore", contribution, disabledSetId);
+  },
+  discardJdbcDriverRetainedSet: async (contribution, disabledSetId) => {
+    return ipcRenderer.invoke("jdbc-drivers:discard-retained", contribution, disabledSetId);
+  },
+  restartBackendForJdbcDrivers: async () => {
+    return ipcRenderer.invoke("jdbc-drivers:restart-backend");
   },
   executeBackendQuery: async (params) => {
     return ipcRenderer.invoke("backend:execute-query", params);

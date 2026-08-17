@@ -32,6 +32,13 @@ import { setKeybindingsRuntimeState } from "../../plugins/core.commands/keybindi
 import { requestMessageDialog } from "../../plugins/core.dialog/message-dialog-service";
 import { getRegisteredQueryExecutableEngines } from "../../plugins/core.queryengine/engine-registration";
 import { hasActiveQueryPlanDialect } from "../../plugins/core.queryengine/query-plan/supported-dialects";
+import { getCoreSettingsService } from "../../plugins/core.settings/service";
+import { JDBC_CONNECTIONS_SETTING_ID } from "../../plugins/core.queryengine.jdbc/jdbc-settings";
+import {
+  getJdbcDriverManagementService,
+  JDBC_DRIVERS_SETTING_ID,
+  JDBC_DRIVER_UPDATE_CHECK_SETTING_ID
+} from "../../plugins/core.queryengine.jdbc/jdbc-driver-management-service";
 
 export async function bootstrapShell() {
   const chain = createContextChain();
@@ -262,6 +269,50 @@ export async function bootstrapShell() {
 
   await host.start(discovery.manifests);
   host.setExternalLoadErrors(discovery.loadErrors);
+
+  const settings = getCoreSettingsService();
+  await settings?.syncRegistryModules();
+  await getJdbcDriverManagementService().initialize({
+    contributions: host.getJdbcDrivers(),
+    shell: window.appShell,
+    notifications: getNotificationService(),
+    openSettings: () => {
+      settings?.openModalForSetting(JDBC_DRIVERS_SETTING_ID);
+    },
+    confirmOperation: async (operation, contribution, artifact) => {
+      const verb = `${operation[0].toUpperCase()}${operation.slice(1)}`;
+      const selectedName = artifact.managedWithPrimary ? `${contribution.displayName} package` : artifact.displayName;
+      const result = await requestMessageDialog({
+        title: `${verb} JDBC driver`,
+        message: artifact.managedWithPrimary ? `${verb} ${selectedName}?` : `${verb} ${selectedName} for ${contribution.displayName}?`,
+        severity: "warning",
+        detail: operation === "remove"
+          ? "The managed artifact will be removed after the Java backend restarts. Manually supplied files are not deleted."
+          : operation === "discard"
+          ? artifact.warning
+          : operation === "activate"
+          ? "This retained version will become active after the Java backend restarts. The current active version will move to retained storage for rollback; the two versions are never loaded together."
+          : "This downloads executable code from its trusted source and activates it after the Java backend restarts.",
+        options: [
+          { label: verb, value: "confirm" },
+          { label: "Cancel", value: "cancel" }
+        ]
+      });
+      return result.action === "confirm";
+    },
+    updateChecksEnabled: () => settings?.getValue(JDBC_DRIVER_UPDATE_CHECK_SETTING_ID) !== false,
+    persistedConnections: () => settings?.getValue(JDBC_CONNECTIONS_SETTING_ID),
+    storage: window.localStorage,
+    windowTarget: window,
+    documentTarget: document
+  });
+  let driverUpdateChecksEnabled = settings?.getValue(JDBC_DRIVER_UPDATE_CHECK_SETTING_ID) !== false;
+  settings?.subscribe(() => {
+    const enabled = settings.getValue(JDBC_DRIVER_UPDATE_CHECK_SETTING_ID) !== false;
+    if (enabled === driverUpdateChecksEnabled) return;
+    driverUpdateChecksEnabled = enabled;
+    getJdbcDriverManagementService().updateCheckPreferenceChanged();
+  });
 
   initializeQuickCommandService(host.getQuickCommandProviders(), () => chain.getEffectiveContext());
 

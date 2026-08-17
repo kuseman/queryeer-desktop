@@ -13,5 +13,16 @@
       "root": "../../../queryeer-backend/backend-plugin-dialect-sqlite",
       "include": ["target/classes", "@target/queryeer-plugin-deps.txt"]
     }
+  },
+  "runtime": {
+    "shared": {
+      "parentFirstPackagePrefixes": ["org.sqlite."],
+      "sharedArtifacts": [
+        {
+          "pattern": "sqlite-jdbc-*.jar",
+          "required": false
+        }
+      ]
+    }
   }
 }

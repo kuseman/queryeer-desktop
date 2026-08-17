@@ -36,6 +36,36 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
     providesCapabilities: ["query.engine.jdbc.sqlserver"]
   },
   activate: (context) => {
+    context.jdbcDrivers.registerDriver({
+      dialectId: SQLSERVER_DIALECT_ID,
+      displayName: "Microsoft JDBC Driver for SQL Server",
+      groupId: "com.microsoft.sqlserver",
+      artifactId: "mssql-jdbc",
+      driverClassName: "com.microsoft.sqlserver.jdbc.SQLServerDriver",
+      compatibleVersionRegex: "\\.jre11$",
+      downloadPageUrl: "https://learn.microsoft.com/sql/connect/jdbc/download-microsoft-jdbc-driver-for-sql-server",
+      companionArtifacts: [{
+        id: "native-auth",
+        displayName: "Windows Native Authentication",
+        kind: "nativeLibrary",
+        platforms: [
+          { os: "windows", arch: "x64" },
+          { os: "windows", arch: "x86" }
+        ],
+        source: {
+          type: "githubReleaseArchive",
+          repository: "microsoft/mssql-jdbc",
+          releaseTagTemplate: "v{releaseVersion}",
+          assetName: "mssql-jdbc_auth.zip",
+          driverVersionToReleaseVersion: { pattern: "^([0-9]+\\.[0-9]+\\.[0-9]+)\\.jre[0-9]+$", replacement: "$1" },
+          archiveEntryTemplate: "{arch}/mssql-jdbc_auth-{releaseVersion}.{arch}.dll"
+        },
+        targetDirectory: "libNative",
+        expectedFileExtension: ".dll",
+        versionLockedToDriver: true
+      }]
+    });
+
     registerSqlServerExpressionFunctions();
 
     // Register connection form for the JDBC settings editor

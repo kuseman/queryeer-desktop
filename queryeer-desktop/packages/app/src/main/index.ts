@@ -34,6 +34,7 @@ import { wireExpressionEvaluatorIpc } from "./expressions/expression-evaluator.j
 import { defaultPluginsDirPath } from "./plugins/plugin-paths.js";
 import { defaultPluginsLockfilePath, PluginInventoryService } from "./plugins/plugin-inventory-service.js";
 import { defaultWindowStatePath, type WindowStateSnapshot, WindowStateStore } from "./window/window-state-store.js";
+import { JdbcDriverArtifactService } from "./jdbc-drivers/jdbc-driver-artifact-service.js";
 
 const isDev = !app.isPackaged;
 const queryeerReleasesUrl = "https://api.github.com/repos/kuseman/queryeer-desktop/releases";
@@ -462,7 +463,7 @@ app.whenReady().then(async () => {
     }
   );
   backendGateway.setOnTransportDiedHook(() => {
-    void securityService?.invalidateBackendSession();
+    return securityService?.invalidateBackendSession();
   });
   securityService.wireIpc();
   const assistantHttpService = new AssistantHttpService({
@@ -492,6 +493,36 @@ app.whenReady().then(async () => {
     const inventory = await pluginInventoryService!.getInventory();
     const enabledPluginIds = new Set(inventory.plugins.filter((plugin) => plugin.enabled).map((plugin) => plugin.id));
     return (await discoverExternalFrontendPlugins(pluginsDirPath)).filter((plugin) => enabledPluginIds.has(plugin.id));
+  });
+  const jdbcDriverArtifactService = new JdbcDriverArtifactService({
+    appDir: appDataDir,
+    settingsDir: settingsDirPath,
+    trashArtifact: (path) => shell.trashItem(path)
+  });
+  await jdbcDriverArtifactService.initialize();
+  ipcMain.handle("jdbc-drivers:list", async (_event, contributions: unknown) => {
+    return jdbcDriverArtifactService.list(contributions);
+  });
+  ipcMain.handle("jdbc-drivers:check", async (_event, contributions: unknown) => {
+    return jdbcDriverArtifactService.check(contributions);
+  });
+  ipcMain.handle("jdbc-drivers:install", async (_event, contribution: unknown, artifactId?: unknown) => {
+    return jdbcDriverArtifactService.install(contribution, artifactId);
+  });
+  ipcMain.handle("jdbc-drivers:update", async (_event, contribution: unknown, artifactId?: unknown) => {
+    return jdbcDriverArtifactService.update(contribution, artifactId);
+  });
+  ipcMain.handle("jdbc-drivers:remove", async (_event, contribution: unknown, artifactId?: unknown) => {
+    return jdbcDriverArtifactService.remove(contribution, artifactId);
+  });
+  ipcMain.handle("jdbc-drivers:restore", async (_event, contribution: unknown, disabledSetId: unknown) => {
+    return jdbcDriverArtifactService.restore(contribution, disabledSetId);
+  });
+  ipcMain.handle("jdbc-drivers:discard-retained", async (_event, contribution: unknown, disabledSetId: unknown) => {
+    return jdbcDriverArtifactService.discardRetainedSet(contribution, disabledSetId);
+  });
+  ipcMain.handle("jdbc-drivers:restart-backend", async () => {
+    return backendGateway.restart(() => jdbcDriverArtifactService.applyPending());
   });
   ipcMain.handle("file:read", async (_event, { uri }: { uri: string }) => {
     try {

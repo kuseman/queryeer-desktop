@@ -37,4 +37,18 @@ describe("BackendExecutionStore", () => {
 
     vi.useRealTimers();
   });
+
+  it("clears active executions while retaining completed history", () => {
+    const store = new BackendExecutionStore();
+    store.markAccepted("exec-active", "payloadbuilder");
+    store.markAccepted("exec-completed", "payloadbuilder");
+    store.onCompleted({ queryExecutionId: "exec-completed" });
+
+    store.clearActive();
+
+    expect(store.getActiveExecutionIds()).toEqual([]);
+    expect(store.getRecentExecutions().map((execution) => execution.queryExecutionId)).toEqual([
+      "exec-completed"
+    ]);
+  });
 });
