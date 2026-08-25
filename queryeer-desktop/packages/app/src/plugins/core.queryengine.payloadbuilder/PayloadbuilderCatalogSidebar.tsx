@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import type { EditorRegistryHost } from "@queryeer/api/editor/EditorCapability";
 import { getPayloadbuilderCatalogStore } from "./catalog-store";
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../core.settings/service";
 import { getPayloadbuilderCatalogContribution } from "./catalog-contributions";
@@ -7,26 +6,14 @@ import { getPayloadbuilderEnvironments } from "./environment-settings";
 import { PAYLOADBUILDER_ENVIRONMENTS_SETTING_ID } from "./environment-settings";
 
 type Props = {
-  editorRegistryHost: EditorRegistryHost;
+  fileId?: string;
 };
 
-type ActiveFileState = {
-  fileId: string;
-};
-
-export function PayloadbuilderCatalogSidebar({ editorRegistryHost }: Props): JSX.Element {
-  const [activeFile, setActiveFile] = useState<ActiveFileState | null>(() => {
-    const fileId = editorRegistryHost.getActiveEditor()?.fileId ?? null;
-    return fileId ? { fileId } : null;
-  });
+export function PayloadbuilderCatalogSidebar({ fileId }: Props): JSX.Element {
   const [_revision, setRevision] = useState(0);
 
   useEffect(() => {
     let unsubscribeSettingsValues: (() => void) | undefined;
-    const sub = editorRegistryHost.onActiveEditorChanged((handle) => {
-      const fileId = handle?.fileId ?? null;
-      setActiveFile(fileId ? { fileId } : null);
-    });
     const unsubscribe = getPayloadbuilderCatalogStore().subscribe(() => {
       setRevision((prev) => prev + 1);
     });
@@ -39,32 +26,31 @@ export function PayloadbuilderCatalogSidebar({ editorRegistryHost }: Props): JSX
     });
 
     return () => {
-      sub.dispose();
       unsubscribe();
       unsubscribeSettingsValues?.();
       unsubscribeSettingsInit();
     };
-  }, [editorRegistryHost]);
+  }, []);
 
-  const instances = activeFile
-    ? getPayloadbuilderCatalogStore().listInstances(activeFile.fileId).filter((instance) => instance.enabled)
+  const instances = fileId
+    ? getPayloadbuilderCatalogStore().listInstances(fileId).filter((instance) => instance.enabled)
     : [];
   const panelInstances = instances.filter((instance) =>
     Boolean(getPayloadbuilderCatalogContribution(instance.catalogId)?.renderPanel)
   );
-  const activeDefaultAlias = activeFile
-    ? ((getPayloadbuilderCatalogStore().buildEngineState(activeFile.fileId) as {
+  const activeDefaultAlias = fileId
+    ? ((getPayloadbuilderCatalogStore().buildEngineState(fileId) as {
         payloadbuilder?: { defaultCatalogAlias?: string };
       })?.payloadbuilder?.defaultCatalogAlias ?? "")
     : "";
-  const selectedEnvironmentId = activeFile
-    ? ((getPayloadbuilderCatalogStore().buildEngineState(activeFile.fileId) as {
+  const selectedEnvironmentId = fileId
+    ? ((getPayloadbuilderCatalogStore().buildEngineState(fileId) as {
         payloadbuilder?: { selectedEnvironmentId?: string };
       })?.payloadbuilder?.selectedEnvironmentId ?? "")
     : "";
   const environments = getPayloadbuilderEnvironments();
 
-  if (!activeFile) {
+  if (!fileId) {
     return <div className="payloadbuilder-catalog-empty">Open a query file to configure catalogs.</div>;
   }
 
@@ -82,7 +68,7 @@ export function PayloadbuilderCatalogSidebar({ editorRegistryHost }: Props): JSX
                 value={selectedEnvironmentId}
                 onInput={(event) =>
                   getPayloadbuilderCatalogStore().setSelectedEnvironmentId(
-                    activeFile.fileId,
+                    fileId,
                     event.currentTarget.value || undefined
                   )
                 }
@@ -120,7 +106,7 @@ export function PayloadbuilderCatalogSidebar({ editorRegistryHost }: Props): JSX
         const contribution = getPayloadbuilderCatalogContribution(instance.catalogId);
         const title = instance.title ?? contribution?.title ?? instance.catalogId;
         return (
-          <section className="panel-card" key={instance.alias}>
+          <section className="panel-card" key={`${fileId}:${instance.alias}`}>
             <header className="panel-header">
               <label>
                 <input
@@ -130,7 +116,7 @@ export function PayloadbuilderCatalogSidebar({ editorRegistryHost }: Props): JSX
                   aria-label={`Set ${instance.alias} as default catalog alias`}
                   checked={instance.alias === activeDefaultAlias}
                   onChange={() =>
-                    getPayloadbuilderCatalogStore().setDefaultCatalogAlias(activeFile.fileId, instance.alias)
+                    getPayloadbuilderCatalogStore().setDefaultCatalogAlias(fileId, instance.alias)
                   }
                 />
               </label>
@@ -140,13 +126,13 @@ export function PayloadbuilderCatalogSidebar({ editorRegistryHost }: Props): JSX
             </header>
             <div className="panel-content">
               {contribution?.renderPanel?.({
-                  fileId: activeFile.fileId,
+                  fileId,
                   alias: instance.alias,
                   catalogId: instance.catalogId,
                   properties: instance.properties,
                   setProperty: (propertyKey, value) =>
                     getPayloadbuilderCatalogStore().setProperty(
-                      activeFile.fileId,
+                      fileId,
                       instance.alias,
                       propertyKey,
                       value

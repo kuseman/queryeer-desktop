@@ -247,7 +247,7 @@ describe("payloadbuilder elasticsearch catalog contribution", () => {
     expect(setPropertyMock).toHaveBeenCalledWith("connectionId", "550e8400-e29b-41d4-a716-446655440100");
   });
 
-  it("clears stale index when persisted connection is disabled", async () => {
+  it("preserves selections when the persisted connection is temporarily unavailable", async () => {
     configuredConnectionsMock.mockReturnValue([
       {
         connectionId: "550e8400-e29b-41d4-a716-446655440100",
@@ -289,13 +289,15 @@ describe("payloadbuilder elasticsearch catalog contribution", () => {
       await flush();
     });
 
-    expect(setPropertyMock).toHaveBeenCalledWith("connectionId", "");
-    expect(setPropertyMock).toHaveBeenCalledWith("index", "");
+    expect(setPropertyMock).not.toHaveBeenCalledWith("connectionId", "");
+    expect(setPropertyMock).not.toHaveBeenCalledWith("index", "");
     expect(setPropertyMock).not.toHaveBeenCalledWith("connectionId", "550e8400-e29b-41d4-a716-446655440100");
+    const connectionSelect = rootElement.querySelector("#payloadbuilder-es-connection-es1") as HTMLSelectElement;
     const indexSelect = rootElement.querySelector("#payloadbuilder-es-index-es1") as HTMLSelectElement;
     const options = Array.from(indexSelect.querySelectorAll("option")).map((option) => option.value);
-    expect(indexSelect.value).toBe("");
-    expect(options).not.toContain("old-*");
+    expect(connectionSelect.value).toBe("cluster-disabled");
+    expect(indexSelect.value).toBe("old-*");
+    expect(options).toContain("old-*");
   });
 
   it("does not resolve disabled elasticsearch connection into runtime properties", () => {

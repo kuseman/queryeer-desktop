@@ -10,6 +10,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -144,7 +145,7 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
         boolean fileSessionLocked = false;
         AccumulatingOutputWriter outputWriter = new AccumulatingOutputWriter();
         PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState catalogState = null;
-        List<String> environmentVariableKeys = List.of();
+        Map<String, ValueVector> previousEnvironmentVariables = Map.of();
         try
         {
             PayloadbuilderEngineState typedState = payloadMapper.convert(engineState, PayloadbuilderEngineState.class);
@@ -160,7 +161,7 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
             session = holder.session;
             sessionId = holder.sessionId;
 
-            environmentVariableKeys = injectEnvironmentVariables(session, catalogState.selectedEnvironmentId());
+            previousEnvironmentVariables = injectEnvironmentVariables(session, catalogState.selectedEnvironmentId());
             injectCatalogProperties(session, catalogState);
 
             session.setAbortSupplier(() -> cancelledExecutionIds.contains(queryExecutionId));
@@ -262,7 +263,7 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
                     }
                     finally
                     {
-                        removeEnvironmentVariables(session, environmentVariableKeys);
+                        restoreEnvironmentVariables(session, previousEnvironmentVariables);
                     }
                 }
             }
@@ -467,33 +468,53 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
         return result;
     }
 
-    private List<String> injectEnvironmentVariables(QuerySession session, String selectedEnvironmentId)
+    private Map<String, ValueVector> injectEnvironmentVariables(QuerySession session, String selectedEnvironmentId)
     {
         Map<String, Object> variables = resolveEnvironmentVariables(selectedEnvironmentId);
-        Map<String, ValueVector> sessionVariables = session.getVariables();
-        List<String> keys = new ArrayList<>(variables.size());
+        Map<String, ValueVector> normalizedVariables = new HashMap<>(variables.size());
         for (Map.Entry<String, Object> entry : variables.entrySet())
         {
+            String rawKey = entry.getKey();
+            if (rawKey == null
+                    || rawKey.isBlank())
+            {
+                throw new IllegalArgumentException("Environment variable keys must be non-blank");
+            }
+            String key = rawKey.toLowerCase(Locale.ROOT);
             ValueVector vector = entry.getValue() == null ? ValueVector.literalNull(ResolvedType.ANY, 1)
                     : ValueVector.literalAny(1, entry.getValue());
-            String key = entry.getKey()
-                    .toLowerCase();
-            sessionVariables.put(key, vector);
-            keys.add(key);
+            if (normalizedVariables.putIfAbsent(key, vector) != null)
+            {
+                throw new IllegalArgumentException("Duplicate environment variable key: " + rawKey);
+            }
         }
-        return keys;
+
+        Map<String, ValueVector> sessionVariables = session.getVariables();
+        Map<String, ValueVector> previousValues = new HashMap<>(normalizedVariables.size());
+        for (Map.Entry<String, ValueVector> entry : normalizedVariables.entrySet())
+        {
+            previousValues.put(entry.getKey(), sessionVariables.put(entry.getKey(), entry.getValue()));
+        }
+        return previousValues;
     }
 
-    private void removeEnvironmentVariables(QuerySession session, List<String> keys)
+    private void restoreEnvironmentVariables(QuerySession session, Map<String, ValueVector> previousValues)
     {
         if (session == null)
         {
             return;
         }
         Map<String, ValueVector> sessionVariables = session.getVariables();
-        for (String key : keys)
+        for (Map.Entry<String, ValueVector> entry : previousValues.entrySet())
         {
-            sessionVariables.remove(key);
+            if (entry.getValue() == null)
+            {
+                sessionVariables.remove(entry.getKey());
+            }
+            else
+            {
+                sessionVariables.put(entry.getKey(), entry.getValue());
+            }
         }
     }
 

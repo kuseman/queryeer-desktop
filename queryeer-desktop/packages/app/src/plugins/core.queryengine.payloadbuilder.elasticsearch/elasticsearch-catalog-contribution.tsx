@@ -62,8 +62,8 @@ function ElasticsearchPanel({ fileId, alias, properties, setProperty }: Payloadb
   const configuredConnectionId = asText(properties.connectionId);
   const configuredConnection = connections.find((connection) => connection.connectionId === configuredConnectionId);
   const selectedConnection = configuredConnection ?? (!hasConfiguredConnectionProperty ? connections[0] : undefined);
-  const selectedConnectionId = selectedConnection?.connectionId ?? "";
-  const selectedIndex = configuredConnection ? asText(properties.index) : "";
+  const selectedConnectionId = hasConfiguredConnectionProperty ? configuredConnectionId : (selectedConnection?.connectionId ?? "");
+  const selectedIndex = asText(properties.index);
   const [indices, setIndices] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -87,11 +87,7 @@ function ElasticsearchPanel({ fileId, alias, properties, setProperty }: Payloadb
     if (!hasConfiguredConnectionProperty && selectedConnectionId) {
       setProperty("connectionId", selectedConnectionId);
     }
-    if (configuredConnectionId && !configuredConnection) {
-      setProperty("connectionId", "");
-      setProperty("index", "");
-    }
-  }, [configuredConnection, configuredConnectionId, hasConfiguredConnectionProperty, selectedConnectionId, setProperty]);
+  }, [hasConfiguredConnectionProperty, selectedConnectionId, setProperty]);
 
   useEffect(() => {
     reloadGeneration.current += 1;
@@ -160,6 +156,9 @@ function ElasticsearchPanel({ fileId, alias, properties, setProperty }: Payloadb
         }}
       >
         <option value="">{connections.length === 0 ? "No connections configured" : "Select connection"}</option>
+        {configuredConnectionId && !configuredConnection && (
+          <option value={configuredConnectionId}>{configuredConnectionId} (unavailable)</option>
+        )}
         {connections.map((connection) => (
           <option key={connection.connectionId} value={connection.connectionId}>
             {connection.title?.trim() || "Untitled connection"}

@@ -446,6 +446,68 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
       expect.objectContaining({ fileId: file.fileId })
     );
   });
+
+  it("does not reactivate a stale file when editor loads complete out of order", async () => {
+    const fileA = makeFile({ fileId: "file-a", uri: "file:///a.sql" });
+    const fileB = makeFile({ fileId: "file-b", uri: "file:///b.sql" });
+    const fileC = makeFile({ fileId: "file-c", uri: "file:///c.sql" });
+    filesById.set(fileA.fileId, fileA);
+    filesById.set(fileB.fileId, fileB);
+    filesById.set(fileC.fileId, fileC);
+    const editorRegistryHost = createEditorRegistryHost();
+    const outlineRegistry = createOutlineRegistry();
+
+    await act(async () => {
+      root.render(
+        <TextEditorComponent
+          file={fileA}
+          registry={registry}
+          editorRegistryHost={editorRegistryHost}
+          outlineRegistry={outlineRegistry}
+        />
+      );
+      await flush();
+    });
+
+    const pendingLoads = new Map<string, () => void>();
+    const openFileSpy = vi.spyOn(registry, "openFileAsync").mockImplementation((nextFile) =>
+      new Promise<void>((resolve) => pendingLoads.set(nextFile.fileId, resolve))
+    );
+
+    await act(async () => {
+      root.render(
+        <TextEditorComponent
+          file={fileB}
+          registry={registry}
+          editorRegistryHost={editorRegistryHost}
+          outlineRegistry={outlineRegistry}
+        />
+      );
+    });
+    await act(async () => {
+      root.render(
+        <TextEditorComponent
+          file={fileC}
+          registry={registry}
+          editorRegistryHost={editorRegistryHost}
+          outlineRegistry={outlineRegistry}
+        />
+      );
+    });
+
+    await act(async () => {
+      pendingLoads.get(fileC.fileId)?.();
+      await flush();
+    });
+    editorRegistryHost.setActiveEditor.mockClear();
+    await act(async () => {
+      pendingLoads.get(fileB.fileId)?.();
+      await flush();
+    });
+
+    expect(editorRegistryHost.setActiveEditor).not.toHaveBeenCalled();
+    openFileSpy.mockRestore();
+  });
 });
 
 describe("TextEditorComponent context menu: multi-cursor selection", () => {

@@ -3,8 +3,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
-  const editorListeners = new Set<(editor: { fileId: string | null } | null) => void>();
-  let activeFileId: string | null = null;
   let instances: Array<{
     alias: string;
     catalogId: string;
@@ -23,13 +21,6 @@ const mocks = vi.hoisted(() => {
   ));
 
   return {
-    editorListeners,
-    setActiveFileId: (value: string | null) => {
-      activeFileId = value;
-      for (const listener of editorListeners) {
-        listener(value ? { fileId: value } : null);
-      }
-    },
     setInstances: (
       value: Array<{
         alias: string;
@@ -64,20 +55,6 @@ const mocks = vi.hoisted(() => {
             defaultAlias: "jdbc",
             allowMultiple: true
           },
-    editorRegistryHost: {
-      getActiveEditor: () => (activeFileId ? { editorId: "test", fileId: activeFileId } : null),
-      onActiveEditorChanged: () => {
-        return {
-          dispose: () => {}
-        };
-      },
-      setActiveEditor: () => {},
-      registerContentRepository: () => () => {},
-      resolveFileContent: () => undefined,
-      broadcastContentUpdate: () => {},
-      applyRecoveredContent: () => {},
-      onContentDirty: () => () => {}
-    },
     store: {
       subscribe: () => {
         return () => {};
@@ -93,7 +70,6 @@ const mocks = vi.hoisted(() => {
     renderPanelMock,
     openModalForSettingMock,
     reset: () => {
-      activeFileId = null;
       instances = [];
       setPropertyMock.mockReset();
       setDefaultCatalogAliasMock.mockReset();
@@ -102,14 +78,9 @@ const mocks = vi.hoisted(() => {
       defaultCatalogAlias = "";
       environments = [];
       hasPanel = true;
-      editorListeners.clear();
     }
   };
 });
-
-vi.mock("../../core/plugin-runtime/ExtensionRegistry", () => ({
-  getEditorRegistryHost: () => mocks.editorRegistryHost
-}));
 
 vi.mock("./catalog-store", () => ({
   getPayloadbuilderCatalogStore: () => mocks.store
@@ -163,7 +134,6 @@ describe("PayloadbuilderCatalogSidebar", () => {
   });
 
   it("renders one panel per enabled alias in provided order", async () => {
-    mocks.setActiveFileId("file-1");
     mocks.setInstances([
       { alias: "jdbc2", catalogId: "Jdbc", enabled: true, properties: {} },
       { alias: "jdbc1", catalogId: "Jdbc", enabled: true, properties: {} },
@@ -171,7 +141,7 @@ describe("PayloadbuilderCatalogSidebar", () => {
     ]);
 
     await act(async () => {
-      root.render(<PayloadbuilderCatalogSidebar editorRegistryHost={mocks.editorRegistryHost} />);
+      root.render(<PayloadbuilderCatalogSidebar fileId="file-1" />);
       await flush();
     });
 
@@ -185,7 +155,6 @@ describe("PayloadbuilderCatalogSidebar", () => {
   });
 
   it("binds panel renderer params to the matching alias", async () => {
-    mocks.setActiveFileId("file-2");
     mocks.setInstances([
       {
         alias: "analytics",
@@ -197,7 +166,7 @@ describe("PayloadbuilderCatalogSidebar", () => {
     ]);
 
     await act(async () => {
-      root.render(<PayloadbuilderCatalogSidebar editorRegistryHost={mocks.editorRegistryHost} />);
+      root.render(<PayloadbuilderCatalogSidebar fileId="file-2" />);
       await flush();
     });
 
@@ -223,15 +192,44 @@ describe("PayloadbuilderCatalogSidebar", () => {
     );
   });
 
+  it("rebinds catalog panels when focus switches back to the editor", async () => {
+    mocks.setInstances([
+      { alias: "analytics", catalogId: "Jdbc", enabled: true, properties: { database: "reporting" } }
+    ]);
+
+    await act(async () => {
+      root.render(<PayloadbuilderCatalogSidebar fileId="file-1" />);
+      await flush();
+    });
+
+    mocks.setInstances([
+      { alias: "analytics", catalogId: "Jdbc", enabled: true, properties: { database: "warehouse" } }
+    ]);
+    await act(async () => {
+      root.render(<PayloadbuilderCatalogSidebar fileId="file-2" />);
+      await flush();
+    });
+
+    const params = mocks.renderPanelMock.mock.calls.at(-1)?.[0] as unknown as {
+      fileId: string;
+      properties: Record<string, unknown>;
+      setProperty: (propertyKey: string, value: unknown) => void;
+    };
+    expect(params.fileId).toBe("file-2");
+    expect(params.properties).toEqual({ database: "warehouse" });
+
+    params.setProperty("database", "production");
+    expect(mocks.setPropertyMock).toHaveBeenCalledWith("file-2", "analytics", "database", "production");
+  });
+
   it("sets selected alias as default catalog", async () => {
-    mocks.setActiveFileId("file-2");
     mocks.setInstances([
       { alias: "a", catalogId: "Jdbc", enabled: true, properties: {} },
       { alias: "b", catalogId: "Jdbc", enabled: true, properties: {} }
     ]);
 
     await act(async () => {
-      root.render(<PayloadbuilderCatalogSidebar editorRegistryHost={mocks.editorRegistryHost} />);
+      root.render(<PayloadbuilderCatalogSidebar fileId="file-2" />);
       await flush();
     });
 
@@ -248,11 +246,10 @@ describe("PayloadbuilderCatalogSidebar", () => {
 
   it("hides aliases without panel contribution", async () => {
     mocks.setHasPanel(false);
-    mocks.setActiveFileId("file-3");
     mocks.setInstances([{ alias: "fs", catalogId: "filesystem", enabled: true, properties: {} }]);
 
     await act(async () => {
-      root.render(<PayloadbuilderCatalogSidebar editorRegistryHost={mocks.editorRegistryHost} />);
+      root.render(<PayloadbuilderCatalogSidebar fileId="file-3" />);
       await flush();
     });
 
@@ -261,14 +258,13 @@ describe("PayloadbuilderCatalogSidebar", () => {
   });
 
   it("renders environment selector and persists selected environment", async () => {
-    mocks.setActiveFileId("file-4");
     mocks.setEnvironments([
       { id: "test", title: "Test" },
       { id: "prod", title: "Production" }
     ]);
 
     await act(async () => {
-      root.render(<PayloadbuilderCatalogSidebar editorRegistryHost={mocks.editorRegistryHost} />);
+      root.render(<PayloadbuilderCatalogSidebar fileId="file-4" />);
       await flush();
     });
 

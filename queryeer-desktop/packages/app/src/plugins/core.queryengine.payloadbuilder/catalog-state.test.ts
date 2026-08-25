@@ -206,7 +206,7 @@ describe("payloadbuilder catalog state", () => {
     expect(isEngineStateCurrent(current, submitted, patch)).toBe(true);
   });
 
-  it("accepts session-only completion metadata independently of catalog property normalization", () => {
+  it("rejects session-only completion metadata after catalog state changed", () => {
     const current = parseCatalogDocument({
       instancesByAlias: {
         mongo: { catalogId: "mongodb", properties: { connectionId: "current", legacyProperty: "persisted" } }
@@ -222,6 +222,20 @@ describe("payloadbuilder catalog state", () => {
 
     expect(isEngineStateCurrent(current, submitted, {
       payloadbuilder: { sessionId: "12" }
-    })).toBe(true);
+    })).toBe(false);
+  });
+
+  it("rejects session-only completion metadata after environment changed", () => {
+    const current = parseCatalogDocument({ selectedEnvironmentId: "prod" });
+    const submitted = {
+      payloadbuilder: {
+        selectedEnvironmentId: "dev",
+        catalogs: {}
+      }
+    };
+
+    expect(isEngineStateCurrent(current, submitted, {
+      payloadbuilder: { sessionId: "12" }
+    })).toBe(false);
   });
 });

@@ -62,8 +62,9 @@ function PayloadbuilderJdbcPanel({ alias, properties, setProperty }: Payloadbuil
   const configuredConnectionId = asText(properties.connectionId);
   const configuredConnection = connections.find((connection) => connection.connectionId === configuredConnectionId);
   const selectedConnection = configuredConnection ?? (!hasConfiguredConnectionProperty ? connections[0] : undefined);
-  const selectedConnectionId = selectedConnection?.connectionId ?? "";
-  const selectedDatabase = configuredConnection ? asText(properties.database) : "";
+  const selectedConnectionId = hasConfiguredConnectionProperty ? configuredConnectionId : (selectedConnection?.connectionId ?? "");
+  const selectedConnectionAvailable = Boolean(selectedConnection);
+  const selectedDatabase = asText(properties.database);
   const [databases, setDatabases] = useState<string[]>([]);
   const [loadingDatabases, setLoadingDatabases] = useState(false);
 
@@ -85,16 +86,12 @@ function PayloadbuilderJdbcPanel({ alias, properties, setProperty }: Payloadbuil
     if (!hasConfiguredConnectionProperty && selectedConnectionId) {
       setProperty("connectionId", selectedConnectionId);
     }
-    if (configuredConnectionId && !configuredConnection) {
-      setProperty("connectionId", "");
-      setProperty("database", "");
-    }
-  }, [configuredConnection, configuredConnectionId, hasConfiguredConnectionProperty, selectedConnectionId, setProperty]);
+  }, [hasConfiguredConnectionProperty, selectedConnectionId, setProperty]);
 
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      if (!selectedConnectionId) {
+      if (!selectedConnectionAvailable) {
         setDatabases([]);
         return;
       }
@@ -118,7 +115,7 @@ function PayloadbuilderJdbcPanel({ alias, properties, setProperty }: Payloadbuil
     return () => {
       cancelled = true;
     };
-  }, [selectedConnectionId]);
+  }, [selectedConnectionAvailable, selectedConnectionId]);
 
   return (
     <div className="payloadbuilder-catalog-fields">
@@ -137,6 +134,9 @@ function PayloadbuilderJdbcPanel({ alias, properties, setProperty }: Payloadbuil
         }}
       >
         <option value="">{connections.length === 0 ? "No connections configured" : "Select connection"}</option>
+        {configuredConnectionId && !configuredConnection && (
+          <option value={configuredConnectionId}>{configuredConnectionId} (unavailable)</option>
+        )}
         {connections.map((connection) => (
           <option key={connection.connectionId} value={connection.connectionId}>
             {connection.title?.trim() || "Untitled connection"}

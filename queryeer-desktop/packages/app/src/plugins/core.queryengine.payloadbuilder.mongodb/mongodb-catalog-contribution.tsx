@@ -32,16 +32,13 @@ function MongoPanel({ alias, properties, setProperty }: PayloadbuilderCatalogPan
   const configuredConnectionId = asText(properties.connectionId);
   const configuredConnection = connections.find((connection) => connection.connectionId === configuredConnectionId);
   const selectedConnection = configuredConnection ?? (!hasConfiguredConnectionProperty ? connections[0] : undefined);
-  const selectedConnectionId = selectedConnection?.connectionId ?? "";
+  const selectedConnectionId = hasConfiguredConnectionProperty ? configuredConnectionId : (selectedConnection?.connectionId ?? "");
 
   useEffect(() => {
     if (!hasConfiguredConnectionProperty && selectedConnectionId) {
       setProperty("connectionId", selectedConnectionId);
     }
-    if (configuredConnectionId && !configuredConnection) {
-      setProperty("connectionId", "");
-    }
-  }, [configuredConnection, configuredConnectionId, hasConfiguredConnectionProperty, selectedConnectionId, setProperty]);
+  }, [hasConfiguredConnectionProperty, selectedConnectionId, setProperty]);
 
   return (
     <div className="payloadbuilder-catalog-fields">
@@ -56,6 +53,9 @@ function MongoPanel({ alias, properties, setProperty }: PayloadbuilderCatalogPan
         onInput={(event) => setProperty("connectionId", event.currentTarget.value)}
       >
         <option value="">{connections.length === 0 ? "No connections configured" : "Select connection"}</option>
+        {configuredConnectionId && !configuredConnection && (
+          <option value={configuredConnectionId}>{configuredConnectionId} (unavailable)</option>
+        )}
         {connections.map((connection) => (
           <option key={connection.connectionId} value={connection.connectionId}>
             {connection.title?.trim() || "Untitled connection"}

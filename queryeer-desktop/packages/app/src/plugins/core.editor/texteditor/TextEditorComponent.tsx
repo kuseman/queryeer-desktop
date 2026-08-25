@@ -50,6 +50,7 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
   const pendingFileRef = useRef<FileEntity | null>(null);
   const initStartedRef = useRef(false);
   const initGenerationRef = useRef(0);
+  const fileLoadGenerationRef = useRef(0);
   const mountedRef = useRef(true);
   // Keep a current-registry ref so the contextmenu DOM listener (which has [] deps) can always read it.
   const registryRef = useRef(registry);
@@ -432,10 +433,14 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
     if (!file) return;
     if (editorRef.current) {
       if (file === pendingFileRef.current) return;
+      const generation = ++fileLoadGenerationRef.current;
       pendingFileRef.current = file;
-    void registry.openFileAsync(file, editorInstanceIdRef.current, { focus: false }).then(() => {
-      activateEditorHandle(file, true);
-    });
+      void registry.openFileAsync(file, editorInstanceIdRef.current, { focus: false }).then(() => {
+        if (generation === fileLoadGenerationRef.current) {
+          pendingFileRef.current = null;
+          activateEditorHandle(file, true);
+        }
+      });
       return;
     }
     pendingFileRef.current = file;
@@ -456,6 +461,7 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
       mountedRef.current = false;
       initStartedRef.current = false;
       initGenerationRef.current += 1;
+      fileLoadGenerationRef.current += 1;
       newlineDecorationsRef.current?.clear();
       newlineDecorationsRef.current = null;
       if (editorRef.current) {

@@ -12,6 +12,7 @@ export type QueryViewState = {
   textOutputFormat?: string;
   includeActualPlan?: boolean;
   outputPanelCollapsed?: boolean;
+  editorSplitPercent?: number;
 };
 
 type Listener = (state: QueryViewState) => void;
@@ -73,6 +74,12 @@ class QueryViewStateStore {
 
   setOutputPanelCollapsed(fileId: string, outputSessionId: string, outputPanelCollapsed: boolean): void {
     this.patch(fileId, outputSessionId, { outputPanelCollapsed });
+  }
+
+  setEditorSplitPercent(fileId: string, outputSessionId: string, editorSplitPercent: number): void {
+    this.patch(fileId, outputSessionId, {
+      editorSplitPercent: Math.max(20, Math.min(80, editorSplitPercent))
+    });
   }
 
   subscribe(fileId: string, outputSessionId: string, listener: Listener): () => void {
@@ -192,7 +199,14 @@ function readLegacyState(raw: unknown): QueryViewState {
     panelSelectedOutputId: panelActiveOutputId,
     textOutputFormat: typeof value.textOutputFormat === "string" ? value.textOutputFormat : undefined,
     includeActualPlan: value.includeActualPlan === true,
-    outputPanelCollapsed: value.outputPanelCollapsed === true
+    outputPanelCollapsed: value.outputPanelCollapsed === true,
+    editorSplitPercent:
+      typeof value.editorSplitPercent === "number"
+      && Number.isFinite(value.editorSplitPercent)
+      && value.editorSplitPercent >= 20
+      && value.editorSplitPercent <= 80
+        ? value.editorSplitPercent
+        : undefined
   };
 }
 

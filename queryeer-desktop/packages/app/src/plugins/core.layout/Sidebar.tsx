@@ -1,11 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import type { LayoutViewContribution, SidebarZone } from "@queryeer/api/extensions/LayoutExtension";
+import type { LayoutToolbarContext, LayoutViewContribution, SidebarZone } from "@queryeer/api/extensions/LayoutExtension";
 import PluginErrorBoundary from "./PluginErrorBoundary";
 
 type SidebarProps = {
   views: LayoutViewContribution[];
   zone: SidebarZone;
   width: number;
+  viewContext: LayoutToolbarContext;
   panelStates?: Record<string, boolean>;
   panelHeights?: Record<string, number>;
   onPanelStateChange?: (viewId: string, isOpen: boolean) => void;
@@ -18,6 +19,7 @@ export function Sidebar({
   views,
   zone,
   width,
+  viewContext,
   panelStates = {},
   panelHeights: initialHeights = {},
   onPanelStateChange,
@@ -97,6 +99,7 @@ export function Sidebar({
           <CollapsiblePanel
             key={view.id}
             view={view}
+            viewContext={viewContext}
             initialIsOpen={panelStates[view.id] ?? view.isOpen ?? true}
             isFlex={view.flex != null}
             panelStyle={panelStyle}
@@ -118,6 +121,7 @@ export function Sidebar({
 
 type CollapsiblePanelProps = {
   view: LayoutViewContribution;
+  viewContext: LayoutToolbarContext;
   initialIsOpen: boolean;
   isFlex: boolean;
   panelStyle?: React.CSSProperties;
@@ -131,6 +135,7 @@ type CollapsiblePanelProps = {
 
 function CollapsiblePanel({
   view,
+  viewContext,
   initialIsOpen,
   isFlex,
   panelStyle,
@@ -207,12 +212,11 @@ function CollapsiblePanel({
       {isOpen && (
         <div className="panel-content">
           <PluginErrorBoundary pluginId={view.id} pluginName={view.title}>
-            {view.render()}
+            {view.render(viewContext)}
           </PluginErrorBoundary>
         </div>
       )}
     </section>
   );
 }
-
 

@@ -832,6 +832,7 @@ export function ShellApp({
             views={primaryViews}
             zone="primarySidebar"
             width={primarySidebarWidth}
+            viewContext={toolbarContext}
             panelStates={panelStates}
             panelHeights={panelHeights}
             onPanelStateChange={(viewId, isOpen) =>
@@ -966,6 +967,7 @@ export function ShellApp({
             views={secondaryViews}
             zone="secondarySidebar"
             width={secondarySidebarWidth}
+            viewContext={toolbarContext}
             panelStates={panelStates}
             panelHeights={panelHeights}
             onPanelStateChange={(viewId, isOpen) =>

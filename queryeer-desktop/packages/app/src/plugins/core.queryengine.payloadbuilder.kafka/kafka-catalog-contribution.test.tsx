@@ -236,7 +236,7 @@ describe("payloadbuilder kafka catalog contribution", () => {
     expect(setPropertyMock).toHaveBeenCalledWith("connectionId", "550e8400-e29b-41d4-a716-446655440300");
   });
 
-  it("clears stale topic when persisted connection is disabled", async () => {
+  it("preserves selections when the persisted connection is temporarily unavailable", async () => {
     configuredConnectionsMock.mockReturnValue([
       {
         connectionId: "550e8400-e29b-41d4-a716-446655440300",
@@ -274,13 +274,15 @@ describe("payloadbuilder kafka catalog contribution", () => {
       await flush();
     });
 
-    expect(setPropertyMock).toHaveBeenCalledWith("connectionId", "");
-    expect(setPropertyMock).toHaveBeenCalledWith("topic", "");
+    expect(setPropertyMock).not.toHaveBeenCalledWith("connectionId", "");
+    expect(setPropertyMock).not.toHaveBeenCalledWith("topic", "");
     expect(setPropertyMock).not.toHaveBeenCalledWith("connectionId", "550e8400-e29b-41d4-a716-446655440300");
+    const connectionSelect = rootElement.querySelector("#payloadbuilder-kafka-connection-kfk1") as HTMLSelectElement;
     const topicSelect = rootElement.querySelector("#payloadbuilder-kafka-topic-kfk1") as HTMLSelectElement;
     const options = Array.from(topicSelect.querySelectorAll("option")).map((option) => option.value);
-    expect(topicSelect.value).toBe("");
-    expect(options).not.toContain("old-topic");
+    expect(connectionSelect.value).toBe("broker-disabled");
+    expect(topicSelect.value).toBe("old-topic");
+    expect(options).toContain("old-topic");
   });
 
   it("does not resolve disabled kafka connection into runtime properties", () => {

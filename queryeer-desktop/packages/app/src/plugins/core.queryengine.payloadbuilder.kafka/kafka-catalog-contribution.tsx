@@ -62,8 +62,8 @@ function KafkaPanel({ fileId, alias, properties, setProperty }: PayloadbuilderCa
   const configuredConnectionId = asText(properties.connectionId);
   const configuredConnection = connections.find((connection) => connection.connectionId === configuredConnectionId);
   const selectedConnection = configuredConnection ?? (!hasConfiguredConnectionProperty ? connections[0] : undefined);
-  const selectedConnectionId = selectedConnection?.connectionId ?? "";
-  const selectedTopic = configuredConnection ? asText(properties.topic) : "";
+  const selectedConnectionId = hasConfiguredConnectionProperty ? configuredConnectionId : (selectedConnection?.connectionId ?? "");
+  const selectedTopic = asText(properties.topic);
   const [topics, setTopics] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -87,11 +87,7 @@ function KafkaPanel({ fileId, alias, properties, setProperty }: PayloadbuilderCa
     if (!hasConfiguredConnectionProperty && selectedConnectionId) {
       setProperty("connectionId", selectedConnectionId);
     }
-    if (configuredConnectionId && !configuredConnection) {
-      setProperty("connectionId", "");
-      setProperty("topic", "");
-    }
-  }, [configuredConnection, configuredConnectionId, hasConfiguredConnectionProperty, selectedConnectionId, setProperty]);
+  }, [hasConfiguredConnectionProperty, selectedConnectionId, setProperty]);
 
   useEffect(() => {
     reloadGeneration.current += 1;
@@ -160,6 +156,9 @@ function KafkaPanel({ fileId, alias, properties, setProperty }: PayloadbuilderCa
         }}
       >
         <option value="">{connections.length === 0 ? "No connections configured" : "Select connection"}</option>
+        {configuredConnectionId && !configuredConnection && (
+          <option value={configuredConnectionId}>{configuredConnectionId} (unavailable)</option>
+        )}
         {connections.map((connection) => (
           <option key={connection.connectionId} value={connection.connectionId}>
             {connection.title?.trim() || "Untitled connection"}
