@@ -191,6 +191,19 @@ export class MonacoTextEditorApi extends TextEditorApi {
     };
   }
 
+  override getSelectedText(): string | null {
+    const model = this.editor?.getModel();
+    const selections = this.editor?.getSelections();
+    if (!model || !selections) return null;
+
+    const selectedParts = selections
+      .filter((selection) => !selection.isEmpty())
+      .sort((left, right) => left.startLineNumber - right.startLineNumber || left.startColumn - right.startColumn)
+      .map((selection) => model.getValueInRange(selection));
+
+    return selectedParts.length > 0 ? selectedParts.join(model.getEOL()) : null;
+  }
+
   setSelection(selection: Selection): void {
     if (!this.editor) return;
     this.editor.setSelection(selection);

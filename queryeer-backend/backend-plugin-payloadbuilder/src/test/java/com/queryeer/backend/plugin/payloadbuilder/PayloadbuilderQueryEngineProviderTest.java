@@ -370,6 +370,13 @@ class PayloadbuilderQueryEngineProviderTest
         Assertions.assertEquals("beta", prod.rows.get(0)
                 .get(0));
         Assertions.assertEquals(devSessionId, sessionId(prod.engineState));
+
+        ChunkRowsPublisher none = new ChunkRowsPublisher();
+        provider.execute("exec-env-none", "file-env-switch", "select @tenant tenant", Map.of("payloadbuilder", Map.of("catalogs", Map.of())), none);
+
+        Assertions.assertNull(none.errorCode, none.errorMessage);
+        Assertions.assertNull(none.rows.get(0)
+                .get(0), "The previous environment variable must not leak into an execution with no environment");
     }
 
     @Test

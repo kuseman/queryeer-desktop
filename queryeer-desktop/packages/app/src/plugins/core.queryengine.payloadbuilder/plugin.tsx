@@ -21,7 +21,6 @@ import {
   PAYLOADBUILDER_ENVIRONMENTS_SETTING_ID
 } from "./environment-settings";
 import { PayloadbuilderCatalogSidebar } from "./PayloadbuilderCatalogSidebar";
-import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegistry";
 import {
   listPayloadbuilderCatalogContributions,
   subscribePayloadbuilderCatalogContributions
@@ -247,7 +246,7 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
         }
       ],
       when: "activeFile?.mimeType == 'application/plbsql'",
-      render: () => <PayloadbuilderCatalogSidebar editorRegistryHost={getEditorRegistryHost()} />
+      render: ({ activeFile }) => <PayloadbuilderCatalogSidebar fileId={activeFile?.fileId} />
     });
 
     context.commands.registerCommand({

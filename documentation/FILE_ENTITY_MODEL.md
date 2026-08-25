@@ -94,6 +94,8 @@ filesRegistry.setEditorState(fileId, "monaco.editor", editor.getViewState());
 
 Each editor contribution owns the shape of its state within `persistentViewState`. Core never interprets the contents. The registry stores state in a namespaced bag (`persistentViewState["monaco.editor"] = {...}`) to allow multiple editors per file.
 
+View state that can differ between split editor panes must not be keyed by `fileId` alone. Use a composite identity of the file and the stable editor-group or output-session ID. For example, query editor output state and the editor/results divider are stored under `(fileId, outputSessionId)`, where a split pane derives `outputSessionId` from its `editorGroupId`. This keeps two panes showing the same file independent while still restoring each pane's state.
+
 ## 4. Backend file-registry (`backend-api` + `backend-core`)
 
 New SPI in `backend-api` and default implementation in `backend-core`.

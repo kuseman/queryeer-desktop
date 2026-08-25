@@ -292,6 +292,42 @@ describe("payloadbuilder catalog store", () => {
     expect(persisted.selectedEnvironmentId).toBe("prod");
   });
 
+  it("builds execution state from the latest environment and catalog selections", () => {
+    getConfiguredCatalogAliasesMock.mockReturnValue([
+      { alias: "jdbc1", catalogId: "Jdbc", enabled: true }
+    ]);
+    const filesRegistry = new FileRegistry().createFilesRegistry();
+    const store = getPayloadbuilderCatalogStore();
+    store.initialize(filesRegistry);
+    const file = filesRegistry.openFile({
+      uri: "untitled:file-latest-state",
+      mimeType: "application/plbsql"
+    });
+
+    store.setSelectedEnvironmentId(file.fileId, "dev");
+    store.setProperty(file.fileId, "jdbc1", "connectionId", "first");
+    store.setProperty(file.fileId, "jdbc1", "database", "old-db");
+    store.setSelectedEnvironmentId(file.fileId, "prod");
+    store.setProperty(file.fileId, "jdbc1", "connectionId", "second");
+    store.setProperty(file.fileId, "jdbc1", "database", "new-db");
+
+    expect(store.buildEngineState(file.fileId)).toEqual({
+      payloadbuilder: {
+        selectedEnvironmentId: "prod",
+        defaultCatalogAlias: undefined,
+        catalogs: {
+          jdbc1: {
+            catalogId: "Jdbc",
+            properties: {
+              connectionId: "second",
+              database: "new-db"
+            }
+          }
+        }
+      }
+    });
+  });
+
   it("does not apply a completion patch after the submitted connection changed", () => {
     getConfiguredCatalogAliasesMock.mockReturnValue([
       { alias: "jdbc1", catalogId: "Jdbc", enabled: true }

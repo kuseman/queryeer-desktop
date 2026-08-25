@@ -109,7 +109,7 @@ export type LayoutViewContribution = {
   maxHeight?: number;
   panelActions?: LayoutPanelAction[];
   when?: string;
-  render: () => ReactNode;
+  render: (context: LayoutToolbarContext) => ReactNode;
 };
 
 export type LayoutStatusItemContribution = {

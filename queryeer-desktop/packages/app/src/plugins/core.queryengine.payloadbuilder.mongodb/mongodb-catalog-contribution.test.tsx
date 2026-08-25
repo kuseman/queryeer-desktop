@@ -92,6 +92,30 @@ describe("payloadbuilder mongodb catalog contribution", () => {
     })).toEqual({});
   });
 
+  it("preserves a selection when its connection is temporarily unavailable", async () => {
+    configuredConnectionsMock.mockReturnValue([]);
+    registerPayloadbuilderMongoCatalogContribution();
+    const renderPanel = getPayloadbuilderCatalogContribution("mongodb")?.renderPanel;
+    if (!renderPanel) {
+      throw new Error("Expected MongoDB catalog panel");
+    }
+    const setProperty = vi.fn();
+
+    await act(async () => {
+      root.render(renderPanel({
+        fileId: "file-1",
+        alias: "mongo",
+        catalogId: "mongodb",
+        properties: { connectionId: "mongo-1" },
+        setProperty
+      }) as React.ReactElement);
+    });
+
+    expect(setProperty).not.toHaveBeenCalled();
+    expect(rootElement.querySelector("select")?.value).toBe("mongo-1");
+    expect(rootElement.textContent).toContain("mongo-1 (unavailable)");
+  });
+
   it("writes and resolves a newly selected connection", async () => {
     configuredConnectionsMock.mockReturnValue([
       {

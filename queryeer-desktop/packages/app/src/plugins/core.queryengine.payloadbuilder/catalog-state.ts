@@ -190,12 +190,6 @@ export function isEngineStateCurrent(
     return false;
   }
 
-  const patchCatalogs = isRecord(patch.catalogs) ? patch.catalogs : {};
-  const patchesDefaultCatalog = Object.prototype.hasOwnProperty.call(patch, "defaultCatalogAlias");
-  if (Object.keys(patchCatalogs).length === 0 && !patchesDefaultCatalog) {
-    return true;
-  }
-
   const submittedEnvironment = typeof submitted.selectedEnvironmentId === "string"
     ? submitted.selectedEnvironmentId
     : undefined;
@@ -203,34 +197,31 @@ export function isEngineStateCurrent(
     return false;
   }
 
-  if (patchesDefaultCatalog) {
-    const submittedDefault = typeof submitted.defaultCatalogAlias === "string"
-      ? submitted.defaultCatalogAlias
-      : undefined;
-    if (document.defaultCatalogAlias !== submittedDefault) {
-      return false;
-    }
+  const submittedDefault = typeof submitted.defaultCatalogAlias === "string"
+    ? submitted.defaultCatalogAlias
+    : undefined;
+  if (document.defaultCatalogAlias !== submittedDefault) {
+    return false;
   }
 
   const submittedCatalogs = isRecord(submitted.catalogs) ? submitted.catalogs : {};
-  for (const [alias, patchInstance] of Object.entries(patchCatalogs)) {
+  for (const [alias, submittedInstance] of Object.entries(submittedCatalogs)) {
     const currentInstance = document.instancesByAlias[alias];
-    const submittedInstance = submittedCatalogs[alias];
-    if (!currentInstance || !isRecord(submittedInstance)) {
+    if (!isRecord(submittedInstance)) {
       return false;
+    }
+    const submittedProperties = isRecord(submittedInstance.properties)
+      ? submittedInstance.properties
+      : {};
+    if (!currentInstance) {
+      continue;
     }
     if (currentInstance.catalogId !== submittedInstance.catalogId) {
       return false;
     }
 
     const currentProperties = currentInstance.properties ?? {};
-    const submittedProperties = isRecord(submittedInstance.properties)
-      ? submittedInstance.properties
-      : {};
-    const patchProperties = isRecord(patchInstance) && isRecord(patchInstance.properties)
-      ? patchInstance.properties
-      : {};
-    const comparedKeys = new Set([...Object.keys(currentProperties), ...Object.keys(patchProperties), "connectionId"]);
+    const comparedKeys = Object.keys(currentProperties);
     for (const key of comparedKeys) {
       if (!propertyValuesEqual(currentProperties[key], submittedProperties[key])) {
         return false;

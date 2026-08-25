@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactElement } from "react";
 import type { PluginContext } from "@queryeer/api/plugin/Plugin";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import type { PayloadbuilderCatalogContribution } from "./catalog-contributions";
@@ -909,6 +910,18 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
         when: "activeFile?.mimeType == 'application/plbsql'"
       })
     );
+
+    const view = registerViewMock.mock.calls
+      .map((call) => call[0])
+      .find((candidate) => candidate.id === "core.queryengine.payloadbuilder.catalogs");
+    const activeFile = { fileId: "file-authoritative" } as FileEntity;
+    const rendered = view.render({
+      activeFile,
+      activeEditorGroupId: "group-2",
+      editorGroupCount: 2,
+      hasMultipleEditorGroups: true
+    }) as ReactElement<{ fileId?: string }>;
+    expect(rendered.props.fileId).toBe("file-authoritative");
   });
 
   it("applies completed engineState back into store for payloadbuilder", () => {

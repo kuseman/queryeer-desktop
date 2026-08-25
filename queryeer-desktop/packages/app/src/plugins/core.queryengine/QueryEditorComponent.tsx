@@ -87,6 +87,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
   const handleExecuteRef = useRef<(retryExecuteOptions?: ExecuteRequestOptions | null) => void>(() => {});
   const handleCancelRef = useRef<() => void>(() => {});
   const splitContainerRef = useRef<HTMLDivElement>(null);
+  const splitPercentRef = useRef(splitPercent);
   const isDraggingRef = useRef(false);
   const executingRef = useRef(false);
   const fileIdRef = useRef(file?.fileId);
@@ -249,6 +250,9 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       ?? null;
     setSelectedPrimaryId(nextSelected);
     setOutputCollapsed(queryViewState.outputPanelCollapsed ?? false);
+    const restoredSplitPercent = queryViewState.editorSplitPercent ?? 60;
+    splitPercentRef.current = restoredSplitPercent;
+    setSplitPercent(restoredSplitPercent);
   }, [file?.fileId, outputSessionId, resolveStoredOutputContextForFile]);
 
   useEffect(() => {
@@ -273,6 +277,10 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     return getQueryViewStateStore().subscribe(fileId, outputSessionIdRef.current, (state) => {
       if (state.outputPanelCollapsed !== undefined) {
         setOutputCollapsed(state.outputPanelCollapsed);
+      }
+      if (state.editorSplitPercent !== undefined) {
+        splitPercentRef.current = state.editorSplitPercent;
+        setSplitPercent(state.editorSplitPercent);
       }
     });
   }, [file?.fileId, outputSessionIdRef.current]);
@@ -344,15 +352,19 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
         return;
       }
 
-      const handle = isActiveEditorGroupRef.current
-        ? editorRegistryHost?.getActiveEditor()
+      const activeEditorFileId = queryTextRegistry.getActiveFile(editorInstanceId)?.fileId;
+      if (!executeOptions?.textOverride && activeEditorFileId && activeEditorFileId !== targetFileId) {
+        return;
+      }
+      const activeEditor = isActiveEditorGroupRef.current
+        ? queryTextRegistry.getActiveEditor(editorInstanceId)
         : null;
-      const selectedText = handle?.selection?.getSelectedText() ?? "";
-      const fullText = handle?.selection?.getContent() ?? "";
+      const selectedText = activeEditor?.getSelectedText() ?? "";
+      const fullText = activeEditor?.getContent() ?? "";
       const text = executeOptions?.textOverride ?? (selectedText.trim() ? selectedText : fullText);
       if (!text.trim()) return;
 
-      const selection = !executeOptions?.textOverride ? (handle?.selection?.getSelection?.() ?? null) : null;
+      const selection = !executeOptions?.textOverride ? (activeEditor?.getSelection() ?? null) : null;
       const anchor: ExecutionAnchor = !executeOptions?.textOverride && selectedText.trim() && selection
         ? {
             line: Math.min(selection.selectionStartLineNumber, selection.positionLineNumber),
@@ -954,16 +966,22 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
   const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     isDraggingRef.current = true;
+    const targetFileId = fileIdRef.current;
+    const targetOutputSessionId = outputSessionIdRef.current;
 
     const onMove = (ev: MouseEvent) => {
       if (!isDraggingRef.current || !splitContainerRef.current) return;
       const rect = splitContainerRef.current.getBoundingClientRect();
       const pct = Math.max(20, Math.min(80, ((ev.clientY - rect.top) / rect.height) * 100));
+      splitPercentRef.current = pct;
       setSplitPercent(pct);
     };
 
     const onUp = () => {
       isDraggingRef.current = false;
+      if (targetFileId) {
+        getQueryViewStateStore().setEditorSplitPercent(targetFileId, targetOutputSessionId, splitPercentRef.current);
+      }
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
     };

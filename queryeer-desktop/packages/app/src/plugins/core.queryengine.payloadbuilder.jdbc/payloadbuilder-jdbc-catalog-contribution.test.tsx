@@ -126,7 +126,7 @@ describe("payloadbuilder jdbc catalog contribution", () => {
     expect(setPropertyMock).toHaveBeenCalledWith("connectionId", "conn-a");
   });
 
-  it("clears stale database when persisted connection is disabled", async () => {
+  it("preserves selections when the persisted connection is temporarily unavailable", async () => {
     configuredConnectionsMock.mockReturnValue([
       {
         connectionId: "conn-a",
@@ -167,14 +167,16 @@ describe("payloadbuilder jdbc catalog contribution", () => {
       await flush();
     });
 
-    expect(setPropertyMock).toHaveBeenCalledWith("connectionId", "");
-    expect(setPropertyMock).toHaveBeenCalledWith("database", "");
+    expect(setPropertyMock).not.toHaveBeenCalledWith("connectionId", "");
+    expect(setPropertyMock).not.toHaveBeenCalledWith("database", "");
     expect(setPropertyMock).not.toHaveBeenCalledWith("connectionId", "conn-a");
 
+    const connectionSelect = rootElement.querySelector("#payloadbuilder-jdbc-connection-jdbc1") as HTMLSelectElement;
     const dbSelect = rootElement.querySelector("#payloadbuilder-jdbc-database-jdbc1") as HTMLSelectElement;
     const options = Array.from(dbSelect.querySelectorAll("option")).map((option) => option.value);
-    expect(dbSelect.value).toBe("");
-    expect(options).not.toContain("old-db");
+    expect(connectionSelect.value).toBe("conn-disabled");
+    expect(dbSelect.value).toBe("old-db");
+    expect(options).toContain("old-db");
   });
 
   it("does not auto-select first connection after connection was explicitly cleared", async () => {

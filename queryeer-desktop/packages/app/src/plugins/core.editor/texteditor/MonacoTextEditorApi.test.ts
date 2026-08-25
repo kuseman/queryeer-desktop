@@ -100,6 +100,33 @@ describe("MonacoTextEditorApi view state", () => {
   });
 });
 
+describe("MonacoTextEditorApi selection", () => {
+  it("returns every row of a block selection in document order", () => {
+    const api = new MonacoTextEditorApi();
+    const selections = [
+      { startLineNumber: 3, startColumn: 8, endLineNumber: 3, endColumn: 14, isEmpty: () => false },
+      { startLineNumber: 1, startColumn: 8, endLineNumber: 1, endColumn: 14, isEmpty: () => false },
+      { startLineNumber: 2, startColumn: 8, endLineNumber: 2, endColumn: 14, isEmpty: () => false }
+    ];
+    const selectedTextByLine = new Map([
+      [1, "first"],
+      [2, "second"],
+      [3, "third"]
+    ]);
+    const editor = {
+      getSelections: () => selections,
+      getModel: () => ({
+        getEOL: () => "\r\n",
+        getValueInRange: (selection: { startLineNumber: number }) => selectedTextByLine.get(selection.startLineNumber)
+      })
+    };
+
+    (api as unknown as { editor: unknown }).editor = editor;
+
+    expect(api.getSelectedText()).toBe("first\r\nsecond\r\nthird");
+  });
+});
+
 describe("MonacoTextEditorApi edit actions", () => {
   it("routes core edit operations through Monaco command ids", () => {
     const api = new MonacoTextEditorApi();
