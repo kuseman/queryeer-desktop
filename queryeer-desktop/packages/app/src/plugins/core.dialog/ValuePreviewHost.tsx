@@ -15,6 +15,11 @@ import "./value-preview-dialog.css";
 import { isPrimaryModifier } from "../../shared/platform-utils";
 
 let monacoModuleInstance: typeof monacoType | null = null;
+const VALUE_PREVIEW_Z_INDEX_BASE = 20_000;
+
+export function toValuePreviewZIndex(relativeZIndex: number): number {
+  return VALUE_PREVIEW_Z_INDEX_BASE + relativeZIndex;
+}
 
 async function getMonaco(): Promise<typeof monacoType> {
   if (!monacoModuleInstance) {
@@ -27,6 +32,35 @@ function languageFromMimeType(mimeType: string | undefined): string {
   if (mimeType === "application/json") return "json";
   if (mimeType === "application/xml" || mimeType === "text/xml") return "xml";
   return "plaintext";
+}
+
+export function buildValuePreviewEditorOptions(
+  value: string,
+  mimeType: string | undefined
+): monacoType.editor.IStandaloneEditorConstructionOptions {
+  return {
+    value,
+    language: languageFromMimeType(mimeType),
+    readOnly: true,
+    lineNumbers: "on",
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    automaticLayout: false,
+    fixedOverflowWidgets: true,
+    fontSize: 12,
+    lineHeight: 18,
+    colorDecorators: false,
+    folding: true,
+    foldingStrategy: "auto",
+    foldingHighlight: true,
+    showFoldingControls: "always",
+    unfoldOnClickAfterEndOfLine: true,
+    find: {
+      addExtraSpaceOnTop: false,
+      autoFindInSelection: "never",
+      seedSearchStringFromSelection: "never"
+    }
+  };
 }
 
 function buildWindowLabel(title: string, value: string): string {
@@ -56,24 +90,10 @@ function ValuePreviewWindow({ windowState }: { windowState: ValuePreviewWindowSt
         return;
       }
 
-      const editor = monaco.editor.create(editorContainerRef.current, {
-        value: windowState.value,
-        language: languageFromMimeType(windowState.mimeType),
-        readOnly: true,
-        lineNumbers: "on",
-        minimap: { enabled: false },
-        scrollBeyondLastLine: false,
-        automaticLayout: false,
-        fixedOverflowWidgets: true,
-        fontSize: 12,
-        lineHeight: 18,
-        colorDecorators: false,
-        find: {
-          addExtraSpaceOnTop: false,
-          autoFindInSelection: "never",
-          seedSearchStringFromSelection: "never"
-        }
-      });
+      const editor = monaco.editor.create(
+        editorContainerRef.current,
+        buildValuePreviewEditorOptions(windowState.value, windowState.mimeType)
+      );
       createdEditor = editor;
       editorRef.current = editor;
 
@@ -254,7 +274,7 @@ function ValuePreviewWindow({ windowState }: { windowState: ValuePreviewWindowSt
         top: `${windowState.y}px`,
         width: `${windowState.width}px`,
         height: `${windowState.height}px`,
-        zIndex: windowState.zIndex,
+        zIndex: toValuePreviewZIndex(windowState.zIndex),
       }}
       onMouseDown={() => {
         focusValuePreviewDialog(windowState.id);
