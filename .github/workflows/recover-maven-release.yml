@@ -1,0 +1,155 @@
+name: Recover Maven Release
+run-name: Recover Maven ${{ inputs.release_version }} from ${{ inputs.deployment_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: Maven release version to verify or recover
+        required: true
+        type: string
+      deployment_id:
+        description: Central deployment ID from the original release run
+        required: true
+        type: string
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: recover-maven-${{ inputs.release_version }}
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    name: Verify or Recover Maven Release
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout recovery tooling
+        uses: actions/checkout@v4
+
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ inputs.release_version }}
+          path: release-source
+
+      - name: Validate backend version
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          BACKEND_VERSION=$(python3 -c "import xml.etree.ElementTree as ET; print(ET.parse('release-source/queryeer-backend/pom.xml').getroot().findtext('{http://maven.apache.org/POM/4.0.0}version'))")
+          if [ "$BACKEND_VERSION" != "$RELEASE_VERSION" ]; then
+            echo "Backend version $BACKEND_VERSION does not match requested release version $RELEASE_VERSION."
+            exit 1
+          fi
+
+      - name: Check Maven Central release state
+        id: central-release
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          QUERYEER_REPOSITORY_ROOT: release-source
+        run: python3 .github/scripts/check_maven_central_release.py "$RELEASE_VERSION"
+
+      - name: Inspect original Central deployment
+        if: steps.central-release.outputs.state == 'missing'
+        id: deployment
+        env:
+          DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+          MAVEN_USERNAME: ${{ secrets.OSS_SONATYPE_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.OSS_SONATYPE_PASSWORD }}
+        run: |
+          TOKEN=$(printf "%s:%s" "$MAVEN_USERNAME" "$MAVEN_PASSWORD" | base64 --wrap=0)
+          echo "::add-mask::$TOKEN"
+          PUBLISH_REQUESTED=false
+          for attempt in {1..60}; do
+            if ! RESPONSE=$(curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 5 --request POST --header "Authorization: Bearer $TOKEN" "https://central.sonatype.com/api/v1/publisher/status?id=$DEPLOYMENT_ID"); then
+              echo "Attempt $attempt: could not query Central; retrying."
+              sleep 30
+              continue
+            fi
+            STATE=$(jq --raw-output .deploymentState <<< "$RESPONSE")
+            echo "Attempt $attempt: Central deployment $DEPLOYMENT_ID is $STATE."
+            case "$STATE" in
+              PUBLISHED)
+                echo "reupload=false" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+              FAILED)
+                jq .errors <<< "$RESPONSE"
+                echo "reupload=true" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+              VALIDATED)
+                if [ "$PUBLISH_REQUESTED" = "false" ]; then
+                  curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 5 --request POST --header "Authorization: Bearer $TOKEN" "https://central.sonatype.com/api/v1/publisher/deployment/$DEPLOYMENT_ID"
+                  PUBLISH_REQUESTED=true
+                fi
+                ;;
+              PENDING|VALIDATING|PUBLISHING)
+                ;;
+              *)
+                echo "Unknown Central deployment state: $STATE"
+                exit 1
+                ;;
+            esac
+            sleep 30
+          done
+          echo "Central deployment did not finish within 30 minutes."
+          exit 1
+
+      - name: Recheck Maven Central before re-upload
+        if: steps.deployment.outputs.reupload == 'true'
+        id: central-recheck
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          QUERYEER_REPOSITORY_ROOT: release-source
+        run: python3 .github/scripts/check_maven_central_release.py "$RELEASE_VERSION"
+
+      - name: Refuse repeated re-upload
+        if: steps.deployment.outputs.reupload == 'true' && steps.central-recheck.outputs.state == 'missing'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          if [ "$GITHUB_RUN_ATTEMPT" -ne 1 ]; then
+            echo "This recovery run already attempted a replacement upload. Use the replacement Central deployment ID for further recovery."
+            exit 1
+          fi
+          RUN_TITLE="Recover Maven $RELEASE_VERSION from $DEPLOYMENT_ID"
+          PREVIOUS_UPLOADS=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/workflows/recover-maven-release.yml/runs?event=workflow_dispatch&per_page=100" --jq "[.[].workflow_runs[] | select(.run_number < $GITHUB_RUN_NUMBER and .display_title == \"$RUN_TITLE\" and .conclusion == \"success\")] | length")
+          if [ "$PREVIOUS_UPLOADS" -ne 0 ]; then
+            echo "A recovery using Central deployment $DEPLOYMENT_ID already succeeded. Use its replacement deployment ID instead of uploading again."
+            exit 1
+          fi
+
+      - name: Set up JDK 25
+        if: steps.deployment.outputs.reupload == 'true' && steps.central-recheck.outputs.state == 'missing'
+        uses: actions/setup-java@v5
+        with:
+          java-version: "25"
+          distribution: zulu
+          cache: maven
+          server-id: central
+          server-username: MAVEN_USERNAME
+          server-password: MAVEN_PASSWORD
+          gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+        env:
+          MAVEN_USERNAME: ${{ secrets.OSS_SONATYPE_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.OSS_SONATYPE_PASSWORD }}
+
+      - name: Make Maven wrapper executable
+        if: steps.deployment.outputs.reupload == 'true' && steps.central-recheck.outputs.state == 'missing'
+        run: chmod +x ./release-source/queryeer-backend/mvnw
+
+      - name: Re-upload backend artifacts to Maven Central
+        if: steps.deployment.outputs.reupload == 'true' && steps.central-recheck.outputs.state == 'missing'
+        run: ./release-source/queryeer-backend/mvnw -B -f release-source/queryeer-backend/pom.xml clean deploy -DperformRelease=true -DskipTests=true -Dmaven.test.skip=true -DwaitUntil=uploaded
+        env:
+          MAVEN_USERNAME: ${{ secrets.OSS_SONATYPE_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.OSS_SONATYPE_PASSWORD }}
+          GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
