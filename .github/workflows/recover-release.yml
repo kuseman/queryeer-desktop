@@ -1,0 +1,78 @@
+name: Recover GitHub Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Existing release tag to recover
+        required: true
+        type: string
+      source_run_id:
+        description: Release workflow run containing the distribution artifacts
+        required: true
+        type: string
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  publish:
+    name: Recover GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag_name }}
+          fetch-depth: 0
+
+      - name: Validate source run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          SOURCE_RUN=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}")
+          SOURCE_SHA=$(jq --raw-output .head_sha <<< "$SOURCE_RUN")
+          SOURCE_WORKFLOW=$(jq --raw-output .path <<< "$SOURCE_RUN")
+          TAG_SHA=$(git rev-list -n 1 "$TAG_NAME")
+          if [ "$SOURCE_WORKFLOW" != ".github/workflows/release.yml" ]; then
+            echo "Source run used $SOURCE_WORKFLOW instead of the Release workflow."
+            exit 1
+          fi
+          if [ "$SOURCE_SHA" != "$TAG_SHA" ]; then
+            echo "Source run commit $SOURCE_SHA does not match tag $TAG_NAME commit $TAG_SHA."
+            exit 1
+          fi
+          RELEASE_VERSION="${TAG_NAME#v}"
+          APP_VERSION=$(node -p "require('./queryeer-desktop/packages/app/package.json').version")
+          if [ "$APP_VERSION" != "$RELEASE_VERSION" ]; then
+            echo "Desktop app package version $APP_VERSION does not match release version $RELEASE_VERSION."
+            exit 1
+          fi
+          echo "QUERYEER_RELEASE_VERSION=${RELEASE_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Generate release changelog
+        run: node queryeer-desktop/packages/app/scripts/generate-changelog.mjs
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+          pattern: queryeer-*
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag_name }}
+          name: Queryeer ${{ env.QUERYEER_RELEASE_VERSION }}
+          body_path: queryeer-desktop/packages/app/dist/generated/CHANGELOG.md
+          draft: false
+          prerelease: false
+          files: release-artifacts/*

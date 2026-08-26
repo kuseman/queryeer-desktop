@@ -20,6 +20,10 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   backend-verify:
     name: Backend Verify
@@ -190,10 +194,23 @@ jobs:
     runs-on: ubuntu-latest
     needs: backend-verify
     permissions:
+      actions: read
       contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Refuse duplicate tag publish
+        if: github.event_name == 'push' && github.run_attempt == 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PREVIOUS_RUNS=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/workflows/release.yml/runs?branch=${GITHUB_REF_NAME}&event=push&per_page=100" --jq "[.[].workflow_runs[] | select(.run_number < $GITHUB_RUN_NUMBER and .head_branch == \"$GITHUB_REF_NAME\")] | length")
+          if [ "$PREVIOUS_RUNS" -ne 0 ]; then
+            echo "Release tag $GITHUB_REF_NAME already has an earlier workflow run. Refusing to submit another Maven deployment."
+            echo "Use the Recover Maven Release workflow with the original Central deployment ID."
+            exit 1
+          fi
 
       - name: Set up JDK 25 (publish)
         uses: actions/setup-java@v5
@@ -235,6 +252,18 @@ jobs:
             exit 1
           fi
 
+      - name: Check Maven Central release state
+        if: github.event_name == 'push'
+        id: central-release
+        run: python3 .github/scripts/check_maven_central_release.py "$QUERYEER_RELEASE_VERSION"
+
+      - name: Refuse blind Maven Central re-upload
+        if: github.event_name == 'push' && github.run_attempt != 1 && steps.central-release.outputs.state == 'missing'
+        run: |
+          echo "The release is not public yet, but a previous workflow attempt may still be processing it."
+          echo "Use the Recover Maven Release workflow with the original Central deployment ID instead of re-uploading blindly."
+          exit 1
+
       - name: Dry-run Maven Central publish
         if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
         run: ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml clean deploy -DperformRelease=true -DskipTests=true -Dmaven.test.skip=true -DskipPublishing=true
@@ -242,8 +271,23 @@ jobs:
           GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
 
       - name: Publish backend artifacts to Maven Central
-        if: github.event_name == 'push'
-        run: ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml clean deploy -DperformRelease=true -DskipTests=true -Dmaven.test.skip=true
+        if: github.event_name == 'push' && github.run_attempt == 1 && steps.central-release.outputs.published != 'true'
+        shell: bash
+        run: |
+          set +e
+          ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml clean deploy -DperformRelease=true -DskipTests=true -Dmaven.test.skip=true 2>&1 | tee "$RUNNER_TEMP/maven-central.log"
+          MAVEN_STATUS=${PIPESTATUS[0]}
+          set -e
+          DEPLOYMENT_ID=$(sed -n 's/.*deploymentId: \([0-9a-f-]*\).*/\1/p' "$RUNNER_TEMP/maven-central.log" | tail -n 1)
+          if [ -n "$DEPLOYMENT_ID" ]; then
+            echo "Central deployment ID: $DEPLOYMENT_ID"
+            {
+              echo "### Maven Central"
+              echo "Uploaded deployment: \`$DEPLOYMENT_ID\`"
+              echo "Publication continues asynchronously in Maven Central."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$MAVEN_STATUS"
         env:
           MAVEN_USERNAME: ${{ secrets.OSS_SONATYPE_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSS_SONATYPE_PASSWORD }}
@@ -318,7 +362,6 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build
-      - publish-maven-central
       - publish-npm
     permissions:
       contents: write
