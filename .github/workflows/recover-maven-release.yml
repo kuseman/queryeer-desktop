@@ -121,7 +121,7 @@ jobs:
             exit 1
           fi
           RUN_TITLE="Recover Maven $RELEASE_VERSION from $DEPLOYMENT_ID"
-          PREVIOUS_UPLOADS=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/workflows/recover-maven-release.yml/runs?event=workflow_dispatch&per_page=100" --jq "[.[].workflow_runs[] | select(.run_number < $GITHUB_RUN_NUMBER and .display_title == \"$RUN_TITLE\" and .conclusion == \"success\")] | length")
+          PREVIOUS_UPLOADS=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/workflows/recover-maven-release.yml/runs?event=workflow_dispatch&per_page=100" | jq --arg title "$RUN_TITLE" --argjson run_number "$GITHUB_RUN_NUMBER" '[.[].workflow_runs[] | select(.run_number < $run_number and .display_title == $title and .conclusion == "success")] | length')
           if [ "$PREVIOUS_UPLOADS" -ne 0 ]; then
             echo "A recovery using Central deployment $DEPLOYMENT_ID already succeeded. Use its replacement deployment ID instead of uploading again."
             exit 1

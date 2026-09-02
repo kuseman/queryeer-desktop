@@ -200,17 +200,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Refuse duplicate tag publish
-        if: github.event_name == 'push' && github.run_attempt == 1
+      - name: Check previous release runs
+        id: previous-release-runs
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          PREVIOUS_RUNS=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/workflows/release.yml/runs?branch=${GITHUB_REF_NAME}&event=push&per_page=100" --jq "[.[].workflow_runs[] | select(.run_number < $GITHUB_RUN_NUMBER and .head_branch == \"$GITHUB_REF_NAME\")] | length")
-          if [ "$PREVIOUS_RUNS" -ne 0 ]; then
-            echo "Release tag $GITHUB_REF_NAME already has an earlier workflow run. Refusing to submit another Maven deployment."
-            echo "Use the Recover Maven Release workflow with the original Central deployment ID."
-            exit 1
-          fi
+          PREVIOUS_RUNS=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/workflows/release.yml/runs?branch=${GITHUB_REF_NAME}&event=push&per_page=100" | jq --arg ref "$GITHUB_REF_NAME" --argjson run_number "$GITHUB_RUN_NUMBER" '[.[].workflow_runs[] | select(.run_number < $run_number and .head_branch == $ref)] | length')
+          echo "Found $PREVIOUS_RUNS earlier release runs for $GITHUB_REF_NAME."
+          echo "count=$PREVIOUS_RUNS" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse duplicate tag publish
+        if: github.event_name == 'push' && github.run_attempt == 1 && steps.previous-release-runs.outputs.count != '0'
+        run: |
+          echo "Release tag $GITHUB_REF_NAME already has an earlier workflow run. Refusing to submit another Maven deployment."
+          echo "Use the Recover Maven Release workflow with the original Central deployment ID."
+          exit 1
 
       - name: Set up JDK 25 (publish)
         uses: actions/setup-java@v5
@@ -253,7 +257,6 @@ jobs:
           fi
 
       - name: Check Maven Central release state
-        if: github.event_name == 'push'
         id: central-release
         run: python3 .github/scripts/check_maven_central_release.py "$QUERYEER_RELEASE_VERSION"
 
