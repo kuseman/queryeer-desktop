@@ -52,6 +52,10 @@ describe("GraphViewer", () => {
       callback(0);
       return 0;
     };
+    Object.defineProperty(globalThis.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn(async () => undefined) },
+    });
     rootElement = document.createElement("div");
     document.body.appendChild(rootElement);
     root = createRoot(rootElement);
@@ -71,5 +75,21 @@ describe("GraphViewer", () => {
 
     expect(rootElement.querySelector(".graph-properties")).toBeNull();
     expect(rootElement.querySelector(".graph-properties-toggle")?.textContent).toBe("Properties");
+  });
+
+  it("copies the visible graph as Mermaid", async () => {
+    await act(async () => {
+      root.render(<GraphViewer graph={graph} />);
+    });
+
+    await act(async () => {
+      (rootElement.querySelector(".graph-layout-copy") as HTMLButtonElement).click();
+    });
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith([
+      "flowchart TB",
+      "    n0[\"Vertex 1\"]",
+    ].join("\n"));
+    expect(rootElement.querySelector(".graph-layout-copy")?.textContent).toBe("Copied");
   });
 });

@@ -48,7 +48,8 @@ public final class JdbcDialectSupport
     }
 
     /**
-     * Collects foreign key column info for the given table from {@link DatabaseMetaData#getImportedKeys}. Returns a map of column name to {@code [referencedTable, referencedColumn]}.
+     * Collects foreign key column info for the given table from {@link DatabaseMetaData#getImportedKeys}. Returns a map of column name to
+     * {@code [referencedSchema, referencedTable, referencedColumn]}.
      */
     public static Map<String, List<String>> collectForeignKeys(DatabaseMetaData meta, String catalog, String schema, String table)
     {
@@ -58,12 +59,15 @@ public final class JdbcDialectSupport
             while (rs.next())
             {
                 String col = rs.getString("FKCOLUMN_NAME");
+                String refSchema = rs.getString("PKTABLE_SCHEM");
                 String refTable = rs.getString("PKTABLE_NAME");
                 String refCol = rs.getString("PKCOLUMN_NAME");
                 if (col != null)
                 {
-                    fkMap.put(col, List.of(refTable != null ? refTable
+                    fkMap.put(col, List.of(refSchema != null ? refSchema
                             : "",
+                            refTable != null ? refTable
+                                    : "",
                             refCol != null ? refCol
                                     : ""));
                 }

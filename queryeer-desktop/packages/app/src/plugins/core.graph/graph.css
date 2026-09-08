@@ -30,8 +30,8 @@
   z-index: 5;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 6px;
+  padding: 5px 6px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg-1);
@@ -50,6 +50,27 @@
   background: var(--bg-2);
   color: var(--text-0);
   font-size: var(--ui-font-size-sm);
+  height: 24px;
+}
+
+.graph-layout-copy {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  height: 24px;
+  padding: 0 7px;
+  background: var(--bg-2);
+  color: var(--text-0);
+  cursor: pointer;
+  font-size: var(--ui-font-size-sm);
+}
+
+.graph-layout-copy:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.graph-layout-copy:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .graph-minimap {
@@ -228,9 +249,9 @@
 .graph-tooltip-row,
 .graph-properties-row {
   display: grid;
-  grid-template-columns: minmax(90px, 1fr) minmax(80px, 1fr);
-  gap: 10px;
-  padding: 2px 0;
+  grid-template-columns: minmax(88px, 0.9fr) minmax(100px, 1.1fr);
+  gap: 12px;
+  padding: 4px 8px;
 }
 
 .graph-tooltip-label,
@@ -270,19 +291,44 @@
 .graph-properties-header {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  padding: 10px 12px;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 56px;
+  padding: 9px 10px 8px 12px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-2);
 }
 
 .graph-properties-title {
+  overflow: hidden;
+  color: var(--text-0);
+  font-size: var(--ui-font-size-md);
   font-weight: 600;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-properties-heading {
+  min-width: 0;
+}
+
+.graph-properties-eyebrow {
+  margin-bottom: 2px;
+  color: var(--text-1);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .graph-properties-subtitle {
+  overflow: hidden;
+  margin-top: 2px;
   color: var(--text-1);
   font-size: var(--ui-font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .graph-properties-collapse,
@@ -295,8 +341,11 @@
 }
 
 .graph-properties-collapse {
-  width: 24px;
-  height: 24px;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  line-height: 18px;
 }
 
 .graph-properties-toggle {
@@ -314,15 +363,21 @@
 
 .graph-properties-groups {
   overflow: auto;
-  padding: 10px 12px 16px;
+  padding: 8px 10px 14px;
 }
 
 .graph-properties-group {
-  margin-bottom: 14px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--bg-2) 55%, transparent);
 }
 
 .graph-properties-row {
   border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  font-size: var(--ui-font-size-xs);
+  line-height: 1.35;
 }
 
 .graph-properties-row:last-child {
@@ -334,10 +389,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 0 0 6px;
-  padding: 4px 0;
+  margin: 0;
+  padding: 5px 8px;
   border: 0;
-  background: transparent;
+  background: color-mix(in srgb, var(--bg-2) 80%, transparent);
   color: var(--text-0);
   font-size: var(--ui-font-size-sm);
   font-weight: 600;
@@ -351,6 +406,7 @@
 
 .graph-properties-group-caret {
   color: var(--text-1);
+  font-size: 10px;
   transition: transform 120ms ease;
 }
 

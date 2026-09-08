@@ -453,6 +453,31 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       });
       getGraphDocumentRepository().seedFile(file, graph, { notifyDirty: true });
       context.files.markDirty(file.fileId);
+
+      void getQueryEngineService().invoke({
+        engineId: "jdbc",
+        action: "jdbc.schema.refresh",
+        payload: {
+          connectionId: node.connectionId,
+          scope: "deep",
+          target: { database: node.name },
+          mode: "force",
+          waitForCompletion: true,
+        },
+      }, { silent: true }).then(async () => {
+        const refreshedGraph = buildSchemaGraph(await loadDeepSnapshot(node.connectionId), node.name);
+        const currentFile = context.files.getFile(file.fileId) ?? file;
+        context.files.updateFile(file.fileId, {
+          metadata: {
+            ...(currentFile.metadata ?? {}),
+            schemaSource: "jdbc",
+            graphDocument: refreshedGraph,
+          },
+        });
+        getGraphDocumentRepository().seedFile(currentFile, refreshedGraph);
+      }).catch(() => {
+        // Keep the diagram built from the existing cache when a live refresh is unavailable.
+      });
     };
 
     treeContextMenu.registerContribution({

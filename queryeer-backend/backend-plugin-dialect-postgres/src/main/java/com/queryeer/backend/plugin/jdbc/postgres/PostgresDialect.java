@@ -433,8 +433,13 @@ public final class PostgresDialect implements JdbcDialect
                         if (fkInfo != null)
                         {
                             attrs.put("foreignKey", true);
-                            attrs.put("referencesTable", fkInfo.get(0));
-                            attrs.put("referencesColumn", fkInfo.get(1));
+                            if (!fkInfo.get(0)
+                                    .isEmpty())
+                            {
+                                attrs.put("referencesSchema", fkInfo.get(0));
+                            }
+                            attrs.put("referencesTable", fkInfo.get(1));
+                            attrs.put("referencesColumn", fkInfo.get(2));
                         }
                         String id = database + "." + schema + "." + table + "." + colName;
                         columns.add(new JdbcSchemaObject(id, colName, "column", null, Map.copyOf(attrs)));

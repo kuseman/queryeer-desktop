@@ -376,6 +376,9 @@ describe("core.queryengine.jdbc plugin integration", () => {
 
   it("creates durable JDBC schema graph documents", async () => {
     const context = createContext();
+    mocks.invokeMock
+      .mockResolvedValueOnce([])
+      .mockReturnValueOnce(new Promise(() => {}));
     const createdFile: FileEntity = {
       fileId: "schema-graph-file",
       version: 0,
@@ -410,6 +413,24 @@ describe("core.queryengine.jdbc plugin integration", () => {
       .find((item) => item.id === "core.queryengine.jdbc.showSchemaDiagram");
 
     await action?.onSelect();
+
+    expect(mocks.invokeMock).toHaveBeenNthCalledWith(1, {
+      engineId: "jdbc",
+      action: "jdbc.schema.snapshot",
+      payload: { connectionId: "conn-1", scope: "deep" }
+    }, { silent: true });
+    expect(context.fileMediator.createUntitledFile).toHaveBeenCalled();
+    expect(mocks.invokeMock).toHaveBeenNthCalledWith(2, {
+      engineId: "jdbc",
+      action: "jdbc.schema.refresh",
+      payload: {
+        connectionId: "conn-1",
+        scope: "deep",
+        target: { database: "Orders" },
+        mode: "force",
+        waitForCompletion: true
+      }
+    }, { silent: true });
 
     expect(context.fileMediator.createUntitledFile).toHaveBeenCalledWith({
       mimeType: JDBC_SCHEMA_GRAPH_MIME_TYPE,
