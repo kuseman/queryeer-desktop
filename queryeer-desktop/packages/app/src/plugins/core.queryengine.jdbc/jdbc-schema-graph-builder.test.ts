@@ -173,6 +173,38 @@ describe("buildSchemaGraph", () => {
     expect(targetLabel).toBe("audit.Users");
   });
 
+  it("matches FK in the referenced schema", () => {
+    const root = database("testdb", [
+      schema("sales", [
+        table("Users", "sales", [
+          col("id", { primaryKey: true, type: "int" }),
+        ]),
+        table("Orders", "sales", [
+          col("id", { primaryKey: true, type: "int" }),
+          col("user_id", {
+            type: "int",
+            foreignKey: true,
+            referencesSchema: "identity",
+            referencesTable: "Users",
+            referencesColumn: "id",
+          }),
+        ]),
+      ]),
+      schema("identity", [
+        table("Users", "identity", [
+          col("id", { primaryKey: true, type: "int" }),
+        ]),
+      ]),
+    ]);
+
+    const result = buildSchemaGraph([root], "testdb");
+
+    expect(result.edges).toHaveLength(1);
+    const edge = result.edges[0]!;
+    expect(result.vertices.find((v) => v.id === edge.sourceVertexId)?.label).toBe("sales.Orders");
+    expect(result.vertices.find((v) => v.id === edge.targetVertexId)?.label).toBe("identity.Users");
+  });
+
   it("handles views with different kind", () => {
     const root = database("testdb", [
       schema("dbo", [
