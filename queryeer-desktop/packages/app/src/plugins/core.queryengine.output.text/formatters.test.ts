@@ -256,5 +256,30 @@ describe("text output formatters", () => {
       expect(content).toContain("alice | 30");
       expect(content).toContain("bob | 25");
     });
+
+    it("plain formatFile preserves formatted JSON and XML without CSV quoting", () => {
+      const formatter = resolveTextOutputFormatter("plain");
+      const content = formatter.formatFile([
+        {
+          resultSetIndex: 0,
+          schema: { columns: [{ name: "payload", type: "string" as const }] },
+          rows: [["{\n  \"id\": 1\n}"], ["<item id=\"1\">\n  <name>A</name>\n</item>"]],
+          rowLimitExceeded: false
+        }
+      ]);
+
+      expect(content).toBe([
+        "Result set 1",
+        "payload",
+        "{",
+        "  \"id\": 1",
+        "}",
+        "<item id=\"1\">",
+        "  <name>A</name>",
+        "</item>"
+      ].join("\n"));
+      expect(content).not.toContain('""id""');
+      expect(content).not.toContain('"<item');
+    });
   });
 });
