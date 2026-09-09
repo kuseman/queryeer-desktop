@@ -82,6 +82,57 @@ describe("text output formatters", () => {
     expect(lines.join("\n")).toContain('"id": 1');
   });
 
+  it("formats canonical JSON text in complex columns as structured JSON", () => {
+    const formatter = resolveTextOutputFormatter("json");
+    const lines = formatter.format(
+      makeContext({
+        state: "idle",
+        resultSets: [
+          {
+            resultSetIndex: 0,
+            schema: {
+              columns: [
+                { name: "codes", type: "array" },
+                { name: "metadata", type: "object" },
+                { name: "items", type: "table" },
+                { name: "dynamic", type: "any" },
+                { name: "dynamicScalar", type: "any" },
+                { name: "literal", type: "string" }
+              ]
+            },
+            rows: [['["RAS"]', '{"active":true}', '[{"id":1}]', '["adult"]', "adult", '["RAS"]']],
+            rowLimitExceeded: false
+          }
+        ],
+        rowsTargetPrimaryId: "core.queryengine.output.text"
+      })
+    );
+    const parsed = JSON.parse(lines.join("\n"));
+
+    expect(parsed[0].rows[0]).toEqual({
+      codes: ["RAS"],
+      metadata: { active: true },
+      items: [{ id: 1 }],
+      dynamic: ["adult"],
+      dynamicScalar: "adult",
+      literal: '["RAS"]'
+    });
+  });
+
+  it("preserves invalid canonical JSON text in complex columns", () => {
+    const formatter = resolveTextOutputFormatter("json");
+    const content = formatter.formatFile([
+      {
+        resultSetIndex: 0,
+        schema: { columns: [{ name: "codes", type: "array" }] },
+        rows: [["[invalid"]],
+        rowLimitExceeded: false
+      }
+    ]);
+
+    expect(JSON.parse(content)[0].rows[0].codes).toBe("[invalid");
+  });
+
   it("formats large-value cells as previews in json formatter", () => {
     const formatter = resolveTextOutputFormatter("json");
     const lines = formatter.format(
@@ -223,6 +274,20 @@ describe("text output formatters", () => {
         { name: "alice", age: 30 },
         { name: "bob", age: 25 }
       ]);
+    });
+
+    it("json formatFile writes canonical array text as an array", () => {
+      const formatter = resolveTextOutputFormatter("json");
+      const content = formatter.formatFile([
+        {
+          resultSetIndex: 0,
+          schema: { columns: [{ name: "codes", type: "array" as const }] },
+          rows: [['["RAS"]']],
+          rowLimitExceeded: false
+        }
+      ]);
+
+      expect(JSON.parse(content)[0].rows[0].codes).toEqual(["RAS"]);
     });
 
     it("json formatFile writes large-value previews", () => {

@@ -1,4 +1,4 @@
-import type { OutputContext, ResultSet } from "@queryeer/api/queryengine/OutputExtension";
+import type { ColumnType, OutputContext, ResultSet } from "@queryeer/api/queryengine/OutputExtension";
 
 export type TextOutputFormatId = "plain" | "json" | "csv";
 
@@ -36,9 +36,19 @@ function isLargeValueCell(value: unknown): value is { kind: "largeValue"; previe
     && typeof (value as { preview?: unknown }).preview === "string";
 }
 
-function toJsonCell(cell: unknown): unknown {
+function toJsonCell(cell: unknown, columnType: ColumnType): unknown {
   if (cell === undefined || cell === null) return null;
   if (isLargeValueCell(cell)) return cell.preview;
+  const trimmedCell = typeof cell === "string" ? cell.trimStart() : "";
+  const isComplexType = columnType === "array" || columnType === "object" || columnType === "table";
+  const isDynamicComplexValue = columnType === "any" && (trimmedCell.startsWith("[") || trimmedCell.startsWith("{"));
+  if (typeof cell === "string" && (isComplexType || isDynamicComplexValue)) {
+    try {
+      return JSON.parse(cell);
+    } catch {
+      return cell;
+    }
+  }
   return cell;
 }
 
@@ -105,7 +115,7 @@ function formatRowsJson(context: OutputContext): string[] {
   const sets = context.resultSets.map((set) => ({
     resultSetIndex: set.resultSetIndex,
     rows: set.rows.map((row) =>
-      Object.fromEntries(set.schema.columns.map((col, i) => [col.name, toJsonCell(row[i])]))
+      Object.fromEntries(set.schema.columns.map((col, i) => [col.name, toJsonCell(row[i], col.type)]))
     )
   }));
   return JSON.stringify(sets, null, 2).split("\n");
@@ -115,7 +125,7 @@ function jsonFileContent(resultSets: ResultSet[]): string {
   const sets = resultSets.map((set) => ({
     resultSetIndex: set.resultSetIndex,
     rows: set.rows.map((row) =>
-      Object.fromEntries(set.schema.columns.map((col, i) => [col.name, toJsonCell(row[i])]))
+      Object.fromEntries(set.schema.columns.map((col, i) => [col.name, toJsonCell(row[i], col.type)]))
     )
   }));
   return JSON.stringify(sets, null, 2);
