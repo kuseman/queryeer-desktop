@@ -14,6 +14,7 @@ export type SqlServerProperties = {
   port?: number | string;
   instanceName?: string;
   database?: string;
+  applicationName?: string;
   authType?: string;
   username?: string;
   password?: string;
@@ -151,6 +152,20 @@ export function SqlServerConnectionForm({ connectionId, properties, password, re
           placeholder="Initial database (optional)"
           readOnly={readonly}
           onChange={(e) => updateProp("database", e.target.value)}
+        />
+      </div>
+
+      <div className="jdbc-settings-cell">
+        <label className="jdbc-settings-label" htmlFor={id("applicationName")}>
+          Application Name
+        </label>
+        <input
+          id={id("applicationName")}
+          className="jdbc-settings-input"
+          value={properties.applicationName ?? "Queryeer"}
+          placeholder="Queryeer"
+          readOnly={readonly}
+          onChange={(e) => updateProp("applicationName", e.target.value)}
         />
       </div>
 
