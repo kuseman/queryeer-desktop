@@ -9,6 +9,8 @@ import type { OutputContext } from "@queryeer/api/queryengine/OutputExtension";
 import { defineStateKey } from "@queryeer/api/files/FileStateRegistry";
 import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistryImpl";
 import { getQueryViewStateStore } from "./QueryViewStateStore";
+import { getQueryOutputFormatRegistry } from "./QueryOutputFormatRegistry";
+import { TEXT_OUTPUT_FORMATTERS } from "../core.queryengine.output.text/formatters";
 
 const mocks = vi.hoisted(() => {
   type ActiveEditorMock = {
@@ -145,7 +147,8 @@ vi.mock("./output/OutputRegistry", () => ({
     getContributors: () => [],
     getSelectablePrimaryContributors: () => [
       { id: "core.queryengine.output.table", mode: "primary", capability: "rows", title: "Results", render: () => null },
-      { id: "core.queryengine.output.text", mode: "primary", capability: "rows", title: "Text", render: () => null }
+      { id: "core.queryengine.output.text", mode: "primary", capability: "rows", title: "Text", render: () => null },
+      { id: "core.queryengine.output.file", mode: "primary", capability: "rows", title: "File", render: () => null }
     ],
     subscribe: () => () => {}
   })
@@ -293,6 +296,13 @@ const filesRegistry = {
     } satisfies FilesRegistry;
 
     getQueryViewStateStore().initialize(filesRegistry);
+
+    const formatRegistry = getQueryOutputFormatRegistry();
+    for (const formatter of TEXT_OUTPUT_FORMATTERS) {
+      if (!formatRegistry.getFormatter(formatter.id)) {
+        formatRegistry.register(formatter);
+      }
+    }
 
     const appShell = ((window as unknown as { appShell?: Record<string, unknown> }).appShell ??= {});
     (appShell as { finalizeExportStream?: () => Promise<{ exportPath: string }> }).finalizeExportStream ??= async () => ({ exportPath: "C:/tmp/export.csv" });
@@ -929,6 +939,51 @@ const filesRegistry = {
     output = rootElement.querySelector('[data-testid="mock-output"]');
     expect(output?.getAttribute("data-state")).toBe("running");
     expect(output?.getAttribute("data-text-format")).toBe("json");
+  });
+
+  it("keeps the file format selected at execution start when session state changes", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+    getQueryViewStateStore().setSelectedOutput("file-1", "file-1", "core.queryengine.output.file");
+    getQueryViewStateStore().setTextOutputFormat("file-1", "file-1", "plain");
+
+    const appShell = window.appShell;
+    appShell.showDialogSave = vi.fn(async () => ({ canceled: false, filePath: "C:\\tmp\\result.txt" }));
+    appShell.openExportStream = vi.fn(async () => {});
+    appShell.appendExportChunk = vi.fn(async () => {});
+    appShell.finalizeExportStream = vi.fn(async () => ({ exportPath: "file:///C:/tmp/result.ndjson" }));
+    appShell.readFile = vi.fn(async () => ({ success: true, content: '["{\\n  \\"id\\": 1\\n}"]\n' }));
+    appShell.writeFile = vi.fn(async () => ({ success: true }));
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) listener();
+      await Promise.resolve();
+    });
+
+    const listener = [...mocks.subscribeByExecutionId.values()][0];
+    await act(async () => {
+      listener?.({
+        method: "queryengine.chunkStart",
+        params: { resultSetIndex: 0, schema: { columns: [{ name: "payload", type: "string" }] } }
+      });
+      listener?.({
+        method: "queryengine.chunkRows",
+        params: { resultSetIndex: 0, rows: [["{\n  \"id\": 1\n}"]] }
+      });
+      getQueryViewStateStore().setTextOutputFormat("file-1", "file-1", "csv");
+      listener?.({ method: "queryengine.completed", params: { metrics: { rowCount: 1 }, features: ["rows"] } });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(appShell.writeFile).toHaveBeenCalledWith(
+      "file:///C:/tmp/result.txt",
+      "Result set 1\npayload\n{\n  \"id\": 1\n}"
+    );
   });
 
   it("uses toolbar-selected output when executing rows", async () => {

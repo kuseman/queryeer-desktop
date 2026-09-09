@@ -45,6 +45,7 @@ type QueryEditorFileRuntimeState = {
   panelSelectedPrimaryId?: string;
   fileOutputPath?: string;
   fileOutputSchema?: Map<number, { columns: Column[] }>;
+  fileOutputFormat?: string;
 };
 
 type ExecutionAnchor = {
@@ -127,7 +128,8 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       || state.executionPrimaryOverride !== undefined
       || state.panelSelectedPrimaryId !== undefined
       || state.fileOutputPath !== undefined
-      || state.fileOutputSchema !== undefined;
+      || state.fileOutputSchema !== undefined
+      || state.fileOutputFormat !== undefined;
 
     if (!hasAnyState) {
       runtimeStateByFileIdRef.current.delete(targetFileId);
@@ -146,6 +148,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     state.securityRetryCount = undefined;
     state.fileOutputPath = undefined;
     state.fileOutputSchema = undefined;
+    state.fileOutputFormat = undefined;
     pruneRuntimeState(targetFileId);
   };
 
@@ -398,9 +401,10 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       const isFileOutput = targetPrimaryId === FILE_OUTPUT_PRIMARY_ID;
       runtimeState.fileOutputPath = undefined;
       runtimeState.fileOutputSchema = undefined;
+      runtimeState.fileOutputFormat = undefined;
 
       if (isFileOutput) {
-        const format = panelState.textOutputFormat ?? "csv";
+        const format = executeOptions?.formatOverride ?? panelState.textOutputFormat ?? "plain";
         const ext = format === "json" ? "json" : format === "csv" ? "csv" : "txt";
         const dialogResult = await window.appShell.showDialogSave({
           title: "Save Query Result",
@@ -413,6 +417,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
         if (dialogResult.canceled || !dialogResult.filePath) return;
         runtimeState.fileOutputPath = dialogResult.filePath;
         runtimeState.fileOutputSchema = new Map();
+        runtimeState.fileOutputFormat = format;
       }
 
       outputRegistry.notifyExecutionStart({ fileId: targetFileId, outputSessionId: outputSessionIdRef.current }, targetPrimaryId);
@@ -675,6 +680,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
             const ctx = readOutputContextForFile(targetFileId);
             const fileOutputPath = runtimeState.fileOutputPath;
             const schemas = runtimeState.fileOutputSchema;
+            const fileOutputFormat = runtimeState.fileOutputFormat;
 
             const isFileOutput = fileOutputPath != null;
 
@@ -700,7 +706,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
                   );
 
                   if (finalized.length > 0) {
-                    const formatId = getQueryViewStateStore().read(targetFileId, outputSessionIdRef.current).textOutputFormat ?? "csv";
+                    const formatId = fileOutputFormat ?? "plain";
                     const formatter = getQueryOutputFormatRegistry().getFormatter(formatId);
                     if (!formatter) {
                       console.error(`[QueryEditor] No formatter found for '${formatId}'`);
