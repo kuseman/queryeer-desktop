@@ -8,6 +8,8 @@ import java.util.Properties;
 
 final class SqlServerUrlBuilder
 {
+    private static final String DEFAULT_APPLICATION_NAME = "Queryeer";
+
     /**
      * Builds the JDBC URL for the SQL Server connection. Format: {@code jdbc:sqlserver://<host>[:<port>][\\<instance>]}
      */
@@ -111,6 +113,9 @@ final class SqlServerUrlBuilder
     static Properties buildConnectionProperties(Map<String, Object> properties)
     {
         Properties props = new Properties();
+        String applicationName = stringValue(properties, "applicationName");
+        props.setProperty("applicationName", applicationName != null ? applicationName
+                : DEFAULT_APPLICATION_NAME);
 
         SqlServerAuthType authType = SqlServerAuthType.fromString(stringValue(properties, "authType"));
 
