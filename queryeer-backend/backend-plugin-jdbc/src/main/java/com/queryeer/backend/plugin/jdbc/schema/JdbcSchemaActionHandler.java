@@ -1,7 +1,5 @@
 package com.queryeer.backend.plugin.jdbc.schema;
 
-import static com.queryeer.backend.api.PayloadUtils.isBlank;
-import static com.queryeer.backend.api.PayloadUtils.stringValue;
 import static com.queryeer.backend.api.PayloadUtils.trimToNull;
 
 import java.util.ArrayList;
@@ -243,19 +241,7 @@ public final class JdbcSchemaActionHandler
                 return crawlCoordinator.refreshDue(connectionId, crawlScope, target, waitForCompletion);
             }
 
-            JdbcConnection resolved = connections.resolve(connectionId);
-            List<JdbcSchemaObject> fetchedTables = router.resolve(resolved, "tables_folder", target);
-            List<JdbcSchemaObject> fetchedViews = router.resolve(resolved, "views_folder", target);
-            List<JdbcSchemaObject> fetchedProcedures = router.resolve(resolved, "procedures_folder", target);
-            // Expand each table to include column children in the snapshot
-            List<JdbcSchemaObject> expandedTables = expandTableColumns(resolved, fetchedTables);
-            List<JdbcSchemaObject> expandedViews = expandTableColumns(resolved, fetchedViews);
-            List<JdbcSchemaObject> expanded = new ArrayList<>(expandedTables.size() + expandedViews.size() + fetchedProcedures.size());
-            expanded.addAll(expandedTables);
-            expanded.addAll(expandedViews);
-            expanded.addAll(fetchedProcedures);
-            schemaStore.persistDeepSnapshotTarget(connectionId, target.database(), target.schema(), expanded);
-            return schemaStore.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP);
+            return crawlCoordinator.refreshNow(connectionId, crawlScope, target);
         }
 
         if (dueMode)
@@ -266,68 +252,4 @@ public final class JdbcSchemaActionHandler
         return crawlCoordinator.refreshNow(connectionId, crawlScope, target);
     }
 
-    /**
-     * For each table node in the fetched list, resolve its columns and indexes via the router and attach them as folder children. This ensures column and index data is persisted in the DEEP snapshot
-     * and available for completion without live JDBC queries.
-     */
-    private List<JdbcSchemaObject> expandTableColumns(JdbcConnection connection, List<JdbcSchemaObject> tables)
-    {
-        List<JdbcSchemaObject> result = new ArrayList<>();
-        for (JdbcSchemaObject table : tables)
-        {
-            String catalog = stringValue(table.attributes(), "catalog");
-            String schema = stringValue(table.attributes(), "schema");
-            String tableName = table.name();
-            if (isBlank(tableName))
-            {
-                continue;
-            }
-            JdbcSchemaTarget tableTarget = new JdbcSchemaTarget(!isBlank(catalog) ? catalog
-                    : null,
-                    !isBlank(schema) ? schema
-                            : null,
-                    tableName);
-            List<JdbcSchemaObject> columns;
-            try
-            {
-                columns = router.resolve(connection, "columns_folder", tableTarget);
-            }
-            catch (RuntimeException e)
-            {
-                System.err.println("[WARN] Failed to resolve columns for " + tableName + ": " + e.getMessage());
-                columns = List.of();
-            }
-            List<JdbcSchemaObject> indexes;
-            try
-            {
-                indexes = router.resolve(connection, "indexes_folder", tableTarget);
-            }
-            catch (RuntimeException e)
-            {
-                System.err.println("[WARN] Failed to resolve indexes for " + tableName + ": " + e.getMessage());
-                indexes = List.of();
-            }
-            Map<String, Object> folderAttrs = new java.util.LinkedHashMap<>(table.attributes());
-            folderAttrs.put("table", tableName);
-            List<JdbcSchemaObject> folderChildren = new ArrayList<>();
-            if (!columns.isEmpty())
-            {
-                folderChildren.add(new JdbcSchemaObject("columns_folder:" + key(catalog, schema) + ":" + tableName, "Columns", "columns_folder", List.copyOf(columns), Map.copyOf(folderAttrs)));
-            }
-            if (!indexes.isEmpty())
-            {
-                folderChildren.add(new JdbcSchemaObject("indexes_folder:" + key(catalog, schema) + ":" + tableName, "Indexes", "indexes_folder", List.copyOf(indexes), Map.copyOf(folderAttrs)));
-            }
-            result.add(new JdbcSchemaObject(table.id(), table.name(), table.kind(), table.nodeType(), table.fullName(), List.copyOf(folderChildren), table.attributes()));
-        }
-        return result;
-    }
-
-    private static String key(String... values)
-    {
-        return java.util.Arrays.stream(values)
-                .map(v -> v == null ? ""
-                        : v)
-                .collect(java.util.stream.Collectors.joining("|"));
-    }
 }
