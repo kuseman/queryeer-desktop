@@ -271,7 +271,78 @@ export class JdbcDriverArtifactService {
       await this.applyPendingBundle(bundleId, members);
       changed = true;
     }
+    if (await this.repairRetainedManagedCompanions()) changed = true;
+    if (await this.migrateManagedNativeFileNames()) changed = true;
     if (changed) await this.writeInventory();
+  }
+
+  private async migrateManagedNativeFileNames(): Promise<boolean> {
+    let changed = false;
+    for (const driverEntry of this.inventory.drivers) {
+      for (const entry of driverEntry.companions ?? []) {
+        const current = entry.managedFile;
+        if (!current || dirname(current) !== this.libNativeDir || !basename(current).includes(".queryeer-managed.")
+          || !entry.installedSha256 || !existsSync(current) || await fileSha256(current) !== entry.installedSha256) continue;
+        const canonical = join(this.libNativeDir, basename(current).replace(".queryeer-managed.", "."));
+        if (existsSync(canonical)) {
+          if (await fileSha256(canonical) !== entry.installedSha256) {
+            entry.error = `Cannot activate managed native library because '${basename(canonical)}' already exists`;
+            continue;
+          }
+          await rm(current, { force: true });
+        } else {
+          await this.moveArtifact(current, canonical);
+        }
+        entry.managedFile = canonical;
+        entry.error = undefined;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  private async repairRetainedManagedCompanions(): Promise<boolean> {
+    let changed = false;
+    for (const contribution of TRUSTED_CONTRIBUTIONS) {
+      const driverEntry = this.findEntry(contribution);
+      if (!driverEntry?.managedFile || !driverEntry.installedVersion || !driverEntry.installedSha256
+        || !existsSync(driverEntry.managedFile) || await fileSha256(driverEntry.managedFile) !== driverEntry.installedSha256) continue;
+      for (const companion of this.lockedCompanions(contribution)) {
+        const companionEntry = this.findCompanionEntry(driverEntry, companion.id);
+        if (!companionEntry?.managedFile || !companionEntry.installedSha256 || existsSync(companionEntry.managedFile)) continue;
+        let expectedVersion: string;
+        try {
+          expectedVersion = this.releaseVersion(companion, driverEntry.installedVersion);
+        } catch {
+          continue;
+        }
+        const matches = this.inventory.disabledSets.flatMap((disabledSet) => disabledSet.pendingDisable || disabledSet.pendingRestore
+          ? []
+          : disabledSet.artifacts
+            .filter((artifact) => artifact.artifactId === companion.id
+              && artifact.kind === companion.kind
+              && artifact.source === "managed"
+              && artifact.version === expectedVersion
+              && artifact.originalFile === companionEntry.managedFile
+              && artifact.sha256 === companionEntry.installedSha256
+              && existsSync(artifact.disabledFile))
+            .map((artifact) => ({ disabledSet, artifact })));
+        const validMatches: typeof matches = [];
+        for (const match of matches) {
+          if (await fileSha256(match.artifact.disabledFile) === companionEntry.installedSha256) validMatches.push(match);
+        }
+        if (validMatches.length === 0) continue;
+        const { disabledSet, artifact } = validMatches.sort((left, right) =>
+          right.disabledSet.disabledAt.localeCompare(left.disabledSet.disabledAt))[0];
+        await this.completeMove(artifact.disabledFile, artifact.originalFile, artifact.sha256);
+        disabledSet.artifacts = disabledSet.artifacts.filter((entry) => entry !== artifact);
+        if (disabledSet.artifacts.length === 0) {
+          this.inventory.disabledSets = this.inventory.disabledSets.filter((entry) => entry !== disabledSet);
+        }
+        changed = true;
+      }
+    }
+    return changed;
   }
 
   private async applyPendingBundle(bundleId: string, members: Array<InventoryEntry | CompanionInventoryEntry>): Promise<void> {
@@ -389,13 +460,16 @@ export class JdbcDriverArtifactService {
       const disabled: ActiveArtifactCandidate[] = [];
       const driverCandidates = providerCandidates.filter((candidate) => candidate.kind === "driver");
       const inventoryEntry = this.findEntry(contribution);
-      const selectedManagedDriver = inventoryEntry?.managedFile && existsSync(inventoryEntry.managedFile)
+      const selectedManagedDriverCandidate = inventoryEntry?.managedFile && existsSync(inventoryEntry.managedFile)
         ? driverCandidates.find((candidate) => candidate.file === inventoryEntry.managedFile && !candidate.ambiguous
           && candidate.sha256 === inventoryEntry.installedSha256)
         : undefined;
+      const selectedManagedDriver = selectedManagedDriverCandidate && !selectedManagedDriverCandidate.version && inventoryEntry?.installedVersion
+        ? { ...selectedManagedDriverCandidate, version: inventoryEntry.installedVersion }
+        : selectedManagedDriverCandidate;
       const selectedDriver = selectedManagedDriver
         ?? this.selectManualCandidate(driverCandidates.filter((candidate) => candidate.source === "manual" && !candidate.ambiguous), contribution);
-      disabled.push(...driverCandidates.filter((candidate) => candidate !== selectedDriver));
+      disabled.push(...driverCandidates.filter((candidate) => candidate.file !== selectedDriver?.file));
 
       for (const companion of contribution.companionArtifacts ?? []) {
         if (!this.isApplicable(companion)) continue;
@@ -415,7 +489,7 @@ export class JdbcDriverArtifactService {
                 && candidate.version === releaseVersion && candidate.sha256 === companionEntry.installedSha256)
               : undefined;
             const matchingManual = companionCandidates.filter((candidate) => candidate.source === "manual"
-              && candidate.version === releaseVersion);
+              && candidate.file !== companionEntry?.managedFile && candidate.version === releaseVersion);
             selectedCompanion = selectedManagedCompanion ?? (matchingManual.length === 1 ? matchingManual[0] : undefined);
           }
         }
@@ -507,13 +581,17 @@ export class JdbcDriverArtifactService {
         if (!this.isApplicable(companion)) continue;
         for (const name of nativeNames) {
           const file = join(this.libNativeDir, name);
+          const sha256 = await fileSha256(file);
+          const inventoryEntry = this.findEntry(contribution);
+          const companionEntry = inventoryEntry ? this.findCompanionEntry(inventoryEntry, companion.id) : undefined;
+          const inventoryOwned = companionEntry?.managedFile === file && companionEntry.installedSha256 === sha256;
           result.push({
             contribution,
             artifactId: companion.id,
             kind: "nativeLibrary",
-            source: name.includes(".queryeer-managed.") ? "managed" : "manual",
+            source: inventoryOwned ? "managed" : "manual",
             version: name.match(/^mssql-jdbc_auth-([0-9]+\.[0-9]+\.[0-9]+)(?:\.[^.]+)?(?:\.queryeer-managed)?\.dll$/i)?.[1],
-            sha256: await fileSha256(file),
+            sha256,
             file
           });
         }
@@ -759,8 +837,8 @@ export class JdbcDriverArtifactService {
       const disabledSet = this.inventory.disabledSets.find((entry) => entry.id === disabledSetId
         && entry.ownerPluginId === contribution.ownerPluginId && entry.dialectId === contribution.dialectId);
       if (!disabledSet) return rejected(status, "Disabled JDBC artifact set was not found");
-      if (!disabledSet.artifacts.some((artifact) => artifact.kind === "driver")) {
-        return rejected(status, "This disabled set has no JDBC JAR and cannot be restored safely");
+      if (!this.isCompleteDisabledSet(contribution, disabledSet)) {
+        return rejected(status, "This disabled set does not contain a complete version-matched JDBC package");
       }
       for (const artifact of disabledSet.artifacts) {
         if (!this.isDisabledPath(artifact.disabledFile) || !this.isActiveArtifactPath(artifact.originalFile, artifact.kind)
@@ -886,7 +964,7 @@ export class JdbcDriverArtifactService {
         : await this.downloadAndVerify(contribution, version);
       const sha256 = createHash("sha256").update(contents).digest("hex");
       const finalFile = companion
-        ? join(this.libNativeDir, `mssql-jdbc_auth-${version}.${this.arch}.queryeer-managed.dll`)
+        ? join(this.libNativeDir, `mssql-jdbc_auth-${version}.${this.arch}.dll`)
         : join(this.libSharedDir, `${MANAGED_PREFIX}${contribution.artifactId}-${version}.jar`);
       if (existsSync(finalFile) && finalFile !== entry.managedFile) {
         throw new Error(`JDBC driver target '${basename(finalFile)}' already exists`);
@@ -927,7 +1005,12 @@ export class JdbcDriverArtifactService {
     try {
       const driverVersion = await this.fetchLatestVersion(contribution);
       const versions = [driverVersion, ...companions.map((companion) => this.releaseVersion(companion, driverVersion))];
-      if (operation === "update" && members.every((entry, index) => entry.managedFile && entry.installedVersion === versions[index])) {
+      const membersHealthy = await Promise.all(members.map(async (entry, index) => Boolean(entry.managedFile
+        && entry.installedVersion === versions[index]
+        && entry.installedSha256
+        && existsSync(entry.managedFile)
+        && await fileSha256(entry.managedFile) === entry.installedSha256)));
+      if (operation === "update" && membersHealthy.every(Boolean)) {
         return rejected(initialStatus, "The managed JDBC driver package is already at the latest compatible version");
       }
       const contents = await Promise.all([
@@ -938,7 +1021,7 @@ export class JdbcDriverArtifactService {
         join(this.libSharedDir, `${MANAGED_PREFIX}${contribution.artifactId}-${driverVersion}.jar`),
         ...companions.map((_companion, index) => join(
           this.libNativeDir,
-          `mssql-jdbc_auth-${versions[index + 1]}.${this.arch}.queryeer-managed.dll`
+          `mssql-jdbc_auth-${versions[index + 1]}.${this.arch}.dll`
         ))
       ];
       for (let index = 0; index < finalFiles.length; index += 1) {
@@ -1186,7 +1269,7 @@ export class JdbcDriverArtifactService {
         disabledAt: disabledSet.disabledAt,
         reason: disabledSet.reason,
         pendingRestore: Boolean(disabledSet.pendingRestore),
-        restorable: disabledSet.artifacts.some((artifact) => artifact.kind === "driver")
+        restorable: this.isCompleteDisabledSet(contribution, disabledSet)
           && disabledSet.artifacts.every((artifact) => existsSync(artifact.disabledFile)),
         artifacts: disabledSet.artifacts.map((artifact) => ({
           artifactId: artifact.artifactId,
@@ -1329,6 +1412,23 @@ export class JdbcDriverArtifactService {
       .filter((companion) => companion.versionLockedToDriver === true && this.isApplicable(companion));
   }
 
+  private isCompleteDisabledSet(contribution: RegisteredJdbcManagedDriverContribution, disabledSet: DisabledSetEntry): boolean {
+    const drivers = disabledSet.artifacts.filter((artifact) => artifact.kind === "driver");
+    if (drivers.length !== 1 || !drivers[0].version) return false;
+    for (const companion of this.lockedCompanions(contribution)) {
+      let expectedVersion: string;
+      try {
+        expectedVersion = this.releaseVersion(companion, drivers[0].version);
+      } catch {
+        return false;
+      }
+      const matches = disabledSet.artifacts.filter((artifact) => artifact.artifactId === companion.id
+        && artifact.kind === companion.kind && artifact.version === expectedVersion);
+      if (matches.length !== 1) return false;
+    }
+    return true;
+  }
+
   private isApplicable(companion: JdbcDriverCompanionArtifact): boolean {
     const os = this.platform === "win32" ? "windows" : this.platform === "darwin" ? "macos" : "linux";
     return companion.platforms.some((platform) => platform.os === os && platform.arch === this.arch);
@@ -1365,7 +1465,7 @@ export class JdbcDriverArtifactService {
 
   private isManagedPath(path: string): boolean {
     return (dirname(path) === this.libSharedDir && basename(path).startsWith(MANAGED_PREFIX))
-      || (dirname(path) === this.libNativeDir && basename(path).includes(".queryeer-managed."));
+      || (dirname(path) === this.libNativeDir && /^mssql-jdbc_auth-[0-9]+\.[0-9]+\.[0-9]+\.(?:x64|x86|arm64)(?:\.queryeer-managed)?\.dll$/i.test(basename(path)));
   }
 
   private isStagedPath(path: string): boolean {
@@ -1531,11 +1631,11 @@ async function readJarVersion(archive: JSZip, fileName: string, artifactId: stri
   const manifest = archive.file(/(^|\/)META-INF\/MANIFEST\.MF$/i)[0];
   if (manifest) {
     const text = (await manifest.async("string")).replace(/\r?\n /g, "");
-    const version = text.match(/^Implementation-Version:\s*(.+?)\s*$/im)?.[1];
+    const version = text.match(/^(?:Implementation-Version|Bundle-Version):\s*(.+?)\s*$/im)?.[1];
     if (version) return version;
   }
   const escaped = artifactId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return fileName.match(new RegExp(`^${escaped}-([0-9][A-Za-z0-9._+-]*)\\.jar$`, "i"))?.[1];
+  return fileName.match(new RegExp(`^(?:${MANAGED_PREFIX})?${escaped}-([0-9][A-Za-z0-9._+-]*)\\.jar$`, "i"))?.[1];
 }
 
 export function compareVersions(left: string, right: string): number {

@@ -28,6 +28,7 @@ class SqlServerDialectContainerTest
     private static final String DATABASE = "master";
     private static final String SCHEMA = "queryeer_test";
 
+    @SuppressWarnings("resource")
     @Container
     private static final MSSQLServerContainer<?> SQL_SERVER = new MSSQLServerContainer<>("mcr.microsoft.com/mssql/server:2022-CU20-ubuntu-22.04").acceptLicense();
 
