@@ -225,9 +225,12 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
           : undefined
       });
 
-      // Clone metadata (e.g. defaultCatalogAlias) from source file
+      // Clone durable metadata (e.g. defaultCatalogAlias), but not transient execution state.
       if (cloneFromFile?.metadata) {
-        filesRegistry.updateFile(file.fileId, { metadata: { ...cloneFromFile.metadata } });
+        const metadata = { ...cloneFromFile.metadata };
+        delete metadata["core.queryengine.tabStateByGroup"];
+        delete metadata["core.queryengine.hasRunningQuery"];
+        filesRegistry.updateFile(file.fileId, { metadata });
       }
 
       return file;
