@@ -982,6 +982,58 @@ describe("GridComponent", () => {
     expect(snapshot.colOrder).toEqual(["b", "a", "c"]);
   });
 
+  it("copies the grid selection after returning to the application", async () => {
+    const onCopySelection = vi.fn();
+    const requestAnimationFrameSpy = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+
+    await act(async () => {
+      root.render(
+        <GridComponent
+          columns={[{ key: "a", title: "A", type: "int" }]}
+          getRowCount={() => 1}
+          getRowsRange={() => [[1]]}
+          getRow={() => [1]}
+          subscribeRowsChanged={() => () => undefined}
+          onCopySelection={onCopySelection}
+          resolveCellDisplayValue={(_type, value) => String(value)}
+          resolveCellLink={() => null}
+          onCellPrimaryAction={() => false}
+          onContextMenuSelection={() => undefined}
+          isDarkTheme={false}
+        />
+      );
+    });
+
+    act(() => {
+      latestDataEditorProps?.onGridSelectionChange(createGridSelection({ x: 0, y: 0, width: 1, height: 1 }));
+    });
+
+    const gridContainer = rootElement.firstElementChild as HTMLElement;
+    const gridFocusTarget = document.createElement("button");
+    gridContainer.appendChild(gridFocusTarget);
+    const other = document.createElement("button");
+    document.body.appendChild(other);
+    gridFocusTarget.focus();
+    expect(document.activeElement).toBe(gridFocusTarget);
+
+    act(() => {
+      window.dispatchEvent(new Event("blur"));
+      other.focus();
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(document.activeElement).toBe(gridFocusTarget);
+    act(() => {
+      gridFocusTarget.dispatchEvent(new KeyboardEvent("keydown", { key: "c", ctrlKey: true, bubbles: true }));
+    });
+    expect(onCopySelection).toHaveBeenCalledTimes(1);
+    other.remove();
+    requestAnimationFrameSpy.mockRestore();
+  });
+
   it("copy via Cmd+C on macOS triggers selection copy", async () => {
     const onCopySelection = vi.fn();
 
