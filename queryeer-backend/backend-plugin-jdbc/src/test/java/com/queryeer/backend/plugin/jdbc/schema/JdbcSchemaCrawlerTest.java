@@ -6,12 +6,14 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -25,6 +27,27 @@ import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaTarget;
 
 class JdbcSchemaCrawlerTest
 {
+    @Test
+    void deepCrawlUsesDialectBulkResolverWithoutBranchQueries()
+    {
+        JdbcSchemaStore store = mock(JdbcSchemaStore.class);
+        JdbcDialect dialect = mock(JdbcDialect.class);
+        JdbcSchemaResolver branchResolver = mock(JdbcSchemaResolver.class);
+        var deepResolver = mock(com.queryeer.backend.queryengine.jdbc.schema.JdbcDeepSchemaResolver.class);
+        JdbcConnection connection = new JdbcConnection("jdbc-1", "title", dialect, Map.of());
+        JdbcSchemaTarget target = new JdbcSchemaTarget("db", "dbo");
+        List<JdbcSchemaObject> objects = List.of(new JdbcSchemaObject("table:db.dbo.users", "users", "table", List.of(), Map.of("catalog", "db", "schema", "dbo")));
+        when(dialect.deepSchemaResolver()).thenReturn(Optional.of(deepResolver));
+        when(dialect.branchResolvers()).thenReturn(Map.of("tables_folder", branchResolver));
+        when(deepResolver.resolveDeepSchema(connection, target)).thenReturn(objects);
+
+        new JdbcSchemaCrawler(store, new JdbcSchemaRouter(new DefaultJdbcSchemaResolver())).crawl(connection, JdbcSchemaCrawlScope.DEEP, target);
+
+        verify(deepResolver).resolveDeepSchema(connection, target);
+        verify(branchResolver, never()).resolveSchema(eq(connection), anyMap());
+        verify(store).persistDeepSnapshotTarget("jdbc-1", "db", "dbo", objects);
+    }
+
     @Test
     void deepTablesMergeKeepsTablesUnderTheirOwnSchemas() throws SQLException
     {

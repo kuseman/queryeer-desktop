@@ -22,7 +22,9 @@
         <jackson2.version>2.22.1</jackson2.version>
         <junit.jupiter.version>6.1.0</junit.jupiter.version>
         <mockito.core.version>5.23.0</mockito.core.version>
+        <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
         <payloadbuilder.version>1.13.0</payloadbuilder.version>
+        <testcontainers.version>1.21.3</testcontainers.version>
         <maven.dependency.plugin.version>3.10.0</maven.dependency.plugin.version>
         <maven.assembly.plugin.version>3.8.0</maven.assembly.plugin.version>
         <checkstyle.skip>false</checkstyle.skip>
@@ -227,6 +229,13 @@
                 <groupId>org.mockito</groupId>
                 <artifactId>mockito-core</artifactId>
                 <version>${mockito.core.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
             <dependency>
                 <groupId>se.kuseman.payloadbuilder</groupId>

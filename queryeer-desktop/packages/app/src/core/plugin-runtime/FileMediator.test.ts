@@ -203,6 +203,26 @@ describe("FileMediator.createUntitledFile", () => {
     expect(created.persistentViewState).not.toBe(source.persistentViewState);
   });
 
+  it("does not clone transient query execution metadata", async () => {
+    const { mediator, registry } = setupHarness();
+    const source = await mediator.openFile("file:///source.sql", {
+      mimeType: "application/sql"
+    });
+    registry.createFilesRegistry().updateFile(source.fileId, {
+      metadata: {
+        defaultCatalogAlias: "catalog-1",
+        "core.queryengine.tabStateByGroup": { "editor-group-1": "running" },
+        "core.queryengine.hasRunningQuery": true
+      }
+    });
+
+    const created = await mediator.createUntitledFile({ cloneFromFileId: source.fileId });
+
+    expect(registry.createFilesRegistry().getFile(created.fileId)?.metadata).toEqual({
+      defaultCatalogAlias: "catalog-1"
+    });
+  });
+
   it("respects externally restored untitled counter", async () => {
     const { mediator } = setupHarness();
     mediator.setUntitledCounter(12);

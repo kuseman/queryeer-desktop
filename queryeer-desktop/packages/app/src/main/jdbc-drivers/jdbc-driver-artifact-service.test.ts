@@ -44,10 +44,10 @@ afterEach(() => {
   rmSync(workDir, { recursive: true, force: true });
 });
 
-async function driverJar(className: string, version?: string): Promise<Buffer> {
+async function driverJar(className: string, version?: string, versionHeader = "Implementation-Version"): Promise<Buffer> {
   const archive = new JSZip();
   archive.file(`${className.replaceAll(".", "/")}.class`, Buffer.from([0xca, 0xfe, 0xba, 0xbe]));
-  if (version) archive.file("META-INF/MANIFEST.MF", `Manifest-Version: 1.0\r\nImplementation-Version: ${version}\r\n`);
+  if (version) archive.file("META-INF/MANIFEST.MF", `Manifest-Version: 1.0\r\n${versionHeader}: ${version}\r\n`);
   return archive.generateAsync({ type: "nodebuffer" });
 }
 
@@ -288,8 +288,8 @@ describe("JdbcDriverArtifactService", () => {
     renameSync(pendingInventory.pending.stagedFile, pendingInventory.pending.finalFile);
     await service.applyPending();
     expect(readdirSync(join(appDir, "libShared"))).toContain("000-queryeer-managed-mssql-jdbc-13.4.0.jre11.jar");
-    expect(readdirSync(join(appDir, "libNative"))).toContain("mssql-jdbc_auth-13.4.0.x64.queryeer-managed.dll");
-    expect(readFileSync(join(appDir, "libNative", "mssql-jdbc_auth-13.4.0.x64.queryeer-managed.dll")).subarray(0, 2))
+    expect(readdirSync(join(appDir, "libNative"))).toContain("mssql-jdbc_auth-13.4.0.x64.dll");
+    expect(readFileSync(join(appDir, "libNative", "mssql-jdbc_auth-13.4.0.x64.dll")).subarray(0, 2))
       .toEqual(Buffer.from([0x4d, 0x5a]));
     expect(existsSync(stale)).toBe(false);
     expect(existsSync(manual)).toBe(false);
@@ -311,6 +311,122 @@ describe("JdbcDriverArtifactService", () => {
     expect(existsSync(disabledManual.disabledFile)).toBe(true);
     expect(readdirSync(join(appDir, "libShared")).filter((name) => name.startsWith("000-queryeer-managed-mssql"))).toEqual([]);
     expect(readdirSync(join(appDir, "libNative")).filter((name) => name.includes("queryeer-managed"))).toEqual([]);
+  });
+
+  it("keeps a managed SQL Server package active when the jar only has Bundle-Version", async () => {
+    const zip = await nativeArchive();
+    const jar = await driverJar(sqlServer.driverClassName, "13.4.0.jre11", "Bundle-Version");
+    const service = new JdbcDriverArtifactService({
+      appDir,
+      settingsDir,
+      fetch: sqlServerFetch(zip, jar),
+      platform: "win32",
+      arch: "x64"
+    });
+    await service.initialize();
+    await service.install(sqlServer);
+    await service.applyPending();
+
+    const status = (await service.list([sqlServer]))[0];
+
+    expect(status).toMatchObject({ source: "managed", installedVersion: "13.4.0.jre11" });
+    expect(status.versionMismatch).toBeUndefined();
+    expect(status.artifacts?.find((artifact) => artifact.id === "native-auth"))
+      .toMatchObject({ source: "managed", installedVersion: "13.4.0" });
+    expect(status.disabledSets).toBeUndefined();
+  });
+
+  it("repairs an inventory-owned native companion moved into a native-only retained set", async () => {
+    const jar = await driverJar(sqlServer.driverClassName, "13.6.0.jre11", "Bundle-Version");
+    const jarPath = join(appDir, "libShared", "000-queryeer-managed-mssql-jdbc-13.6.0.jre11.jar");
+    const legacyNativePath = join(appDir, "libNative", "mssql-jdbc_auth-13.6.0.x64.queryeer-managed.dll");
+    const nativePath = join(appDir, "libNative", "mssql-jdbc_auth-13.6.0.x64.dll");
+    const disabledNative = join(appDir, "libNative", "disabled", "sqlserver", "broken-native", "mssql-jdbc_auth-13.6.0.x64.queryeer-managed.dll");
+    const native = Buffer.from([0x4d, 0x5a, 0x13]);
+    mkdirSync(join(appDir, "libShared"), { recursive: true });
+    mkdirSync(join(appDir, "libNative", "disabled", "sqlserver", "broken-native"), { recursive: true });
+    mkdirSync(settingsDir, { recursive: true });
+    writeFileSync(jarPath, jar);
+    writeFileSync(disabledNative, native);
+    writeFileSync(defaultJdbcDriverInventoryPath(settingsDir), JSON.stringify({
+      version: 2,
+      drivers: [{
+        ownerPluginId: sqlServer.ownerPluginId,
+        dialectId: sqlServer.dialectId,
+        installedVersion: "13.6.0.jre11",
+        installedSha256: createHash("sha256").update(jar).digest("hex"),
+        managedFile: jarPath,
+        companions: [{
+          id: "native-auth",
+          installedVersion: "13.6.0",
+          installedSha256: createHash("sha256").update(native).digest("hex"),
+          managedFile: legacyNativePath
+        }]
+      }],
+      disabledSets: [{
+        id: "broken-native",
+        ownerPluginId: sqlServer.ownerPluginId,
+        dialectId: sqlServer.dialectId,
+        version: "13.6.0",
+        disabledAt: "2026-09-14T06:42:42.000Z",
+        reason: "Disabled because another artifact was selected for this JDBC provider.",
+        artifacts: [{
+          artifactId: "native-auth",
+          kind: "nativeLibrary",
+          source: "managed",
+          version: "13.6.0",
+          sha256: createHash("sha256").update(native).digest("hex"),
+          originalFile: legacyNativePath,
+          disabledFile: disabledNative
+        }]
+      }, {
+        id: "broken-native-duplicate",
+        ownerPluginId: sqlServer.ownerPluginId,
+        dialectId: sqlServer.dialectId,
+        version: "13.6.0",
+        disabledAt: "2026-09-14T07:20:15.000Z",
+        reason: "Disabled because another artifact was selected for this JDBC provider.",
+        artifacts: [{
+          artifactId: "native-auth",
+          kind: "nativeLibrary",
+          source: "managed",
+          version: "13.6.0",
+          sha256: createHash("sha256").update(native).digest("hex"),
+          originalFile: legacyNativePath,
+          disabledFile: join(appDir, "libNative", "disabled", "sqlserver", "broken-native-duplicate", "mssql-jdbc_auth-13.6.0.x64.queryeer-managed.dll")
+        }]
+      }]
+    }));
+    const duplicateDisabledNative = join(appDir, "libNative", "disabled", "sqlserver", "broken-native-duplicate", "mssql-jdbc_auth-13.6.0.x64.queryeer-managed.dll");
+    mkdirSync(join(appDir, "libNative", "disabled", "sqlserver", "broken-native-duplicate"), { recursive: true });
+    writeFileSync(duplicateDisabledNative, native);
+
+    const service = new JdbcDriverArtifactService({ appDir, settingsDir, platform: "win32", arch: "x64" });
+    await service.initialize();
+
+    expect(existsSync(nativePath)).toBe(true);
+    expect(existsSync(disabledNative)).toBe(true);
+    expect(existsSync(duplicateDisabledNative)).toBe(false);
+    const status = (await service.list([sqlServer]))[0];
+    expect(status.versionMismatch).toBeUndefined();
+    expect(status.disabledSets).toEqual([expect.objectContaining({ id: "broken-native" })]);
+  });
+
+  it("allows a same-version package update to repair a missing member", async () => {
+    const zip = await nativeArchive();
+    const jar = await driverJar(sqlServer.driverClassName, "13.4.0.jre11", "Bundle-Version");
+    const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: sqlServerFetch(zip, jar), platform: "win32", arch: "x64" });
+    await service.initialize();
+    await service.install(sqlServer);
+    await service.applyPending();
+    const inventory = JSON.parse(readFileSync(defaultJdbcDriverInventoryPath(settingsDir), "utf8"));
+    rmSync(inventory.drivers[0].companions[0].managedFile);
+
+    const update = await service.update(sqlServer);
+
+    expect(update.accepted).toBe(true);
+    await service.applyPending();
+    expect((await service.list([sqlServer]))[0].versionMismatch).toBeUndefined();
   });
 
   it("keeps one manual SQL Server pair active and can restore a disabled version", async () => {
@@ -533,7 +649,7 @@ describe("JdbcDriverArtifactService", () => {
 
     await service.applyPending();
     expect(readdirSync(join(appDir, "libShared"))).toContain("000-queryeer-managed-mssql-jdbc-13.4.0.jre11.jar");
-    expect(readdirSync(join(appDir, "libNative"))).toContain("mssql-jdbc_auth-13.4.0.x64.queryeer-managed.dll");
+    expect(readdirSync(join(appDir, "libNative"))).toContain("mssql-jdbc_auth-13.4.0.x64.dll");
   });
 
   it("rolls back a partially removed version-locked bundle", async () => {
@@ -547,7 +663,7 @@ describe("JdbcDriverArtifactService", () => {
       platform: "win32",
       arch: "x64",
       moveArtifact: async (source, target) => {
-        if (failNativeRemoval && String(source).endsWith(".queryeer-managed.dll")) {
+        if (failNativeRemoval && String(source).endsWith("mssql-jdbc_auth-13.4.0.x64.dll")) {
           failNativeRemoval = false;
           throw new Error("simulated native removal failure");
         }
@@ -563,7 +679,7 @@ describe("JdbcDriverArtifactService", () => {
     await expect(service.applyPending()).rejects.toThrow("simulated native removal failure");
 
     expect(readdirSync(join(appDir, "libShared"))).toContain("000-queryeer-managed-mssql-jdbc-13.4.0.jre11.jar");
-    expect(readdirSync(join(appDir, "libNative"))).toContain("mssql-jdbc_auth-13.4.0.x64.queryeer-managed.dll");
+    expect(readdirSync(join(appDir, "libNative"))).toContain("mssql-jdbc_auth-13.4.0.x64.dll");
     const pending = JSON.parse(readFileSync(defaultJdbcDriverInventoryPath(settingsDir), "utf8")).drivers[0];
     expect(pending.pending.operation).toBe("remove");
     expect(pending.companions[0].pending.operation).toBe("remove");
@@ -598,7 +714,7 @@ describe("JdbcDriverArtifactService", () => {
       arch: "x64",
       moveArtifact: async (source, target) => {
         const sourcePath = String(source);
-        if (failOldNativeQuarantine && sourcePath.includes("13.4.0") && sourcePath.endsWith(".queryeer-managed.dll")) {
+        if (failOldNativeQuarantine && sourcePath.endsWith("mssql-jdbc_auth-13.4.0.x64.dll")) {
           failOldNativeQuarantine = false;
           throw new Error("simulated old native quarantine failure");
         }
@@ -612,14 +728,14 @@ describe("JdbcDriverArtifactService", () => {
 
     expect(readdirSync(join(appDir, "libShared")).filter((name) => name.startsWith("000-queryeer-managed-mssql")))
       .toEqual(["000-queryeer-managed-mssql-jdbc-13.4.0.jre11.jar"]);
-    expect(readdirSync(join(appDir, "libNative")).filter((name) => name.includes("queryeer-managed")))
-      .toEqual(["mssql-jdbc_auth-13.4.0.x64.queryeer-managed.dll"]);
+    expect(readdirSync(join(appDir, "libNative")).filter((name) => /^mssql-jdbc_auth-/.test(name)))
+      .toEqual(["mssql-jdbc_auth-13.4.0.x64.dll"]);
 
     await updating.applyPending();
     expect(readdirSync(join(appDir, "libShared")).filter((name) => name.startsWith("000-queryeer-managed-mssql")))
       .toEqual(["000-queryeer-managed-mssql-jdbc-13.5.0.jre11.jar"]);
-    expect(readdirSync(join(appDir, "libNative")).filter((name) => name.includes("queryeer-managed")))
-      .toEqual(["mssql-jdbc_auth-13.5.0.x64.queryeer-managed.dll"]);
+    expect(readdirSync(join(appDir, "libNative")).filter((name) => /^mssql-jdbc_auth-/.test(name)))
+      .toEqual(["mssql-jdbc_auth-13.5.0.x64.dll"]);
   });
 
   it("rejects a wrong GitHub digest and a missing exact native archive entry", async () => {
@@ -682,7 +798,7 @@ describe("JdbcDriverArtifactService", () => {
     expect(status.artifacts?.find((artifact) => artifact.id === "native-auth"))
       .toMatchObject({ source: "missing", versionMismatch: true });
     expect(status.disabledSets).toEqual(expect.arrayContaining([
-      expect.objectContaining({ artifacts: [expect.objectContaining({ artifactId: "native-auth", source: "managed" })] })
+      expect.objectContaining({ artifacts: [expect.objectContaining({ artifactId: "native-auth", source: "manual" })] })
     ]));
   });
 

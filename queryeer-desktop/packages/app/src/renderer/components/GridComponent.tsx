@@ -1095,6 +1095,47 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
     };
   }, [collectSelectionSnapshot, onCopySelection]);
 
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    let focusTarget: HTMLElement | null = null;
+    let restoreOnWindowFocus = false;
+
+    const rememberFocus = (event: FocusEvent) => {
+      if (event.target instanceof HTMLElement) {
+        focusTarget = event.target;
+      }
+    };
+    const handleWindowBlur = () => {
+      const active = document.activeElement;
+      if (selectionRef.current && active instanceof HTMLElement && el.contains(active)) {
+        restoreOnWindowFocus = true;
+        focusTarget = active;
+      } else {
+        restoreOnWindowFocus = false;
+      }
+    };
+    const handleWindowFocus = () => {
+      if (!restoreOnWindowFocus) return;
+      restoreOnWindowFocus = false;
+      const activeOnWindowFocus = document.activeElement;
+      window.requestAnimationFrame(() => {
+        if (focusTarget?.isConnected && document.activeElement === activeOnWindowFocus) {
+          focusTarget.focus({ preventScroll: true });
+        }
+      });
+    };
+
+    el.addEventListener("focusin", rememberFocus);
+    window.addEventListener("blur", handleWindowBlur);
+    window.addEventListener("focus", handleWindowFocus);
+    return () => {
+      el.removeEventListener("focusin", rememberFocus);
+      window.removeEventListener("blur", handleWindowBlur);
+      window.removeEventListener("focus", handleWindowFocus);
+    };
+  }, []);
+
   const prevActiveMatchRef = useRef<{ row: number; col: number } | null>(null);
   useEffect(() => {
     if (!searchActiveMatch || !gridRef.current) {

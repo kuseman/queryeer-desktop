@@ -29,38 +29,40 @@ final class SqlServerConnectionSetup
         // Note: username/password appear for both SQL_SERVER_AUTH and WINDOWS_NTLM_AUTH.
         // visibleWhen supports a single value; the actual conditional rendering is handled
         // by SqlServerConnectionForm.tsx which evaluates both cases in JSX.
-        return new JdbcConnectionSetupDefinition(
-                List.of(new JdbcConnectionFieldDefinition("host", "Host", JdbcConnectionFieldType.TEXT, true, "Hostname or IP address of the SQL Server instance", List.of(), null, null),
+        return new JdbcConnectionSetupDefinition(List.of(
+                new JdbcConnectionFieldDefinition("host", "Host", JdbcConnectionFieldType.TEXT, true, "Hostname or IP address of the SQL Server instance", List.of(), null, null),
 
-                        new JdbcConnectionFieldDefinition("port", "Port", JdbcConnectionFieldType.NUMBER, false, "TCP port (default: 1433)", List.of(), 1433, null),
+                new JdbcConnectionFieldDefinition("port", "Port", JdbcConnectionFieldType.NUMBER, false, "TCP port (default: 1433)", List.of(), 1433, null),
 
-                        new JdbcConnectionFieldDefinition("instanceName", "Instance Name", JdbcConnectionFieldType.TEXT, false,
-                                "Named instance, e.g. SQLEXPRESS (leave blank for the default instance)", List.of(), null, null),
+                new JdbcConnectionFieldDefinition("instanceName", "Instance Name", JdbcConnectionFieldType.TEXT, false, "Named instance, e.g. SQLEXPRESS (leave blank for the default instance)",
+                        List.of(), null, null),
 
-                        new JdbcConnectionFieldDefinition("database", "Database", JdbcConnectionFieldType.TEXT, false, "Initial database to connect to", List.of(), null, null),
+                new JdbcConnectionFieldDefinition("database", "Database", JdbcConnectionFieldType.TEXT, false, "Initial database to connect to", List.of(), null, null),
 
-                        new JdbcConnectionFieldDefinition(FIELD_AUTH_TYPE, "Authentication", JdbcConnectionFieldType.SELECT, true, "Authentication scheme", authOptions,
-                                SqlServerAuthType.SQL_SERVER_AUTH.name(), null),
+                new JdbcConnectionFieldDefinition("applicationName", "Application Name", JdbcConnectionFieldType.TEXT, false, "Application name reported to SQL Server", List.of(), "Queryeer", null),
 
-                        new JdbcConnectionFieldDefinition("username", "Username", JdbcConnectionFieldType.TEXT, true, null, List.of(), null, sqlAuthOnly),
+                new JdbcConnectionFieldDefinition(FIELD_AUTH_TYPE, "Authentication", JdbcConnectionFieldType.SELECT, true, "Authentication scheme", authOptions,
+                        SqlServerAuthType.SQL_SERVER_AUTH.name(), null),
 
-                        new JdbcConnectionFieldDefinition("password", "Password", JdbcConnectionFieldType.SECRET, true, "Stored in security vault", List.of(), null, sqlAuthOnly),
+                new JdbcConnectionFieldDefinition("username", "Username", JdbcConnectionFieldType.TEXT, true, null, List.of(), null, sqlAuthOnly),
 
-                        new JdbcConnectionFieldDefinition("domain", "Windows Domain", JdbcConnectionFieldType.TEXT, false, "Optional Windows domain, e.g. CORP", List.of(), null, ntlmAuthOnly),
+                new JdbcConnectionFieldDefinition("password", "Password", JdbcConnectionFieldType.SECRET, true, "Stored in security vault", List.of(), null, sqlAuthOnly),
 
-                        new JdbcConnectionFieldDefinition("encrypt", "Encrypt", JdbcConnectionFieldType.SELECT, false, "Whether to encrypt the connection", encryptOptions, "true", null),
+                new JdbcConnectionFieldDefinition("domain", "Windows Domain", JdbcConnectionFieldType.TEXT, false, "Optional Windows domain, e.g. CORP", List.of(), null, ntlmAuthOnly),
 
-                        new JdbcConnectionFieldDefinition("trustServerCertificate", "Trust Server Certificate", JdbcConnectionFieldType.BOOLEAN, false,
-                                "Trust self-signed or untrusted server certificates (set true for local dev)", List.of(), false, null),
+                new JdbcConnectionFieldDefinition("encrypt", "Encrypt", JdbcConnectionFieldType.SELECT, false, "Whether to encrypt the connection", encryptOptions, "true", null),
 
-                        new JdbcConnectionFieldDefinition("hostNameInCertificate", "Host Name In Certificate", JdbcConnectionFieldType.TEXT, false,
-                                "Expected host name in the TLS certificate, overrides SNI", List.of(), null, null),
+                new JdbcConnectionFieldDefinition("trustServerCertificate", "Trust Server Certificate", JdbcConnectionFieldType.BOOLEAN, false,
+                        "Trust self-signed or untrusted server certificates (set true for local dev)", List.of(), false, null),
 
-                        new JdbcConnectionFieldDefinition("krb5ConfigFile", "Kerberos Config File (krb5.conf)", JdbcConnectionFieldType.FOLDER_PATH, false,
-                                "Path to the krb5.conf / krb5.ini file for Java Kerberos authentication", List.of(), null, javaKerberosOnly),
+                new JdbcConnectionFieldDefinition("hostNameInCertificate", "Host Name In Certificate", JdbcConnectionFieldType.TEXT, false, "Expected host name in the TLS certificate, overrides SNI",
+                        List.of(), null, null),
 
-                        new JdbcConnectionFieldDefinition("jaasConfigEntry", "JAAS Config Entry Name", JdbcConnectionFieldType.TEXT, false,
-                                "Entry name in jaas.conf to use for Kerberos login (default: SQLJDBCDriver)", List.of(), "SQLJDBCDriver", javaKerberosOnly)));
+                new JdbcConnectionFieldDefinition("krb5ConfigFile", "Kerberos Config File (krb5.conf)", JdbcConnectionFieldType.FOLDER_PATH, false,
+                        "Path to the krb5.conf / krb5.ini file for Java Kerberos authentication", List.of(), null, javaKerberosOnly),
+
+                new JdbcConnectionFieldDefinition("jaasConfigEntry", "JAAS Config Entry Name", JdbcConnectionFieldType.TEXT, false,
+                        "Entry name in jaas.conf to use for Kerberos login (default: SQLJDBCDriver)", List.of(), "SQLJDBCDriver", javaKerberosOnly)));
     }
 
     private SqlServerConnectionSetup()

@@ -7,6 +7,7 @@ import { formatGraphPropertyValue, getGraphEntityActions, getGraphEntityProperti
 import { getGraphNodeTypeRegistry } from "./graph-node-type-registry";
 import { getGraphViewState, setGraphViewState } from "./graph-view-state-store";
 import { getVisibleVertexIds, hasVisibleVertexEntry, setAllVerticesVisible, subscribeToVisibleVertices } from "./graph-visible-vertices-store";
+import { graphDocumentToMermaid } from "./graph-mermaid";
 import "@xyflow/react/dist/style.css";
 import "./graph.css";
 
@@ -98,6 +99,7 @@ export function GraphViewer({
   const [layoutDirectionOverride, setLayoutDirectionOverride] = useState<GraphLayoutDirection | "auto">(
     () => getGraphViewState(graphViewStateKey)?.layoutDirection ?? "auto"
   );
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [, forceRender] = useState(0);
   useEffect(() => subscribeToVisibleVertices(() => forceRender((n) => n + 1)), []);
   // Synchronously initialize the store if it's empty so the first render
@@ -184,6 +186,21 @@ export function GraphViewer({
       }
     };
   }, [visibleGraph, layoutDirectionOverride]);
+
+  const copyAsMermaid = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(graphDocumentToMermaid(graphWithLayoutOverride));
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("failed");
+    }
+  }, [graphWithLayoutOverride]);
+
+  useEffect(() => {
+    if (copyStatus === "idle") return;
+    const timeout = window.setTimeout(() => setCopyStatus("idle"), 2000);
+    return () => window.clearTimeout(timeout);
+  }, [copyStatus]);
 
   const positionedGraph = useMemo(() => layoutProvider.layout(graphWithLayoutOverride), [graphWithLayoutOverride, layoutProvider]);
 
@@ -408,6 +425,9 @@ export function GraphViewer({
         <GraphLayoutToolbar
           direction={layoutDirectionOverride}
           onDirectionChanged={setLayoutDirectionOverride}
+          onCopyMermaid={() => void copyAsMermaid()}
+          copyStatus={copyStatus}
+          copyDisabled={graphWithLayoutOverride.vertices.length === 0}
         />
         <ReactFlow
           key={graphViewStateKey}
@@ -499,10 +519,16 @@ function getGraphBounds(vertices: PositionedGraphVertex[]): { x: number; y: numb
 
 function GraphLayoutToolbar({
   direction,
-  onDirectionChanged
+  onDirectionChanged,
+  onCopyMermaid,
+  copyStatus,
+  copyDisabled,
 }: {
   direction: GraphLayoutDirection | "auto";
   onDirectionChanged: (direction: GraphLayoutDirection | "auto") => void;
+  onCopyMermaid: () => void;
+  copyStatus: "idle" | "copied" | "failed";
+  copyDisabled: boolean;
 }): JSX.Element {
   return (
     <div className="graph-layout-toolbar">
@@ -518,6 +544,15 @@ function GraphLayoutToolbar({
           <option key={option.value} value={option.value}>{option.label}</option>
         ))}
       </select>
+      <button
+        type="button"
+        className="graph-layout-copy"
+        onClick={onCopyMermaid}
+        disabled={copyDisabled}
+        title="Copy the currently visible graph as Mermaid flowchart source"
+      >
+        {copyStatus === "copied" ? "Copied" : copyStatus === "failed" ? "Copy failed" : "Copy Mermaid"}
+      </button>
     </div>
   );
 }
@@ -630,6 +665,7 @@ function GraphPropertiesPanel({
   const [width, setWidth] = useState(300);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const groups = getGraphEntityProperties(entity);
+  const entityLabel = entity?.entity.label || "No selection";
 
   useEffect(() => {
     setCollapsedGroups({});
@@ -666,11 +702,14 @@ function GraphPropertiesPanel({
     <aside className="graph-properties" style={{ width }}>
       <div className="graph-properties-resizer" onMouseDown={startResize} />
       <header className="graph-properties-header">
-        <div>
-          <div className="graph-properties-title">Properties</div>
-          <div className="graph-properties-subtitle">{entity ? entity.entity.id : "No selection"}</div>
+        <div className="graph-properties-heading">
+          <div className="graph-properties-eyebrow">Properties</div>
+          <div className="graph-properties-title">{entityLabel}</div>
+          {entity && entity.entity.id !== entityLabel && (
+            <div className="graph-properties-subtitle" title={entity.entity.id}>{entity.entity.id}</div>
+          )}
         </div>
-        <button type="button" className="graph-properties-collapse" onClick={() => setCollapsed(true)}>×</button>
+        <button type="button" className="graph-properties-collapse" onClick={() => setCollapsed(true)} aria-label="Collapse properties" title="Collapse properties">×</button>
       </header>
       {groups.length === 0 ? (
         <div className="graph-properties-empty">Select a vertex or edge to inspect properties.</div>

@@ -72,7 +72,7 @@ final class SharedLibraryLoader
             for (String driver : drivers)
             {
                 providerJars.add(path);
-                providerCandidates.computeIfAbsent(driver, ignored -> new ArrayList<>())
+                providerCandidates.computeIfAbsent(driver, _ -> new ArrayList<>())
                         .add(path);
             }
         }

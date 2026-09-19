@@ -417,11 +417,12 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
             while (rs.next())
             {
                 String col = rs.getString("FKCOLUMN_NAME");
+                String refSchema = rs.getString("PKTABLE_SCHEM");
                 String refTable = rs.getString("PKTABLE_NAME");
                 String refColumn = rs.getString("PKCOLUMN_NAME");
                 if (col != null)
                 {
-                    fkMap.put(col, List.of(nullToEmpty(refTable), nullToEmpty(refColumn)));
+                    fkMap.put(col, List.of(nullToEmpty(refSchema), nullToEmpty(refTable), nullToEmpty(refColumn)));
                 }
             }
         }
@@ -466,8 +467,13 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
                     if (fkInfo != null)
                     {
                         attrs.put("foreignKey", true);
-                        attrs.put("referencesTable", fkInfo.get(0));
-                        attrs.put("referencesColumn", fkInfo.get(1));
+                        if (!fkInfo.get(0)
+                                .isEmpty())
+                        {
+                            attrs.put("referencesSchema", fkInfo.get(0));
+                        }
+                        attrs.put("referencesTable", fkInfo.get(1));
+                        attrs.put("referencesColumn", fkInfo.get(2));
                     }
                     children.add(new JdbcSchemaObject("column:" + schemaKey + ":" + tableName + ":" + colName, colName, "column", null, Map.copyOf(attrs)));
                 }

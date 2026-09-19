@@ -1012,11 +1012,12 @@ JDBC startup preload behavior:
 - JDBC crawl subsystem starts at plugin activation, but crawl execution is gated until backend receives `security.session.open` from desktop main.
 - On `security.session.close`, schema crawl loop pauses until a new `security.session.open` arrives.
 - `jdbc.schema.refresh` requires an open security session; otherwise backend returns a validation error.
-- `jdbc.schema.refresh` supports `scope=top|deep` (`top` default). `scope=deep` requires `target.schema` (`target.database` optional).
-- Active connections are background-crawled on `top` scope (databases/schemas) while `deep` scope (tables/columns) is refreshed only on explicit triggers.
-- For JDBC schema trees, `column` nodes include normalized attributes from foundation mapping: `type` (lowercase fallback `unknown`), optional `nullable`, optional `ordinal`, and optional type qualifiers `size`, `precision`, `scale` when applicable for the dialect/type.
+- `jdbc.schema.refresh` supports `scope=top|deep` (`top` default). Normal `scope=deep` refresh requires `target.schema`; due/force refreshes may target a whole database.
+- Active database usage triggers throttled deep crawls, and known database targets are also refreshed by the periodic crawler.
+- For JDBC schema trees, `column` nodes include normalized attributes from foundation mapping: `type` (lowercase fallback `unknown`), optional `nullable`, optional `ordinal`, and optional type qualifiers `size`, `precision`, `scale` when applicable for the dialect/type. Foreign-key columns include `foreignKey=true`, `referencesTable`, `referencesColumn`, and `referencesSchema` when the JDBC driver reports the referenced schema.
 - JDBC schema tree uses folder-based organization under tables/views: each table resolves to `columns_folder` and `indexes_folder` children. The DEEP crawl expands both folders inline so column and index data is available for completion without live JDBC queries.
 - Index nodes (`kind: "index"`) carry attributes: `columns` (comma-separated column list), `unique` (boolean), and `primaryKey` (boolean when the index backs a primary key constraint). SQL Server dialect uses native `sys.indexes`/`sys.index_columns` views; other dialects use `DatabaseMetaData.getIndexInfo()`.
+- Dialects may provide a bulk deep-schema resolver. SQL Server retrieves tables/views, columns/keys, indexes, and procedures/parameters with four catalog queries on one connection; dialects without this capability retain branch-by-branch fallback crawling.
 
 Current integration notes:
 

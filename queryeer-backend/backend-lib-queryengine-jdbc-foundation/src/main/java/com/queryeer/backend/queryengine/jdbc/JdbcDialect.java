@@ -13,6 +13,7 @@ import java.util.Properties;
 
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryExecutor;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryPlanExecutor;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcDeepSchemaResolver;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
 
 public interface JdbcDialect
@@ -35,6 +36,12 @@ public interface JdbcDialect
     default Map<String, JdbcSchemaResolver> branchResolvers()
     {
         return Map.of();
+    }
+
+    /** Returns an optional optimized resolver for complete deep schema snapshots. */
+    default Optional<JdbcDeepSchemaResolver> deepSchemaResolver()
+    {
+        return Optional.empty();
     }
 
     /**

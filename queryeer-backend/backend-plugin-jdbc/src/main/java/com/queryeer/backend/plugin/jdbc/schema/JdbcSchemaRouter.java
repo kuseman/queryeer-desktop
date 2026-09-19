@@ -3,11 +3,13 @@ package com.queryeer.backend.plugin.jdbc.schema;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import com.queryeer.backend.plugin.jdbc.DefaultJdbcSchemaResolver;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
+import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaTarget;
 
 public final class JdbcSchemaRouter
 {
@@ -34,5 +36,12 @@ public final class JdbcSchemaRouter
                 .branchResolvers();
         JdbcSchemaResolver resolver = branchResolvers.getOrDefault(parentKind, defaultResolver);
         return resolver.resolveSchema(connection, options);
+    }
+
+    Optional<List<JdbcSchemaObject>> resolveDeep(JdbcConnection connection, JdbcSchemaTarget target)
+    {
+        return connection.dialect()
+                .deepSchemaResolver()
+                .map(resolver -> resolver.resolveDeepSchema(connection, target));
     }
 }

@@ -29,15 +29,22 @@ public final class JdbcSchemaCrawler
     {
         if (scope == JdbcSchemaCrawlScope.DEEP)
         {
-            // Skip if no database target — would only resolve to useless folder shells
+            // A deep crawl needs at least a database or schema target.
             if (target == null
-                    || isBlank(target.database()))
+                    || (isBlank(target.database())
+                            && isBlank(target.schema())))
             {
                 return;
             }
             // Always pass the database to the router. When schema is null we use
             // targetMatches() fallback that filters by database only (not schema).
             JdbcSchemaTarget crawlTarget = new JdbcSchemaTarget(target.database(), target.schema());
+            var bulkResult = router.resolveDeep(connection, crawlTarget);
+            if (bulkResult.isPresent())
+            {
+                store.persistDeepSnapshotTarget(connection.connectionId(), target.database(), target.schema(), bulkResult.get());
+                return;
+            }
             List<JdbcSchemaObject> tables = router.resolve(connection, "tables_folder", crawlTarget);
             List<JdbcSchemaObject> views = router.resolve(connection, "views_folder", crawlTarget);
             List<JdbcSchemaObject> procedures = router.resolve(connection, "procedures_folder", crawlTarget);

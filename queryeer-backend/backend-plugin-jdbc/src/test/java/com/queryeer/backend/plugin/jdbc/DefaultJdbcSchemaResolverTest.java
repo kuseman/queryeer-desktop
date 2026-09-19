@@ -93,6 +93,32 @@ class DefaultJdbcSchemaResolverTest
     }
 
     @Test
+    void preservesReferencedSchemaForCrossSchemaForeignKeys() throws Exception
+    {
+        String url = "jdbc:h2:mem:test_cross_schema_fk;DB_CLOSE_DELAY=-1";
+        try (Connection connection = DriverManager.getConnection(url); Statement statement = connection.createStatement())
+        {
+            statement.execute("create schema identity");
+            statement.execute("create schema sales");
+            statement.execute("create table identity.person(id int primary key)");
+            statement.execute("create table sales.orders(person_id int, constraint fk_person foreign key(person_id) references identity.person(id))");
+        }
+
+        DefaultJdbcSchemaResolver resolver = new DefaultJdbcSchemaResolver();
+        JdbcConnection conn = new JdbcConnection("connection", "connection", new BasicJdbcDialect(), Map.of("url", url));
+        List<JdbcSchemaObject> columns = resolver.resolveSchema(conn, Map.of("parentKind", "columns_folder", "target", Map.of("schema", "SALES", "table", "ORDERS")));
+
+        JdbcSchemaObject personId = columns.stream()
+                .filter(column -> "person_id".equalsIgnoreCase(column.name()))
+                .findFirst()
+                .orElseThrow();
+        Assertions.assertEquals("IDENTITY", personId.attributes()
+                .get("referencesSchema"));
+        Assertions.assertEquals("PERSON", personId.attributes()
+                .get("referencesTable"));
+    }
+
+    @Test
     void schemaFoldersHaveUniqueIdsAcrossDifferentSchemas() throws Exception
     {
         // Regression: folder IDs must include schema context so expanding two different

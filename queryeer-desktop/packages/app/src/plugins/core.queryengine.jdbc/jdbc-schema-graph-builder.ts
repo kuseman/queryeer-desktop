@@ -7,6 +7,7 @@ type TableVertex = {
   vertex: GraphVertex;
   fkRefs: Array<{
     colName: string;
+    refSchema?: string;
     refTable: string;
   }>;
 };
@@ -65,6 +66,7 @@ type FlatTable = {
     type: string;
     isPk: boolean;
     isFk: boolean;
+    refSchema: string | undefined;
     refTable: string | undefined;
   }>;
 };
@@ -122,6 +124,7 @@ function extractColumns(table: JdbcSchemaObject): FlatTable["columns"] {
             type: stringAttr(col.attributes.type, ""),
             isPk: col.attributes.primaryKey === true,
             isFk: col.attributes.foreignKey === true,
+            refSchema: stringAttr(col.attributes.referencesSchema, undefined),
             refTable: stringAttr(col.attributes.referencesTable, undefined),
           });
         }
@@ -191,6 +194,7 @@ function buildVertices(tables: FlatTable[]): TableVertex[] {
         .filter((col) => col.isFk && col.refTable)
         .map((col) => ({
           colName: col.name,
+          refSchema: col.refSchema,
           refTable: col.refTable!,
         })),
     };
@@ -202,7 +206,7 @@ function buildEdges(tables: TableVertex[], _vertexById: Map<string, TableVertex>
 
   for (const source of tables) {
     for (const fk of source.fkRefs) {
-      const target = findTargetVertex(tables, fk.refTable, source.schema);
+      const target = findTargetVertex(tables, fk.refTable, fk.refSchema ?? source.schema);
       if (!target) continue;
 
       const edgeId = `fk-${source.vertex.id}-${fk.colName}`;
@@ -230,13 +234,13 @@ function buildEdges(tables: TableVertex[], _vertexById: Map<string, TableVertex>
 function findTargetVertex(
   tables: TableVertex[],
   refTable: string,
-  sourceSchema: string
+  targetSchema: string
 ): TableVertex | undefined {
   const normalizedRef = refTable.toLowerCase();
   return tables.find((t) => {
     const nameMatch = t.shortName.toLowerCase() === normalizedRef;
     if (!nameMatch) return false;
-    if (!sourceSchema) return true;
-    return t.schema.toLowerCase() === sourceSchema.toLowerCase();
+    if (!targetSchema) return true;
+    return t.schema.toLowerCase() === targetSchema.toLowerCase();
   });
 }
