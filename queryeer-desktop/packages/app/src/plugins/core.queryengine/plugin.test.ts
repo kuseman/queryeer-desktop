@@ -108,8 +108,9 @@ function makeFile(overrides: Partial<FileEntity> = {}): FileEntity {
   };
 }
 
-function createContext(file: FileEntity): PluginContext {
-  const filesById = new Map<string, FileEntity>([[file.fileId, file]]);
+function createContext(fileOrFiles: FileEntity | FileEntity[]): PluginContext {
+  const files = Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles];
+  const filesById = new Map<string, FileEntity>(files.map((file) => [file.fileId, file]));
 
   return {
     commands: {
@@ -573,6 +574,38 @@ expect(store.list("file-zombie")).toEqual([]);
   });
 
   describe("split pane tab indicator isolation", () => {
+    it("does not mutate tab state shared by cloned file metadata", () => {
+      const sharedTabState = { "group-1": "failed" as const };
+      const sourceFile = makeFile({
+        metadata: { "core.queryengine.tabStateByGroup": sharedTabState }
+      });
+      const clonedFile = makeFile({
+        fileId: "file-2",
+        uri: "untitled:Untitled1.sql",
+        metadata: { "core.queryengine.tabStateByGroup": sharedTabState }
+      });
+      const context = createContext([sourceFile, clonedFile]);
+      coreQueryEnginePlugin.activate(context);
+
+      const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+        | ((event: { method: string; params?: { queryExecutionId?: string } }, executeContext?: { fileId?: string; targetOutputSessionId?: string }) => void)
+        | undefined;
+
+      listener?.(
+        { method: "query.started", params: { queryExecutionId: "q-cloned-file" } },
+        { fileId: "file-2", targetOutputSessionId: "core.queryengine:group-2" }
+      );
+
+      expect(sharedTabState).toEqual({ "group-1": "failed" });
+      expect(context.files.getFile("file-1")?.metadata?.["core.queryengine.tabStateByGroup"]).toEqual({
+        "group-1": "failed"
+      });
+      expect(context.files.getFile("file-2")?.metadata?.["core.queryengine.tabStateByGroup"]).toEqual({
+        "group-1": "failed",
+        "group-2": "running"
+      });
+    });
+
     it("only marks tab as running for the session that started the query", () => {
       const file = makeFile();
       const context = createContext(file);

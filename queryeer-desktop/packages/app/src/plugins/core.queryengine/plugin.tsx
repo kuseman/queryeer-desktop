@@ -58,7 +58,9 @@ function writeQueryTabStateToMetadata(
     return;
   }
   const metadata = { ...(file.metadata ?? {}) };
-  const tabStateByGroup = (metadata[TAB_STATE_METADATA_KEY] as Record<string, QueryTabState> | undefined) ?? {};
+  const tabStateByGroup = {
+    ...((metadata[TAB_STATE_METADATA_KEY] as Record<string, QueryTabState> | undefined) ?? {})
+  };
   if (state) {
     tabStateByGroup[groupId] = state;
   } else {
