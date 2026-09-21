@@ -131,6 +131,17 @@ class SqlClauseClassifierTest
     }
 
     @Test
+    void classifiesExecParametersAcrossLinesAsProcedureCall()
+    {
+        String sql = """
+                EXEC dbo.my_proc @param1 = 'value'
+                ,
+                """;
+
+        assertEquals(PROCEDURE_CALL, SqlClauseClassifier.classify(sql, 2, 3));
+    }
+
+    @Test
     void classifiesCallAsProcedureCall()
     {
         assertEquals(PROCEDURE_CALL, SqlClauseClassifier.classify("CALL ", 1, 6));
