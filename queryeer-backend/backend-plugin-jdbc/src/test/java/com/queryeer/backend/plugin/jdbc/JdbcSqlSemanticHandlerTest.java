@@ -20,6 +20,7 @@ import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 import com.queryeer.backend.core.JacksonPayloadMapper;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaNavigator;
+import com.queryeer.backend.queryengine.jdbc.JdbcSqlEditorServices.CompletionRequest;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 import com.queryeer.backend.queryengine.sql.parser.SqlCompletionSupport;
 import com.queryeer.backend.queryengine.sql.parser.SqlHoverSupport;
@@ -290,6 +291,33 @@ class JdbcSqlSemanticHandlerTest
     void extractProcedureNameBeforeCursor_handlesCallKeyword()
     {
         assertEquals("my_proc", JdbcSqlSemanticHandler.extractProcedureNameBeforeCursor("CALL my_proc ", new SqlCompletionSupport.SqlCompleteCursor(1, 14)));
+    }
+
+    @Test
+    void extractProcedureNameBeforeCursor_handlesParametersAcrossLines()
+    {
+        String sql = """
+                EXEC dbo.my_proc @param1 = 'value'
+                ,
+                """;
+
+        assertEquals("dbo.my_proc", JdbcSqlSemanticHandler.extractProcedureNameBeforeCursor(sql, new SqlCompletionSupport.SqlCompleteCursor(2, 3)));
+    }
+
+    @Test
+    void complete_returnsProcedureParametersAcrossLines()
+    {
+        String sql = """
+                EXEC dbo.my_proc @param1 = 'value'
+                ,
+                """;
+        when(schemaNavigator.procedureParameterNames(CONN_ID, "dbo", "my_proc")).thenReturn(List.of("@param1", "@param2"));
+
+        var result = handler.complete(new CompletionRequest(CONN_ID, "db1", sql, SqlParseContext.PROCEDURE_CALL.name(), "", 1, 2, 2, 100, Map.of()));
+
+        assertEquals(List.of("@param1", "@param2"), result.stream()
+                .map(item -> item.label())
+                .toList());
     }
 
     @Test

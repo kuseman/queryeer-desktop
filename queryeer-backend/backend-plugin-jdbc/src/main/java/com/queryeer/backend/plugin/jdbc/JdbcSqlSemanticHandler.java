@@ -423,18 +423,15 @@ final class JdbcSqlSemanticHandler implements JdbcSqlEditorServices
         {
             return null;
         }
-        String line = lines[cursor.line() - 1];
-        int col0 = Math.min(cursor.column(), line.length());
-        // If cursor is on a word char, the procedure name is still being typed — let procedure name completion handle it
-        if (col0 > 0
-                && (Character.isLetterOrDigit(line.charAt(col0 - 1))
-                        || line.charAt(col0 - 1) == '_'
-                        || line.charAt(col0 - 1) == '.'))
+        StringBuilder prefixBuilder = new StringBuilder();
+        for (int i = 0; i < cursor.line() - 1; i++)
         {
-            return null;
+            prefixBuilder.append(lines[i])
+                    .append('\n');
         }
-        String prefix = line.substring(0, col0)
-                .trim();
+        String cursorLine = lines[cursor.line() - 1];
+        prefixBuilder.append(cursorLine, 0, Math.min(cursor.column(), cursorLine.length()));
+        String prefix = prefixBuilder.toString();
         // Find the last CALL/EXEC keyword before cursor
         int keywordIdx = -1;
         String lower = prefix.toLowerCase();
@@ -455,23 +452,27 @@ final class JdbcSqlSemanticHandler implements JdbcSqlEditorServices
             return null;
         }
         String afterKeyword = prefix.substring(keywordIdx + 5)
-                .trim();
+                .stripLeading();
         if (afterKeyword.isEmpty())
         {
             return null;
         }
-        String[] parts = afterKeyword.split("\\s+", 2);
-        String name = parts[0];
-        // Strip trailing non-name characters (e.g. '(')
-        int end = name.length();
-        while (end > 0
-                && !Character.isLetterOrDigit(name.charAt(end - 1))
-                && name.charAt(end - 1) != '_')
+        int nameEnd = 0;
+        while (nameEnd < afterKeyword.length())
         {
-            end--;
+            char character = afterKeyword.charAt(nameEnd);
+            if (!Character.isLetterOrDigit(character)
+                    && character != '_'
+                    && character != '.')
+            {
+                break;
+            }
+            nameEnd++;
         }
-        return end > 0 ? name.substring(0, end)
-                : null;
+        // No delimiter after the token means the procedure name is still being typed.
+        return nameEnd > 0
+                && nameEnd < afterKeyword.length() ? afterKeyword.substring(0, nameEnd)
+                        : null;
     }
 
     // -- Semantic hover provider --
