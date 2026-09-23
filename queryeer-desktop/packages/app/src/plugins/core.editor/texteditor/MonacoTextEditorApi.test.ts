@@ -128,6 +128,36 @@ describe("MonacoTextEditorApi selection", () => {
 });
 
 describe("MonacoTextEditorApi edit actions", () => {
+  it.each([
+    { isUndo: true, isRedo: false },
+    { isUndo: false, isRedo: true }
+  ])("forwards undo and redo model change state", ({ isUndo, isRedo }) => {
+    const api = new MonacoTextEditorApi();
+    let modelContentListener: ((event: unknown) => void) | undefined;
+    const dispose = vi.fn();
+    (api as unknown as { editor: unknown }).editor = {
+      onDidChangeModelContent: (listener: (event: unknown) => void) => {
+        modelContentListener = listener;
+        return { dispose };
+      }
+    };
+    const callback = vi.fn();
+
+    const subscription = api.onDidChangeModelContent(callback);
+    modelContentListener?.({
+      changes: [],
+      eol: "\n",
+      isFlush: false,
+      isRedoing: isRedo,
+      isUndoing: isUndo,
+      versionId: 2
+    });
+
+    expect(callback).toHaveBeenCalledWith(expect.objectContaining({ isRedo, isUndo }));
+    subscription.dispose();
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
   it("routes core edit operations through Monaco command ids", () => {
     const api = new MonacoTextEditorApi();
     const trigger = vi.fn();

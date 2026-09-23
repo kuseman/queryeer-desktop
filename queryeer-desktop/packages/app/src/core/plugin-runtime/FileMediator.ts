@@ -34,8 +34,7 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
     readFile,
     resolveFileContent,
     onFileChanged,
-    showSaveDialog,
-    muteFileWatcherPath
+    showSaveDialog
   } = options;
 
   let activeFileId: string | null = null;
@@ -283,20 +282,19 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
       if (latestText === undefined) {
         return;
       }
+      const savedVersion = filesRegistry.getFile(fileId)?.version;
 
       if (writeFile) {
-        if (targetUri.startsWith("file:")) {
-          await muteFileWatcherPath?.(targetUri, 750);
-        }
         const result = await writeFile(targetUri, latestText);
         if (!result.success) {
           throw new Error(`Failed to save file '${targetUri}'`);
         }
       }
 
+      const currentFile = filesRegistry.getFile(fileId);
       filesRegistry.updateFile(fileId, {
         uri: targetUri,
-        dirtyVsDisk: false,
+        dirtyVsDisk: currentFile?.version !== savedVersion,
         diskState: "inSync"
       });
     },
