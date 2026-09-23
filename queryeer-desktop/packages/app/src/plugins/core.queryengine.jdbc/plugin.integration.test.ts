@@ -374,6 +374,20 @@ describe("core.queryengine.jdbc plugin integration", () => {
       .toBeUndefined();
   });
 
+  it("registers JDBC navigation without a panel-level refresh action", () => {
+    const context = createContext();
+
+    coreQueryEngineJdbcPlugin.activate(context);
+
+    const navigationView = (context.layout.registerView as ReturnType<typeof vi.fn>).mock.calls
+      .map((call: unknown[]) => call[0] as { id?: string; panelActions?: unknown[] })
+      .find((view) => view.id === "core.queryengine.jdbc.navigation");
+    expect(navigationView?.panelActions).toBeUndefined();
+    expect(context.commands.registerCommand).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: "core.queryengine.jdbc.navigation.refresh" })
+    );
+  });
+
   it("creates durable JDBC schema graph documents", async () => {
     const context = createContext();
     mocks.invokeMock

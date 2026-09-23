@@ -20,7 +20,6 @@ import { writeJdbcContextMetadata, initJdbcFileBinding } from "./jdbc-metadata";
 import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";
 import { getQuickCommandService } from "../core.quickcommand/service";
 import { createJdbcDatabaseQuickCommandProvider } from "./jdbc-database-quick-command";
-import { getJdbcDatabaseCache } from "./jdbc-database-cache";
 import { JdbcPanel } from "./JdbcPanel";
 import { getJdbcTreeContextMenuRegistry } from "./jdbc-tree-context-menu-registry";
 import { getTreeActionRegistry } from "./tree-action-registry";
@@ -276,15 +275,6 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
     const getToolbarQueryFile = (toolbarContext: LayoutToolbarContext) => toolbarContext.activeFile ?? getActiveQueryFile();
 
     context.commands.registerCommand({
-      id: "core.queryengine.jdbc.navigation.refresh",
-      title: "Refresh JDBC Tree",
-      handler: () => {
-        getJdbcNavigationStore().loadConnectionRoots();
-        getJdbcDatabaseCache().invalidate();
-      }
-    });
-
-    context.commands.registerCommand({
       id: "core.queryengine.jdbc.showEstimatedPlan",
       title: "Show Estimated Query Plan",
       category: "Query",
@@ -370,14 +360,6 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       canCollapse: true,
       flex: 1,
       minHeight: 120,
-      panelActions: [
-        {
-          id: "core.queryengine.jdbc.navigation.refresh",
-          icon: "↺",
-          title: "Refresh",
-          commandId: "core.queryengine.jdbc.navigation.refresh"
-        }
-      ],
       when: "activeFile?.mimeType == 'application/sql'",
       render: () => <JdbcNavigationView context={context} />
     });

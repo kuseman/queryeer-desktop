@@ -197,6 +197,7 @@ function TreeNodeRow({ nodeId, store, depth, dialectId, activeFileConnectionId, 
   const chevron = isExpandable ? (node.isExpanded ? "▼" : "▶") : "  ";
   const icon = getNodeIcon(node.kind, node.attributes, dialectId);
   const label = formatNodeLabel(node);
+  const canRefresh = REFRESHABLE_NODE_KINDS.has(node.kind);
 
   const isActive =
     selectedNodeId === null && linkToActiveFile && activeFileConnectionId && node.connectionId === activeFileConnectionId
@@ -232,6 +233,20 @@ function TreeNodeRow({ nodeId, store, depth, dialectId, activeFileConnectionId, 
         {node.loadError && (
           <span className="jdbc-nav-node-error" title={node.loadError}>⚠</span>
         )}
+        {canRefresh && !node.isLoading && (
+          <button
+            data-testid="jdbc-tree-refresh"
+            className="jdbc-nav-node-refresh"
+            title={`Refresh ${label}`}
+            aria-label={`Refresh ${label}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              void store.refreshNode(nodeId);
+            }}
+          >
+            ↻
+          </button>
+        )}
       </div>
       {node.isExpanded && node.childIds.map((childId) => (
         <TreeNodeRow
@@ -251,6 +266,20 @@ function TreeNodeRow({ nodeId, store, depth, dialectId, activeFileConnectionId, 
     </>
   );
 }
+
+const REFRESHABLE_NODE_KINDS = new Set([
+  "connection",
+  "database",
+  "schema",
+  "tables_folder",
+  "views_folder",
+  "procedures_folder",
+  "triggers_folder",
+  "table",
+  "view",
+  "columns_folder",
+  "indexes_folder"
+]);
 
 function formatNodeLabel(node: JdbcTreeNode): string {
   if (node.nodeType === "object" && node.fullName && node.fullName !== node.name) {

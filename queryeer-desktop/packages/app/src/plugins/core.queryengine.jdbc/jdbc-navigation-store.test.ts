@@ -234,16 +234,74 @@ describe("JdbcNavigationStore", () => {
     expect(mocks.invokeMock).toHaveBeenCalledTimes(1);
   });
 
-  it("refreshNode clears isLoaded and re-fetches", async () => {
+  it("refreshNode re-fetches while preserving expansion state", async () => {
     mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
     mocks.invokeMock.mockResolvedValue(databasesContainerResult);
     store.loadConnectionRoots();
     await store.expandNode("conn-a::__root__");
+    store.collapseNode("conn-a::__root__");
     mocks.invokeMock.mockClear();
     mocks.invokeMock.mockResolvedValue(databasesContainerResult);
     await store.refreshNode("conn-a::__root__");
     expect(mocks.invokeMock).toHaveBeenCalledTimes(1);
     expect(store.getNode("conn-a::__root__")?.isLoaded).toBe(true);
+    expect(store.getNode("conn-a::__root__")?.isExpanded).toBe(false);
+  });
+
+  it("refreshNode primes an unopened node without expanding it", async () => {
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
+    mocks.invokeMock.mockResolvedValue(databasesContainerResult);
+    store.loadConnectionRoots();
+
+    await store.refreshNode("conn-a::__root__");
+
+    const root = store.getNode("conn-a::__root__")!;
+    expect(root.isLoaded).toBe(true);
+    expect(root.isExpanded).toBe(false);
+    expect(root.childIds).toHaveLength(1);
+  });
+
+  it("keeps existing children visible while refresh is pending and after failure", async () => {
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
+    mocks.invokeMock.mockResolvedValueOnce(databasesContainerResult);
+    store.loadConnectionRoots();
+    await store.expandNode("conn-a::__root__");
+    const originalChildIds = store.getNode("conn-a::__root__")!.childIds;
+
+    let rejectRefresh!: (reason: unknown) => void;
+    mocks.invokeMock.mockReturnValueOnce(new Promise((_, reject) => (rejectRefresh = reject)));
+    const refresh = store.refreshNode("conn-a::__root__");
+
+    expect(store.getNode("conn-a::__root__")?.isLoading).toBe(true);
+    expect(store.getNode("conn-a::__root__")?.childIds).toEqual(originalChildIds);
+
+    rejectRefresh(new Error("refresh failed"));
+    await refresh;
+
+    expect(store.getNode("conn-a::__root__")?.childIds).toEqual(originalChildIds);
+    expect(store.getNode("conn-a::__root__")?.loadError).toBe("refresh failed");
+  });
+
+  it("ignores a descendant load that finishes after an ancestor refresh", async () => {
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
+    mocks.invokeMock.mockResolvedValueOnce(databasesContainerResult);
+    store.loadConnectionRoots();
+    await store.expandNode("conn-a::__root__");
+    const databasesNodeId = store.getNode("conn-a::__root__")!.childIds[0];
+    const databaseNodeId = store.getNode(databasesNodeId)!.childIds[0];
+
+    let resolveDescendant!: (value: unknown) => void;
+    mocks.invokeMock.mockReturnValueOnce(new Promise((resolve) => (resolveDescendant = resolve)));
+    const descendantLoad = store.expandNode(databaseNodeId);
+
+    mocks.invokeMock.mockResolvedValueOnce([]);
+    await store.refreshNode("conn-a::__root__");
+    resolveDescendant(schemasContainerResult);
+    await descendantLoad;
+
+    expect(store.getNode("conn-a::__root__")?.childIds).toEqual([]);
+    expect(store.getNode(databasesNodeId)).toBeUndefined();
+    expect(store.getNode(databaseNodeId)).toBeUndefined();
   });
 
   it("collapseNode sets isExpanded=false", () => {
