@@ -401,22 +401,16 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
 
     activateEditorHandle(file);
 
-    let dirtyTimer: ReturnType<typeof setTimeout> | null = null;
-    api.onDidChangeModelContent((event) => {
+    disposablesRef.current.push(api.onDidChangeModelContent((event) => {
       updateNewlineDecorationsRef.current();
       if (event.isFlush) {
         return;
       }
-      if (dirtyTimer === null) {
-        dirtyTimer = setTimeout(() => {
-          dirtyTimer = null;
-          const currentFile = registry.getActiveFile(editorInstanceIdRef.current);
-          if (currentFile?.fileId) {
-            registry.markDirty(currentFile.fileId, editorInstanceIdRef.current);
-          }
-        }, 0);
+      const currentFile = registry.getActiveFile(editorInstanceIdRef.current);
+      if (currentFile?.fileId) {
+        registry.markDirty(currentFile.fileId, editorInstanceIdRef.current);
       }
-    });
+    }));
 
     const fileForInitialLoad = pendingFileRef.current ?? fileToLoad;
     if (fileForInitialLoad) {

@@ -394,6 +394,28 @@ describe("FileMediator.saveFile", () => {
     expect(writeFile).toHaveBeenCalledWith("file:///y.sql", "resolved-content");
   });
 
+  it("keeps the file dirty when content changes while a save is pending", async () => {
+    const { mediator, registry, writeFile } = setupHarness();
+    const filesRegistry = registry.createFilesRegistry();
+    const file = await mediator.openFile("file:///pending.sql", {
+      mimeType: "application/sql"
+    });
+    filesRegistry.markDirty(file.fileId);
+
+    let completeWrite: ((result: { success: boolean }) => void) | undefined;
+    writeFile.mockImplementationOnce(() => new Promise((resolve) => {
+      completeWrite = resolve;
+    }));
+
+    const save = mediator.saveFile(file.fileId);
+    await vi.waitFor(() => expect(writeFile).toHaveBeenCalledOnce());
+    filesRegistry.markDirty(file.fileId);
+    completeWrite?.({ success: true });
+    await save;
+
+    expect(filesRegistry.getFile(file.fileId)?.dirtyVsDisk).toBe(true);
+  });
+
   it("shows save dialog for untitled files and converts uri on save", async () => {
     const { mediator, registry, writeFile, showSaveDialog } = setupHarness();
     const file = await mediator.openFile("untitled:Query1.sql", {

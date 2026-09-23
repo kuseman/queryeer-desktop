@@ -7,6 +7,7 @@ import { toPluginManifestFile } from "@queryeer/api/plugin/PluginManifestFile";
 import type { CommandExecutionResult } from "@queryeer/api/plugin/Plugin";
 import { RendererFileWatcherService } from "../file-watcher/file-watcher-service";
 import { RendererWorkspaceService } from "../workspace/workspace-service";
+import { OwnFileWriteTracker } from "../workspace/own-file-write-tracker";
 import { discoverPluginModules } from "../../plugins/discovery";
 import { setRuntimeData } from "../../plugins/core.observability/runtime-data";
 import { createKeybindingService } from "../../plugins/core.commands/keybinding-service";
@@ -151,6 +152,7 @@ export async function bootstrapShell() {
     muteFileWatcherPath: (params) => window.appShell.muteFileWatcherPath(params),
     onFileWatcherEvent: (listener) => window.appShell.onFileWatcherEvent(listener)
   });
+  const ownFileWriteTracker = new OwnFileWriteTracker();
 
   let workspaceService: RendererWorkspaceService | null = null;
   let filesRegistry: FilesRegistry | null = null;
@@ -208,7 +210,11 @@ export async function bootstrapShell() {
     fileWatcher,
     backendSync,
     onFileChanged,
-    writeFile: (uri, text) => window.appShell.writeFile(uri, text),
+    writeFile: (uri, text) => ownFileWriteTracker.write(
+      uri,
+      text,
+      () => window.appShell.writeFile(uri, text)
+    ),
     readFile: (uri) => window.appShell.readFile(uri),
     muteFileWatcherPath: (uri, durationMs) => fileWatcher.mutePath(uri, durationMs),
     resolveFileContent,
@@ -405,6 +411,10 @@ export async function bootstrapShell() {
     filesRegistry: filesRegistry!,
     fileMediator: fileMediator!,
     fileWatcher,
+    isOwnFileWrite: (uri) => ownFileWriteTracker.matchesCurrentDiskContent(
+      uri,
+      () => window.appShell.readFile(uri)
+    ),
     editorRegistryHost: getEditorRegistryHost(),
     showDialog: (options) => window.appShell.showDialogMessage(options),
     applyRecoveredContent: (fileId, text) => {

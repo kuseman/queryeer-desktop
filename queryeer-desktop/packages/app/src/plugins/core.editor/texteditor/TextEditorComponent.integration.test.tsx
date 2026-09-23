@@ -25,7 +25,7 @@ type FakeEditor = {
   onDidFocusEditorWidget: (listener: () => void) => { dispose: () => void };
   onDidChangeModelContent: (listener: (event: unknown) => void) => { dispose: () => void };
   onDidChangeCursorSelection: (listener: (event: unknown) => void) => { dispose: () => void };
-  triggerModelContentChange: (event?: { isFlush?: boolean }) => void;
+  triggerModelContentChange: (event?: { isFlush?: boolean; isRedo?: boolean; isUndo?: boolean }) => void;
   getValue: ReturnType<typeof vi.fn>;
   getSelections: ReturnType<typeof vi.fn>;
   setSelections: ReturnType<typeof vi.fn>;
@@ -111,6 +111,8 @@ vi.mock("monaco-editor", () => {
             ],
             eol: 1,
             isFlush: event?.isFlush ?? false,
+            isRedoing: event?.isRedo ?? false,
+            isUndoing: event?.isUndo ?? false,
             versionId: 2
           });
         }
@@ -336,7 +338,7 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
     );
   });
 
-  it("syncs TextEditorRegistry model content on monaco change events", async () => {
+  it("synchronously syncs TextEditorRegistry model content on monaco change events", async () => {
     const file = makeFile({ fileId: "file-content-sync", uri: "file:///content-sync.sql" });
     filesById.set(file.fileId, file);
 
@@ -348,9 +350,8 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
     const editor = editors[0];
     expect(editor).toBeTruthy();
 
-    await act(async () => {
+    act(() => {
       editor.triggerModelContentChange();
-      await flush();
     });
 
     const model = registry.getModelForFile(file.fileId);
@@ -376,6 +377,26 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
     });
 
     expect(markDirtySpy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { change: "undo", event: { isUndo: true } },
+    { change: "redo", event: { isRedo: true } }
+  ])("marks dirty on monaco $change events", async ({ event }) => {
+    const file = makeFile({ fileId: `file-${event.isUndo ? "undo" : "redo"}`, uri: "file:///history.sql" });
+    filesById.set(file.fileId, file);
+
+    await act(async () => {
+      root.render(<TextEditorComponent file={file} registry={registry} />);
+      await flush();
+    });
+
+    await act(async () => {
+      editors[0].triggerModelContentChange(event);
+      await flush();
+    });
+
+    expect(markDirtySpy).toHaveBeenCalledWith(file.fileId);
   });
 
   it("does not focus or register inactive editor groups while mounting", async () => {

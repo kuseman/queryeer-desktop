@@ -51,12 +51,23 @@ export type RendererWorkspaceServiceOptions = {
   backupDebounceMs?: number;
   backupMaxIntervalMs?: number;
   now?: () => Date;
+  isOwnFileWrite?: (uri: string) => Promise<boolean>;
 };
 
 type AutosaveState = {
   latestText: string;
   debounceTimer: ReturnType<typeof setTimeout> | null;
   maxIntervalTimer: ReturnType<typeof setTimeout> | null;
+};
+
+type WatcherState = {
+  uri: string;
+  subscription: FileWatcherSubscription;
+};
+
+type PendingWatcherState = {
+  uri: string;
+  promise: Promise<void>;
 };
 
 const DEFAULT_DEBOUNCE_MS = 250;
@@ -109,14 +120,16 @@ export class RendererWorkspaceService {
   private readonly backupDebounceMs: number;
   private readonly backupMaxIntervalMs: number;
   private readonly now: () => Date;
+  private readonly isOwnFileWrite: (uri: string) => Promise<boolean>;
   private unsubscribeFromFiles: (() => void) | null = null;
   private pushTimer: ReturnType<typeof setTimeout> | null = null;
   private hydrated = false;
   private activeFileId: string | null = null;
   private restoredLayoutSnapshot: PersistedLayoutSnapshot | null = null;
   private layout: PersistedLayoutSnapshot | null = null;
-  private readonly watcherSubs = new Map<string, FileWatcherSubscription>();
-  private readonly watcherSubsPending = new Map<string, Promise<void>>();
+  private readonly watcherSubs = new Map<string, WatcherState>();
+  private readonly watcherSubsPending = new Map<string, PendingWatcherState>();
+  private readonly watcherEventTails = new Map<string, Promise<void>>();
   private readonly autosaveStates = new Map<string, AutosaveState>();
   private readonly backupFileIdByFileId = new Map<string, string>();
   private readonly externalPromptInFlight = new Set<string>();
@@ -139,6 +152,7 @@ export class RendererWorkspaceService {
     this.backupDebounceMs = options.backupDebounceMs ?? DEFAULT_BACKUP_DEBOUNCE_MS;
     this.backupMaxIntervalMs = options.backupMaxIntervalMs ?? DEFAULT_BACKUP_MAX_INTERVAL_MS;
     this.now = options.now ?? (() => new Date());
+    this.isOwnFileWrite = options.isOwnFileWrite ?? (async () => false);
   }
 
   public async hydrate(): Promise<void> {
@@ -419,8 +433,8 @@ export class RendererWorkspaceService {
     }
     this.unsubscribeFromFiles?.();
     this.unsubscribeFromFiles = null;
-    for (const sub of this.watcherSubs.values()) {
-      void sub.unsubscribe();
+    for (const state of this.watcherSubs.values()) {
+      void state.subscription.unsubscribe();
     }
     this.watcherSubs.clear();
     this.watcherSubsPending.clear();
@@ -525,14 +539,17 @@ export class RendererWorkspaceService {
   }
 
   private syncWatchers(files: FileEntity[]): void {
-    const presentIds = new Set(files.map((f) => f.fileId));
-    for (const fileId of [...this.watcherSubs.keys()]) {
-      if (!presentIds.has(fileId)) {
+    const filesById = new Map(files.map((file) => [file.fileId, file]));
+    for (const [fileId, state] of this.watcherSubs) {
+      const file = filesById.get(fileId);
+      if (!file || file.uri !== state.uri || !file.uri.startsWith("file:")) {
         this.unsubscribeWatcher(fileId);
       }
     }
     for (const file of files) {
-      if (this.watcherSubs.has(file.fileId) || this.watcherSubsPending.has(file.fileId)) {
+      const subscribed = this.watcherSubs.get(file.fileId);
+      const pending = this.watcherSubsPending.get(file.fileId);
+      if (subscribed?.uri === file.uri || pending?.uri === file.uri) {
         continue;
       }
       if (!file.uri.startsWith("file:")) {
@@ -544,38 +561,61 @@ export class RendererWorkspaceService {
 
   private subscribeWatcher(fileId: string, uri: string): void {
     const pending = this.fileWatcher
-      .watch(uri, {}, (event) => this.onWatcherEvent(fileId, event))
+      .watch(uri, {}, (event) => this.enqueueWatcherEvent(fileId, event))
       .then((sub) => {
-        this.watcherSubsPending.delete(fileId);
-        if (!this.filesRegistry.getFile(fileId)) {
+        const pendingState = this.watcherSubsPending.get(fileId);
+        if (pendingState?.promise === pending) {
+          this.watcherSubsPending.delete(fileId);
+        }
+        const file = this.filesRegistry.getFile(fileId);
+        if (!file || file.uri !== uri) {
           void sub.unsubscribe();
           return;
         }
-        this.watcherSubs.set(fileId, sub);
+        this.unsubscribeWatcher(fileId);
+        this.watcherSubs.set(fileId, { uri, subscription: sub });
       })
       .catch(() => {
-        this.watcherSubsPending.delete(fileId);
+        if (this.watcherSubsPending.get(fileId)?.promise === pending) {
+          this.watcherSubsPending.delete(fileId);
+        }
       });
-    this.watcherSubsPending.set(fileId, pending);
+    this.watcherSubsPending.set(fileId, { uri, promise: pending });
   }
 
   private unsubscribeWatcher(fileId: string): void {
-    const sub = this.watcherSubs.get(fileId);
-    if (sub) {
+    const state = this.watcherSubs.get(fileId);
+    if (state) {
       this.watcherSubs.delete(fileId);
-      void sub.unsubscribe();
+      void state.subscription.unsubscribe();
     }
   }
 
-  private onWatcherEvent(fileId: string, event: FileWatcherEvent): void {
-    const file = this.filesRegistry.getFile(fileId);
-    if (!file) {
+  private enqueueWatcherEvent(fileId: string, event: FileWatcherEvent): void {
+    const previous = this.watcherEventTails.get(fileId) ?? Promise.resolve();
+    const next = previous.catch(() => {}).then(() => this.onWatcherEvent(fileId, event));
+    this.watcherEventTails.set(fileId, next);
+    void next.finally(() => {
+      if (this.watcherEventTails.get(fileId) === next) {
+        this.watcherEventTails.delete(fileId);
+      }
+    });
+  }
+
+  public async flushWatcherEvents(): Promise<void> {
+    while (this.watcherEventTails.size > 0) {
+      await Promise.all([...this.watcherEventTails.values()]);
+    }
+  }
+
+  private async onWatcherEvent(fileId: string, event: FileWatcherEvent): Promise<void> {
+    let file = this.filesRegistry.getFile(fileId);
+    if (!file || file.uri !== event.uri) {
       return;
     }
 
-    const isActive = this.isActiveFile(fileId);
-
     if (event.type === "delete") {
+      const isActive = this.isActiveFile(fileId);
       const next = this.filesRegistry.updateFile(fileId, {
         diskState: "deletedOnDisk"
       });
@@ -588,6 +628,22 @@ export class RendererWorkspaceService {
       return;
     }
 
+    let ownWrite = false;
+    try {
+      ownWrite = await this.isOwnFileWrite(event.uri);
+    } catch {
+      // Treat failed checks as external changes.
+    }
+    if (ownWrite) {
+      return;
+    }
+
+    file = this.filesRegistry.getFile(fileId);
+    if (!file || file.uri !== event.uri) {
+      return;
+    }
+
+    const isActive = this.isActiveFile(fileId);
     const isDirty = this.isLocallyDirty(file);
     if (isActive && !isDirty) {
       void this.fileMediator.reloadFile(fileId);

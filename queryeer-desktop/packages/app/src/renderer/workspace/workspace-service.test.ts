@@ -74,7 +74,11 @@ function createWatcherHarness(): WatcherHarness {
 
 function makeHarness(
   initialSnapshot: WorkspaceSnapshot = emptyWorkspaceSnapshot(),
-  overrides: { backupDebounceMs?: number; backupMaxIntervalMs?: number } = {}
+  overrides: {
+    backupDebounceMs?: number;
+    backupMaxIntervalMs?: number;
+    isOwnFileWrite?: (uri: string) => Promise<boolean>;
+  } = {}
 ) {
   const fileRegistryImpl = new FileRegistry();
   const filesRegistry = fileRegistryImpl.createFilesRegistry();
@@ -139,7 +143,8 @@ function makeHarness(
     debounceMs: 25,
     backupDebounceMs: overrides.backupDebounceMs ?? 100,
     backupMaxIntervalMs: overrides.backupMaxIntervalMs ?? 1_000,
-    applyRecoveredContent: applyRecoveredContentMock
+    applyRecoveredContent: applyRecoveredContentMock,
+    isOwnFileWrite: overrides.isOwnFileWrite
   });
   onFileChangedListeners.add((file, text) => {
     service.handleFileChanged(file as never, text);
@@ -570,6 +575,22 @@ describe("RendererWorkspaceService fileWatcher integration", () => {
     expect(watcher.unsubscribeMock).toHaveBeenCalledTimes(1);
   });
 
+  it("moves the watcher when a file uri changes", async () => {
+    const { service, mediator, watcher, filesRegistry } = makeHarness();
+    await service.hydrate();
+    const file = await mediator.openFile("file:///old.txt", { mimeType: "text/plain" });
+    await flushMicrotasks();
+
+    filesRegistry.updateFile(file.fileId, { uri: "file:///new.txt" });
+    await flushMicrotasks();
+
+    expect(watcher.unsubscribeMock).toHaveBeenCalledTimes(1);
+    expect(watcher.watchMock.mock.calls.map((call) => call[0])).toEqual([
+      "file:///old.txt",
+      "file:///new.txt"
+    ]);
+  });
+
   it("silently reloads when the active file is clean on external change", async () => {
     const { service, mediator, watcher, reloadSpy, filesRegistry } = makeHarness();
     await service.hydrate();
@@ -578,6 +599,7 @@ describe("RendererWorkspaceService fileWatcher integration", () => {
     await flushMicrotasks();
 
     watcher.fire("file:///a.txt", diskEvent);
+    await service.flushWatcherEvents();
 
     expect(reloadSpy).toHaveBeenCalledTimes(1);
     expect(reloadSpy).toHaveBeenCalledWith(file.fileId);
@@ -594,6 +616,7 @@ describe("RendererWorkspaceService fileWatcher integration", () => {
     await flushMicrotasks();
 
     watcher.fire("file:///a.txt", diskEvent);
+    await service.flushWatcherEvents();
     await vi.runAllTimersAsync();
 
     expect(reloadSpy).not.toHaveBeenCalled();
@@ -616,6 +639,7 @@ describe("RendererWorkspaceService fileWatcher integration", () => {
     await flushMicrotasks();
 
     watcher.fire("file:///a.txt", diskEvent);
+    await service.flushWatcherEvents();
 
     expect(reloadSpy).not.toHaveBeenCalled();
     const after = filesRegistry.getFile(other.fileId)!;
@@ -632,6 +656,7 @@ describe("RendererWorkspaceService fileWatcher integration", () => {
     await flushMicrotasks();
 
     watcher.fire("file:///a.txt", diskEvent);
+    await service.flushWatcherEvents();
 
     const after = filesRegistry.getFile(other.fileId)!;
     expect(after.diskState).toBe("modifiedOnDisk");
@@ -754,8 +779,9 @@ describe("RendererWorkspaceService fileWatcher integration", () => {
     fileRegistryImpl.createFilesRegistry().updateFile(file.fileId, { dirtyVsDisk: true });
     showDialogMock.mockResolvedValue({ action: "keep" });
 
-    watcher.fire("file:///race2.txt", diskEvent);
+    watcher.fire("file:///race2.txt", { ...diskEvent, uri: "file:///race2.txt" });
     service.setActiveFileId(file.fileId);
+    await service.flushWatcherEvents();
     await vi.advanceTimersByTimeAsync(100);
 
     expect(showDialogMock).toHaveBeenCalledWith(
@@ -764,6 +790,45 @@ describe("RendererWorkspaceService fileWatcher integration", () => {
         message: expect.stringContaining("race2.txt")
       })
     );
+  });
+
+  it("ignores a delayed watcher event from Queryeer's own save", async () => {
+    const isOwnFileWrite = vi.fn(async () => true);
+    const { service, mediator, watcher, filesRegistry, fileRegistryImpl, showDialogMock, reloadSpy } =
+      makeHarness(emptyWorkspaceSnapshot(), { isOwnFileWrite });
+    await service.hydrate();
+    const file = await mediator.openFile("file:///a.txt", { mimeType: "text/plain" });
+    service.setActiveFileId(file.fileId);
+    fileRegistryImpl.createFilesRegistry().markDirty(file.fileId);
+    await flushMicrotasks();
+
+    watcher.fire("file:///a.txt", diskEvent);
+    await service.flushWatcherEvents();
+
+    expect(isOwnFileWrite).toHaveBeenCalledWith("file:///a.txt");
+    expect(showDialogMock).not.toHaveBeenCalled();
+    expect(reloadSpy).not.toHaveBeenCalled();
+    expect(filesRegistry.getFile(file.fileId)).toEqual(expect.objectContaining({
+      dirtyVsDisk: true,
+      diskState: "inSync"
+    }));
+  });
+
+  it("still prompts when disk content differs from Queryeer's save", async () => {
+    const { service, mediator, watcher, fileRegistryImpl, showDialogMock } = makeHarness(
+      emptyWorkspaceSnapshot(),
+      { isOwnFileWrite: async () => false }
+    );
+    await service.hydrate();
+    const file = await mediator.openFile("file:///a.txt", { mimeType: "text/plain" });
+    service.setActiveFileId(file.fileId);
+    fileRegistryImpl.createFilesRegistry().markDirty(file.fileId);
+    await flushMicrotasks();
+
+    watcher.fire("file:///a.txt", diskEvent);
+    await service.flushWatcherEvents();
+
+    expect(showDialogMock).toHaveBeenCalledWith(expect.objectContaining({ title: "File Changed" }));
   });
 });
 

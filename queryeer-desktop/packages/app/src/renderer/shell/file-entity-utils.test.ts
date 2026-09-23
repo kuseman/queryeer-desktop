@@ -17,8 +17,15 @@ function makeFile(overrides: Partial<FileEntity> = {}): FileEntity {
 }
 
 describe("filesAreStructurallyIdentical", () => {
-  it("ignores typing-time dirty/version changes", () => {
+  it("detects dirty state changes", () => {
     const previous = [makeFile({ dirtyVsDisk: false, version: 1 })];
+    const next = [makeFile({ dirtyVsDisk: true, version: 2 })];
+
+    expect(filesAreStructurallyIdentical(previous, next)).toBe(false);
+  });
+
+  it("ignores typing-time version changes after the file is dirty", () => {
+    const previous = [makeFile({ dirtyVsDisk: true, version: 2 })];
     const next = [makeFile({ dirtyVsDisk: true, version: 20 })];
 
     expect(filesAreStructurallyIdentical(previous, next)).toBe(true);

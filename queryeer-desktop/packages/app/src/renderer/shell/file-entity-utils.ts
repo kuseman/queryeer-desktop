@@ -1,9 +1,8 @@
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 
 /**
- * Compares two FileEntity arrays for structural (non-dirty) equality.
- * Returns `true` when only `dirtyVsDisk` / `version` differ between
- * corresponding entries, so React state can bail out.
+ * Compares two FileEntity arrays for layout-relevant equality.
+ * Ignores per-edit version changes so React can bail out while typing.
  */
 export function filesAreStructurallyIdentical(
   prev: readonly FileEntity[],
@@ -16,7 +15,8 @@ export function filesAreStructurallyIdentical(
     const b = next[i];
     if (a.fileId !== b.fileId || a.uri !== b.uri || a.mimeType !== b.mimeType ||
         a.editorId !== b.editorId || a.engineBinding !== b.engineBinding ||
-        a.dirtyVsBackend !== b.dirtyVsBackend || a.diskState !== b.diskState ||
+        a.dirtyVsBackend !== b.dirtyVsBackend || a.dirtyVsDisk !== b.dirtyVsDisk ||
+        a.diskState !== b.diskState ||
         a.backupUri !== b.backupUri || a.hasRecoveredBackup !== b.hasRecoveredBackup ||
         a.runtimeViewState !== b.runtimeViewState ||
         a.persistentViewState !== b.persistentViewState ||

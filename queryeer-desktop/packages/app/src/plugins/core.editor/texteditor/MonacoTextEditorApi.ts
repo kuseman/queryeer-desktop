@@ -657,8 +657,8 @@ export class MonacoTextEditorApi extends TextEditorApi {
         })),
         eol: e.eol,
         isFlush: e.isFlush,
-        isRedo: false,
-        isUndo: false,
+        isRedo: e.isRedoing,
+        isUndo: e.isUndoing,
         versionId: e.versionId
       });
     });
