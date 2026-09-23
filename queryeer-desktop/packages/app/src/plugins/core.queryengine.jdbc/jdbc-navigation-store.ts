@@ -21,9 +21,12 @@ export class JdbcNavigationStore {
     linkToActiveFile: true
   };
   private listeners = new Set<() => void>();
+  private requestGenerations = new Map<string, number>();
+  private nextRequestGeneration = 0;
 
   reset(): void {
     this.state = { connectionEntries: [], nodeMap: new Map(), linkToActiveFile: true };
+    this.requestGenerations.clear();
     this.listeners.clear();
   }
 
@@ -78,10 +81,12 @@ export class JdbcNavigationStore {
     }
     if (node.isLoading) return;
 
+    const requestGeneration = this.beginRequest(nodeId);
     this.updateNode(nodeId, { isLoading: true, loadError: undefined });
     try {
-      await this.doFetchAndApply(nodeId, node, options);
+      await this.doFetchAndApply(nodeId, node, true, requestGeneration, options);
     } catch (e) {
+      if (!this.isCurrentRequest(nodeId, requestGeneration)) return;
       if (e instanceof BackendNotReadyError) {
         this.updateNode(nodeId, { isLoading: false });
         return;
@@ -95,16 +100,25 @@ export class JdbcNavigationStore {
     }
   }
 
-  private async doFetchAndApply(nodeId: string, node: JdbcTreeNode, options?: { silent?: boolean }): Promise<void> {
+  private async doFetchAndApply(
+    nodeId: string,
+    node: JdbcTreeNode,
+    isExpanded: boolean,
+    requestGeneration: number,
+    options?: { silent?: boolean }
+  ): Promise<void> {
     const children = await this.fetchChildren(node, options);
+    if (!this.isCurrentRequest(nodeId, requestGeneration)) return;
     const newNodeMap = new Map(this.state.nodeMap);
+    this.removeChildSubtrees(nodeId, newNodeMap);
     const catalog = node.kind === "database" ? node.name : (node.attributes.catalog as string | undefined);
     const childIds = this.materializeNodes(node.connectionId, node.dialectId, children, newNodeMap, catalog);
     newNodeMap.set(nodeId, {
       ...newNodeMap.get(nodeId)!,
       isLoading: false,
       isLoaded: true,
-      isExpanded: true,
+      isExpanded,
+      loadError: undefined,
       childIds
     });
     this.state = { ...this.state, nodeMap: newNodeMap };
@@ -117,17 +131,22 @@ export class JdbcNavigationStore {
 
   async refreshNode(nodeId: string): Promise<void> {
     const node = this.state.nodeMap.get(nodeId);
-    if (!node) return;
-    const newNodeMap = new Map(this.state.nodeMap);
-    this.removeChildSubtrees(nodeId, newNodeMap);
-    newNodeMap.set(nodeId, {
-      ...newNodeMap.get(nodeId)!,
-      isLoaded: false,
-      isExpanded: false,
-      childIds: []
-    });
-    this.state = { ...this.state, nodeMap: newNodeMap };
-    await this.expandNode(nodeId);
+    if (!node || node.isLoading) return;
+
+    this.invalidateDescendantRequests(nodeId);
+    const requestGeneration = this.beginRequest(nodeId);
+    this.updateNode(nodeId, { isLoading: true, loadError: undefined });
+    try {
+      await this.doFetchAndApply(nodeId, node, node.isExpanded, requestGeneration);
+    } catch (e) {
+      if (!this.isCurrentRequest(nodeId, requestGeneration)) return;
+      if (e instanceof BackendNotReadyError) {
+        this.updateNode(nodeId, { isLoading: false });
+        return;
+      }
+      const message = e instanceof Error ? e.message : String(e);
+      this.updateNode(nodeId, { isLoading: false, loadError: message });
+    }
   }
 
   toggleLinkToActiveFile(): void {
@@ -232,6 +251,25 @@ export class JdbcNavigationStore {
     if (!node) return;
     for (const childId of node.childIds) {
       this.removeSubtree(childId, nodeMap);
+    }
+  }
+
+  private beginRequest(nodeId: string): number {
+    const generation = ++this.nextRequestGeneration;
+    this.requestGenerations.set(nodeId, generation);
+    return generation;
+  }
+
+  private isCurrentRequest(nodeId: string, generation: number): boolean {
+    return this.requestGenerations.get(nodeId) === generation && this.state.nodeMap.has(nodeId);
+  }
+
+  private invalidateDescendantRequests(nodeId: string): void {
+    const node = this.state.nodeMap.get(nodeId);
+    if (!node) return;
+    for (const childId of node.childIds) {
+      this.requestGenerations.delete(childId);
+      this.invalidateDescendantRequests(childId);
     }
   }
 

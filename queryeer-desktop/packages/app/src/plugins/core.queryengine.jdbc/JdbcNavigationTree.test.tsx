@@ -190,6 +190,34 @@ describe("JdbcNavigationTree", () => {
     expect(store.getNode("conn-a::__root__")?.isExpanded).toBe(true);
   });
 
+  it("offers refresh before expansion without toggling the row", async () => {
+    mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
+    mocks.invokeMock.mockResolvedValue(databasesContainerResult);
+    store.loadConnectionRoots();
+
+    await act(async () => {
+      root.render(
+        <JdbcNavigationTree
+          store={store}
+          activeFileConnectionId={undefined}
+          activeFileDatabase={undefined}
+        />
+      );
+    });
+
+    const refreshSpy = vi.spyOn(store, "refreshNode").mockResolvedValue();
+    const refreshButton = container.querySelector<HTMLButtonElement>("[data-testid='jdbc-tree-refresh']")!;
+    expect(refreshButton.getAttribute("aria-label")).toBe("Refresh Connection A");
+
+    await act(async () => {
+      refreshButton.click();
+    });
+
+    expect(refreshSpy).toHaveBeenCalledOnce();
+    expect(refreshSpy).toHaveBeenCalledWith("conn-a::__root__");
+    expect(store.getNode("conn-a::__root__")?.isExpanded).toBe(false);
+  });
+
   it("auto-expands to active connection when linkToActiveFile is true", async () => {
     mocks.getConfiguredJdbcConnectionsMock.mockReturnValue([connA]);
     mocks.invokeMock.mockResolvedValue(databasesContainerResult);
