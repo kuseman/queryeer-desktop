@@ -20,6 +20,13 @@ describe("ValuePreviewHost editor options", () => {
     expect(buildValuePreviewEditorOptions("<root><child /></root>", "application/xml").language).toBe("xml");
   });
 
+  it("wraps very long lines so the complete value can be rendered safely", () => {
+    expect(buildValuePreviewEditorOptions("x".repeat(20_000), "text/plain")).toMatchObject({
+      wordWrap: "on",
+      wrappingStrategy: "simple"
+    });
+  });
+
   it("places relative dialog ordering above Monaco and shell overlays", () => {
     expect(toValuePreviewZIndex(1)).toBe(20_001);
     expect(toValuePreviewZIndex(2)).toBeGreaterThan(toValuePreviewZIndex(1));

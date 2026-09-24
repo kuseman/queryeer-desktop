@@ -50,6 +50,8 @@ export function buildValuePreviewEditorOptions(
     fontSize: 12,
     lineHeight: 18,
     colorDecorators: false,
+    wordWrap: "on",
+    wrappingStrategy: "simple",
     folding: true,
     foldingStrategy: "auto",
     foldingHighlight: true,
