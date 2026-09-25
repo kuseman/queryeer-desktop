@@ -6,7 +6,7 @@ import type {
   LayoutToolbarSelectContribution,
   LayoutZone
 } from "@queryeer/api/extensions/LayoutExtension";
-import { GenericActionIcon, layoutToolbarIconMap } from "../../renderer/icons/LayoutIcons";
+import { ChevronDownIcon, GenericActionIcon, layoutToolbarIconMap } from "../../renderer/icons/LayoutIcons";
 import type { CommandExecutionResult } from "@queryeer/api/plugin/Plugin";
 import { memo, useEffect, useState } from "react";
 
@@ -136,12 +136,34 @@ function ToolbarComponent({
         ? contribution.disabled(toolbarContext)
         : (contribution.disabled ?? false);
     const isOpen = openMenuId === contribution.id;
+    const primaryCommandId = contribution.primaryCommandId;
+    const primaryDisabled = primaryCommandId ? !canExecuteCommand(primaryCommandId) : false;
+    const primaryTitle = primaryCommandId ? getCommandTitle(primaryCommandId) : undefined;
+    const primaryAccelerator = primaryCommandId ? getCommandAccelerator(primaryCommandId) : undefined;
+    const primaryTooltip = primaryTitle
+      ? (primaryAccelerator ? `${primaryTitle} (${primaryAccelerator})` : primaryTitle)
+      : undefined;
 
     return (
-      <div key={contribution.id} className="shell-toolbar-menu-wrap">
+      <div key={contribution.id} className={`shell-toolbar-menu-wrap ${primaryCommandId ? "shell-toolbar-split-button" : ""}`.trim()}>
+        {primaryCommandId ? (
+          <button
+            type="button"
+            className="shell-toolbar-action shell-toolbar-split-primary"
+            title={primaryTooltip}
+            aria-label={primaryTooltip ?? primaryCommandId}
+            disabled={primaryDisabled}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              if (!primaryDisabled) void executeCommand(primaryCommandId);
+            }}
+          >
+            {renderIcon(contribution.icon)}
+          </button>
+        ) : null}
         <button
           type="button"
-          className="shell-toolbar-action"
+          className={`shell-toolbar-action ${primaryCommandId ? "shell-toolbar-split-trigger" : ""}`.trim()}
           title={contribution.title}
           aria-haspopup="menu"
           aria-expanded={isOpen}
@@ -153,8 +175,10 @@ function ToolbarComponent({
             setOpenMenuId((current) => (current === contribution.id ? null : contribution.id));
           }}
         >
-          {renderIcon(contribution.icon)}
-          <span>{contribution.title ?? "Menu"}</span>
+          {primaryCommandId
+            ? <ChevronDownIcon className={`shell-toolbar-split-chevron${isOpen ? " is-open" : ""}`} />
+            : renderIcon(contribution.icon)}
+          {!primaryCommandId ? <span>{contribution.title ?? "Menu"}</span> : null}
         </button>
         {isOpen && items.length > 0 ? (
           <div className="shell-toolbar-menu" role="menu">

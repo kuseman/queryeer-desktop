@@ -23,13 +23,14 @@ export function TabTooltip({ sections }: TabTooltipProps) {
 
 export function buildTabTooltip(
   file: FileEntity | undefined,
-  contributions: TooltipSectionContribution[]
+  contributions: TooltipSectionContribution[],
+  editorGroupId?: string
 ): TabTooltipProps {
   if (!file) return { sections: [] };
   const sections = contributions
     .filter((c) => c.order >= 0)
     .sort((a, b) => a.order - b.order)
-    .map((c) => c.render({ file }))
+    .map((c) => c.render({ file, editorGroupId }))
     .filter((section): section is TooltipSection => section !== null);
 
   return { sections };

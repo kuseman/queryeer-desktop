@@ -76,6 +76,8 @@ export type LayoutToolbarMenuContribution = {
   order?: number;
   alignment?: "west" | "east";
   icon?: string | LayoutActionIconRenderer;
+  /** Renders a primary command next to the menu trigger as a split button. */
+  primaryCommandId?: string;
   when?: string;
   getItems: (context: LayoutToolbarContext) => LayoutToolbarMenuItem[];
   onSelect: (value: string, context: LayoutToolbarContext) => void;
@@ -177,6 +179,8 @@ export type TabHeaderStyle = {
   className?: string;
   indicatorClassName?: string;
   style?: React.CSSProperties;
+  statusIcon?: LayoutActionIconRenderer;
+  statusIconTitle?: string;
 };
 
 export type TabHeaderStyleContribution = {

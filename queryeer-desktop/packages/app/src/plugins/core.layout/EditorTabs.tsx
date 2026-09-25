@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import type {
   LayoutEditorContribution,
+  LayoutActionIconRenderer,
   TabContextMenuContribution,
   TabContextMenuAction,
   TabHeaderStyleContribution,
@@ -105,10 +106,11 @@ export function EditorTabs({
   }
 
   const tooltipProps = hoveredTab
-    ? buildTabTooltip(
-        openFiles.find((f) => f.fileId === hoveredTab.fileId),
-        tooltipContributions
-      )
+      ? buildTabTooltip(
+         openFiles.find((f) => f.fileId === hoveredTab.fileId),
+         tooltipContributions,
+         editorGroupId
+       )
     : { sections: [] };
 
   const allActions = tabContextMenus
@@ -153,9 +155,17 @@ export function EditorTabs({
               (acc, style) => ({
                 className: [acc.className, style.className].filter(Boolean).join(" "),
                 indicatorClassName: [acc.indicatorClassName, style.indicatorClassName].filter(Boolean).join(" "),
-                style: { ...acc.style, ...style.style }
+                style: { ...acc.style, ...style.style },
+                statusIcon: style.statusIcon ?? acc.statusIcon,
+                statusIconTitle: style.statusIconTitle ?? acc.statusIconTitle
               }),
-              { className: "", indicatorClassName: "", style: undefined as React.CSSProperties | undefined }
+              {
+                className: "",
+                indicatorClassName: "",
+                style: undefined as React.CSSProperties | undefined,
+                statusIcon: undefined as LayoutActionIconRenderer | undefined,
+                statusIconTitle: undefined as string | undefined
+              }
             );
 
           if (file.diskState === "deletedOnDisk") {
@@ -185,6 +195,14 @@ export function EditorTabs({
                 className="shell-editor-tab-button"
                 onClick={() => onSelectFile(file.fileId)}
               >
+                {tabHeaderStyle.statusIcon && (() => {
+                  const StatusIcon = tabHeaderStyle.statusIcon;
+                  return (
+                    <span className="shell-editor-tab-status-icon" aria-label={tabHeaderStyle.statusIconTitle}>
+                      <StatusIcon className="shell-editor-tab-status-icon-svg" />
+                    </span>
+                  );
+                })()}
                 {(() => {
                   const icon = getMimeIcon ? getMimeIcon(file.mimeType) : undefined;
                   const IconComponent = icon ?? DocumentIcon;

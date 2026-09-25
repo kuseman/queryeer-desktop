@@ -83,6 +83,32 @@
   display: inline-flex;
 }
 
+.shell-toolbar-split-button {
+  gap: 0;
+}
+
+.shell-toolbar-split-primary {
+  border-radius: 4px 0 0 4px;
+}
+
+.shell-toolbar-split-trigger {
+  min-width: 18px;
+  padding-inline: 3px;
+  border-left: 0;
+  border-radius: 0 4px 4px 0;
+}
+
+.shell-toolbar-split-chevron {
+  width: 12px;
+  height: 12px;
+  opacity: 0.8;
+  transition: transform 120ms ease;
+}
+
+.shell-toolbar-split-chevron.is-open {
+  transform: rotate(180deg);
+}
+
 .shell-toolbar-menu {
   position: absolute;
   top: calc(100% + 4px);

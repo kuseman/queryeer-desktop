@@ -4,7 +4,7 @@ import { OutputPanel } from "./output/OutputPanel";
 import { QueryEditorStatusBar } from "./output/QueryEditorStatusBar";
 import type { OutputContext, OutputMessage, ResultSet, ColumnType, Column } from "@queryeer/api/queryengine/OutputExtension";
 import { IDLE_OUTPUT_CONTEXT } from "@queryeer/api/queryengine/OutputExtension";
-import type { ExecuteRequestOptions } from "@queryeer/api/queryengine/QueryEngineTypes.js";
+import type { CancelRequestOptions, ExecuteRequestOptions, QueryScheduleState, ScheduleRequestOptions } from "@queryeer/api/queryengine/QueryEngineTypes.js";
 import type { QueryResultCell } from "@queryeer/api/backend/Types.js";
 import { getQueryEngineService } from "./QueryEngineService";
 import { resolveOutputMaxRows } from "./output-limits";
@@ -20,6 +20,7 @@ import { getCoreSecurityService } from "../core.security/service";
 import type { EditorRegistryHost } from "@queryeer/api/editor/EditorCapability";
 import type { OutlineRegistry } from "@queryeer/api/extensions/OutlineExtension";
 import { QUERY_PLAN_OUTPUT_ID as PLAN_OUTPUT_ID } from "./query-plan/constants";
+import { RecurringExecutionController } from "./RecurringExecutionController";
 
 type Props = {
   file?: FileEntity;
@@ -37,6 +38,8 @@ type ActiveExecution = {
 
 type QueryEditorFileRuntimeState = {
   activeExecution?: ActiveExecution;
+  schedule?: RecurringExecutionController;
+  scheduleFileOutputPath?: string;
   pendingExecutionStart?: boolean;
   cancelPendingExecution?: boolean;
   executionAnchor?: ExecutionAnchor;
@@ -46,6 +49,8 @@ type QueryEditorFileRuntimeState = {
   fileOutputPath?: string;
   fileOutputSchema?: Map<number, { columns: Column[] }>;
   fileOutputFormat?: string;
+  fileOutputFinalizationExecutionId?: string;
+  executeAfterFileOutputFinalization?: ExecuteRequestOptions;
 };
 
 type ExecutionAnchor = {
@@ -83,10 +88,11 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
   const [splitPercent, setSplitPercent] = useState(60);
   const [outputCollapsed, setOutputCollapsed] = useState(false);
   const [selectedPrimaryId, setSelectedPrimaryId] = useState<string | null>(null);
+  const [scheduleStatus, setScheduleStatus] = useState<QueryScheduleState | null>(null);
 
   const runtimeStateByFileIdRef = useRef(new Map<string, QueryEditorFileRuntimeState>());
   const handleExecuteRef = useRef<(retryExecuteOptions?: ExecuteRequestOptions | null) => void>(() => {});
-  const handleCancelRef = useRef<() => void>(() => {});
+  const handleCancelRef = useRef<(options?: CancelRequestOptions) => void>(() => {});
   const splitContainerRef = useRef<HTMLDivElement>(null);
   const splitPercentRef = useRef(splitPercent);
   const isDraggingRef = useRef(false);
@@ -96,6 +102,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
   const outputSessionStorageKeyRef = useRef(outputSessionStorageKey);
   const editorGroupIdRef = useRef(editorGroupId);
   const isActiveEditorGroupRef = useRef<boolean>(isActiveEditorGroup !== false);
+  const disposedRef = useRef(false);
   fileIdRef.current = file?.fileId;
   outputSessionIdRef.current = outputSessionId;
   outputSessionStorageKeyRef.current = outputSessionStorageKey;
@@ -121,6 +128,8 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       return;
     }
     const hasAnyState = state.activeExecution !== undefined
+      || state.schedule !== undefined
+      || state.scheduleFileOutputPath !== undefined
       || state.pendingExecutionStart === true
       || state.cancelPendingExecution === true
       || state.executionAnchor !== undefined
@@ -129,7 +138,9 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       || state.panelSelectedPrimaryId !== undefined
       || state.fileOutputPath !== undefined
       || state.fileOutputSchema !== undefined
-      || state.fileOutputFormat !== undefined;
+      || state.fileOutputFormat !== undefined
+      || state.fileOutputFinalizationExecutionId !== undefined
+      || state.executeAfterFileOutputFinalization !== undefined;
 
     if (!hasAnyState) {
       runtimeStateByFileIdRef.current.delete(targetFileId);
@@ -149,6 +160,8 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     state.fileOutputPath = undefined;
     state.fileOutputSchema = undefined;
     state.fileOutputFormat = undefined;
+    state.fileOutputFinalizationExecutionId = undefined;
+    state.executeAfterFileOutputFinalization = undefined;
     pruneRuntimeState(targetFileId);
   };
 
@@ -223,6 +236,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     if (!fileId) {
       setOutputContext(IDLE_OUTPUT_CONTEXT);
       setSelectedPrimaryId(null);
+      setScheduleStatus(null);
       return;
     }
     const queryViewState = getQueryViewStateStore().read(fileId, outputSessionIdRef.current);
@@ -246,6 +260,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     setOutputContext(nextContext);
 
     const runtimeState = peekRuntimeState(fileId);
+    setScheduleStatus(runtimeState?.schedule?.getStatus() ?? null);
     const nextSelected = runtimeState?.executionPrimaryOverride
       ?? runtimeState?.panelSelectedPrimaryId
       ?? queryViewState.panelActiveOutputId
@@ -330,9 +345,26 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     executingRef.current = true;
 
     const run = async () => {
-      const targetFileId = file?.fileId;
+      const targetFileId = retryExecuteOptions?.fileIdOverride ?? file?.fileId;
       if (!targetFileId) return;
       const runtimeState = getRuntimeState(targetFileId);
+      if (runtimeState.fileOutputFinalizationExecutionId) {
+        if (retryExecuteOptions?.scheduled !== true) {
+          const deferredOptions = retryExecuteOptions ?? getQueryEngineService().consumeExecuteOptions({
+            fileId: targetFileId,
+            targetOutputSessionId: outputSessionIdRef.current,
+            targetEditorGroupId: editorGroupIdRef.current,
+            isActiveEditorGroup: isActiveEditorGroupRef.current
+          }) ?? {};
+          runtimeState.executeAfterFileOutputFinalization = {
+            ...deferredOptions,
+            fileIdOverride: targetFileId,
+            targetOutputSessionId: deferredOptions.targetOutputSessionId ?? outputSessionIdRef.current,
+            targetEditorGroupId: deferredOptions.targetEditorGroupId ?? editorGroupIdRef.current
+          };
+        }
+        return;
+      }
       if (runtimeState.securityRetryCount === undefined) {
         runtimeState.securityRetryCount = 0;
       }
@@ -356,14 +388,17 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       }
 
       const activeEditorFileId = queryTextRegistry.getActiveFile(editorInstanceId)?.fileId;
-      if (!executeOptions?.textOverride && activeEditorFileId && activeEditorFileId !== targetFileId) {
+      if (!executeOptions?.textOverride && !executeOptions?.fileIdOverride && activeEditorFileId && activeEditorFileId !== targetFileId) {
         return;
       }
-      const activeEditor = isActiveEditorGroupRef.current
+      const activeEditor = !activeEditorFileId || activeEditorFileId === targetFileId
         ? queryTextRegistry.getActiveEditor(editorInstanceId)
         : null;
-      const selectedText = activeEditor?.getSelectedText() ?? "";
-      const fullText = activeEditor?.getContent() ?? "";
+      const useSelection = executeOptions?.useSelection !== false;
+      const selectedText = useSelection ? (activeEditor?.getSelectedText() ?? "") : "";
+      const fullText = activeEditor?.getContent()
+        ?? queryTextRegistry.getModelForFile(targetFileId)?.getContent()
+        ?? "";
       const text = executeOptions?.textOverride ?? (selectedText.trim() ? selectedText : fullText);
       if (!text.trim()) return;
 
@@ -406,16 +441,27 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       if (isFileOutput) {
         const format = executeOptions?.formatOverride ?? panelState.textOutputFormat ?? "plain";
         const ext = format === "json" ? "json" : format === "csv" ? "csv" : "txt";
-        const dialogResult = await window.appShell.showDialogSave({
-          title: "Save Query Result",
-          defaultPath: `query-result.${ext}`,
-          filters: [
-            { name: ext.toUpperCase(), extensions: [ext] },
-            { name: "All Files", extensions: ["*"] }
-          ]
-        });
-        if (dialogResult.canceled || !dialogResult.filePath) return;
-        runtimeState.fileOutputPath = dialogResult.filePath;
+        let outputPath = executeOptions?.scheduled ? runtimeState.scheduleFileOutputPath : undefined;
+        if (!outputPath) {
+          const dialogResult = await window.appShell.showDialogSave({
+            title: executeOptions?.scheduled ? "Save Scheduled Query Results" : "Save Query Result",
+            defaultPath: `query-result.${ext}`,
+            filters: [
+              { name: ext.toUpperCase(), extensions: [ext] },
+              { name: "All Files", extensions: ["*"] }
+            ]
+          });
+          if (disposedRef.current) return;
+          if (dialogResult.canceled || !dialogResult.filePath) {
+            if (executeOptions?.scheduled) {
+              runtimeState.schedule?.pause("File output path was not selected");
+            }
+            return;
+          }
+          outputPath = dialogResult.filePath;
+          if (executeOptions?.scheduled) runtimeState.scheduleFileOutputPath = outputPath;
+        }
+        runtimeState.fileOutputPath = outputPath;
         runtimeState.fileOutputSchema = new Map();
         runtimeState.fileOutputFormat = format;
       }
@@ -443,8 +489,10 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
           fileId: targetFileId,
           text,
           targetOutputSessionId: executeOptions?.targetOutputSessionId ?? outputSessionIdRef.current,
+          interactiveSecurity: executeOptions?.scheduled !== true,
           ...(executeOptions?.optionsOverride ? { options: executeOptions.optionsOverride } : {})
         });
+        if (executeOptions?.scheduled) runtimeState.schedule?.recordSuccess();
         runtimeState.pendingExecutionStart = undefined;
 
         if (runtimeState.cancelPendingExecution === true) {
@@ -656,6 +704,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
             const hasPlanGraphArtifact = artifacts.some((artifact) => artifact.kind === "graph" && artifact.capability === "plan");
             runtimeState.activeExecution = undefined;
             runtimeState.securityRetryCount = undefined;
+            runtimeState.schedule?.recordSuccess();
             updateOutputContextForFile(targetFileId, (prev) => ({
               ...prev,
               state: "completed",
@@ -685,6 +734,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
             const isFileOutput = fileOutputPath != null;
 
             if (isFileOutput) {
+              runtimeState.fileOutputFinalizationExecutionId = executionId;
               // File output: finalize all streams, merge all result sets → single formatted file
               void (async () => {
                 try {
@@ -715,18 +765,29 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
                       const targetUri = "file:///" + fileOutputPath.replace(/\\/g, "/");
                       await window.appShell.writeFile(targetUri, formatted);
 
-                      updateOutputContextForFile(targetFileId, (prev) => ({
-                        ...prev,
-                        resultSets: prev.resultSets.map((s) => ({
-                          ...s,
-                          rowLimitExceeded: true,
-                          exportPath: targetUri
-                        }))
-                      }));
+                      if (runtimeState.fileOutputFinalizationExecutionId === executionId) {
+                        updateOutputContextForFile(targetFileId, (prev) => ({
+                          ...prev,
+                          resultSets: prev.resultSets.map((s) => ({
+                            ...s,
+                            rowLimitExceeded: true,
+                            exportPath: targetUri
+                          }))
+                        }));
+                      }
                     }
                   }
                 } catch (err) {
                   console.error("[QueryEditor] File output failed:", err);
+                } finally {
+                  if (runtimeState.fileOutputFinalizationExecutionId === executionId) {
+                    const deferredExecution = runtimeState.executeAfterFileOutputFinalization;
+                    runtimeState.executeAfterFileOutputFinalization = undefined;
+                    clearRuntimeExecutionState(targetFileId);
+                    if (deferredExecution !== undefined && !disposedRef.current) {
+                      handleExecuteRef.current(deferredExecution);
+                    }
+                  }
                 }
               })();
             } else {
@@ -743,10 +804,8 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
                     }));
                   });
               }
+              clearRuntimeExecutionState(targetFileId);
             }
-
-            // Clean up file output state
-            clearRuntimeExecutionState(targetFileId);
           } else if (event.method === "queryengine.failed") {
             const p = event.params as {
               error?: { code: string; message: string; details?: Record<string, unknown> };
@@ -772,6 +831,20 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
                 }
               : null;
             if (p.error?.code === "SECURITY_SESSION_CLOSED") {
+              if (executeOptions?.scheduled) {
+                clearRuntimeExecutionState(targetFileId);
+                runtimeState.schedule?.pause("Security vault is locked");
+                updateOutputContextForFile(targetFileId, (prev) => ({
+                  ...prev,
+                  state: "failed",
+                  error: errorWithLocation,
+                  progress: null,
+                  executionStartedAtMs: null
+                }));
+                setPanelSelectedPrimary(targetFileId, TEXT_OUTPUT_PRIMARY_ID);
+                setExecutionPrimaryOverride(targetFileId, null);
+                return;
+              }
               const retryCount = runtimeState.securityRetryCount ?? 0;
               clearRuntimeExecutionState(targetFileId);
               updateOutputContextForFile(targetFileId, (prev) => ({
@@ -839,6 +912,14 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
           return;
         }
         clearRuntimeExecutionState(targetFileId);
+        if (executeOptions?.scheduled) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (message.includes("SECURITY_SESSION_CLOSED") || message.toLowerCase().includes("vault")) {
+            runtimeState.schedule?.pause("Security vault is locked");
+          } else {
+            runtimeState.schedule?.recordInfrastructureFailure("Backend is unavailable after repeated attempts");
+          }
+        }
         updateOutputContextForFile(targetFileId, () => ({
           ...IDLE_OUTPUT_CONTEXT,
           state: "failed",
@@ -865,11 +946,65 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     readOutputContextForFile
   ]);
 
-  const handleCancel = useCallback(() => {
-    const targetFileId = file?.fileId;
+  const stopSchedule = useCallback((targetFileId: string): void => {
+    const runtimeState = peekRuntimeState(targetFileId);
+    if (!runtimeState?.schedule) {
+      return;
+    }
+    runtimeState.schedule.stop();
+    runtimeState.schedule = undefined;
+    runtimeState.scheduleFileOutputPath = undefined;
+    getQueryEngineService().notifyScheduleChanged({
+      fileId: targetFileId,
+      outputSessionId: outputSessionIdRef.current,
+      state: undefined
+    });
+    if (fileIdRef.current === targetFileId) setScheduleStatus(null);
+    pruneRuntimeState(targetFileId);
+  }, []);
+
+  const handleSchedule = useCallback((options: ScheduleRequestOptions) => {
+    const targetFileId = options.fileIdOverride ?? fileIdRef.current;
+    if (!targetFileId) {
+      return;
+    }
+    const runtimeState = getRuntimeState(targetFileId);
+    stopSchedule(targetFileId);
+    const targetOutputSessionId = options.targetOutputSessionId ?? outputSessionIdRef.current;
+    const schedule = new RecurringExecutionController(
+      options.intervalSeconds,
+      () => {
+        const latestState = peekRuntimeState(targetFileId);
+        if (!latestState?.schedule
+          || latestState.activeExecution
+          || latestState.pendingExecutionStart
+          || latestState.fileOutputFinalizationExecutionId
+          || executingRef.current) {
+          return;
+        }
+        handleExecuteRef.current({
+          fileIdOverride: targetFileId,
+          targetOutputSessionId,
+          targetEditorGroupId: options.targetEditorGroupId ?? editorGroupIdRef.current,
+          useSelection: false,
+          scheduled: true
+        });
+      },
+      (state) => {
+        getQueryEngineService().notifyScheduleChanged({ fileId: targetFileId, outputSessionId: targetOutputSessionId, state });
+        if (fileIdRef.current === targetFileId) setScheduleStatus(state);
+      }
+    );
+    runtimeState.schedule = schedule;
+    schedule.start();
+  }, [stopSchedule]);
+
+  const handleCancel = useCallback((options?: CancelRequestOptions) => {
+    const targetFileId = options?.fileIdOverride ?? file?.fileId;
     if (!targetFileId) return;
 
     const runtimeState = getRuntimeState(targetFileId);
+    stopSchedule(targetFileId);
 
     const execution = runtimeState.activeExecution;
     if (!execution) {
@@ -898,7 +1033,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       executionStartedAtMs: null
     }));
     setExecutionPrimaryOverride(targetFileId, null);
-  }, [file?.fileId, updateOutputContextForFile, setExecutionPrimaryOverride]);
+  }, [file?.fileId, updateOutputContextForFile, setExecutionPrimaryOverride, stopSchedule]);
 
   useEffect(() => {
     handleExecuteRef.current = handleExecute;
@@ -941,7 +1076,22 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       }
       handleExecuteRef.current();
     });
-    const unsubCancel = service.onCancelRequest(() => handleCancelRef.current());
+    const unsubCancel = service.onCancelRequest((options) => {
+      if (options?.targetOutputSessionId && options.targetOutputSessionId !== outputSessionIdRef.current) return;
+      if (options?.targetEditorGroupId && options.targetEditorGroupId !== editorGroupIdRef.current) return;
+      if (options?.fileIdOverride
+        && options.fileIdOverride !== fileIdRef.current
+        && !runtimeStateByFileIdRef.current.has(options.fileIdOverride)) return;
+      if (!options?.targetOutputSessionId && !options?.targetEditorGroupId && isActiveEditorGroupRef.current === false) return;
+      handleCancelRef.current(options);
+    });
+    const unsubSchedule = service.onScheduleRequest((options) => {
+      if (options.targetOutputSessionId && options.targetOutputSessionId !== outputSessionIdRef.current) return;
+      if (options.targetEditorGroupId && options.targetEditorGroupId !== editorGroupIdRef.current) return;
+      if (options.fileIdOverride && options.fileIdOverride !== fileIdRef.current) return;
+      if (!options.targetOutputSessionId && !options.targetEditorGroupId && isActiveEditorGroupRef.current === false) return;
+      handleSchedule(options);
+    });
     const unsubToggle = service.onToggleOutputPanelRequest(() => {
       if (isActiveEditorGroupRef.current === false) return;
       const targetFileIdInner = fileIdRef.current;
@@ -952,18 +1102,31 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     return () => {
       unsubExec();
       unsubCancel();
+      unsubSchedule();
       unsubToggle();
     };
   }, []);
 
   useEffect(() => {
+    disposedRef.current = false;
     return () => {
-      for (const state of runtimeStateByFileIdRef.current.values()) {
-        const execution = state.activeExecution;
-        if (!execution) {
-          continue;
+      disposedRef.current = true;
+      for (const [fileId, state] of runtimeStateByFileIdRef.current.entries()) {
+        if (state.schedule) {
+          state.schedule.stop();
+          getQueryEngineService().notifyScheduleChanged({
+            fileId,
+            outputSessionId: outputSessionIdRef.current,
+            state: undefined
+          });
         }
-        execution.unsubscribe();
+        const execution = state.activeExecution;
+        if (execution) {
+          execution.unsubscribe();
+          void getQueryEngineService().cancel(execution.executionId).catch(() => {});
+        } else if (state.pendingExecutionStart === true) {
+          state.cancelPendingExecution = true;
+        }
       }
       runtimeStateByFileIdRef.current.clear();
     };
@@ -1034,7 +1197,21 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
           />
         </div>
       </div>
-      <QueryEditorStatusBar outputContext={outputContext} file={file} />
+      <QueryEditorStatusBar
+        outputContext={outputContext}
+        file={file}
+        schedule={scheduleStatus}
+        onStopSchedule={() => {
+          const targetFileId = fileIdRef.current;
+          if (targetFileId) {
+            handleCancelRef.current({
+              fileIdOverride: targetFileId,
+              targetOutputSessionId: outputSessionIdRef.current,
+              targetEditorGroupId: editorGroupIdRef.current
+            });
+          }
+        }}
+      />
     </div>
   );
 }

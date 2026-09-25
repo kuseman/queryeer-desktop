@@ -107,6 +107,21 @@ export function GenericActionIcon({ className }: IconProps): JSX.Element {
   );
 }
 
+export function ChevronDownIcon({ className }: IconProps): JSX.Element {
+  return (
+    <svg className={className} viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="m4.5 6.25 3.5 3.5 3.5-3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function FileOpenIcon({ className }: IconProps): JSX.Element {
   return (
     <svg className={className} viewBox="0 0 16 16" aria-hidden="true">

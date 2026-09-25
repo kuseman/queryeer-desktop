@@ -319,8 +319,12 @@ export function ShellApp({
 
   useEffect(() => {
     const activeEditorForContext = activeFile?.editorId ? editorsById.get(activeFile.editorId) : undefined;
+    const scheduleByGroup = activeFile?.metadata?.["core.queryengine.scheduleByGroup"] as Record<string, unknown> | undefined;
+    const tabStateByGroup = activeFile?.metadata?.["core.queryengine.tabStateByGroup"] as Record<string, string> | undefined;
     contextChain.update("core.layout.editorGroup", {
       activeEditorGroupId: activeGroup.id,
+      activeEditorGroupHasQuerySchedule: scheduleByGroup?.[activeGroup.id] !== undefined,
+      activeEditorGroupHasRunningQuery: tabStateByGroup?.[activeGroup.id] === "running",
       editorGroupCount: editorWorkbench.groups.length,
       hasMultipleEditorGroups: editorWorkbench.groups.length > 1,
       activeEditorCanSplit: activeEditorForContext?.canSplit === true

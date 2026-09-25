@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { QueryOutputArtifact } from "@queryeer/api/backend/Types";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
-import type { LayoutToolbarSelectContribution, TabHeaderStyleContribution } from "@queryeer/api/extensions/LayoutExtension";
+import type { LayoutToolbarMenuContribution, LayoutToolbarSelectContribution, TabHeaderStyleContribution } from "@queryeer/api/extensions/LayoutExtension";
+import type { TooltipSectionContribution } from "@queryeer/api/extensions/TooltipExtension";
 import type { PluginContext } from "@queryeer/api/plugin/Plugin";
 import { getQueryPlanArtifactStore } from "./query-plan/artifact-store";
 import { QUERY_VIEW_STATE_KEY } from "./QueryViewStateStore";
@@ -14,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   registerEngineResolverMock: vi.fn(),
   requestExecuteMock: vi.fn(),
   requestCancelMock: vi.fn(),
+  requestScheduleMock: vi.fn(),
+  onScheduleChangedMock: vi.fn(),
   setFilesRegistryMock: vi.fn()
 }));
 
@@ -23,7 +26,9 @@ vi.mock("./QueryEngineService", () => ({
     onQueryEvent: mocks.onQueryEventMock,
     registerEngineResolver: mocks.registerEngineResolverMock,
     requestExecute: mocks.requestExecuteMock,
-    requestCancel: mocks.requestCancelMock
+    requestCancel: mocks.requestCancelMock,
+    requestSchedule: mocks.requestScheduleMock,
+    onScheduleChanged: mocks.onScheduleChangedMock
   })
 }));
 
@@ -275,6 +280,8 @@ describe("core.queryengine plugin", () => {
     mocks.registerEngineResolverMock.mockReset();
     mocks.requestExecuteMock.mockReset();
     mocks.requestCancelMock.mockReset();
+    mocks.requestScheduleMock.mockReset();
+    mocks.onScheduleChangedMock.mockReset();
     mocks.setFilesRegistryMock.mockReset();
   });
 
@@ -461,13 +468,13 @@ it("marks backend-dependent commands with backendHealthy enablement", () => {
     expect(registerCommandMock).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "core.queryengine.execute",
-        enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFile?.metadata?.core?.queryengine?.hasRunningQuery != true"
+        enablement: "backendHealthy && hasActiveQueryExecutableFile && activeEditorGroupHasRunningQuery != true && activeEditorGroupHasQuerySchedule != true"
       })
     );
     expect(registerCommandMock).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "core.queryengine.cancel",
-        enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFile?.metadata?.core?.queryengine?.hasRunningQuery == true"
+        enablement: "hasActiveQueryExecutableFile && (activeEditorGroupHasRunningQuery == true || activeEditorGroupHasQuerySchedule == true)"
       })
     );
 
@@ -502,6 +509,100 @@ it("marks backend-dependent commands with backendHealthy enablement", () => {
         when: "hasActiveQueryExecutableFile"
       })
     );
+  });
+
+  it("registers legacy interval commands and reflects schedules in the owning group tab", async () => {
+    const file = makeFile();
+    const context = createContext(file);
+    let scheduleChanged: ((params: { fileId: string; outputSessionId: string; state?: { intervalSeconds: number; paused: boolean; consecutiveInfrastructureFailures: number } }) => void) | undefined;
+    mocks.onScheduleChangedMock.mockImplementation((listener) => {
+      scheduleChanged = listener;
+      return () => {};
+    });
+
+    coreQueryEnginePlugin.activate(context);
+
+    const commands = (context.commands.registerCommand as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[0]);
+    const intervalCommand = commands.find((command) => command.id === "core.queryengine.executeEvery5Seconds");
+    expect(intervalCommand).toBeDefined();
+    await intervalCommand.handler();
+    expect(mocks.requestScheduleMock).toHaveBeenCalledWith({ intervalSeconds: 5 });
+
+    scheduleChanged?.({
+      fileId: file.fileId,
+      outputSessionId: "core.queryengine:left",
+      state: { intervalSeconds: 5, paused: false, consecutiveInfrastructureFailures: 0 }
+    });
+    const updated = context.files.getFile(file.fileId)!;
+    const style = (context.layout.registerTabHeaderStyle as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as TabHeaderStyleContribution;
+    expect(style.render({
+      file: updated,
+      isActive: true,
+      editorGroupId: "left",
+      hasCapability: () => true
+    })).toEqual(expect.objectContaining({ statusIconTitle: "Executing every 5 seconds" }));
+    expect(style.render({
+      file: updated,
+      isActive: false,
+      editorGroupId: "right",
+      hasCapability: () => true
+    })).toBeNull();
+
+    const tooltip = (context.tooltip.registerTooltipSection as ReturnType<typeof vi.fn>).mock.calls
+      .map((call) => call[0])
+      .find((contribution) => contribution.id === "core.queryengine.tooltip.schedule") as TooltipSectionContribution;
+    expect(tooltip.render({ file: updated, editorGroupId: "left" })).toEqual({
+      label: "Recurring execution",
+      value: "Every 5 seconds"
+    });
+    expect(tooltip.render({ file: updated, editorGroupId: "right" })).toBeNull();
+  });
+
+  it("does not add execute commands to the application menu", () => {
+    const context = createContext(makeFile());
+    coreQueryEnginePlugin.activate(context);
+
+    const menuIds = (context.menu.registerMenuItem as ReturnType<typeof vi.fn>).mock.calls
+      .map((call) => call[0]?.id as string | undefined);
+    expect(menuIds.some((id) => id?.startsWith("core.menu.tools.execute"))).toBe(false);
+  });
+
+  it("hides disabled schedule choices while keeping schedule stop available", () => {
+    const file = makeFile();
+    const context = createContext(file);
+    (context.commands.canExecuteCommand as ReturnType<typeof vi.fn>).mockReturnValue(false);
+    coreQueryEnginePlugin.activate(context);
+
+    const toolbar = (context.layout.registerToolbarAction as ReturnType<typeof vi.fn>).mock.calls
+      .map((call) => call[0])
+      .find((action) => action.id === "core.queryengine.toolbar.execute") as LayoutToolbarMenuContribution;
+    const toolbarContext = {
+      activeFile: file,
+      activeEditorGroupId: "left",
+      editorGroupCount: 1,
+      hasMultipleEditorGroups: false
+    };
+
+    expect(toolbar.getItems(toolbarContext)).toEqual([]);
+    toolbar.onSelect("interval:5", toolbarContext);
+    expect(mocks.requestScheduleMock).not.toHaveBeenCalled();
+
+    const scheduledFile = context.files.updateFile(file.fileId, {
+      metadata: {
+        "core.queryengine.scheduleByGroup": {
+          left: { intervalSeconds: 5, paused: false, consecutiveInfrastructureFailures: 0 }
+        }
+      }
+    });
+    expect(toolbar.getItems({ ...toolbarContext, activeFile: scheduledFile })).toEqual([
+      { value: "stop", label: "Stop scheduled execution" }
+    ]);
+    toolbar.onSelect("stop", { ...toolbarContext, activeFile: scheduledFile });
+    expect(mocks.requestCancelMock).toHaveBeenCalledWith({
+      fileIdOverride: file.fileId,
+      targetEditorGroupId: "left",
+      targetOutputSessionId: "core.queryengine:left"
+    });
   });
 
   it("stores toolbar output selection under the active editor group session", () => {

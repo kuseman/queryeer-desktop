@@ -229,6 +229,7 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
         const metadata = { ...cloneFromFile.metadata };
         delete metadata["core.queryengine.tabStateByGroup"];
         delete metadata["core.queryengine.hasRunningQuery"];
+        delete metadata["core.queryengine.scheduleByGroup"];
         filesRegistry.updateFile(file.fileId, { metadata });
       }
 

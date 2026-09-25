@@ -211,7 +211,11 @@ describe("bootstrapShell diagnostics wiring", () => {
 
     const result = await bootstrapShell();
 
-    expect(result.contextChain.getEffectiveContext()).toMatchObject({ activeFileId: null });
+    expect(result.contextChain.getEffectiveContext()).toMatchObject({
+      activeFileId: null,
+      activeEditorGroupHasRunningQuery: false,
+      activeEditorGroupHasQuerySchedule: false
+    });
 
     const activeFile = await result.fileMediator.createUntitledFile({ mimeType: "text/plain" });
 
