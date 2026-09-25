@@ -1,13 +1,16 @@
 import { BackendNotReadyError } from "@queryeer/api/backend/BackendNotReadyError";
 import type { QueryExecuteOptions, QueryResultCell } from "@queryeer/api/backend/Types.js";
 import type { Column } from "@queryeer/api/queryengine/OutputExtension.js";
-import type { CollectedResultSet, CollectedResults, ExecuteRequestOptions } from "@queryeer/api/queryengine/QueryEngineTypes.js";
+import type { CancelRequestOptions, CollectedResultSet, CollectedResults, ExecuteRequestOptions, QueryScheduleState, ScheduleRequestOptions } from "@queryeer/api/queryengine/QueryEngineTypes.js";
 import { getCoreSecurityService } from "../core.security/service";
 
 type QueryEvent = { method: string; params: unknown };
 type QueryEventListener = (event: QueryEvent) => void;
 type GlobalQueryEventListener = (event: QueryEvent, context?: ExecuteParams) => void;
 type SimpleListener = () => void;
+type CancelRequestListener = (options?: CancelRequestOptions) => void;
+type ScheduleRequestListener = (options: ScheduleRequestOptions) => void;
+type ScheduleChangedListener = (params: { fileId: string; outputSessionId: string; state?: QueryScheduleState }) => void;
 
 type ExecutionContextProvider = (params: ExecuteParams) => Partial<ExecuteParams> | void;
 type EngineResolver = (params: Omit<ExecuteParams, "engineId">) => string | undefined;
@@ -23,6 +26,7 @@ type ExecuteParams = {
   engineState?: unknown;
   options?: QueryExecuteOptions;
   targetOutputSessionId?: string;
+  interactiveSecurity?: boolean;
 };
 
 type EngineInvokeParams = {
@@ -62,7 +66,9 @@ export class QueryEngineService {
   private readonly executionListeners = new Map<string, Set<QueryEventListener>>();
   private readonly globalEventListeners = new Set<GlobalQueryEventListener>();
   private readonly executeRequestListeners = new Set<SimpleListener>();
-  private readonly cancelRequestListeners = new Set<SimpleListener>();
+  private readonly cancelRequestListeners = new Set<CancelRequestListener>();
+  private readonly scheduleRequestListeners = new Set<ScheduleRequestListener>();
+  private readonly scheduleChangedListeners = new Set<ScheduleChangedListener>();
   private readonly toggleOutputPanelRequestListeners = new Set<SimpleListener>();
   private readonly executionContextProviders = new Set<ExecutionContextProvider>();
   private readonly engineResolvers: EngineResolverEntry[] = [];
@@ -173,7 +179,7 @@ export class QueryEngineService {
           engineState: decoratedParams.engineState,
           options: decoratedParams.options
         });
-      });
+      }, { interactive: decoratedParams.interactiveSecurity !== false });
     } catch (error) {
       this.executionContextById.delete(queryExecutionId);
       this.pendingEventBuffers.delete(queryExecutionId);
@@ -199,26 +205,31 @@ export class QueryEngineService {
   }
 
   async cancel(queryExecutionId: string): Promise<void> {
-    await ensureBackendHealthy();
-    await window.appShell.cancelBackendQuery({ queryExecutionId });
+    let cancelError: unknown;
+    try {
+      await ensureBackendHealthy();
+      await window.appShell.cancelBackendQuery({ queryExecutionId });
+    } catch (error) {
+      cancelError = error;
+    }
     const context = this.executionContextById.get(queryExecutionId);
-    if (!context) {
-      return;
-    }
-    const event = {
-      method: "queryengine.failed",
-      params: {
-        queryExecutionId,
-        error: {
-          code: "CANCELLED",
-          message: "Execution cancelled by client"
+    if (context) {
+      const event = {
+        method: "queryengine.failed",
+        params: {
+          queryExecutionId,
+          error: {
+            code: "CANCELLED",
+            message: "Execution cancelled by client"
+          }
         }
+      };
+      for (const listener of this.globalEventListeners) {
+        listener(event, context);
       }
-    };
-    for (const listener of this.globalEventListeners) {
-      listener(event, context);
+      this.executionContextById.delete(queryExecutionId);
     }
-    this.executionContextById.delete(queryExecutionId);
+    if (cancelError) throw cancelError;
   }
 
   /**
@@ -365,9 +376,9 @@ export class QueryEngineService {
     return opts;
   }
 
-  requestCancel(): void {
+  requestCancel(options?: CancelRequestOptions): void {
     for (const listener of this.cancelRequestListeners) {
-      listener();
+      listener(options);
     }
   }
 
@@ -378,11 +389,33 @@ export class QueryEngineService {
     };
   }
 
-  onCancelRequest(listener: SimpleListener): () => void {
+  onCancelRequest(listener: CancelRequestListener): () => void {
     this.cancelRequestListeners.add(listener);
     return () => {
       this.cancelRequestListeners.delete(listener);
     };
+  }
+
+  requestSchedule(options: ScheduleRequestOptions): void {
+    for (const listener of this.scheduleRequestListeners) {
+      listener(options);
+    }
+  }
+
+  onScheduleRequest(listener: ScheduleRequestListener): () => void {
+    this.scheduleRequestListeners.add(listener);
+    return () => this.scheduleRequestListeners.delete(listener);
+  }
+
+  notifyScheduleChanged(params: { fileId: string; outputSessionId: string; state?: QueryScheduleState }): void {
+    for (const listener of this.scheduleChangedListeners) {
+      listener(params);
+    }
+  }
+
+  onScheduleChanged(listener: ScheduleChangedListener): () => void {
+    this.scheduleChangedListeners.add(listener);
+    return () => this.scheduleChangedListeners.delete(listener);
   }
 
   requestToggleOutputPanel(): void {

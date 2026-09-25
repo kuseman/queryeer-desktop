@@ -1,13 +1,14 @@
 import React from "react";
 import type { LayoutToolbarContext } from "@queryeer/api/extensions/LayoutExtension";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
+import type { QueryScheduleState } from "@queryeer/api/queryengine/QueryEngineTypes.js";
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
 import { getQueryEngineService } from "./QueryEngineService";
 import { getQueryPlanArtifactStore, queryCompletedArtifacts, isPlanGraphArtifact } from "./query-plan/artifact-store";
 import { clearGraphViewState } from "../core.graph/graph-view-state-store";
 import { queryTextRegistry } from "./QueryTextEditorRegistry";
 import { QueryEditorComponent } from "./QueryEditorComponent";
-import { QueryRunIcon, QueryStopIcon } from "./query-toolbar-icons";
+import { QueryRunIcon, QueryScheduledIcon, QueryStopIcon } from "./query-toolbar-icons";
 import { getOutputRegistry } from "./output/OutputRegistry";
 import { getQueryOutputFormatRegistry } from "./QueryOutputFormatRegistry";
 import { getQueryViewStateStore, TEXT_OUTPUT_PRIMARY_ID } from "./QueryViewStateStore";
@@ -33,6 +34,8 @@ type QueryTabState = "running" | "failed";
 
 const TAB_STATE_METADATA_KEY = "core.queryengine.tabStateByGroup";
 const HAS_RUNNING_QUERY_KEY = "core.queryengine.hasRunningQuery";
+const SCHEDULE_BY_GROUP_KEY = "core.queryengine.scheduleByGroup";
+const EXECUTION_INTERVALS = [1, 5, 10, 30, 60] as const;
 
 function readQueryTabState(file: FileEntity, groupId: string | undefined): QueryTabState | undefined {
   if (!groupId) {
@@ -41,6 +44,34 @@ function readQueryTabState(file: FileEntity, groupId: string | undefined): Query
   const tabStateByGroup = file.metadata?.[TAB_STATE_METADATA_KEY] as Record<string, QueryTabState> | undefined;
   const tabState = tabStateByGroup?.[groupId];
   return tabState === "running" || tabState === "failed" ? tabState : undefined;
+}
+
+function readScheduleState(file: FileEntity, groupId: string | undefined): QueryScheduleState | undefined {
+  if (!groupId) return undefined;
+  const value = (file.metadata?.[SCHEDULE_BY_GROUP_KEY] as Record<string, QueryScheduleState> | undefined)?.[groupId];
+  return value && typeof value.intervalSeconds === "number" ? value : undefined;
+}
+
+function writeScheduleToMetadata(
+  context: Parameters<Plugin["activate"]>[0],
+  fileId: string,
+  groupId: string,
+  state?: QueryScheduleState
+): void {
+  const file = context.files.getFile(fileId);
+  if (!file) return;
+  const metadata = { ...(file.metadata ?? {}) };
+  const scheduleByGroup = {
+    ...((metadata[SCHEDULE_BY_GROUP_KEY] as Record<string, QueryScheduleState> | undefined) ?? {})
+  };
+  if (state !== undefined) scheduleByGroup[groupId] = state;
+  else delete scheduleByGroup[groupId];
+  if (Object.keys(scheduleByGroup).length > 0) {
+    metadata[SCHEDULE_BY_GROUP_KEY] = scheduleByGroup;
+  } else {
+    delete metadata[SCHEDULE_BY_GROUP_KEY];
+  }
+  context.files.updateFile(fileId, { metadata });
 }
 
 function getToolbarSessionId(toolbarContext: LayoutToolbarContext, fallbackFileId: string): string {
@@ -183,19 +214,53 @@ export const coreQueryEnginePlugin: Plugin = {
           return null;
         }
         const tabState = readQueryTabState(file, editorGroupId);
+        const scheduleState = readScheduleState(file, editorGroupId);
+        const scheduleInterval = scheduleState?.intervalSeconds;
+        const scheduleStyle = scheduleState !== undefined
+          ? {
+              statusIcon: QueryScheduledIcon,
+              statusIconTitle: scheduleState.paused
+                ? `Auto-run paused: ${scheduleState.pauseReason ?? "paused"}`
+                : `Executing every ${scheduleInterval} ${scheduleInterval === 1 ? "second" : "seconds"}`,
+              ...(scheduleState.paused ? { className: "queryengine-tab-schedule-paused" } : {})
+            }
+          : {};
         if (tabState === "running") {
           return {
+            ...scheduleStyle,
             className: "queryengine-tab-state-running",
             indicatorClassName: "queryengine-tab-indicator-running"
           };
         }
         if (tabState === "failed") {
           return {
+            ...scheduleStyle,
             indicatorClassName: "queryengine-tab-indicator-failed"
           };
         }
-        return null;
+        return scheduleState !== undefined ? scheduleStyle : null;
       }
+    });
+
+    context.tooltip.registerTooltipSection({
+      id: "core.queryengine.tooltip.schedule",
+      order: 20,
+      render: ({ file, editorGroupId }) => {
+        const schedule = readScheduleState(file, editorGroupId);
+        if (!schedule) return null;
+        const interval = `${schedule.intervalSeconds} ${schedule.intervalSeconds === 1 ? "second" : "seconds"}`;
+        return {
+          label: "Recurring execution",
+          value: schedule.paused
+            ? `Paused: ${schedule.pauseReason ?? "paused"}`
+            : `Every ${interval}`,
+          ...(schedule.paused ? { severity: "warning" as const } : {})
+        };
+      }
+    });
+
+    queryEngineService.onScheduleChanged(({ fileId, outputSessionId, state }) => {
+      writeScheduleToMetadata(context, fileId, querySessionKey(outputSessionId), state);
     });
 
     queryEngineService.onQueryEvent((event, executeContext) => {
@@ -239,19 +304,34 @@ export const coreQueryEnginePlugin: Plugin = {
       } else if (event.method === "queryengine.failed") {
         const groupId = querySessionKey(info.outputSessionId);
         executionInfoById.delete(params.queryExecutionId);
-        writeQueryTabStateToMetadata(context, info.fileId, groupId, "failed");
+        const errorCode = (event.params as { error?: { code?: string } }).error?.code;
+        writeQueryTabStateToMetadata(context, info.fileId, groupId, errorCode === "CANCELLED" ? undefined : "failed");
       }
     });
 
+    let previousFiles = context.files.listFiles();
     context.files.subscribe((files) => {
       queryPlanStore.pruneToFileIds(files.map((file) => file.fileId));
+      const nextFileIds = new Set(files.map((file) => file.fileId));
+      for (const removedFile of previousFiles) {
+        if (nextFileIds.has(removedFile.fileId)) continue;
+        const scheduleByGroup = removedFile.metadata?.[SCHEDULE_BY_GROUP_KEY] as Record<string, QueryScheduleState> | undefined;
+        for (const groupId of Object.keys(scheduleByGroup ?? {})) {
+          queryEngineService.requestCancel({
+            fileIdOverride: removedFile.fileId,
+            targetEditorGroupId: groupId,
+            targetOutputSessionId: toQueryOutputSessionId(groupId, removedFile.fileId)
+          });
+        }
+      }
+      previousFiles = files;
     });
 
     context.commands.registerCommand({
       id: "core.queryengine.execute",
       title: "Execute Query",
       category: "Query",
-      enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFile?.metadata?.core?.queryengine?.hasRunningQuery != true",
+      enablement: "backendHealthy && hasActiveQueryExecutableFile && activeEditorGroupHasRunningQuery != true && activeEditorGroupHasQuerySchedule != true",
       handler: async () => {
         queryEngineService.requestExecute();
       }
@@ -261,11 +341,22 @@ export const coreQueryEnginePlugin: Plugin = {
       id: "core.queryengine.cancel",
       title: "Cancel Query",
       category: "Query",
-      enablement: "backendHealthy && hasActiveQueryExecutableFile && activeFile?.metadata?.core?.queryengine?.hasRunningQuery == true",
+      enablement: "hasActiveQueryExecutableFile && (activeEditorGroupHasRunningQuery == true || activeEditorGroupHasQuerySchedule == true)",
       handler: async () => {
         queryEngineService.requestCancel();
       }
     });
+
+    for (const intervalSeconds of EXECUTION_INTERVALS) {
+      const commandId = `core.queryengine.executeEvery${intervalSeconds}Seconds`;
+      context.commands.registerCommand({
+        id: commandId,
+        title: `Execute every ${intervalSeconds} ${intervalSeconds === 1 ? "second" : "seconds"}`,
+        category: "Query",
+        enablement: "backendHealthy && hasActiveQueryExecutableFile && activeEditorGroupHasRunningQuery != true",
+        handler: async () => queryEngineService.requestSchedule({ intervalSeconds })
+      });
+    }
 
     context.commands.registerCommand({
       id: "core.queryengine.toggleOutputPanel",
@@ -279,11 +370,43 @@ export const coreQueryEnginePlugin: Plugin = {
 
     context.layout.registerToolbarAction({
       id: "core.queryengine.toolbar.execute",
+      type: "menu",
       title: "Execute",
       order: 40,
-      commandId: "core.queryengine.execute",
+      primaryCommandId: "core.queryengine.execute",
       icon: QueryRunIcon,
-      when: "hasActiveQueryExecutableFile"
+      when: "hasActiveQueryExecutableFile",
+      getItems: (toolbarContext) => {
+        const active = getToolbarQueryFile(toolbarContext);
+        const state = active ? readScheduleState(active, toolbarContext.activeEditorGroupId) : undefined;
+        const items = EXECUTION_INTERVALS
+          .filter((intervalSeconds) => context.commands.canExecuteCommand(`core.queryengine.executeEvery${intervalSeconds}Seconds`))
+          .map((intervalSeconds) => ({
+            value: `interval:${intervalSeconds}`,
+            label: `${state?.intervalSeconds === intervalSeconds ? "✓ " : ""}Every ${intervalSeconds} ${intervalSeconds === 1 ? "second" : "seconds"}`
+          }));
+        return state ? [...items, { value: "stop", label: "Stop scheduled execution" }] : items;
+      },
+      onSelect: (value, toolbarContext) => {
+        const active = getToolbarQueryFile(toolbarContext);
+        if (!active) return;
+        const targetOutputSessionId = getToolbarSessionId(toolbarContext, active.fileId);
+        const target = {
+          fileIdOverride: active.fileId,
+          targetEditorGroupId: toolbarContext.activeEditorGroupId,
+          targetOutputSessionId
+        };
+        if (value === "stop") {
+          queryEngineService.requestCancel(target);
+          return;
+        }
+        const intervalSeconds = Number(value.slice("interval:".length));
+        const commandId = `core.queryengine.executeEvery${intervalSeconds}Seconds`;
+        if (EXECUTION_INTERVALS.includes(intervalSeconds as typeof EXECUTION_INTERVALS[number])
+          && context.commands.canExecuteCommand(commandId)) {
+          queryEngineService.requestSchedule({ ...target, intervalSeconds });
+        }
+      }
     });
 
     context.layout.registerToolbarAction({
@@ -386,6 +509,8 @@ export const coreQueryEnginePlugin: Plugin = {
 
     // Symbol Actions: when-expression variables for context variable autocomplete
     registerWhenExpressionVariables([
+      { name: "activeEditorGroupHasRunningQuery", type: "boolean", description: "True when the active editor group has a running query" },
+      { name: "activeEditorGroupHasQuerySchedule", type: "boolean", description: "True when the active editor group has recurring query execution configured" },
       { name: "symbol.kind", type: "string", description: "Kind of symbol at cursor position (e.g. 'table', 'view', 'function', 'column')" },
       { name: "symbol.name", type: "string", description: "Legacy display/reference name of symbol at cursor position (e.g. 'dbo.MyTable')" },
       { name: "symbol.fullName", type: "string", description: "Most complete resolved symbol name available (e.g. 'database.dbo.MyTable')" },

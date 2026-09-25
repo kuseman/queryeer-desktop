@@ -127,6 +127,45 @@ describe("Toolbar", () => {
     expect(executeCommand).toHaveBeenCalledWith("core.files.open");
   });
 
+  it("renders a split menu with an executable primary action", async () => {
+    const executeCommand = vi.fn(async (commandId: string) => ({ commandId, executed: true as const }));
+    const onSelect = vi.fn();
+    act(() => {
+      root.render(
+        <Toolbar
+          toolbarActions={[{
+            id: "execute",
+            type: "menu",
+            title: "Execute options",
+            icon: "file-open",
+            primaryCommandId: "query.execute",
+            getItems: () => [{ value: "5", label: "Every 5 seconds" }],
+            onSelect
+          }]}
+          visibleZones={new Set(["mainArea"])}
+          canExecuteCommand={() => true}
+          executeCommand={executeCommand}
+          getCommandTitle={() => "Execute Query"}
+          getCommandAccelerator={() => "F5"}
+        />
+      );
+    });
+
+    const primary = rootElement.querySelector(".shell-toolbar-split-primary") as HTMLButtonElement;
+    const trigger = rootElement.querySelector(".shell-toolbar-split-trigger") as HTMLButtonElement;
+    expect(primary.title).toBe("Execute Query (F5)");
+    expect(trigger.textContent).toBe("");
+    expect(trigger.querySelector("svg.shell-toolbar-split-chevron")).toBeTruthy();
+    await act(async () => primary.click());
+    expect(executeCommand).toHaveBeenCalledWith("query.execute");
+
+    act(() => trigger.click());
+    expect(trigger.querySelector("svg.shell-toolbar-split-chevron.is-open")).toBeTruthy();
+    const item = rootElement.querySelector(".shell-toolbar-menu-item") as HTMLButtonElement;
+    act(() => item.click());
+    expect(onSelect).toHaveBeenCalledWith("5", expect.any(Object));
+  });
+
   it("prevents mousedown default to preserve editor focus", () => {
     act(() => {
       root.render(

@@ -120,4 +120,59 @@ describe("EditorTabs rendering", () => {
     expect(button.textContent).toBe("");
     expect(button.querySelector("svg.shell-editor-group-maximize-icon")).toBeTruthy();
   });
+
+  it("renders a contributed tab status icon with accessible text", () => {
+    const StatusIcon = ({ className }: { className?: string }) => <svg className={className} data-testid="scheduled" />;
+
+    act(() => {
+      root.render(
+        <EditorTabs
+          openFiles={[makeFile()]}
+          activeFileId="file-1"
+          editorsById={new Map()}
+          tabsRef={createRef<HTMLDivElement>()}
+          onSelectFile={vi.fn()}
+          onCloseFile={vi.fn()}
+          tabHeaderStyleContributions={[{
+            id: "scheduled",
+            render: () => ({ statusIcon: StatusIcon, statusIconTitle: "Executing every 5 seconds" })
+          }]}
+        />
+      );
+    });
+
+    const icon = rootElement.querySelector(".shell-editor-tab-status-icon");
+    expect(icon?.getAttribute("aria-label")).toBe("Executing every 5 seconds");
+    expect(icon?.getAttribute("title")).toBeNull();
+    expect(icon?.querySelector("[data-testid='scheduled']")).toBeTruthy();
+  });
+
+  it("passes the editor group to shared tab tooltip contributions", () => {
+    const renderTooltip = vi.fn(({ editorGroupId }: { editorGroupId?: string }) => ({
+      label: "Recurring execution",
+      value: `Every 5 seconds in ${editorGroupId}`
+    }));
+
+    act(() => {
+      root.render(
+        <EditorTabs
+          openFiles={[makeFile()]}
+          activeFileId="file-1"
+          editorGroupId="left"
+          editorsById={new Map()}
+          tabsRef={createRef<HTMLDivElement>()}
+          onSelectFile={vi.fn()}
+          onCloseFile={vi.fn()}
+          tooltipContributions={[{ id: "schedule", order: 20, render: renderTooltip }]}
+        />
+      );
+    });
+
+    act(() => {
+      rootElement.querySelector(".shell-editor-tab")?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+
+    expect(renderTooltip).toHaveBeenCalledWith(expect.objectContaining({ editorGroupId: "left" }));
+    expect(rootElement.querySelector(".shell-tab-tooltip")?.textContent).toContain("Every 5 seconds in left");
+  });
 });

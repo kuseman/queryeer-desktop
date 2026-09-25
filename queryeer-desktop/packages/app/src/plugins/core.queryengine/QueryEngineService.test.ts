@@ -578,6 +578,31 @@ describe("QueryEngineService backend readiness", () => {
     expect(failedParams.error?.code).toBe("CANCELLED");
   });
 
+  it("emits local cancellation even when the backend becomes unavailable", async () => {
+    let healthy = true;
+    window.appShell = {
+      ...originalAppShell,
+      getBackendStatus: async () => ({
+        mode: "mock-stdio",
+        state: healthy ? "healthy" : "unavailable",
+        supportedCapabilities: [],
+        activeExecutionIds: [],
+        recentExecutions: [],
+        backendLogs: []
+      }),
+      executeBackendQuery: vi.fn(async (params) => ({ accepted: true, queryExecutionId: params.queryExecutionId })),
+      cancelBackendQuery: vi.fn()
+    };
+    const service = new QueryEngineService();
+    const events: string[] = [];
+    service.onQueryEvent((event) => events.push(event.method));
+    const executionId = await service.execute({ engineId: "jdbc", fileId: "file-1", text: "select 1" });
+    healthy = false;
+
+    await expect(service.cancel(executionId)).rejects.toBeInstanceOf(BackendNotReadyError);
+    expect(events).toContain("queryengine.failed");
+  });
+
   it("consumes execute options for matching output session id", () => {
     const service = new QueryEngineService();
 

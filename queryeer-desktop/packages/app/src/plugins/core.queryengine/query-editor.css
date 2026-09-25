@@ -182,6 +182,43 @@
   animation: queryengine-tab-indicator-spin 0.9s linear infinite;
 }
 
+.query-output-schedule-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #44c984;
+}
+
+.query-output-schedule-status.is-paused {
+  color: #d6a84b;
+}
+
+.query-output-schedule-stop {
+  border: 0;
+  padding: 0 3px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.shell-editor-tab-status-icon {
+  display: inline-flex;
+  align-items: center;
+  color: #44c984;
+  flex: 0 0 auto;
+}
+
+.shell-editor-tab-status-icon-svg {
+  width: 14px;
+  height: 14px;
+}
+
+.queryengine-tab-schedule-paused .shell-editor-tab-status-icon {
+  color: #d6a84b;
+}
+
 @keyframes queryengine-tab-indicator-spin {
   from {
     transform: translate3d(-110%, 0, 0);

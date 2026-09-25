@@ -61,6 +61,8 @@ export async function bootstrapShell() {
       editorTextFocus: false,
       hasActiveQueryExecutableFile: false,
       hasActiveQueryPlanDialect: false,
+      activeEditorGroupHasRunningQuery: false,
+      activeEditorGroupHasQuerySchedule: false,
       backendHealthy: false,
     }
   });

@@ -11,7 +11,7 @@ export type TooltipSection = {
 export type TooltipSectionContribution = {
   id: string;
   order: number;
-  render: (context: { file: FileEntity }) => TooltipSection | null;
+  render: (context: { file: FileEntity; editorGroupId?: string }) => TooltipSection | null;
 };
 
 export type TooltipRegistry = {

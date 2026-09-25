@@ -25,7 +25,8 @@ const mocks = vi.hoisted(() => {
   };
   const subscribeByExecutionId = new Map<string, (event: { method: string; params?: unknown }) => void>();
   const executeRequestListeners = new Set<() => void>();
-  const cancelRequestListeners = new Set<() => void>();
+  const cancelRequestListeners = new Set<(options?: { fileIdOverride?: string; targetEditorGroupId?: string }) => void>();
+  const scheduleRequestListeners = new Set<(options: { intervalSeconds: number; fileIdOverride?: string; targetEditorGroupId?: string }) => void>();
   const toggleOutputPanelRequestListeners = new Set<() => void>();
   const selectedPrimaryRef = { value: "core.queryengine.output.table" as string | null };
   const activeTextEditorFileIdRef = { value: null as string | null };
@@ -47,10 +48,15 @@ const mocks = vi.hoisted(() => {
       executeRequestListeners.add(listener);
       return () => executeRequestListeners.delete(listener);
     }),
-    onCancelRequestMock: vi.fn((listener: () => void) => {
+    onCancelRequestMock: vi.fn((listener: (options?: { fileIdOverride?: string; targetEditorGroupId?: string }) => void) => {
       cancelRequestListeners.add(listener);
       return () => cancelRequestListeners.delete(listener);
     }),
+    onScheduleRequestMock: vi.fn((listener: (options: { intervalSeconds: number; fileIdOverride?: string; targetEditorGroupId?: string }) => void) => {
+      scheduleRequestListeners.add(listener);
+      return () => scheduleRequestListeners.delete(listener);
+    }),
+    notifyScheduleChangedMock: vi.fn(),
     onToggleOutputPanelRequestMock: vi.fn((listener: () => void) => {
       toggleOutputPanelRequestListeners.add(listener);
       return () => toggleOutputPanelRequestListeners.delete(listener);
@@ -66,6 +72,7 @@ const mocks = vi.hoisted(() => {
     subscribeByExecutionId,
     executeRequestListeners,
     cancelRequestListeners,
+    scheduleRequestListeners,
     toggleOutputPanelRequestListeners,
   };
 });
@@ -100,7 +107,8 @@ vi.mock("./QueryTextEditorRegistry", () => ({
     getActiveEditor: () => mocks.getActiveEditorMock(),
     getActiveFile: () => mocks.activeTextEditorFileIdRef.value
       ? { fileId: mocks.activeTextEditorFileIdRef.value }
-      : null
+      : null,
+    getModelForFile: () => undefined
   }
 }));
 
@@ -111,6 +119,8 @@ vi.mock("./QueryEngineService", () => ({
     subscribe: mocks.subscribeMock,
     onExecuteRequest: mocks.onExecuteRequestMock,
     onCancelRequest: mocks.onCancelRequestMock,
+    onScheduleRequest: mocks.onScheduleRequestMock,
+    notifyScheduleChanged: mocks.notifyScheduleChangedMock,
     onToggleOutputPanelRequest: mocks.onToggleOutputPanelRequestMock,
     consumeExecuteOptions: mocks.consumeExecuteOptionsMock,
     peekExecuteOptions: mocks.peekExecuteOptionsMock
@@ -233,6 +243,8 @@ describe("QueryEditorComponent execution state across tab switches", () => {
     mocks.subscribeMock.mockClear();
     mocks.onExecuteRequestMock.mockClear();
     mocks.onCancelRequestMock.mockClear();
+    mocks.onScheduleRequestMock.mockClear();
+    mocks.notifyScheduleChangedMock.mockClear();
     mocks.notifyExecutionStartMock.mockClear();
     mocks.ensureUnlockedForSecretAccessMock.mockReset();
     mocks.ensureUnlockedForSecretAccessMock.mockResolvedValue(true);
@@ -240,6 +252,7 @@ describe("QueryEditorComponent execution state across tab switches", () => {
     mocks.subscribeByExecutionId.clear();
     mocks.executeRequestListeners.clear();
     mocks.cancelRequestListeners.clear();
+    mocks.scheduleRequestListeners.clear();
     mocks.toggleOutputPanelRequestListeners.clear();
     mocks.selectedPrimaryRef.value = "core.queryengine.output.table";
     mocks.activeTextEditorFileIdRef.value = null;
@@ -318,6 +331,7 @@ const filesRegistry = {
       root.unmount();
     });
     rootElement.remove();
+    vi.useRealTimers();
   });
 
   it("defaults new query files to table results output", async () => {
@@ -341,6 +355,280 @@ const filesRegistry = {
 
     const context = readOutputContext("file-1");
     expect(context?.rowsTargetPrimaryId).toBe("core.queryengine.output.table");
+  });
+
+  it("executes the whole current document on scheduled ticks and skips while busy", async () => {
+    vi.useFakeTimers();
+    const file = makeFile({ fileId: "scheduled", uri: "file:///scheduled.sql" });
+    mocks.activeTextEditorFileIdRef.value = file.fileId;
+    const editor = {
+      getSelectedText: vi.fn(() => "selected only"),
+      getContent: vi.fn(() => "select current_value"),
+      getSelection: vi.fn(() => null)
+    };
+    mocks.getActiveEditorMock.mockReturnValue(editor);
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file} editorInstanceId="left" editorGroupId="left" editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+
+    await act(async () => {
+      for (const listener of mocks.scheduleRequestListeners) {
+        listener({ intervalSeconds: 5, fileIdOverride: file.fileId, targetEditorGroupId: "left" });
+      }
+      await Promise.resolve();
+    });
+
+    expect(mocks.executeMock).toHaveBeenCalledWith(expect.objectContaining({
+      fileId: file.fileId,
+      text: "select current_value"
+    }));
+
+    await act(async () => {
+      vi.advanceTimersByTime(10_000);
+      await Promise.resolve();
+    });
+    expect(mocks.executeMock).toHaveBeenCalledTimes(1);
+
+    const listener = mocks.subscribeByExecutionId.get("exec-1");
+    await act(async () => {
+      listener?.({ method: "queryengine.completed", params: {} });
+      vi.advanceTimersByTime(5_000);
+      await Promise.resolve();
+    });
+    expect(mocks.executeMock).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it("stops a schedule and its active execution through targeted cancel", async () => {
+    vi.useFakeTimers();
+    const file = makeFile({ fileId: "scheduled", uri: "file:///scheduled.sql" });
+    mocks.activeTextEditorFileIdRef.value = file.fileId;
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file} editorInstanceId="left" editorGroupId="left" editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+    await act(async () => {
+      for (const listener of mocks.scheduleRequestListeners) {
+        listener({ intervalSeconds: 1, fileIdOverride: file.fileId, targetEditorGroupId: "left" });
+      }
+      await Promise.resolve();
+    });
+    await act(async () => {
+      for (const listener of mocks.cancelRequestListeners) {
+        listener({ fileIdOverride: file.fileId, targetEditorGroupId: "left" });
+      }
+      await Promise.resolve();
+    });
+
+    expect(mocks.cancelMock).toHaveBeenCalledWith("exec-1");
+    expect(mocks.notifyScheduleChangedMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      fileId: file.fileId
+    }));
+    vi.advanceTimersByTime(5_000);
+    expect(mocks.executeMock).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it("cancels a pending scheduled execution when its editor group is disposed", async () => {
+    let resolveExecution!: (executionId: string) => void;
+    mocks.executeMock.mockReturnValue(new Promise<string>((resolve) => {
+      resolveExecution = resolve;
+    }));
+    const file = makeFile({ fileId: "scheduled-pending", uri: "file:///scheduled-pending.sql" });
+    mocks.activeTextEditorFileIdRef.value = file.fileId;
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file} editorGroupId="left" editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+    await act(async () => {
+      for (const listener of mocks.scheduleRequestListeners) {
+        listener({ intervalSeconds: 5, fileIdOverride: file.fileId, targetEditorGroupId: "left" });
+      }
+      await Promise.resolve();
+    });
+    await act(async () => {
+      root.render(<></>);
+    });
+    await act(async () => {
+      resolveExecution("exec-pending");
+      await Promise.resolve();
+    });
+
+    expect(mocks.cancelMock).toHaveBeenCalledWith("exec-pending");
+    expect(mocks.subscribeMock).not.toHaveBeenCalled();
+  });
+
+  it("does not start a scheduled file-output execution after its editor group is disposed", async () => {
+    let resolveDialog!: (result: { canceled: boolean; filePath: string }) => void;
+    window.appShell.showDialogSave = vi.fn(() => new Promise<{ canceled: boolean; filePath: string }>((resolve) => {
+      resolveDialog = resolve;
+    }));
+    const file = makeFile({ fileId: "scheduled-dialog", uri: "file:///scheduled-dialog.sql" });
+    mocks.activeTextEditorFileIdRef.value = file.fileId;
+    getQueryViewStateStore().setSelectedOutput(file.fileId, "core.queryengine:left", "core.queryengine.output.file");
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file} editorGroupId="left" editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+    await act(async () => {
+      for (const listener of mocks.scheduleRequestListeners) {
+        listener({ intervalSeconds: 5, fileIdOverride: file.fileId, targetEditorGroupId: "left" });
+      }
+      await Promise.resolve();
+    });
+    await act(async () => {
+      root.render(<></>);
+    });
+    await act(async () => {
+      resolveDialog({ canceled: false, filePath: "C:\\tmp\\disposed.csv" });
+      await Promise.resolve();
+    });
+
+    expect(mocks.executeMock).not.toHaveBeenCalled();
+  });
+
+  it("pauses a scheduled query on a locked security session without prompting repeatedly", async () => {
+    vi.useFakeTimers();
+    const file = makeFile({ fileId: "scheduled-security", uri: "file:///scheduled-security.sql" });
+    mocks.activeTextEditorFileIdRef.value = file.fileId;
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file} editorGroupId="left" editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+    await act(async () => {
+      for (const listener of mocks.scheduleRequestListeners) listener({ intervalSeconds: 5, fileIdOverride: file.fileId, targetEditorGroupId: "left" });
+      await Promise.resolve();
+    });
+
+    const listener = mocks.subscribeByExecutionId.get("exec-1");
+    await act(async () => {
+      listener?.({
+        method: "queryengine.failed",
+        params: { error: { code: "SECURITY_SESSION_CLOSED", message: "Vault is locked" } }
+      });
+      await Promise.resolve();
+    });
+
+    expect(rootElement.textContent).toContain("Auto-run paused: Security vault is locked");
+    expect(mocks.ensureUnlockedForSecretAccessMock).not.toHaveBeenCalled();
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
+    expect(mocks.executeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("pauses after three consecutive scheduled execution-start failures", async () => {
+    vi.useFakeTimers();
+    const file = makeFile({ fileId: "scheduled-offline", uri: "file:///scheduled-offline.sql" });
+    mocks.activeTextEditorFileIdRef.value = file.fileId;
+    mocks.executeMock.mockRejectedValue(new Error("Backend is not ready"));
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file} editorGroupId="left" editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+    await act(async () => {
+      for (const listener of mocks.scheduleRequestListeners) listener({ intervalSeconds: 1, fileIdOverride: file.fileId, targetEditorGroupId: "left" });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    expect(mocks.executeMock).toHaveBeenCalledTimes(3);
+    expect(rootElement.textContent).toContain("Auto-run paused: Backend is unavailable after repeated attempts");
+    await act(async () => vi.advanceTimersByTimeAsync(5_000));
+    expect(mocks.executeMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("reuses one file output path for all scheduled occurrences", async () => {
+    vi.useFakeTimers();
+    const file = makeFile({ fileId: "scheduled-file", uri: "file:///scheduled-file.sql" });
+    mocks.activeTextEditorFileIdRef.value = file.fileId;
+    const showDialogSave = vi.fn(async () => ({ canceled: false, filePath: "C:\\tmp\\scheduled.csv" }));
+    window.appShell.showDialogSave = showDialogSave;
+    window.appShell.openExportStream = vi.fn(async () => {});
+    window.appShell.appendExportChunk = vi.fn(async () => {});
+    let resolveFinalize!: (value: { exportPath: string }) => void;
+    window.appShell.finalizeExportStream = vi.fn(() => new Promise<{ exportPath: string }>((resolve) => {
+      resolveFinalize = resolve;
+    }));
+    window.appShell.readFile = vi.fn(async () => ({ success: true, content: "[1]\n" }));
+    window.appShell.writeFile = vi.fn(async () => ({ success: true }));
+    getQueryViewStateStore().setSelectedOutput(file.fileId, "core.queryengine:left", "core.queryengine.output.file");
+    mocks.executeMock.mockResolvedValueOnce("exec-1").mockResolvedValueOnce("exec-2");
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file} editorGroupId="left" editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+    await act(async () => {
+      for (const listener of mocks.scheduleRequestListeners) listener({ intervalSeconds: 5, fileIdOverride: file.fileId, targetEditorGroupId: "left" });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      const listener = mocks.subscribeByExecutionId.get("exec-1");
+      listener?.({
+        method: "queryengine.chunkStart",
+        params: { resultSetIndex: 0, schema: { columns: [{ name: "value", type: "int" }] } }
+      });
+      listener?.({ method: "queryengine.chunkRows", params: { resultSetIndex: 0, rows: [[1]] } });
+      listener?.({ method: "queryengine.completed", params: {} });
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+
+    expect(mocks.executeMock).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      resolveFinalize({ exportPath: "file:///C:/tmp/scheduled.ndjson" });
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(mocks.executeMock).toHaveBeenCalledTimes(2);
+    expect(showDialogSave).toHaveBeenCalledTimes(1);
+  });
+
+  it("queues manual execution until file-output finalization completes", async () => {
+    const file = makeFile({ fileId: "file-finalizing", uri: "file:///file-finalizing.sql" });
+    mocks.activeTextEditorFileIdRef.value = file.fileId;
+    getQueryViewStateStore().setSelectedOutput(file.fileId, "core.queryengine:left", "core.queryengine.output.file");
+    window.appShell.showDialogSave = vi.fn(async () => ({ canceled: false, filePath: "C:\\tmp\\manual.txt" }));
+    window.appShell.openExportStream = vi.fn(async () => {});
+    window.appShell.appendExportChunk = vi.fn(async () => {});
+    let resolveFinalize!: (value: { exportPath: string }) => void;
+    window.appShell.finalizeExportStream = vi.fn(() => new Promise<{ exportPath: string }>((resolve) => {
+      resolveFinalize = resolve;
+    }));
+    window.appShell.readFile = vi.fn(async () => ({ success: true, content: "[1]\n" }));
+    window.appShell.writeFile = vi.fn(async () => ({ success: true }));
+    mocks.executeMock.mockResolvedValueOnce("exec-1").mockResolvedValueOnce("exec-2");
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file} editorGroupId="left" editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) listener();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      const listener = mocks.subscribeByExecutionId.get("exec-1");
+      listener?.({
+        method: "queryengine.chunkStart",
+        params: { resultSetIndex: 0, schema: { columns: [{ name: "value", type: "int" }] } }
+      });
+      listener?.({ method: "queryengine.chunkRows", params: { resultSetIndex: 0, rows: [[1]] } });
+      listener?.({ method: "queryengine.completed", params: {} });
+      for (const executeListener of mocks.executeRequestListeners) executeListener();
+      await Promise.resolve();
+    });
+    expect(mocks.executeMock).toHaveBeenCalledTimes(1);
+
+    const otherFile = makeFile({ fileId: "other-file", uri: "file:///other-file.sql" });
+    await act(async () => {
+      root.render(<QueryEditorComponent file={otherFile} editorGroupId="left" editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+    await act(async () => {
+      resolveFinalize({ exportPath: "file:///C:/tmp/manual.ndjson" });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(mocks.executeMock).toHaveBeenCalledTimes(2);
+    expect(mocks.executeMock).toHaveBeenLastCalledWith(expect.objectContaining({ fileId: file.fileId }));
   });
 
   it("keeps the editor divider position independent per file", async () => {
