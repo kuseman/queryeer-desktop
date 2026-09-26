@@ -32,9 +32,7 @@ export default defineConfig({
           include: ["src/main/backend/backend-integration.test.ts"],
           environment: "node",
           pool: "forks",
-          poolOptions: {
-            forks: { singleFork: true }
-          },
+          maxWorkers: 1,
           isolate: false
         }
       },

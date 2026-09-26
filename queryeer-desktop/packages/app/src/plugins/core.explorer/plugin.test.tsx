@@ -101,8 +101,8 @@ describe("coreExplorerPlugin", () => {
 function createContext(args: {
   commands: Map<string, () => Promise<void> | void>;
   providers?: QuickCommandProvider[];
-  watch: ReturnType<typeof vi.fn>;
-  showOpenFolder: ReturnType<typeof vi.fn>;
+  watch: PluginContext["fileWatcher"]["watch"];
+  showOpenFolder: PluginContext["dialog"]["showOpenFolder"];
   readDir: ReturnType<typeof vi.fn>;
 }): PluginContext {
   Object.defineProperty(window, "appShell", {
