@@ -35,7 +35,8 @@ export default defineConfig({
           include: ["src/main/backend/backend-integration.test.ts"],
           environment: "node",
           pool: "forks",
-          singleFork: true,
+          maxWorkers: 1,
+          sequence: { groupOrder: 1 },
           isolate: false
         }
       },
