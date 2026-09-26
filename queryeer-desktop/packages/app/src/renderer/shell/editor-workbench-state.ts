@@ -342,6 +342,60 @@ export function moveFileToSide(
   });
 }
 
+export function moveFileToGroup(
+  state: EditorWorkbenchState,
+  sourceGroupId: string,
+  fileId: string,
+  targetGroupId: string,
+  targetIndex: number
+): EditorWorkbenchState {
+  const sourceGroup = state.groups.find((group) => group.id === sourceGroupId);
+  const targetGroup = state.groups.find((group) => group.id === targetGroupId);
+  if (!sourceGroup?.fileIds.includes(fileId) || !targetGroup || !Number.isFinite(targetIndex)) {
+    return state;
+  }
+
+  const insertionIndex = Math.min(Math.max(Math.trunc(targetIndex), 0), targetGroup.fileIds.length);
+  if (sourceGroupId === targetGroupId) {
+    const sourceIndex = sourceGroup.fileIds.indexOf(fileId);
+    const adjustedIndex = sourceIndex < insertionIndex ? insertionIndex - 1 : insertionIndex;
+    if (sourceIndex === adjustedIndex) {
+      return state;
+    }
+    const fileIds = sourceGroup.fileIds.filter((id) => id !== fileId);
+    fileIds.splice(adjustedIndex, 0, fileId);
+    return {
+      ...state,
+      groups: state.groups.map((group) => group.id === sourceGroupId ? { ...group, fileIds } : group)
+    };
+  }
+
+  const existingTargetIndex = targetGroup.fileIds.indexOf(fileId);
+  const adjustedIndex = existingTargetIndex >= 0 && existingTargetIndex < insertionIndex
+    ? insertionIndex - 1
+    : insertionIndex;
+  const targetFileIds = targetGroup.fileIds.filter((id) => id !== fileId);
+  targetFileIds.splice(Math.min(adjustedIndex, targetFileIds.length), 0, fileId);
+
+  const groups = state.groups.map((group) => {
+    if (group.id === sourceGroupId) {
+      return removeFileFromGroup(group, fileId);
+    }
+    if (group.id === targetGroupId) {
+      return activateFile({ ...group, fileIds: targetFileIds }, fileId);
+    }
+    return group;
+  });
+  const collapsed = collapseEmptyGroups(groups, targetGroupId);
+  const groupCountChanged = collapsed.length !== state.groups.length;
+  return normalizeEditorWorkbenchState({
+    groups: collapsed,
+    activeGroupId: targetGroupId,
+    sizes: normalizeSizes(groupCountChanged ? [] : state.sizes, collapsed.length),
+    maximizedGroupId: state.maximizedGroupId ? targetGroupId : null
+  });
+}
+
 export function resizeAdjacentEditorGroups(
   state: EditorWorkbenchState,
   dividerIndex: number,

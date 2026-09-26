@@ -7,6 +7,7 @@ import {
   getActiveWorkbenchFileId,
   isFileReferenced,
   listWorkbenchFileIds,
+  moveFileToGroup,
   moveFileToSide,
   openFileToSide,
   resizeAdjacentEditorGroups,
@@ -183,6 +184,89 @@ describe("editor workbench state", () => {
     expect(next.groups[1].activeFileId).toBe("b");
   });
 
+  it("reorders tabs within a group without changing activation state", () => {
+    const state = {
+      groups: [{ id: "main", fileIds: ["a", "b", "c"], activeFileId: "b", activationQueue: ["a", "b"] }],
+      activeGroupId: "main",
+      sizes: [1]
+    };
+
+    const movedRight = moveFileToGroup(state, "main", "a", "main", 3);
+    const movedLeft = moveFileToGroup(movedRight, "main", "c", "main", 0);
+
+    expect(movedRight.groups[0]).toEqual({
+      id: "main",
+      fileIds: ["b", "c", "a"],
+      activeFileId: "b",
+      activationQueue: ["a", "b"]
+    });
+    expect(movedLeft.groups[0].fileIds).toEqual(["c", "b", "a"]);
+  });
+
+  it("returns the existing state for invalid and unchanged tab moves", () => {
+    const state = createEditorWorkbenchState(["a", "b", "c"], "a");
+    const groupId = state.groups[0].id;
+
+    expect(moveFileToGroup(state, groupId, "b", groupId, 1)).toBe(state);
+    expect(moveFileToGroup(state, "missing", "b", groupId, 0)).toBe(state);
+    expect(moveFileToGroup(state, groupId, "missing", groupId, 0)).toBe(state);
+    expect(moveFileToGroup(state, groupId, "b", "missing", 0)).toBe(state);
+  });
+
+  it("moves a tab to an exact position in another group and activates it", () => {
+    const state = {
+      groups: [
+        { id: "left", fileIds: ["a", "b"], activeFileId: "a", activationQueue: ["a"] },
+        { id: "right", fileIds: ["c", "d"], activeFileId: "d", activationQueue: ["c", "d"] }
+      ],
+      activeGroupId: "left",
+      sizes: [0.6, 0.4]
+    };
+
+    const next = moveFileToGroup(state, "left", "b", "right", 1);
+
+    expect(next.groups.map((group) => group.fileIds)).toEqual([["a"], ["c", "b", "d"]]);
+    expect(next.groups[1].activeFileId).toBe("b");
+    expect(next.groups[1].activationQueue).toEqual(["c", "d", "b"]);
+    expect(next.activeGroupId).toBe("right");
+    expect(next.sizes).toEqual([0.6, 0.4]);
+  });
+
+  it("collapses an emptied source group after a cross-group move", () => {
+    const state = {
+      groups: [
+        { id: "left", fileIds: ["a"], activeFileId: "a", activationQueue: ["a"] },
+        { id: "right", fileIds: ["b"], activeFileId: "b", activationQueue: ["b"] }
+      ],
+      activeGroupId: "left",
+      sizes: [0.7, 0.3]
+    };
+
+    const next = moveFileToGroup(state, "left", "a", "right", 0);
+
+    expect(next.groups).toHaveLength(1);
+    expect(next.groups[0].fileIds).toEqual(["a", "b"]);
+    expect(next.groups[0].activeFileId).toBe("a");
+    expect(next.activeGroupId).toBe("right");
+    expect(next.sizes).toEqual([1]);
+  });
+
+  it("removes a duplicate from the source and repositions the target copy", () => {
+    const state = {
+      groups: [
+        { id: "left", fileIds: ["a", "b"], activeFileId: "a", activationQueue: ["a"] },
+        { id: "right", fileIds: ["c", "b", "d"], activeFileId: "c", activationQueue: ["c"] }
+      ],
+      activeGroupId: "left",
+      sizes: [0.5, 0.5]
+    };
+
+    const next = moveFileToGroup(state, "left", "b", "right", 3);
+
+    expect(next.groups.map((group) => group.fileIds)).toEqual([["a"], ["c", "d", "b"]]);
+    expect(next.groups[1].activeFileId).toBe("b");
+  });
+
   it("closes a duplicate tab only in the requested group", () => {
     const state = splitActiveGroupRight(createEditorWorkbenchState(["query"], "query"));
     const leftGroupId = state.groups[0].id;
@@ -311,6 +395,28 @@ describe("editor workbench state", () => {
     expect(restored.groups.map((group) => group.fileIds)).toEqual([["query"], ["graph"]]);
     expect(restored.activeGroupId).toBe("right");
     expect(restored.sizes).toEqual([0.7, 0.3]);
+  });
+
+  it("restores tabs in persisted URI order", () => {
+    const restored = restoreEditorWorkbenchStateFromSnapshot(
+      [
+        { fileId: "a", uri: "file:///a.sql" },
+        { fileId: "b", uri: "file:///b.sql" },
+        { fileId: "c", uri: "file:///c.sql" }
+      ],
+      {
+        editorGroups: [{
+          id: "main",
+          fileUris: ["file:///c.sql", "file:///a.sql", "file:///b.sql"],
+          activeFileUri: "file:///a.sql"
+        }],
+        activeEditorGroupId: "main"
+      },
+      "a"
+    );
+
+    expect(restored.groups[0].fileIds).toEqual(["c", "a", "b"]);
+    expect(restored.groups[0].activeFileId).toBe("a");
   });
 
   it("restores a persisted maximized editor group as the active group", () => {
