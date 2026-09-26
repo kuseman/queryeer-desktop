@@ -50,6 +50,7 @@ import {
   getActiveEditorGroup,
   getActiveWorkbenchFileId,
   listWorkbenchFileIds,
+  moveFileToGroup,
   moveFileToSide,
   openFileInActiveGroup,
   openFileToSide,
@@ -611,6 +612,16 @@ export function ShellApp({
     setEditorWorkbench((previous) => selectFileInGroup(previous, groupId, fileId));
   };
 
+  const moveFile = (sourceGroupId: string, fileId: string, targetGroupId: string, targetIndex: number) => {
+    setEditorWorkbench((previous) => moveFileToGroup(
+      previous,
+      sourceGroupId,
+      fileId,
+      targetGroupId,
+      targetIndex
+    ));
+  };
+
   const focusGroup = (groupId: string) => {
     setEditorWorkbench((previous) => focusEditorGroup(previous, groupId));
   };
@@ -927,6 +938,7 @@ export function ShellApp({
                       }}
                       onSelectFile={(fileId) => selectFile(fileId, group.id)}
                       onCloseFile={(fileId) => closeFile(fileId, group.id)}
+                      onMoveFile={moveFile}
                       tooltipContributions={tooltipContributions}
                       tabContextMenus={tabContextMenus}
                       tabHeaderStyleContributions={tabHeaderStyleContributions}

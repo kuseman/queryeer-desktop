@@ -18,6 +18,41 @@ function makeFile(overrides: Partial<FileEntity> = {}): FileEntity {
   };
 }
 
+class TestDataTransfer {
+  dropEffect = "none";
+  effectAllowed = "uninitialized";
+  private readonly data = new Map<string, string>();
+
+  get types(): string[] {
+    return [...this.data.keys()];
+  }
+
+  getData(type: string): string {
+    return this.data.get(type) ?? "";
+  }
+
+  setData(type: string, value: string): void {
+    this.data.set(type, value);
+  }
+}
+
+function dispatchDrag(
+  element: Element,
+  type: string,
+  dataTransfer: TestDataTransfer,
+  clientX = 0
+): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperties(event, {
+    dataTransfer: { value: dataTransfer },
+    clientX: { value: clientX }
+  });
+  act(() => {
+    element.dispatchEvent(event);
+  });
+  return event;
+}
+
 describe("EditorTabs rendering", () => {
   let rootElement: HTMLDivElement;
   let root: Root;
@@ -174,5 +209,153 @@ describe("EditorTabs rendering", () => {
 
     expect(renderTooltip).toHaveBeenCalledWith(expect.objectContaining({ editorGroupId: "left" }));
     expect(rootElement.querySelector(".shell-tab-tooltip")?.textContent).toContain("Every 5 seconds in left");
+  });
+
+  it("writes the source group and file to the tab drag payload", () => {
+    const dataTransfer = new TestDataTransfer();
+
+    act(() => {
+      root.render(
+        <EditorTabs
+          openFiles={[makeFile()]}
+          activeFileId="file-1"
+          editorGroupId="left"
+          editorsById={new Map()}
+          tabsRef={createRef<HTMLDivElement>()}
+          onSelectFile={vi.fn()}
+          onCloseFile={vi.fn()}
+          onMoveFile={vi.fn()}
+        />
+      );
+    });
+
+    const tab = rootElement.querySelector(".shell-editor-tab") as HTMLDivElement;
+    dispatchDrag(tab, "dragstart", dataTransfer);
+
+    expect(tab.draggable).toBe(true);
+    expect(dataTransfer.effectAllowed).toBe("move");
+    expect(JSON.parse(dataTransfer.getData("application/x-queryeer-editor-tab"))).toEqual({
+      editorGroupId: "left",
+      fileId: "file-1"
+    });
+    expect(tab.classList.contains("is-dragging")).toBe(true);
+  });
+
+  it("drops before or after a tab based on its horizontal midpoint", () => {
+    const onMoveFile = vi.fn();
+    const files = [
+      makeFile({ fileId: "target-1", uri: "file:///tmp/one.sql" }),
+      makeFile({ fileId: "target-2", uri: "file:///tmp/two.sql" })
+    ];
+
+    act(() => {
+      root.render(
+        <EditorTabs
+          openFiles={files}
+          activeFileId="target-1"
+          editorGroupId="right"
+          editorsById={new Map()}
+          tabsRef={createRef<HTMLDivElement>()}
+          onSelectFile={vi.fn()}
+          onCloseFile={vi.fn()}
+          onMoveFile={onMoveFile}
+        />
+      );
+    });
+
+    const secondTab = rootElement.querySelector("[data-file-id='target-2']") as HTMLDivElement;
+    vi.spyOn(secondTab, "getBoundingClientRect").mockReturnValue({
+      left: 100,
+      right: 200,
+      width: 100,
+      top: 0,
+      bottom: 28,
+      height: 28,
+      x: 100,
+      y: 0,
+      toJSON: () => ({})
+    });
+
+    const beforeTransfer = new TestDataTransfer();
+    beforeTransfer.setData("application/x-queryeer-editor-tab", JSON.stringify({ editorGroupId: "left", fileId: "source" }));
+    dispatchDrag(secondTab, "dragover", beforeTransfer, 120);
+    expect(secondTab.classList.contains("is-drop-before")).toBe(true);
+    dispatchDrag(secondTab, "drop", beforeTransfer, 120);
+    expect(onMoveFile).toHaveBeenLastCalledWith("left", "source", "right", 1);
+
+    const afterTransfer = new TestDataTransfer();
+    afterTransfer.setData("application/x-queryeer-editor-tab", JSON.stringify({ editorGroupId: "left", fileId: "source" }));
+    dispatchDrag(secondTab, "dragover", afterTransfer, 180);
+    expect(secondTab.classList.contains("is-drop-after")).toBe(true);
+    dispatchDrag(secondTab, "drop", afterTransfer, 180);
+    expect(onMoveFile).toHaveBeenLastCalledWith("left", "source", "right", 2);
+  });
+
+  it("drops into trailing strip space at the end and clears drag feedback", () => {
+    const onMoveFile = vi.fn();
+    act(() => {
+      root.render(
+        <EditorTabs
+          openFiles={[
+            makeFile({ fileId: "target-1", uri: "file:///tmp/one.sql" }),
+            makeFile({ fileId: "target-2", uri: "file:///tmp/two.sql" })
+          ]}
+          activeFileId="target-1"
+          editorGroupId="right"
+          editorsById={new Map()}
+          tabsRef={createRef<HTMLDivElement>()}
+          onSelectFile={vi.fn()}
+          onCloseFile={vi.fn()}
+          onMoveFile={onMoveFile}
+        />
+      );
+    });
+
+    const list = rootElement.querySelector(".shell-editor-tabs-list") as HTMLDivElement;
+    const dataTransfer = new TestDataTransfer();
+    dataTransfer.setData("application/x-queryeer-editor-tab", JSON.stringify({ editorGroupId: "left", fileId: "source" }));
+
+    dispatchDrag(list, "dragover", dataTransfer, 500);
+    expect(list.classList.contains("is-drag-over")).toBe(true);
+    expect(rootElement.querySelector("[data-file-id='target-2']")?.classList.contains("is-drop-after")).toBe(true);
+    dispatchDrag(list, "drop", dataTransfer, 500);
+
+    expect(onMoveFile).toHaveBeenCalledWith("left", "source", "right", 2);
+    expect(list.classList.contains("is-drag-over")).toBe(false);
+    expect(rootElement.querySelector(".is-drop-after")).toBeNull();
+  });
+
+  it("allows tabs to be selected after a drop without waiting for dragend", () => {
+    const onSelectFile = vi.fn();
+    act(() => {
+      root.render(
+        <EditorTabs
+          openFiles={[
+            makeFile({ fileId: "file-1", uri: "file:///tmp/one.sql" }),
+            makeFile({ fileId: "file-2", uri: "file:///tmp/two.sql" })
+          ]}
+          activeFileId="file-1"
+          editorGroupId="main"
+          editorsById={new Map()}
+          tabsRef={createRef<HTMLDivElement>()}
+          onSelectFile={onSelectFile}
+          onCloseFile={vi.fn()}
+          onMoveFile={vi.fn()}
+        />
+      );
+    });
+
+    const firstTab = rootElement.querySelector("[data-file-id='file-1']") as HTMLDivElement;
+    const secondTab = rootElement.querySelector("[data-file-id='file-2']") as HTMLDivElement;
+    const dataTransfer = new TestDataTransfer();
+    dispatchDrag(firstTab, "dragstart", dataTransfer);
+    dispatchDrag(secondTab, "dragover", dataTransfer, 0);
+    dispatchDrag(secondTab, "drop", dataTransfer, 0);
+
+    act(() => {
+      (secondTab.querySelector(".shell-editor-tab-button") as HTMLDivElement).click();
+    });
+
+    expect(onSelectFile).toHaveBeenCalledWith("file-2");
   });
 });
