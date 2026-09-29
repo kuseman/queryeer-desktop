@@ -21,6 +21,7 @@ process.env.QUERYEER_CHANGELOG_FULL = "true";
 run("Generate changelog", "node scripts/generate-changelog.mjs");
 run("Build backend jlink runtime", "node scripts/backend-jlink.mjs");
 run("Stage backend release resources", "node scripts/stage-backend-release.mjs");
+run("Test packaged backend", "npm run test:packaged-backend:staged");
 run("Build desktop", "npm run build");
 const versionArgs = releaseVersion ? [`--config.extraMetadata.version=${releaseVersion}`] : [];
 run("Package desktop", ["npx", "electron-builder", "--publish", "never", ...versionArgs, ...builderArgs].join(" "));

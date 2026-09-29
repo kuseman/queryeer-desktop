@@ -15,6 +15,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --project integration",
+    "test:packaged-backend": "npm run backend:jlink && npm run backend:stage-release && npm run test:packaged-backend:staged",
+    "test:packaged-backend:staged": "vitest run --config vitest.packaged-backend.config.ts",
     "assets:icons": "node scripts/generate-icons.mjs",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "lint": "eslint . --ext .ts,.tsx",

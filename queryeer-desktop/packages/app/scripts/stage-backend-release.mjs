@@ -1,13 +1,14 @@
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { basename, delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getModulesByPluginId, getBackendRoot } from "./backend-catalog.mjs";
+import { getBackendRoot, getBackendVersion, getModulesByPluginId } from "./backend-catalog.mjs";
 import { copyDereferenced } from "./copy-dereferenced.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(here, "..");
 const repoRoot = resolve(projectRoot, "..", "..", "..");
 const backendRoot = getBackendRoot();
+const backendVersion = getBackendVersion();
 const stageRoot = resolve(process.env.QUERYEER_RELEASE_RESOURCES_DIR ?? join(projectRoot, "dist", "release-resources"));
 const jlinkHome = resolve(process.env.QUERYEER_JLINK_OUTPUT ?? join(repoRoot, ".backend-jlink"));
 
@@ -23,14 +24,11 @@ function findJar(targetDir, artifactId) {
     fail(`Maven target directory not found: ${targetDir}`);
   }
   const entries = readdirSync(targetDir);
-  const jars = entries
-    .filter((name) => name.endsWith(".jar"))
-    .filter((name) => name.startsWith(`${artifactId}-`))
-    .filter((name) => !name.includes("-sources") && !name.includes("-javadoc") && !name.includes("-tests"));
-  if (jars.length !== 1) {
-    fail(`Expected one ${artifactId} jar in ${targetDir}, found ${jars.length}: ${jars.join(", ")}`);
+  const jarName = `${artifactId}-${backendVersion}.jar`;
+  if (!entries.includes(jarName)) {
+    fail(`Expected ${jarName} in ${targetDir}`);
   }
-  return join(targetDir, jars[0]);
+  return join(targetDir, jarName);
 }
 
 function copyClasspathFileEntries(classpathFile, outputDir) {
@@ -85,7 +83,13 @@ for (const [pluginId, moduleName] of moduleByPluginId) {
   if (!existsSync(pluginDistribution)) {
     fail(`Backend plugin distribution not found: ${pluginDistribution}`);
   }
-  copyDereferenced(pluginDistribution, join(pluginsOut, pluginId));
+  const pluginOut = join(pluginsOut, pluginId);
+  const pluginLibOut = join(pluginOut, "lib");
+  const pluginTarget = join(backendRoot, moduleName, "target");
+  mkdirSync(pluginLibOut, { recursive: true });
+  copyFileSync(join(pluginDistribution, "plugin.json"), join(pluginOut, "plugin.json"));
+  copyFileSync(findJar(pluginTarget, moduleName), join(pluginLibOut, `${moduleName}-${backendVersion}.jar`));
+  copyClasspathFileEntries(join(pluginTarget, "queryeer-plugin-deps.txt"), pluginLibOut);
 }
 
 assertNoSymbolicLinks(stageRoot);

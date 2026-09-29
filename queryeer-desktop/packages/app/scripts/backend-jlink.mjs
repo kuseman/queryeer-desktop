@@ -37,7 +37,7 @@ async function main() {
 
   run("jlink", [
     "jlink",
-    "--add-modules", "java.base,java.sql,java.management,java.net.http,java.xml,java.naming",
+    "--add-modules", "java.base,java.sql,java.management,java.net.http,java.xml,java.naming,jdk.net",
     `--output`, `"${jlinkOutput}"`,
     "--strip-debug",
     "--compress", "zip-6",
