@@ -75,6 +75,10 @@ function readString(parent, childTag, propertyName) {
 
 function loadCatalog() {
   const parent = readPom(parentPomPath);
+  const backendVersion = readString(parent, "version");
+  if (!backendVersion) {
+    throw new Error(`Backend parent POM is missing <version>: ${parentPomPath}`);
+  }
   const moduleDirs = childElements(parent, "modules").flatMap((m) => childElements(m, "module"))
     .map((m) => m.textContent.trim());
 
@@ -96,6 +100,7 @@ function loadCatalog() {
 
   return {
     backendRoot,
+    backendVersion,
     modulesByPluginId: new Map(builtinModules.map((m) => [m.pluginId, m.artifactId]))
   };
 }
@@ -113,4 +118,8 @@ export function getModulesByPluginId() {
 
 export function getBackendRoot() {
   return ensureLoaded().backendRoot;
+}
+
+export function getBackendVersion() {
+  return ensureLoaded().backendVersion;
 }

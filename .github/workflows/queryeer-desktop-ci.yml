@@ -52,6 +52,9 @@ jobs:
       - name: Run desktop unit tests
         run: npm run test
 
+      - name: Test packaged backend runtime
+        run: npm run -w @queryeer/app test:packaged-backend
+
       - name: Run desktop typecheck
         run: npm run typecheck
 
@@ -108,4 +111,3 @@ jobs:
             npm run package
             echo "::endgroup::"
           done
-

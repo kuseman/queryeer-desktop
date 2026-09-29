@@ -7,7 +7,10 @@ export default defineConfig({
         test: {
           name: "main",
           include: ["src/main/**/*.test.ts"],
-          exclude: ["src/main/backend/backend-integration.test.ts"],
+          exclude: [
+            "src/main/backend/backend-integration.test.ts",
+            "src/main/backend/packaged-backend.integration.test.ts"
+          ],
           environment: "node"
         }
       },
