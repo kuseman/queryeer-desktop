@@ -1,7 +1,7 @@
 import React from "react";
 import type { LayoutToolbarContext } from "@queryeer/api/extensions/LayoutExtension";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
-import type { QueryScheduleState } from "@queryeer/api/queryengine/QueryEngineTypes.js";
+import type { QueryScheduleState, ScheduleRequestOptions } from "@queryeer/api/queryengine/QueryEngineTypes.js";
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
 import { getQueryEngineService } from "./QueryEngineService";
 import { getQueryPlanArtifactStore, queryCompletedArtifacts, isPlanGraphArtifact } from "./query-plan/artifact-store";
@@ -163,6 +163,28 @@ export const coreQueryEnginePlugin: Plugin = {
     };
 
     const getSelectableOutputs = () => getOutputRegistry().getSelectablePrimaryContributors();
+
+    const requestCustomSchedule = async (
+      target: Omit<ScheduleRequestOptions, "intervalSeconds"> = {}
+    ): Promise<void> => {
+      const input = await context.dialog.showInputDialog?.({
+        title: "Custom Recurring Execution",
+        message: "Interval in seconds (positive whole number)",
+        placeholder: "60"
+      });
+      if (!input || input.canceled) return;
+
+      const intervalSeconds = Number(input.value?.trim());
+      if (!Number.isSafeInteger(intervalSeconds) || intervalSeconds <= 0) {
+        await context.dialog.showMessage({
+          title: "Invalid Interval",
+          message: "Enter a positive whole number of seconds.",
+          severity: "warning"
+        });
+        return;
+      }
+      queryEngineService.requestSchedule({ ...target, intervalSeconds });
+    };
 
     const resolveSelectedOutput = (fileId: string, sessionId?: string): string => {
       const outputs = getSelectableOutputs();
@@ -359,6 +381,14 @@ export const coreQueryEnginePlugin: Plugin = {
     }
 
     context.commands.registerCommand({
+      id: "core.queryengine.executeEveryCustomInterval",
+      title: "Execute at custom interval...",
+      category: "Query",
+      enablement: "backendHealthy && hasActiveQueryExecutableFile && activeEditorGroupHasRunningQuery != true",
+      handler: async () => requestCustomSchedule()
+    });
+
+    context.commands.registerCommand({
       id: "core.queryengine.toggleOutputPanel",
       title: "Toggle Output Panel",
       category: "Query",
@@ -385,9 +415,17 @@ export const coreQueryEnginePlugin: Plugin = {
             value: `interval:${intervalSeconds}`,
             label: `${state?.intervalSeconds === intervalSeconds ? "✓ " : ""}Every ${intervalSeconds} ${intervalSeconds === 1 ? "second" : "seconds"}`
           }));
+        if (context.commands.canExecuteCommand("core.queryengine.executeEveryCustomInterval")) {
+          const isCustomInterval = state !== undefined
+            && !EXECUTION_INTERVALS.includes(state.intervalSeconds as typeof EXECUTION_INTERVALS[number]);
+          items.push({
+            value: "custom",
+            label: `${isCustomInterval ? "✓ " : ""}Custom interval...`
+          });
+        }
         return state ? [...items, { value: "stop", label: "Stop scheduled execution" }] : items;
       },
-      onSelect: (value, toolbarContext) => {
+      onSelect: async (value, toolbarContext) => {
         const active = getToolbarQueryFile(toolbarContext);
         if (!active) return;
         const targetOutputSessionId = getToolbarSessionId(toolbarContext, active.fileId);
@@ -398,6 +436,12 @@ export const coreQueryEnginePlugin: Plugin = {
         };
         if (value === "stop") {
           queryEngineService.requestCancel(target);
+          return;
+        }
+        if (value === "custom") {
+          if (context.commands.canExecuteCommand("core.queryengine.executeEveryCustomInterval")) {
+            await requestCustomSchedule(target);
+          }
           return;
         }
         const intervalSeconds = Number(value.slice("interval:".length));

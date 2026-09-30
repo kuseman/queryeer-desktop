@@ -208,7 +208,8 @@ function createContext(fileOrFiles: FileEntity | FileEntity[]): PluginContext {
       showMessage: vi.fn(),
       showOpenDialog: vi.fn(),
       showOpenFolder: vi.fn(),
-      showSaveDialog: vi.fn()
+      showSaveDialog: vi.fn(),
+      showInputDialog: vi.fn(async () => ({ canceled: true, value: undefined }))
     },
     tooltip: { registerTooltipSection: vi.fn() },
     fileState: { get: vi.fn(), set: vi.fn(), delete: vi.fn(), evict: vi.fn() },
@@ -602,6 +603,62 @@ it("marks backend-dependent commands with backendHealthy enablement", () => {
       fileIdOverride: file.fileId,
       targetEditorGroupId: "left",
       targetOutputSessionId: "core.queryengine:left"
+    });
+  });
+
+  it("schedules a custom whole-number interval from the toolbar", async () => {
+    const file = makeFile();
+    const context = createContext(file);
+    context.dialog.showInputDialog = vi.fn(async () => ({ canceled: false, value: " 17 " }));
+    coreQueryEnginePlugin.activate(context);
+
+    const toolbar = (context.layout.registerToolbarAction as ReturnType<typeof vi.fn>).mock.calls
+      .map((call) => call[0])
+      .find((action) => action.id === "core.queryengine.toolbar.execute") as LayoutToolbarMenuContribution;
+    const toolbarContext = {
+      activeFile: file,
+      activeEditorGroupId: "left",
+      editorGroupCount: 1,
+      hasMultipleEditorGroups: false
+    };
+
+    expect(toolbar.getItems(toolbarContext)).toContainEqual({ value: "custom", label: "Custom interval..." });
+    await toolbar.onSelect("custom", toolbarContext);
+
+    expect(context.dialog.showInputDialog).toHaveBeenCalledWith({
+      title: "Custom Recurring Execution",
+      message: "Interval in seconds (positive whole number)",
+      placeholder: "60"
+    });
+    expect(mocks.requestScheduleMock).toHaveBeenCalledWith({
+      fileIdOverride: file.fileId,
+      targetEditorGroupId: "left",
+      targetOutputSessionId: "core.queryengine:left",
+      intervalSeconds: 17
+    });
+  });
+
+  it("rejects an invalid custom interval", async () => {
+    const file = makeFile();
+    const context = createContext(file);
+    context.dialog.showInputDialog = vi.fn(async () => ({ canceled: false, value: "1.5" }));
+    coreQueryEnginePlugin.activate(context);
+
+    const toolbar = (context.layout.registerToolbarAction as ReturnType<typeof vi.fn>).mock.calls
+      .map((call) => call[0])
+      .find((action) => action.id === "core.queryengine.toolbar.execute") as LayoutToolbarMenuContribution;
+    await toolbar.onSelect("custom", {
+      activeFile: file,
+      activeEditorGroupId: "left",
+      editorGroupCount: 1,
+      hasMultipleEditorGroups: false
+    });
+
+    expect(mocks.requestScheduleMock).not.toHaveBeenCalled();
+    expect(context.dialog.showMessage).toHaveBeenCalledWith({
+      title: "Invalid Interval",
+      message: "Enter a positive whole number of seconds.",
+      severity: "warning"
     });
   });
 
