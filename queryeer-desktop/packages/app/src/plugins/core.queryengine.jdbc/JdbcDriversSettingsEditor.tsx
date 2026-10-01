@@ -39,7 +39,7 @@ export function JdbcDriversSettingsEditor({ readonly }: Props): JSX.Element {
           <button className="jdbc-settings-button" disabled={readonly || busy !== null} onClick={() => void run("restart", () => service.restartBackend())}>Restart backend</button>
         )}
       </div>
-      {statuses.length === 0 && <div className="jdbc-settings-empty">No JDBC driver contributions are registered.</div>}
+      {statuses.length === 0 && <div className="jdbc-settings-empty">No database drivers are available.</div>}
       <div className="jdbc-driver-list">
         {statuses.map((status) => {
           const id = status.contribution.dialectId;

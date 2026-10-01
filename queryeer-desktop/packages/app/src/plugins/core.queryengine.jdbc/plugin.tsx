@@ -121,11 +121,11 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
 
     registerJdbcFlowNodeContribution();
 
-    context.files.capabilities.registerLabel?.("application/sql", "Jdbc");
+    context.files.capabilities.registerLabel?.("application/sql", "SQL Query");
     context.files.capabilities.registerPreferredNewFileMimeType?.("application/sql", 10);
     context.files.capabilities.registerCapabilities(JDBC_SCHEMA_GRAPH_MIME_TYPE, ["viewable", "backupable"]);
     context.files.capabilities.registerContentCategory(JDBC_SCHEMA_GRAPH_MIME_TYPE, "text");
-    context.files.capabilities.registerLabel?.(JDBC_SCHEMA_GRAPH_MIME_TYPE, "JDBC Schema Graph");
+    context.files.capabilities.registerLabel?.(JDBC_SCHEMA_GRAPH_MIME_TYPE, "Database Schema Graph");
     context.files.capabilities.registerPreferredExtension?.(JDBC_SCHEMA_GRAPH_MIME_TYPE, JDBC_SCHEMA_GRAPH_EXTENSION);
     context.files.registerMimeResolver((_uri, hint) => {
       return hint?.extension?.toLowerCase() === JDBC_SCHEMA_GRAPH_EXTENSION
@@ -177,7 +177,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       id: "core.queryengine.jdbc.connections.validator",
       validate: ({ value }) => {
         if (!Array.isArray(value)) {
-          return { ok: false, message: "Expected an array of JDBC connection definitions" };
+          return { ok: false, message: "Expected an array of database connection definitions" };
         }
 
         const parsed = parseJdbcConnectionDefinitions(value);
@@ -205,16 +205,16 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
 
     context.settings.registerSettings({
       moduleId: "core.queryengine.jdbc",
-      title: "Query Engine JDBC",
+      title: "SQL Databases",
       order: 32,
       settings: [
         {
           id: JDBC_CONNECTIONS_SETTING_ID,
           moduleId: "core.queryengine.jdbc",
-          title: "JDBC Connections",
+          title: "Database Connections",
           description:
-            "Configure JDBC connections with dialect, URL, username and vault-backed password.",
-          sectionPath: ["Query Engine", "JDBC"],
+            "Configure database connections with database type, URL, username and vault-backed password.",
+          sectionPath: ["Query Engine", "SQL Databases"],
           tags: ["jdbc", "sql", "connection"],
           type: "json",
           defaultValue: [],
@@ -226,9 +226,9 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
         {
           id: JDBC_DRIVERS_SETTING_ID,
           moduleId: "core.queryengine.jdbc",
-          title: "JDBC Drivers",
-          description: "Inspect, install, update, and remove JDBC driver artifacts.",
-          sectionPath: ["Query Engine", "JDBC", "Drivers"],
+          title: "Database Drivers",
+          description: "Inspect, install, update, and remove database driver files.",
+          sectionPath: ["Query Engine", "SQL Databases", "Drivers"],
           tags: ["jdbc", "driver", "update", "install"],
           type: "json",
           defaultValue: [],
@@ -237,9 +237,9 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
         {
           id: JDBC_DRIVER_UPDATE_CHECK_SETTING_ID,
           moduleId: "core.queryengine.jdbc",
-          title: "Check For JDBC Driver Updates",
-          description: "Check for JDBC driver updates at startup and every 24 hours.",
-          sectionPath: ["Query Engine", "JDBC", "Drivers"],
+          title: "Check for Database Driver Updates",
+          description: "Check for database driver updates at startup and every 24 hours.",
+          sectionPath: ["Query Engine", "SQL Databases", "Drivers"],
           tags: ["jdbc", "driver", "updates"],
           type: "boolean",
           defaultValue: true
@@ -353,7 +353,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
 
     context.layout.registerView({
       id: "core.queryengine.jdbc.navigation",
-      title: "JDBC",
+      title: "SQL Databases",
       defaultZone: "primarySidebar",
       order: 30,
       canMoveZones: true,
@@ -585,15 +585,15 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
     });
     context.settings.registerSettings({
       moduleId: "core.queryengine.jdbc",
-      title: "Query Engine JDBC",
+      title: "SQL Databases",
       order: 32,
       settings: [
         {
           id: TREE_ACTIONS_SETTING_ID,
           moduleId: "core.queryengine.jdbc",
           title: "Tree Actions",
-          description: "Context menu actions that appear when right-clicking on nodes in the JDBC navigation tree.",
-          sectionPath: ["Query Engine", "JDBC", "Tree Actions"],
+          description: "Context menu actions that appear when right-clicking on nodes in the database explorer.",
+          sectionPath: ["Query Engine", "SQL Databases", "Tree Actions"],
           tags: ["jdbc", "tree", "actions", "context-menu"],
           type: "json",
           defaultValue: [],
@@ -731,7 +731,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       tabs: [
         {
           id: "core.queryengine.jdbc.panel",
-          title: "JDBC",
+          title: "Database Sessions",
           order: 20,
           render: () => <JdbcPanel files={context.files} fileMediator={context.fileMediator} />
         }

@@ -291,7 +291,7 @@ export async function bootstrapShell() {
       const verb = `${operation[0].toUpperCase()}${operation.slice(1)}`;
       const selectedName = artifact.managedWithPrimary ? `${contribution.displayName} package` : artifact.displayName;
       const result = await requestMessageDialog({
-        title: `${verb} JDBC driver`,
+        title: `${verb} database driver`,
         message: artifact.managedWithPrimary ? `${verb} ${selectedName}?` : `${verb} ${selectedName} for ${contribution.displayName}?`,
         severity: "warning",
         detail: operation === "remove"

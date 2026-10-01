@@ -67,6 +67,11 @@ describe("payloadbuilder jdbc catalog contribution", () => {
     registerPayloadbuilderJdbcCatalogContribution();
     const contribution = getPayloadbuilderCatalogContribution("jdbc");
     expect(contribution).toBeDefined();
+    expect(contribution).toMatchObject({
+      catalogId: "jdbc",
+      title: "SQL Database",
+      defaultAlias: "jdbc"
+    });
     expect(await contribution?.flowMappingFields?.[0]?.listOptions?.({})).toEqual([{
       value: "conn-a",
       label: "Reports"

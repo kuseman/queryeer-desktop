@@ -64,11 +64,11 @@ export function SqliteDatabaseWelcomeEditor({ filePath, fileMediator, files, onD
       </header>
       <div style={{ marginTop: "14px" }}>
         <p style={{ color: "var(--text-1)", maxWidth: "70ch" }}>
-          This file appears to be a SQLite database. Create a JDBC connection to run queries against it.
+          This file appears to be a SQLite database. Create a database connection to run queries against it.
         </p>
         <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
           <button className="dialog-input-button primary" onClick={handleCreateConnection}>
-            Create JDBC Connection
+            Create Database Connection
           </button>
           <button className="dialog-input-button" onClick={() => { opened.current = true; onDone(); }}>
             Cancel

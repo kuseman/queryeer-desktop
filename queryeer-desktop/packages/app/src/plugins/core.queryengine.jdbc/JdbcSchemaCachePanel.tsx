@@ -97,7 +97,7 @@ export function JdbcSchemaCachePanel() {
   if (rows.length === 0) {
     return (
       <div className="schema-cache-panel">
-        <div className="schema-cache-panel__empty">No schema cache data. Configure JDBC connections to see crawl status.</div>
+        <div className="schema-cache-panel__empty">No schema cache data. Configure database connections to see crawl status.</div>
       </div>
     );
   }

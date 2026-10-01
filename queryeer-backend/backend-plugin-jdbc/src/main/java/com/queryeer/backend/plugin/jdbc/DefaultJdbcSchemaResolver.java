@@ -51,7 +51,7 @@ public class DefaultJdbcSchemaResolver implements JdbcSchemaResolver
     private static final String KEY_TYPE = "type";
     private static final String DEFAULT_SCHEMA_NAME = "default";
     private static final String DEFAULT_CATALOG_NAME = "default";
-    private static final String ERROR_RESOLVE_SCHEMA = "Failed to resolve JDBC schema";
+    private static final String ERROR_RESOLVE_SCHEMA = "Failed to resolve database schema";
 
     @Override
     public List<JdbcSchemaObject> resolveSchema(JdbcConnection connection, Map<String, Object> options)

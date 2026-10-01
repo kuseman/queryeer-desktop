@@ -292,12 +292,12 @@ describe("core.queryengine.jdbc plugin integration", () => {
     coreQueryEngineJdbcPlugin.activate(context);
 
     const contribution = vi.mocked(context.settings.registerSettings).mock.calls[0][0];
-    expect(contribution.settings.find((setting) => setting.title === "JDBC Connections")?.sectionPath)
-      .toEqual(["Query Engine", "JDBC"]);
-    expect(contribution.settings.find((setting) => setting.title === "JDBC Drivers")?.sectionPath)
-      .toEqual(["Query Engine", "JDBC", "Drivers"]);
-    expect(contribution.settings.find((setting) => setting.title === "Check For JDBC Driver Updates")?.sectionPath)
-      .toEqual(["Query Engine", "JDBC", "Drivers"]);
+    expect(contribution.settings.find((setting) => setting.title === "Database Connections")?.sectionPath)
+      .toEqual(["Query Engine", "SQL Databases"]);
+    expect(contribution.settings.find((setting) => setting.title === "Database Drivers")?.sectionPath)
+      .toEqual(["Query Engine", "SQL Databases", "Drivers"]);
+    expect(contribution.settings.find((setting) => setting.title === "Check for Database Driver Updates")?.sectionPath)
+      .toEqual(["Query Engine", "SQL Databases", "Drivers"]);
   });
 
   it("contributes JDBC flow query node type", () => {
@@ -309,7 +309,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
     coreQueryEngineJdbcPlugin.activate(createContext());
 
     const contribution = getFlowNodeTypeContribution("jdbc.query");
-    expect(contribution?.title).toBe("JDBC Query");
+    expect(contribution?.title).toBe("SQL Query");
     expect(contribution?.getSummary?.({
       node: {
         index: 0,
@@ -563,7 +563,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
 
     expect(contribution?.validateConfiguration?.({ node })).toEqual([{
       field: "jdbc.connection",
-      message: "JDBC flow mapping 'connection' value 'orders-db' is not mapped locally."
+      message: "Database flow mapping 'connection' value 'orders-db' is not mapped locally."
     }]);
     expect(await contribution?.execute({
       fileId: "file-1",
@@ -573,7 +573,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
     })).toEqual({
       ok: false,
       code: "FLOW_MAPPING_MISSING",
-      message: "JDBC flow mapping 'connection' value 'orders-db' is not mapped locally.",
+      message: "Database flow mapping 'connection' value 'orders-db' is not mapped locally.",
       details: {
         owner: "core.queryengine.jdbc",
         kind: "jdbc.connection",

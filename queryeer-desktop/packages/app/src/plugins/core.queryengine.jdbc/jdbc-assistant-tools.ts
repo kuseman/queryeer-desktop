@@ -29,8 +29,8 @@ export function createJdbcAssistantTools(context: PluginContext): AssistantToolC
   return [
     {
       id: "core.queryengine.jdbc.searchObjects",
-      title: "Search JDBC Tables and Views",
-      description: "Search cached JDBC schema for tables and views using a glob pattern. Use this before writing SQL that references unknown table/view names. The active SQL file determines the JDBC connection and selected database. Pattern supports * and ? and matches object name, schema.name, and snapshot fullName.",
+      title: "Search Database Tables and Views",
+      description: "Search the cached database schema for tables and views using a glob pattern. Use this before writing SQL that references unknown table/view names. The active SQL file determines the database connection and selected database. Pattern supports * and ? and matches object name, schema.name, and snapshot fullName.",
       order: 30,
       when: "activeFile?.mimeType == 'application/sql'",
       inputSchema: {
@@ -45,8 +45,8 @@ export function createJdbcAssistantTools(context: PluginContext): AssistantToolC
     },
     {
       id: "core.queryengine.jdbc.getObjectDetails",
-      title: "Get JDBC Table or View Details",
-      description: "Return cached columns, primary keys, foreign keys, indices, and other metadata for one JDBC table or view. Use a result from core.queryengine.jdbc.searchObjects when possible. The active SQL file determines the JDBC connection and selected database. This tool reads only cached deep schema snapshots and does not query the live database.",
+      title: "Get Database Table or View Details",
+      description: "Return cached columns, primary keys, foreign keys, indices, and other metadata for one database table or view. Use a result from core.queryengine.jdbc.searchObjects when possible. The active SQL file determines the database connection and selected database. This tool reads only cached deep schema snapshots and does not query the live database.",
       order: 31,
       when: "activeFile?.mimeType == 'application/sql'",
       inputSchema: {
@@ -81,8 +81,8 @@ async function searchJdbcObjects(context: PluginContext, request: AssistantToolI
   return {
     ok: true,
     message: allMatches.length === 0
-      ? "No cached JDBC tables or views matched. Refresh the JDBC schema cache if this is unexpected."
-      : `Found ${allMatches.length} JDBC table/view match${allMatches.length === 1 ? "" : "es"}.`,
+      ? "No cached database tables or views matched. Refresh the database schema cache if this is unexpected."
+      : `Found ${allMatches.length} database table/view match${allMatches.length === 1 ? "" : "es"}.`,
     data: {
       connectionId: jdbcContext.value.connectionId,
       database: jdbcContext.value.database,
@@ -108,12 +108,12 @@ async function getJdbcObjectDetails(context: PluginContext, request: AssistantTo
     .filter((match) => matchesDatabase(match, jdbcContext.value.database))
     .filter((match) => matchesDetail(match, parsed.value.name, parsed.value.schema));
   if (matches.length === 0) {
-    return { ok: false, message: "No cached JDBC table or view matched. Search objects first or refresh the JDBC schema cache." };
+    return { ok: false, message: "No cached database table or view matched. Search objects first or refresh the database schema cache." };
   }
   if (matches.length > 1) {
     return {
       ok: false,
-      message: "Multiple JDBC objects matched. Retry with schema or a fully-qualified name.",
+      message: "Multiple database objects matched. Retry with schema or a fully-qualified name.",
       data: { matches: matches.map(({ object: _object, ...match }) => match) }
     };
   }
@@ -123,8 +123,8 @@ async function getJdbcObjectDetails(context: PluginContext, request: AssistantTo
   return {
     ok: true,
     message: children.length === 0
-      ? `No cached JDBC child metadata found for ${match.fullName ?? match.name}. Refresh the deep JDBC schema cache if columns or indices are needed.`
-      : `Fetched cached JDBC details for ${match.fullName ?? match.name}.`,
+      ? `No cached database child metadata found for ${match.fullName ?? match.name}. Refresh the deep database schema cache if columns or indices are needed.`
+      : `Fetched cached database details for ${match.fullName ?? match.name}.`,
     data: toObjectDetail(match, children)
   };
 }
@@ -143,7 +143,7 @@ function resolveJdbcContext(
 ): { ok: true; value: JdbcAssistantContext } | { ok: false; message: string } {
   const fileId = request.activeFileId;
   if (!fileId) {
-    return { ok: false, message: "No active JDBC file. Activate a SQL file with a JDBC connection." };
+    return { ok: false, message: "No active SQL query. Activate a SQL file with a database connection." };
   }
   const file = context.files.getFile(fileId);
   const connectionId = file?.engineBinding?.engineId === "jdbc" ? file.engineBinding.connectionId : undefined;
@@ -151,7 +151,7 @@ function resolveJdbcContext(
     (candidate) => candidate.enabled && candidate.connectionId === connectionId
   );
   if (!connection) {
-    return { ok: false, message: "The active SQL file is not bound to a JDBC connection." };
+    return { ok: false, message: "The active SQL file is not bound to a database connection." };
   }
   const selected = readSelectedDatabase(context, fileId, connection.connectionId);
   return { ok: true, value: { connectionId: connection.connectionId, database: selected } };

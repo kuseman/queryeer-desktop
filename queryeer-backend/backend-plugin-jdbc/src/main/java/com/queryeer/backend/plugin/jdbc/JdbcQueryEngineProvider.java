@@ -362,10 +362,11 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
 
     private JdbcConnectionSetupDefinition connectionSetup()
     {
-        return new JdbcConnectionSetupDefinition(List.of(new JdbcConnectionFieldDefinition(FIELD_DIALECT_ID, "Dialect", JdbcConnectionFieldType.SELECT, true, "Select JDBC dialect", registry.all()
-                .stream()
-                .map(metadata -> new JdbcConnectionFieldOption(metadata.id(), metadata.displayName()))
-                .toList(), ENGINE_ID, null),
+        return new JdbcConnectionSetupDefinition(List.of(
+                new JdbcConnectionFieldDefinition(FIELD_DIALECT_ID, "Database Type", JdbcConnectionFieldType.SELECT, true, "Select database type", registry.all()
+                        .stream()
+                        .map(metadata -> new JdbcConnectionFieldOption(metadata.id(), metadata.displayName()))
+                        .toList(), ENGINE_ID, null),
                 new JdbcConnectionFieldDefinition(FIELD_URL, "JDBC URL", JdbcConnectionFieldType.TEXT, true, "Example: jdbc:postgresql://localhost:5432/appdb", List.of(), null, null),
                 new JdbcConnectionFieldDefinition(FIELD_USERNAME, "Username", JdbcConnectionFieldType.TEXT, false, null, List.of(), null, null),
                 new JdbcConnectionFieldDefinition(FIELD_PASSWORD, "Password", JdbcConnectionFieldType.SECRET, false, "Stored in security vault", List.of(), null, null)));
