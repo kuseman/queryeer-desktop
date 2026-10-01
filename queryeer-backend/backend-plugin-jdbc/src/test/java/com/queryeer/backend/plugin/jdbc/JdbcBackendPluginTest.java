@@ -335,7 +335,7 @@ class JdbcBackendPluginTest
         IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class,
                 () -> provider.invoke("file-1", "jdbc.connection.test", Map.of("connection", Map.of("dialectId", "oracle", "url", "jdbc:oracle:thin:@localhost:1521/XE"))));
 
-        Assertions.assertEquals("Unsupported JDBC dialect: oracle", error.getMessage());
+        Assertions.assertEquals("Unsupported database type: oracle", error.getMessage());
     }
 
     @Test

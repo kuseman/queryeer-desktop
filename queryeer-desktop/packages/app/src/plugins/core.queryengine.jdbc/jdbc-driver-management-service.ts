@@ -133,20 +133,20 @@ export class JdbcDriverManagementService {
   public async restore(dialectId: string, disabledSetId: string): Promise<JdbcDriverOperationResult> {
     const options = this.requireOptions();
     const contribution = options.contributions.find((entry) => entry.dialectId === dialectId);
-    if (!contribution) throw new Error(`Unknown JDBC driver '${dialectId}'`);
+    if (!contribution) throw new Error(`Unknown database driver '${dialectId}'`);
     const currentStatus = this.statuses.find((entry) => entry.contribution.dialectId === dialectId)
       ?? (await this.refresh()).find((entry) => entry.contribution.dialectId === dialectId);
     const disabledSet = currentStatus?.disabledSets?.find((entry) => entry.id === disabledSetId);
     if (!currentStatus || !disabledSet) throw new Error(`Disabled JDBC artifact set '${disabledSetId}' is unavailable`);
     const artifact = restoreArtifact(disabledSet, contribution.artifactId);
     if (!await options.confirmOperation("activate", contribution, artifact)) {
-      return { accepted: false, reason: "JDBC driver operation cancelled", status: currentStatus };
+      return { accepted: false, reason: "Database driver operation cancelled", status: currentStatus };
     }
     const result = await options.shell.restoreJdbcDriver(contribution, disabledSetId);
     if (result.accepted) {
       await this.refresh();
       const restartNotification = options.notifications.notify({
-        title: "JDBC driver activation staged",
+        title: "Database driver activation staged",
         message: `Restart the backend to activate ${disabledSet.version ? `version ${disabledSet.version}` : "the retained artifact set"}. The current version will be retained for rollback.`,
         severity: "info",
         actions: [{
@@ -167,7 +167,7 @@ export class JdbcDriverManagementService {
   public async discardRetainedSet(dialectId: string, disabledSetId: string): Promise<JdbcDriverOperationResult> {
     const options = this.requireOptions();
     const contribution = options.contributions.find((entry) => entry.dialectId === dialectId);
-    if (!contribution) throw new Error(`Unknown JDBC driver '${dialectId}'`);
+    if (!contribution) throw new Error(`Unknown database driver '${dialectId}'`);
     const currentStatus = this.statuses.find((entry) => entry.contribution.dialectId === dialectId)
       ?? (await this.refresh()).find((entry) => entry.contribution.dialectId === dialectId);
     const disabledSet = currentStatus?.disabledSets?.find((entry) => entry.id === disabledSetId);
@@ -175,18 +175,18 @@ export class JdbcDriverManagementService {
     const artifact = restoreArtifact(disabledSet, contribution.artifactId);
     artifact.warning = `Files moved to the Recycle Bin:\n${disabledSet.artifacts.map((entry) => entry.fileName).join("\n")}`;
     if (!await options.confirmOperation("discard", contribution, artifact)) {
-      return { accepted: false, reason: "JDBC driver operation cancelled", status: currentStatus };
+      return { accepted: false, reason: "Database driver operation cancelled", status: currentStatus };
     }
     const result = await options.shell.discardJdbcDriverRetainedSet(contribution, disabledSetId);
     this.setStatuses(this.statuses.map((status) => status.contribution.dialectId === dialectId ? result.status : status));
     if (result.accepted) {
       options.notifications.notify({
-        title: "Retained JDBC version removed",
+        title: "Retained database driver version removed",
         message: "The retained files were moved to the Recycle Bin. The active runtime was not changed.",
         severity: "success"
       });
     } else if (result.reason) {
-      options.notifications.notify({ title: "Retained JDBC version removal failed", message: result.reason, severity: "error" });
+      options.notifications.notify({ title: "Retained database driver version removal failed", message: result.reason, severity: "error" });
     }
     return result;
   }
@@ -205,7 +205,7 @@ export class JdbcDriverManagementService {
     await this.refresh();
     options.notifications.notify({
       title: "Backend restarted",
-      message: "JDBC driver changes are active. The vault is locked; re-enter your password as needed.",
+      message: "Database driver changes are active. The vault is locked; re-enter your password as needed.",
       severity: "success"
     });
   }
@@ -233,7 +233,7 @@ export class JdbcDriverManagementService {
     const options = this.requireOptions();
     const contribution = options.contributions.find((entry) => entry.dialectId === dialectId);
     if (!contribution) {
-      throw new Error(`Unknown JDBC driver '${dialectId}'`);
+      throw new Error(`Unknown database driver '${dialectId}'`);
     }
     const operationName = operation === "installJdbcDriver"
       ? "install"
@@ -245,7 +245,7 @@ export class JdbcDriverManagementService {
     if (!await options.confirmOperation(operationName, contribution, artifact)) {
       const status = currentStatus;
       if (!status) throw new Error(`JDBC driver status '${dialectId}' is unavailable`);
-      return { accepted: false, reason: "JDBC driver operation cancelled", status };
+      return { accepted: false, reason: "Database driver operation cancelled", status };
     }
     const result = artifactId === undefined
       ? await options.shell[operation](contribution)
@@ -253,7 +253,7 @@ export class JdbcDriverManagementService {
     if (result.accepted) {
       await this.refresh();
       const restartNotification = options.notifications.notify({
-        title: `JDBC driver ${verb}`,
+        title: `Database driver ${verb}`,
         message: `Restart the backend to apply the ${artifact.displayName} change.`,
         severity: "info",
         actions: [{
@@ -303,7 +303,7 @@ export class JdbcDriverManagementService {
                 await this.restartBackend();
               }
             },
-            { id: "core.queryengine.jdbc.openDrivers", label: "Open JDBC Drivers", run: options.openSettings },
+            { id: "core.queryengine.jdbc.openDrivers", label: "Open Database Drivers", run: options.openSettings },
             {
               id: `core.queryengine.jdbc.suppressUpdate.${status.contribution.dialectId}.${notificationArtifactId}`,
               label: "Don't show again for this version",
@@ -331,7 +331,7 @@ export class JdbcDriverManagementService {
         entry.contribution.dialectId === status.contribution.dialectId ? result.status : entry));
       if (result.reason && !/cancelled/i.test(result.reason)) {
         options.notifications.notify({
-          title: "JDBC driver update failed",
+          title: "Database driver update failed",
           message: result.reason,
           severity: "error"
         });
@@ -351,10 +351,10 @@ export class JdbcDriverManagementService {
     if (!hasSqliteConnection || sqliteStatus?.source !== "missing") return;
     options.storage?.setItem(SQLITE_MIGRATION_NOTICE_STORAGE_KEY, "1");
     options.notifications.notify({
-      title: "SQLite JDBC driver required",
-      message: "SQLite is no longer bundled. Install it from JDBC Drivers settings before using SQLite connections.",
+      title: "SQLite database driver required",
+      message: "SQLite is no longer bundled. Install it from Database Drivers settings before using SQLite connections.",
       severity: "info",
-      actions: [{ id: "core.queryengine.jdbc.openDrivers", label: "Open JDBC Drivers", run: options.openSettings }]
+      actions: [{ id: "core.queryengine.jdbc.openDrivers", label: "Open Database Drivers", run: options.openSettings }]
     });
   }
 
@@ -398,7 +398,7 @@ export class JdbcDriverManagementService {
   }
 
   private requireOptions(): JdbcDriverManagementOptions {
-    if (!this.options) throw new Error("JDBC driver management service is not initialized");
+    if (!this.options) throw new Error("Database driver management service is not initialized");
     return this.options;
   }
 }

@@ -98,7 +98,7 @@ public final class DefaultJdbcConnections implements JdbcConnections
         String dialectId = stored.dialectId != null ? stored.dialectId
                 : ENGINE_ID;
         JdbcDialect dialect = dialectRegistry.find(dialectId)
-                .orElseThrow(() -> new IllegalArgumentException("Unsupported JDBC dialect: " + dialectId));
+                .orElseThrow(() -> new IllegalArgumentException("Unsupported database type: " + dialectId));
         // Validate that the connection has a URL
         validateConnectionUrl(dialect, props, stored.connectionId());
 

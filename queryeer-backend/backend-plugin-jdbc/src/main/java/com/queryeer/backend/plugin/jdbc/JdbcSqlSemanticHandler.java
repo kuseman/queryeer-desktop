@@ -210,7 +210,7 @@ final class JdbcSqlSemanticHandler implements JdbcSqlEditorServices
                         .filter(name -> seen.add(name.toLowerCase()))
                         .sorted(String.CASE_INSENSITIVE_ORDER)
                         .limit(maxItems)
-                        .map(name -> new CompletionItem(name, "parameter", "JDBC procedure parameter", null, name, "plain", "jdbc.schema"))
+                        .map(name -> new CompletionItem(name, "parameter", "Database procedure parameter", null, name, "plain", "jdbc.schema"))
                         .toList();
             }
             boolean explicitDatabasePrefix = qualifierPartCount(prefix) >= 3;
@@ -229,7 +229,7 @@ final class JdbcSqlSemanticHandler implements JdbcSqlEditorServices
                             .toLowerCase()))
                     .sorted((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(a.name(), b.name()))
                     .limit(maxItems)
-                    .map(info -> new CompletionItem(info.name(), info.kind(), "JDBC procedure", null, info.name(), "plain", "jdbc.schema"))
+                    .map(info -> new CompletionItem(info.name(), info.kind(), "Database procedure", null, info.name(), "plain", "jdbc.schema"))
                     .toList();
         }
 
@@ -253,8 +253,8 @@ final class JdbcSqlSemanticHandler implements JdbcSqlEditorServices
                     .limit(maxItems)
                     .map(info ->
                     {
-                        String detail = "table".equals(info.kind()) ? "JDBC table"
-                                : "JDBC view";
+                        String detail = "table".equals(info.kind()) ? "Database table"
+                                : "Database view";
                         return new CompletionItem(info.name(), info.kind(), detail, null, info.name(), "plain", "jdbc.schema");
                     })
                     .toList();
@@ -283,7 +283,7 @@ final class JdbcSqlSemanticHandler implements JdbcSqlEditorServices
                         && seenLower.add(col.toLowerCase()))
                 {
                     String insertText = qualifier + "." + col;
-                    columnItems.add(new CompletionItem(insertText, "column", "JDBC column", null, insertText, "plain", "jdbc.schema"));
+                    columnItems.add(new CompletionItem(insertText, "column", "Database column", null, insertText, "plain", "jdbc.schema"));
                 }
             }
         }
@@ -312,7 +312,7 @@ final class JdbcSqlSemanticHandler implements JdbcSqlEditorServices
                                     .startsWith(prefix.toLowerCase()))
                             && seenLower.add(prefixed.toLowerCase()))
                     {
-                        columnItems.add(new CompletionItem(prefixed, "column", "JDBC column", null, prefixed, "plain", "jdbc.schema"));
+                        columnItems.add(new CompletionItem(prefixed, "column", "Database column", null, prefixed, "plain", "jdbc.schema"));
                     }
                 }
             }

@@ -121,7 +121,7 @@ describe("JdbcDriverManagementService", () => {
     expect(setup.notifications.notify).toHaveBeenCalledTimes(1);
     expect(setup.notifications.notify).toHaveBeenCalledWith(expect.objectContaining({ title: "SQLite JDBC Driver update available" }));
     const notification = vi.mocked(setup.notifications.notify).mock.calls[0][0];
-    await notification.actions?.find((action) => action.label === "Open JDBC Drivers")?.run();
+    await notification.actions?.find((action) => action.label === "Open Database Drivers")?.run();
     expect(setup.openSettings).toHaveBeenCalledOnce();
   });
 
@@ -235,7 +235,7 @@ describe("JdbcDriverManagementService", () => {
     await service.initialize(setup);
 
     expect(setup.notifications.notify).toHaveBeenCalledTimes(1);
-    expect(setup.notifications.notify).toHaveBeenCalledWith(expect.objectContaining({ title: "SQLite JDBC driver required" }));
+    expect(setup.notifications.notify).toHaveBeenCalledWith(expect.objectContaining({ title: "SQLite database driver required" }));
 
     localStorage.clear();
     const withoutSqlite = options({ updateChecksEnabled: () => false });
@@ -277,7 +277,7 @@ describe("JdbcDriverManagementService", () => {
     await service.install("sqlite");
     const restartNotice = vi.mocked(setup.notifications.notify).mock.calls
       .map(([request]) => request)
-      .find((request) => request.title === "JDBC driver installed");
+      .find((request) => request.title === "Database driver installed");
 
     await restartNotice?.actions?.[0]?.run();
 
@@ -297,7 +297,7 @@ describe("JdbcDriverManagementService", () => {
 
     const result = await service.install("sqlite");
 
-    expect(result).toMatchObject({ accepted: false, reason: "JDBC driver operation cancelled" });
+    expect(result).toMatchObject({ accepted: false, reason: "Database driver operation cancelled" });
     expect(setup.shell.installJdbcDriver).not.toHaveBeenCalled();
   });
 
@@ -371,7 +371,7 @@ describe("JdbcDriverManagementService", () => {
 
     expect(notice?.actions?.map((action) => action.label)).toEqual([
       "Install and Restart Backend",
-      "Open JDBC Drivers",
+      "Open Database Drivers",
       "Don't show again for this version"
     ]);
     await notice?.actions?.[2].run();
@@ -458,7 +458,7 @@ describe("JdbcDriverManagementService", () => {
     }));
     expect(setup.shell.restoreJdbcDriver).toHaveBeenCalledWith(sqlite, "sqlite-disabled-1");
     expect(setup.notifications.notify).toHaveBeenCalledWith(expect.objectContaining({
-      title: "JDBC driver activation staged"
+      title: "Database driver activation staged"
     }));
   });
 
@@ -493,6 +493,6 @@ describe("JdbcDriverManagementService", () => {
     }));
     expect(setup.shell.discardJdbcDriverRetainedSet).toHaveBeenCalledWith(sqlite, "sqlite-disabled-1");
     expect(setup.shell.restartBackendForJdbcDrivers).not.toHaveBeenCalled();
-    expect(setup.notifications.notify).toHaveBeenCalledWith(expect.objectContaining({ title: "Retained JDBC version removed" }));
+    expect(setup.notifications.notify).toHaveBeenCalledWith(expect.objectContaining({ title: "Retained database driver version removed" }));
   });
 });

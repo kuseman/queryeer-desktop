@@ -25,8 +25,8 @@ const JDBC_CONNECTION_MAPPING_KIND = "jdbc.connection";
 export function registerJdbcFlowNodeContribution(): void {
   registerFlowNodeTypeContribution({
     id: "jdbc.query",
-    title: "JDBC Query",
-    description: "Execute a SQL query through the JDBC query engine.",
+    title: "SQL Query",
+    description: "Execute a query against a SQL database.",
     createTemplate: () => ({
       metadata: {
         type: "jdbc.query",
@@ -112,7 +112,7 @@ function resolveJdbcFlowEngineState(raw: unknown):
   if (!connectionRef) {
     return {
       ok: false,
-      message: "JDBC flow node is missing jdbc.connection."
+      message: "SQL query flow node is missing jdbc.connection."
     };
   }
 
@@ -415,8 +415,8 @@ function analyzeJdbcFlowConnection(
     ref,
     state: mapping ? "invalid" : "missing",
     message: mapping
-      ? `JDBC flow mapping 'connection' value '${ref}' points to a local connection that is not available.`
-      : `JDBC flow mapping 'connection' value '${ref}' is not mapped locally.`,
+      ? `Database flow mapping 'connection' value '${ref}' points to a local connection that is not available.`
+      : `Database flow mapping 'connection' value '${ref}' is not mapped locally.`,
     mapping
   };
 }

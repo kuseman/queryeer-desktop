@@ -62,7 +62,7 @@ function createHarness(): Harness {
         listPreferredNewFileMimeTypes: vi.fn(() => ["application/sql", "application/plbsql"]),
         getLabel: vi.fn((mimeType: string) => {
           if (mimeType === "application/sql") {
-            return "Jdbc";
+            return "SQL Query";
           }
           if (mimeType === "application/plbsql") {
             return "Payloadbuilder";
@@ -423,7 +423,7 @@ describe("core.files plugin", () => {
       "application/plbsql",
       "application/sql"
     ]);
-    expect(options.map((option) => option.label)).toEqual(["Payloadbuilder", "Jdbc"]);
+    expect(options.map((option) => option.label)).toEqual(["Payloadbuilder", "SQL Query"]);
   });
 
   it("uses all creatable mime types when setting is empty", async () => {

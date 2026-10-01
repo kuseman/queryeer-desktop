@@ -44,7 +44,7 @@ const TEST_CONNECTION_SUFFIX = "::test";
 export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Props): JSX.Element {
   const [rows, setRows] = useState<Row[]>(() => toRows(parseJdbcConnectionDefinitions(value)));
   const [selectedRowId, setSelectedRowId] = useState<string | undefined>(() => rows[0]?.id);
-  const [dialects, setDialects] = useState<JdbcDialectOption[]>([{ id: "jdbc", displayName: "Generic JDBC" }]);
+  const [dialects, setDialects] = useState<JdbcDialectOption[]>([{ id: "jdbc", displayName: "Other Database (JDBC)" }]);
   const [appDir, setAppDir] = useState<string | null>(null);
 
   useEffect(() => {
@@ -209,7 +209,7 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
         }
 
         return (
-          <div className="jdbc-settings-detail-grid" role="group" aria-label="JDBC connection details">
+          <div className="jdbc-settings-detail-grid" role="group" aria-label="Database connection details">
             <div className="jdbc-settings-cell">
               <span className="jdbc-settings-help">
                 JDBC driver JARs must be placed in{" "}
@@ -272,7 +272,7 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
 
             <div className="jdbc-settings-cell">
               <label className="jdbc-settings-label" htmlFor={`jdbc-dialect-${row.id}`}>
-                Dialect
+                Database Type
               </label>
               <select
                 id={`jdbc-dialect-${row.id}`}

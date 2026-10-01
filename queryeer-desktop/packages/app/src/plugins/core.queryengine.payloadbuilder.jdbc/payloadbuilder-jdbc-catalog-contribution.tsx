@@ -16,7 +16,7 @@ export function registerPayloadbuilderJdbcCatalogContribution(): void {
 
   registerPayloadbuilderCatalogContribution({
     catalogId: JDBC_CATALOG_ID,
-    title: "JDBC",
+    title: "SQL Database",
     defaultAlias: "jdbc",
     allowMultiple: true,
     order: 20,

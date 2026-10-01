@@ -67,7 +67,7 @@ class DefaultJdbcConnectionsTest
         DefaultJdbcConnections connections = new DefaultJdbcConnections(configService, PAYLOAD_MAPPER, registry);
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> connections.resolve("bad"));
-        assertEquals("Unsupported JDBC dialect: oracle", error.getMessage());
+        assertEquals("Unsupported database type: oracle", error.getMessage());
     }
 
     @Test

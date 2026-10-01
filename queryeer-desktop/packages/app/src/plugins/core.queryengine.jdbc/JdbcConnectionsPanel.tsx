@@ -115,7 +115,7 @@ export function JdbcConnectionsPanel({ files, fileMediator }: JdbcConnectionsPan
                   className="jdbc-sessions-panel__force-close"
                   disabled={!row.canForceClose}
                   onClick={() => void handleForceClose(row)}
-                  title="Force close this JDBC session connection"
+                  title="Force close this database session"
                 >
                   Force close
                 </button>

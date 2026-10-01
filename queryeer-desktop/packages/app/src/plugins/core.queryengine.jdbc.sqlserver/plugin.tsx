@@ -155,7 +155,7 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
     // SQL Server plan output setting
     context.settings.registerSettings({
       moduleId: "core.queryengine.jdbc",
-      title: "Query Engine JDBC",
+      title: "SQL Databases",
       order: 32,
       settings: [
         {
@@ -163,7 +163,7 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
           moduleId: "core.queryengine.jdbc",
           title: "SQL Server Plan XML Output",
           description: "Controls whether SQL Server query plan XML result sets are also shown as raw query output when plan graph artifacts are produced.",
-          sectionPath: ["Query Engine", "JDBC", "SQL Server"],
+          sectionPath: ["Query Engine", "SQL Databases", "SQL Server"],
           tags: ["jdbc", "sqlserver", "plan", "showplan"],
           type: "enum",
           defaultValue: "suppress",
