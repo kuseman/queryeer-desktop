@@ -62,7 +62,13 @@ type CellEvent = {
 };
 
 let latestDataEditorProps: DataEditorProps | null = null;
-const latestDataEditorRef: { current: { remeasureColumns: ReturnType<typeof vi.fn> } | null } = { current: null };
+const latestDataEditorRef: {
+  current: {
+    remeasureColumns: ReturnType<typeof vi.fn>;
+    updateCells: ReturnType<typeof vi.fn>;
+    scrollTo: ReturnType<typeof vi.fn>;
+  } | null;
+} = { current: null };
 
 vi.mock("@glideapps/glide-data-grid", () => {
   class CompactSelectionMock {
@@ -90,9 +96,9 @@ vi.mock("@glideapps/glide-data-grid", () => {
     GridCellKind: { Text: "text", Uri: "uri", Image: "image" },
     DataEditor: React.forwardRef((_props: DataEditorProps, _ref: React.Ref<unknown>) => {
       latestDataEditorProps = _props;
-      const refObj = { remeasureColumns: vi.fn(), updateCells: vi.fn() };
+      const refObj = { remeasureColumns: vi.fn(), updateCells: vi.fn(), scrollTo: vi.fn() };
       if (_ref && typeof _ref === "object" && "current" in _ref) {
-        (_ref as React.MutableRefObject<{ remeasureColumns: ReturnType<typeof vi.fn>; updateCells: ReturnType<typeof vi.fn> }>).current = refObj;
+        (_ref as React.MutableRefObject<typeof refObj>).current = refObj;
         latestDataEditorRef.current = refObj;
       }
       return null;
@@ -2214,6 +2220,114 @@ describe("GridComponent", () => {
 
       const match = await act(async () => gridRef.current!.findNext(null));
       expect(match).toEqual({ row: 0, col: 0 });
+    });
+
+    it("findNext searches the sorted row order", async () => {
+      vi.useFakeTimers();
+      const gridRef = createRef<GridSearchHandle>();
+      const rows = [["Charlie"], ["Alice"], ["Bob"]];
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            ref={gridRef}
+            columns={[{ key: "name", title: "Name", type: "string" }]}
+            getRowCount={() => rows.length}
+            getRowsRange={(start, end) => rows.slice(start, end)}
+            getRow={(index) => rows[index]}
+            subscribeRowsChanged={() => () => undefined}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText="Charlie"
+          />
+        );
+      });
+
+      act(() => {
+        latestDataEditorProps?.onHeaderClicked(0);
+        vi.advanceTimersByTime(10);
+      });
+
+      const match = await act(async () => gridRef.current!.findNext(null));
+      expect(match).toEqual({ row: 2, col: 0 });
+    });
+
+    it("findNext can use freshly pasted text before the search prop renders", async () => {
+      vi.useFakeTimers();
+      const gridRef = createRef<GridSearchHandle>();
+      const rows = [["Charlie"], ["Alice"], ["Bob"]];
+
+      await act(async () => {
+        root.render(
+          <GridComponent
+            ref={gridRef}
+            columns={[{ key: "name", title: "Name", type: "string" }]}
+            getRowCount={() => rows.length}
+            getRowsRange={(start, end) => rows.slice(start, end)}
+            getRow={(index) => rows[index]}
+            subscribeRowsChanged={() => () => undefined}
+            resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+            resolveCellLink={() => null}
+            onCellPrimaryAction={() => false}
+            onCopySelection={() => undefined}
+            onContextMenuSelection={() => undefined}
+            isDarkTheme={false}
+            searchText=""
+          />
+        );
+      });
+
+      act(() => {
+        latestDataEditorProps?.onHeaderClicked(0);
+        vi.advanceTimersByTime(10);
+      });
+
+      const match = await act(async () => gridRef.current!.findNext(null, "Charlie"));
+      expect(match).toEqual({ row: 2, col: 0 });
+    });
+
+    it("scrolls to and repaints an active match after sorting", async () => {
+      vi.useFakeTimers();
+      const rows = [["Charlie"], ["Alice"], ["Bob"]];
+      const renderGrid = async (activeMatch: { row: number; col: number } | null) => {
+        await act(async () => {
+          root.render(
+            <GridComponent
+              columns={[{ key: "name", title: "Name", type: "string" }]}
+              getRowCount={() => rows.length}
+              getRowsRange={(start, end) => rows.slice(start, end)}
+              getRow={(index) => rows[index]}
+              subscribeRowsChanged={() => () => undefined}
+              resolveCellDisplayValue={(_type, value) => String(value ?? "")}
+              resolveCellLink={() => null}
+              onCellPrimaryAction={() => false}
+              onCopySelection={() => undefined}
+              onContextMenuSelection={() => undefined}
+              isDarkTheme={false}
+              searchText="Charlie"
+              searchActiveMatch={activeMatch}
+            />
+          );
+        });
+      };
+
+      await renderGrid(null);
+      act(() => {
+        latestDataEditorProps?.onHeaderClicked(0);
+        vi.advanceTimersByTime(10);
+      });
+
+      await renderGrid({ row: 2, col: 0 });
+      act(() => {
+        vi.advanceTimersByTime(0);
+      });
+
+      expect(latestDataEditorRef.current?.scrollTo).toHaveBeenCalledWith(0, 2);
+      expect(latestDataEditorRef.current?.updateCells).toHaveBeenCalledWith([{ cell: [0, 2] }]);
     });
 
     it("findNext from first match advances to next match", async () => {

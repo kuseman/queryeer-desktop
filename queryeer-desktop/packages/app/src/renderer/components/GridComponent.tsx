@@ -76,8 +76,8 @@ export type GridComponentContextMenuEvent = {
 };
 
 export type GridSearchHandle = {
-  findNext: (from: { row: number; col: number } | null) => Promise<{ row: number; col: number } | null>;
-  findPrev: (from: { row: number; col: number } | null) => Promise<{ row: number; col: number } | null>;
+  findNext: (from: { row: number; col: number } | null, textOverride?: string) => Promise<{ row: number; col: number } | null>;
+  findPrev: (from: { row: number; col: number } | null, textOverride?: string) => Promise<{ row: number; col: number } | null>;
   cancelSearch: () => void;
 };
 
@@ -480,12 +480,12 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
 
   const FIND_BATCH = 500;
 
-  const findNextMatch = useCallback((from: { row: number; col: number } | null): Promise<{ row: number; col: number } | null> => {
+  const findNextMatch = useCallback((from: { row: number; col: number } | null, textOverride?: string): Promise<{ row: number; col: number } | null> => {
     activeCancelRef.current?.();
     return new Promise<{ row: number; col: number } | null>((resolve) => {
       const token = { cancelled: false };
       activeCancelRef.current = () => { token.cancelled = true; };
-      const text = searchTextRef.current;
+      const text = textOverride ?? searchTextRef.current;
       if (!text) { resolve(null); return; }
       const count = getRowCountRef.current();
       const cols = columnsRef.current;
@@ -531,12 +531,12 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
     });
   }, []);
 
-  const findPrevMatch = useCallback((from: { row: number; col: number } | null): Promise<{ row: number; col: number } | null> => {
+  const findPrevMatch = useCallback((from: { row: number; col: number } | null, textOverride?: string): Promise<{ row: number; col: number } | null> => {
     activeCancelRef.current?.();
     return new Promise<{ row: number; col: number } | null>((resolve) => {
       const token = { cancelled: false };
       activeCancelRef.current = () => { token.cancelled = true; };
-      const text = searchTextRef.current;
+      const text = textOverride ?? searchTextRef.current;
       if (!text) { resolve(null); return; }
       const count = getRowCountRef.current();
       const cols = columnsRef.current;
@@ -1138,15 +1138,30 @@ export const GridComponent = forwardRef<GridSearchHandle, GridComponentProps>(fu
 
   const prevActiveMatchRef = useRef<{ row: number; col: number } | null>(null);
   useEffect(() => {
-    if (!searchActiveMatch || !gridRef.current) {
-      prevActiveMatchRef.current = null;
-      return;
-    }
     const prev = prevActiveMatchRef.current;
-    if (prev && prev.row === searchActiveMatch.row && prev.col === searchActiveMatch.col) return;
-    prevActiveMatchRef.current = { row: searchActiveMatch.row, col: searchActiveMatch.col };
-    const visualCol = getVisualIndex(searchActiveMatch.col);
-    gridRef.current.scrollTo(visualCol, searchActiveMatch.row);
+    prevActiveMatchRef.current = searchActiveMatch
+      ? { row: searchActiveMatch.row, col: searchActiveMatch.col }
+      : null;
+
+    const timer = window.setTimeout(() => {
+      const grid = gridRef.current;
+      if (!grid) return;
+
+      const cells = new Map<string, { cell: Item }>();
+      if (prev) {
+        const visualCol = getVisualIndex(prev.col);
+        cells.set(`${visualCol}:${prev.row}`, { cell: [visualCol, prev.row] });
+      }
+      if (searchActiveMatch) {
+        const visualCol = getVisualIndex(searchActiveMatch.col);
+        grid.scrollTo(visualCol, searchActiveMatch.row);
+        cells.set(`${visualCol}:${searchActiveMatch.row}`, { cell: [visualCol, searchActiveMatch.row] });
+      }
+      if (cells.size > 0) {
+        grid.updateCells([...cells.values()]);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [searchActiveMatch, getVisualIndex]);
 
   useEffect(() => {
