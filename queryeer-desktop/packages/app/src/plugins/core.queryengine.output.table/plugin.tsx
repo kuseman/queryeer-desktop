@@ -369,8 +369,8 @@ const TableGrid = forwardRef<GridSearchHandle, TableGridProps>(function TableGri
 
   const gridCompRef = useRef<GridSearchHandle | null>(null);
   useImperativeHandle(ref, () => ({
-    findNext: (from) => gridCompRef.current?.findNext(from) ?? Promise.resolve(null),
-    findPrev: (from) => gridCompRef.current?.findPrev(from) ?? Promise.resolve(null),
+    findNext: (from, textOverride) => gridCompRef.current?.findNext(from, textOverride) ?? Promise.resolve(null),
+    findPrev: (from, textOverride) => gridCompRef.current?.findPrev(from, textOverride) ?? Promise.resolve(null),
     cancelSearch: () => gridCompRef.current?.cancelSearch(),
   }), []);
 
@@ -499,7 +499,7 @@ function ResultSetMetadata({ metadata }: { metadata?: Record<string, string> }):
   );
 }
 
-function TableOutputView({ context, onPreviewValue }: { context: OutputContext; onPreviewValue: (options: { title: string; value: string; mimeType?: string }) => void }): JSX.Element {
+export function TableOutputView({ context, onPreviewValue }: { context: OutputContext; onPreviewValue: (options: { title: string; value: string; mimeType?: string }) => void }): JSX.Element {
   const tableSettings = resolveOutputTableSettings();
   const outputSessionId = context.outputSessionId;
   const outputViewStateKey = outputSessionId ?? "";
@@ -667,7 +667,7 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
       const el = containerRef.current;
       if (!el || !el.contains(e.target as Node)) return;
       const primaryModifier = isPrimaryModifier(e);
-      if (primaryModifier && (e.key.toLowerCase() === "f" || e.key.toLowerCase() === "x")) {
+      if (primaryModifier && e.key.toLowerCase() === "f") {
         e.preventDefault();
         e.stopPropagation();
         if (searchOpen) {
@@ -792,7 +792,8 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
   }, [searchMarkAll, allMatches, currentMatchIndex]);
 
   // Navigation handlers
-  const handleFindNext = useCallback(() => {
+  const handleFindNext = useCallback((textOverride?: string) => {
+    const effectiveSearchText = textOverride ?? searchText;
     if (searchMarkAll) {
       if (allMatches.length === 0) return;
       const nextIndex = (currentMatchIndex + 1) % allMatches.length;
@@ -810,12 +811,12 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
         ? (activeStackedResultSetIndex ?? resultSets[0]?.resultSetIndex ?? 0)
         : (resultSets[clampedIndex]?.resultSetIndex ?? 0);
       const handle = lazySearchHandles.current.get(rsIndex);
-      if (!handle || !searchText) return;
+      if (!handle || !effectiveSearchText) return;
       const seq = ++lazyFindSeqRef.current;
       const from = currentActiveLazy?.resultSetIndex === rsIndex
         ? { row: currentActiveLazy.row, col: currentActiveLazy.col }
         : null;
-      handle.findNext(from).then(match => {
+      handle.findNext(from, effectiveSearchText).then(match => {
         if (lazyFindSeqRef.current !== seq) return;
         // Non-wrapped match in current set: accept directly
         if (match && (!from || match.row > from.row || (match.row === from.row && match.col > from.col))) {
@@ -851,7 +852,8 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
     }
   }, [searchMarkAll, allMatches, currentMatchIndex, context.resultSets, isStacked, clampedIndex, handleSetActive, scrollToStackedResultSet, activeStackedResultSetIndex, currentActiveLazy, searchText]);
 
-  const handleFindPrev = useCallback(() => {
+  const handleFindPrev = useCallback((textOverride?: string) => {
+    const effectiveSearchText = textOverride ?? searchText;
     if (searchMarkAll) {
       if (allMatches.length === 0) return;
       const prevIndex = (currentMatchIndex - 1 + allMatches.length) % allMatches.length;
@@ -869,12 +871,12 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
         ? (activeStackedResultSetIndex ?? resultSets[0]?.resultSetIndex ?? 0)
         : (resultSets[clampedIndex]?.resultSetIndex ?? 0);
       const handle = lazySearchHandles.current.get(rsIndex);
-      if (!handle || !searchText) return;
+      if (!handle || !effectiveSearchText) return;
       const seq = ++lazyFindSeqRef.current;
       const from = currentActiveLazy?.resultSetIndex === rsIndex
         ? { row: currentActiveLazy.row, col: currentActiveLazy.col }
         : null;
-      handle.findPrev(from).then(match => {
+      handle.findPrev(from, effectiveSearchText).then(match => {
         if (lazyFindSeqRef.current !== seq) return;
         // Non-wrapped match in current set: accept directly
         if (match && (!from || match.row < from.row || (match.row === from.row && match.col < from.col))) {
@@ -951,15 +953,15 @@ function TableOutputView({ context, onPreviewValue }: { context: OutputContext; 
               if (e.key === "Enter") {
                 e.preventDefault();
                 if (e.shiftKey) {
-                  handleFindPrev();
+                  handleFindPrev(e.currentTarget.value);
                 } else {
-                  handleFindNext();
+                  handleFindNext(e.currentTarget.value);
                 }
               }
             }}
           />
-          <button type="button" onClick={handleFindPrev} disabled={!searchText}>Prev</button>
-          <button type="button" onClick={handleFindNext} disabled={!searchText}>Next</button>
+          <button type="button" onClick={() => handleFindPrev()} disabled={!searchText}>Prev</button>
+          <button type="button" onClick={() => handleFindNext()} disabled={!searchText}>Next</button>
           <label>
             <input type="checkbox" checked={searchCaseSensitive} onChange={(e) => setSearchCaseSensitive(e.target.checked)} />
             Aa
