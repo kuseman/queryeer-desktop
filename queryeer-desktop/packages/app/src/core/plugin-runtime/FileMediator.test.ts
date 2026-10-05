@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { LayoutEditorContribution } from "@queryeer/api/extensions/LayoutExtension";
+import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import { FileRegistry } from "./FileRegistry";
 import {
   createFileMediator,
@@ -23,7 +24,7 @@ type Harness = {
   registry: FileRegistry;
   sync: Required<FileBackendSync>;
   writeFile: ReturnType<typeof vi.fn>;
-  readFile: ReturnType<typeof vi.fn>;
+  readFile: (uri: string) => Promise<{ success: boolean; content: string }>;
   resolveFileContent: ReturnType<typeof vi.fn>;
   showSaveDialog: ReturnType<typeof vi.fn>;
   mediator: ReturnType<typeof createFileMediator>;
@@ -32,6 +33,8 @@ type Harness = {
 function setupHarness(options?: {
   editors?: LayoutEditorContribution[];
   changeDebounceMs?: number;
+  readFile?: (uri: string) => Promise<{ success: boolean; content: string }>;
+  onFileChanged?: (file: FileEntity, text: string) => void;
 }): Harness {
   const registry = new FileRegistry({
     getEditors: () => options?.editors ?? []
@@ -43,7 +46,7 @@ function setupHarness(options?: {
     changeFile: vi.fn(async () => {})
   };
   const writeFile = vi.fn(async () => ({ success: true }));
-  const readFile = vi.fn(async () => ({ success: true, content: "" }));
+  const readFile = options?.readFile ?? vi.fn(async () => ({ success: true, content: "" }));
   const resolveFileContent = vi.fn(() => "resolved-content");
   const showSaveDialog = vi.fn();
   const mediator = createFileMediator({
@@ -52,6 +55,7 @@ function setupHarness(options?: {
     writeFile,
     readFile,
     resolveFileContent,
+    onFileChanged: options?.onFileChanged,
     changeDebounceMs: options?.changeDebounceMs ?? 50,
     showSaveDialog
   });
@@ -599,6 +603,29 @@ it("reloadFile resets diskState and dirtyVsDisk", async () => {
     await mediator.reloadFile(file.fileId);
 
     expect(readFile).toHaveBeenCalledWith(file.uri);
+  });
+
+  it("does not apply a stale disk read after the file is edited", async () => {
+    let resolveRead!: (result: { success: boolean; content: string }) => void;
+    const readFile = vi.fn(() => new Promise<{ success: boolean; content: string }>((resolve) => {
+      resolveRead = resolve;
+    }));
+    const onFileChanged = vi.fn();
+    const { mediator, registry } = setupHarness({ readFile, onFileChanged });
+    const filesRegistry = registry.createFilesRegistry();
+    const file = await mediator.openFile("file:///stale.txt", { mimeType: "text/plain" });
+    filesRegistry.updateFile(file.fileId, { diskState: "modifiedOnDisk" });
+
+    const reload = mediator.reloadFile(file.fileId);
+    filesRegistry.markDirty(file.fileId);
+    resolveRead({ success: true, content: "stale disk content" });
+    const result = await reload;
+
+    expect(onFileChanged).not.toHaveBeenCalled();
+    expect(result).toEqual(expect.objectContaining({
+      dirtyVsDisk: true,
+      diskState: "modifiedOnDisk"
+    }));
   });
 
   it("acceptExternalChange clears diskState and dirtyVsDisk", async () => {
