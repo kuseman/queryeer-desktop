@@ -355,12 +355,22 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
       if (!file) {
         return undefined;
       }
+      const versionBeforeRead = file.version;
 
       if (readFile) {
         try {
           const result = await readFile(file.uri);
-          if (result.success && onFileChanged) {
-            onFileChanged(file, result.content);
+          if (result.success) {
+            const currentFile = filesRegistry.getFile(fileId);
+            if (!currentFile) {
+              return undefined;
+            }
+            if (currentFile.version !== versionBeforeRead) {
+              return filesRegistry.updateFile(fileId, {
+                diskState: "modifiedOnDisk"
+              });
+            }
+            onFileChanged?.(file, result.content);
           }
         } catch {
           // Failed to read file, continue with reset
