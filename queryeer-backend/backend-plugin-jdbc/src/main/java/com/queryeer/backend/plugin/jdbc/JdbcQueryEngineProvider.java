@@ -9,6 +9,8 @@ import static com.queryeer.backend.plugin.jdbc.JdbcUtils.rollbackAndClose;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
+import java.sql.SQLRecoverableException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -163,6 +165,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         String sessionId = null;
         JdbcConnection resolved = null;
         String sqlText = null;
+        Connection sessionConnection = null;
         try
         {
             if (isBlank(text))
@@ -229,7 +232,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             }
             resultSetMeta.put("Execution Time", LocalDateTime.now()
                     .toString());
-            Connection sessionConnection = acquire(fileId, resolved);
+            sessionConnection = acquire(fileId, resolved);
             JdbcQueryRequest request = new JdbcQueryRequest(queryExecutionId, fileId, text, resolved.connectionId(), resolved.properties(), sessionConnection, state.database(), resolved.dialect(),
                     options);
             JdbcQueryResult result = executeJdbcRequest(resolved, request, new TransportJdbcQueryEventListener(publisher, resultSetMeta));
@@ -261,6 +264,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         }
         catch (Exception e)
         {
+            invalidateSessionIfBroken(fileId, sessionConnection, e);
             if (cancelledExecutionIds.contains(queryExecutionId)
                     || containsCancelledState(e))
             {
@@ -635,6 +639,69 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         rollbackAndClose(removed.connection());
         deadByFileId.put(fileId, new DeadSessionSnapshot(fileId, removed.connectionId(), removed.sessionId(), System.currentTimeMillis() + DEFAULT_DEAD_SNAPSHOT_TTL_MS));
         return true;
+    }
+
+    private void invalidateSessionIfBroken(String fileId, Connection connection, Throwable failure)
+    {
+        if (connection == null
+                || (!containsConnectionFailure(failure)
+                        && isConnectionUsable(connection)))
+        {
+            return;
+        }
+
+        FileSessionHandle session = byFileId.get(fileId);
+        if (session != null
+                && session.connection() == connection
+                && byFileId.remove(fileId, session))
+        {
+            rollbackAndClose(connection);
+        }
+    }
+
+    private static boolean containsConnectionFailure(Throwable throwable)
+    {
+        Throwable current = throwable;
+        while (current != null)
+        {
+            if (current instanceof SQLRecoverableException)
+            {
+                return true;
+            }
+            if (current instanceof SQLException sqlException)
+            {
+                SQLException next = sqlException;
+                while (next != null)
+                {
+                    String sqlState = next.getSQLState();
+                    if (sqlState != null
+                            && sqlState.startsWith("08"))
+                    {
+                        return true;
+                    }
+                    next = next.getNextException();
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private static boolean isConnectionUsable(Connection connection)
+    {
+        try
+        {
+            return !connection.isClosed()
+                    && connection.isValid(1);
+        }
+        catch (SQLFeatureNotSupportedException e)
+        {
+            return true;
+        }
+        catch (SQLException e)
+        {
+            return false;
+        }
     }
 
     private List<Map<String, Object>> connectionSnapshots(long now)
