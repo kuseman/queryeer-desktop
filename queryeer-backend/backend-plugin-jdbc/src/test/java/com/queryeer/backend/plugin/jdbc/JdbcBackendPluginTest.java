@@ -5,16 +5,23 @@ import static org.mockito.Mockito.mock;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
+import java.sql.Driver;
 import java.sql.DriverManager;
+import java.sql.DriverPropertyInfo;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Logger;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.Mockito;
 
 import com.queryeer.backend.api.BackendPluginContext;
 import com.queryeer.backend.api.ChangelogRegistry;
@@ -401,6 +408,67 @@ class JdbcBackendPluginTest
     }
 
     @Test
+    void executeReconnectsAfterConnectionFailureMarkedOpenByDriver() throws Exception
+    {
+        String jdbcUrl = "jdbc:queryeer-broken:test";
+        Connection brokenConnection = Mockito.mock(Connection.class);
+        Statement brokenStatement = Mockito.mock(Statement.class);
+        Connection replacementConnection = Mockito.mock(Connection.class);
+        Statement replacementStatement = Mockito.mock(Statement.class);
+        AtomicInteger connectCount = new AtomicInteger();
+
+        Mockito.when(brokenConnection.isClosed())
+                .thenReturn(false);
+        Mockito.when(brokenConnection.createStatement())
+                .thenReturn(brokenStatement);
+        Mockito.when(brokenStatement.execute(Mockito.anyString()))
+                .thenThrow(new SQLException("The connection is broken and recovery is not possible", "08S01"));
+        Mockito.when(replacementConnection.isClosed())
+                .thenReturn(false);
+        Mockito.when(replacementConnection.createStatement())
+                .thenReturn(replacementStatement);
+        Mockito.when(replacementStatement.execute(Mockito.anyString()))
+                .thenReturn(false);
+        Mockito.when(replacementStatement.getUpdateCount())
+                .thenReturn(-1);
+
+        Driver driver = testDriver(jdbcUrl, connectCount, brokenConnection, replacementConnection);
+        DriverManager.registerDriver(driver);
+        try
+        {
+            QueryEngineProvider provider = activateAndGetProvider(TestUtils.mockConnections("""
+                    {
+                        "core.queryengine.jdbc.connections": [
+                            {
+                                "connectionId": "jdbc-broken",
+                                "dialectId": "jdbc",
+                                "url": "jdbc:queryeer-broken:test",
+                                "enabled": true
+                            }
+                        ]
+                    }
+                    """));
+
+            RecordingPublisher failedPublisher = new RecordingPublisher();
+            provider.execute("exec-broken-1", "file-broken", "select 1", Map.of("connectionId", "jdbc-broken"), failedPublisher);
+            Assertions.assertEquals("INTERNAL", failedPublisher.errorCode);
+
+            RecordingPublisher recoveredPublisher = new RecordingPublisher();
+            provider.execute("exec-broken-2", "file-broken", "select 1", Map.of("connectionId", "jdbc-broken"), recoveredPublisher);
+
+            Assertions.assertNull(recoveredPublisher.errorCode, recoveredPublisher.errorMessage);
+            Assertions.assertTrue(recoveredPublisher.completed);
+            Assertions.assertEquals(2, connectCount.get());
+            Mockito.verify(brokenConnection)
+                    .close();
+        }
+        finally
+        {
+            DriverManager.deregisterDriver(driver);
+        }
+    }
+
+    @Test
     void rebindingConnectionClosesPreviousSessionStateImmediately()
     {
         JdbcBackendPlugin plugin = new JdbcBackendPlugin();
@@ -774,10 +842,67 @@ class JdbcBackendPluginTest
 
     private QueryEngineProvider activateAndGetProvider()
     {
+        return activateAndGetProvider(defaultConnectionsConfigService());
+    }
+
+    private QueryEngineProvider activateAndGetProvider(ConfigService configService)
+    {
         JdbcBackendPlugin plugin = new JdbcBackendPlugin();
         RecordingQueryEngineRegistry registry = new RecordingQueryEngineRegistry();
-        plugin.activate(new TestPluginContext(registry, new RecordingFileSessionHandlerRegistry(), defaultConnectionsConfigService()), null);
+        plugin.activate(new TestPluginContext(registry, new RecordingFileSessionHandlerRegistry(), configService), null);
         return registry.provider;
+    }
+
+    private static Driver testDriver(String jdbcUrl, AtomicInteger connectCount, Connection... connections)
+    {
+        return new Driver()
+        {
+            @Override
+            public Connection connect(String url, Properties info)
+            {
+                if (!acceptsURL(url))
+                {
+                    return null;
+                }
+                return connections[connectCount.getAndIncrement()];
+            }
+
+            @Override
+            public boolean acceptsURL(String url)
+            {
+                return jdbcUrl.equals(url);
+            }
+
+            @Override
+            public DriverPropertyInfo[] getPropertyInfo(String url, Properties info)
+            {
+                return new DriverPropertyInfo[0];
+            }
+
+            @Override
+            public int getMajorVersion()
+            {
+                return 1;
+            }
+
+            @Override
+            public int getMinorVersion()
+            {
+                return 0;
+            }
+
+            @Override
+            public boolean jdbcCompliant()
+            {
+                return false;
+            }
+
+            @Override
+            public Logger getParentLogger()
+            {
+                return Logger.getGlobal();
+            }
+        };
     }
 
     private static ConfigService defaultConnectionsConfigService()
