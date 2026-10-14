@@ -549,6 +549,15 @@ export const coreQueryEnginePlugin: Plugin = {
       order: 500
     });
 
+    context.keybindings.registerKeybinding({
+      id: "core.queryengine.keybinding.cancel",
+      commandId: "core.queryengine.cancel",
+      key: "Escape",
+      when: "hasActiveQueryExecutableFile && (activeEditorGroupHasRunningQuery == true || activeEditorGroupHasQuerySchedule == true)",
+      scope: "global",
+      order: 500
+    });
+
     registerShortcuts(context);
 
     // Symbol Actions: when-expression variables for context variable autocomplete

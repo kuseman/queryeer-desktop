@@ -488,6 +488,15 @@ it("marks backend-dependent commands with backendHealthy enablement", () => {
         scope: "global"
       })
     );
+    expect(registerKeybindingMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "core.queryengine.keybinding.cancel",
+        commandId: "core.queryengine.cancel",
+        key: "Escape",
+        when: "hasActiveQueryExecutableFile && (activeEditorGroupHasRunningQuery == true || activeEditorGroupHasQuerySchedule == true)",
+        scope: "global"
+      })
+    );
   });
 
   it("registers output and text format toolbar select contributions", () => {
