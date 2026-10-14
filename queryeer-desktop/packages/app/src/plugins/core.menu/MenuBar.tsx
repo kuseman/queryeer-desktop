@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MenuItemContribution } from "@queryeer/api/extensions/MenuExtension";
 import { isPrimaryModifier } from "../../shared/platform-utils";
 import queryeerLogoUrl from "../../assets/icons/queryeer-logo.svg";
@@ -38,6 +38,7 @@ export function CoreMenuBar({
   const [focusPath, setFocusPath] = useState<string[]>([]);
   const [menuBarFocused, setMenuBarFocused] = useState(false);
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
+  const altActivationPending = useRef(false);
   const platform = window.appShell.platform;
 
   if (platform === "darwin") {
@@ -269,15 +270,12 @@ export function CoreMenuBar({
 
       if (event.key === "Alt" && !isPrimaryModifier(event) && !event.shiftKey) {
         event.preventDefault();
-        if (active) {
-          closeMenus(false);
-          return;
-        }
-        if (rootItems.length > 0) {
-          setMenuBarFocused(true);
-          setFocusPath([rootItems[0]!.id]);
-        }
+        altActivationPending.current = true;
         return;
+      }
+
+      if (event.altKey) {
+        altActivationPending.current = false;
       }
 
       if (!active) {
@@ -361,8 +359,37 @@ export function CoreMenuBar({
       }
     };
 
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key !== "Alt" || !altActivationPending.current) {
+        return;
+      }
+
+      altActivationPending.current = false;
+      event.preventDefault();
+      const active = menuBarFocused || openPath.length > 0;
+      if (active) {
+        closeMenus(false);
+        return;
+      }
+      if (rootItems.length > 0) {
+        setMenuBarFocused(true);
+        setFocusPath([rootItems[0]!.id]);
+      }
+    };
+
+    const onWindowBlur = () => {
+      altActivationPending.current = false;
+      closeMenus(false);
+    };
+
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    document.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onWindowBlur);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onWindowBlur);
+    };
   }, [focusPath, menuBarFocused, openPath, rootItems]);
 
   const renderSubmenu = (parentId: string, depth: number): JSX.Element | null => {

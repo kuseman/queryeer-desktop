@@ -90,6 +90,64 @@ describe("CoreMenuBar", () => {
 
     expect(executeCommand).toHaveBeenCalledWith("core.files.new");
   });
+
+  it("does not leave the menu active after Alt+Tab switches applications", async () => {
+    await act(async () => {
+      root.render(
+        <CoreMenuBar
+          canExecuteCommand={() => true}
+          executeCommand={async () => ({})}
+          getCommandAccelerator={() => undefined}
+          menuItems={[
+            { id: "root.file", label: "File", order: 1 },
+            { id: "file.open", parentId: "root.file", label: "Open", commandId: "file.open", order: 1 }
+          ]}
+        />
+      );
+    });
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", altKey: true, bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", altKey: true, bubbles: true }));
+      window.dispatchEvent(new Event("blur"));
+      document.dispatchEvent(new KeyboardEvent("keyup", { key: "Alt", bubbles: true }));
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    const fileButton = Array.from(rootElement.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "File"
+    ) as HTMLButtonElement;
+    expect(fileButton.classList.contains("is-focused")).toBe(false);
+    expect(rootElement.querySelector(".shell-titlebar-dropdown")).toBeNull();
+  });
+
+  it("activates the menu when Alt is pressed and released by itself", async () => {
+    await act(async () => {
+      root.render(
+        <CoreMenuBar
+          canExecuteCommand={() => true}
+          executeCommand={async () => ({})}
+          getCommandAccelerator={() => undefined}
+          menuItems={[{ id: "root.file", label: "File", order: 1 }]}
+        />
+      );
+    });
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", altKey: true, bubbles: true }));
+    });
+
+    const fileButton = Array.from(rootElement.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "File"
+    ) as HTMLButtonElement;
+    expect(fileButton.classList.contains("is-focused")).toBe(false);
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keyup", { key: "Alt", bubbles: true }));
+    });
+
+    expect(fileButton.classList.contains("is-focused")).toBe(true);
+  });
 });
 
 void React;
