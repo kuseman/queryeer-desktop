@@ -299,6 +299,34 @@ describe("editor workbench state", () => {
     expect(next.groups[0].activeFileId).toBe("b");
   });
 
+  it("preserves editor group sizes when closing a tab", () => {
+    const state = splitActiveGroupRight(createEditorWorkbenchState(["a", "b"], "a"));
+    state.sizes = [0.7, 0.3];
+
+    const next = closeFileInGroup(state, state.groups[0].id, "b");
+
+    expect(next.groups).toHaveLength(2);
+    expect(next.sizes).toEqual([0.7, 0.3]);
+  });
+
+  it("renormalizes surviving editor group sizes when closing the last tab in a group", () => {
+    const state = {
+      groups: [
+        { id: "left", fileIds: ["a"], activeFileId: "a", activationQueue: ["a"] },
+        { id: "middle", fileIds: ["b"], activeFileId: "b", activationQueue: ["b"] },
+        { id: "right", fileIds: ["c"], activeFileId: "c", activationQueue: ["c"] }
+      ],
+      activeGroupId: "left",
+      sizes: [0.5, 0.3, 0.2]
+    };
+
+    const next = closeFileInGroup(state, "middle", "b");
+
+    expect(next.groups.map((group) => group.id)).toEqual(["left", "right"]);
+    expect(next.sizes[0]).toBeCloseTo(5 / 7);
+    expect(next.sizes[1]).toBeCloseTo(2 / 7);
+  });
+
   it("adds newly opened registry files to the active group only", () => {
     const split = splitActiveGroupRight(createEditorWorkbenchState(["query"], "query"));
     const result = syncWorkbenchWithFiles(
