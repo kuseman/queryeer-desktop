@@ -440,10 +440,14 @@ export function closeFileInGroup(
   const activeGroupId = collapsed.some((group) => group.id === state.activeGroupId)
     ? state.activeGroupId
     : activeFallbackId;
+  const sizeByGroupId = new Map(state.groups.map((group, index) => [group.id, state.sizes[index]]));
   return normalizeEditorWorkbenchState({
     groups: collapsed,
     activeGroupId,
-    sizes: normalizeSizes([], collapsed.length),
+    sizes: normalizeSizes(
+      collapsed.map((group) => sizeByGroupId.get(group.id) ?? 0),
+      collapsed.length
+    ),
     maximizedGroupId: state.maximizedGroupId ?? null
   });
 }
