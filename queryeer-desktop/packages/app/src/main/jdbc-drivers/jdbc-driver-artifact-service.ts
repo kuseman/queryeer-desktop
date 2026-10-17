@@ -21,6 +21,18 @@ const MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024;
 const MANAGED_PREFIX = "000-queryeer-managed-";
 const INVENTORY_VERSION = 2;
 
+type GitHubReleaseMetadata = {
+  tag_name?: unknown;
+  draft?: unknown;
+  prerelease?: unknown;
+  assets?: Array<{ name?: unknown; browser_download_url?: unknown; digest?: unknown }>;
+};
+
+type ResolvedCompanionRelease = {
+  version: string;
+  metadata: GitHubReleaseMetadata;
+};
+
 type PendingEntry = {
   operation: JdbcDriverPendingOperation;
   bundleId?: string;
@@ -29,6 +41,7 @@ type PendingEntry = {
   sha256?: string;
   stagedFile?: string;
   finalFile?: string;
+  driverVersion?: string;
 };
 
 type InventoryEntry = {
@@ -44,7 +57,10 @@ type InventoryEntry = {
   companions?: CompanionInventoryEntry[];
 };
 
-type CompanionInventoryEntry = Omit<InventoryEntry, "ownerPluginId" | "dialectId" | "companions"> & { id: string };
+type CompanionInventoryEntry = Omit<InventoryEntry, "ownerPluginId" | "dialectId" | "companions"> & {
+  id: string;
+  installedForDriverVersion?: string;
+};
 
 type DisabledArtifactEntry = {
   artifactId: string;
@@ -224,6 +240,7 @@ export class JdbcDriverArtifactService {
           entry.managedFile = undefined;
           entry.installedVersion = undefined;
           entry.installedSha256 = undefined;
+          if ("id" in entry) entry.installedForDriverVersion = undefined;
           entry.pending = undefined;
           changed = true;
           continue;
@@ -259,6 +276,7 @@ export class JdbcDriverArtifactService {
         entry.managedFile = pending.finalFile;
         entry.installedVersion = pending.version;
         entry.installedSha256 = pending.sha256;
+        if ("id" in entry) entry.installedForDriverVersion = pending.driverVersion;
         entry.error = undefined;
         entry.pending = undefined;
         if (oldFile && oldFile !== entry.managedFile && this.isManagedPath(oldFile)) {
@@ -312,7 +330,7 @@ export class JdbcDriverArtifactService {
         if (!companionEntry?.managedFile || !companionEntry.installedSha256 || existsSync(companionEntry.managedFile)) continue;
         let expectedVersion: string;
         try {
-          expectedVersion = this.releaseVersion(companion, driverEntry.installedVersion);
+          expectedVersion = this.installedCompanionVersion(companion, driverEntry, companionEntry, driverEntry.installedVersion);
         } catch {
           continue;
         }
@@ -377,6 +395,7 @@ export class JdbcDriverArtifactService {
         entry.managedFile = undefined;
         entry.installedVersion = undefined;
         entry.installedSha256 = undefined;
+        if ("id" in entry) entry.installedForDriverVersion = undefined;
         entry.error = undefined;
         entry.pending = undefined;
       }
@@ -446,6 +465,7 @@ export class JdbcDriverArtifactService {
       entry.managedFile = pending.finalFile;
       entry.installedVersion = pending.version;
       entry.installedSha256 = pending.sha256;
+      if ("id" in entry) entry.installedForDriverVersion = pending.driverVersion;
       entry.error = undefined;
       entry.pending = undefined;
     }
@@ -479,7 +499,9 @@ export class JdbcDriverArtifactService {
         if (selectedDriver?.version) {
           let releaseVersion: string | undefined;
           try {
-            releaseVersion = this.releaseVersion(companion, selectedDriver.version);
+            releaseVersion = inventoryEntry
+              ? this.installedCompanionVersion(companion, inventoryEntry, companionEntry, selectedDriver.version)
+              : this.releaseVersion(companion, selectedDriver.version);
           } catch {
             releaseVersion = undefined;
           }
@@ -659,6 +681,12 @@ export class JdbcDriverArtifactService {
     if (!candidate.version || candidate.kind === "nativeLibrary") return candidate.version;
     const companion = candidate.contribution.companionArtifacts?.find((artifact) => artifact.versionLockedToDriver);
     if (!companion) return candidate.version;
+    const driverEntry = this.findEntry(candidate.contribution);
+    const companionEntry = driverEntry ? this.findCompanionEntry(driverEntry, companion.id) : undefined;
+    if (candidate.file === driverEntry?.managedFile && driverEntry.installedVersion === candidate.version
+      && companionEntry?.installedForDriverVersion === candidate.version && companionEntry.installedVersion) {
+      return companionEntry.installedVersion;
+    }
     try {
       return this.releaseVersion(companion, candidate.version);
     } catch {
@@ -756,6 +784,7 @@ export class JdbcDriverArtifactService {
       companionEntry.managedFile = undefined;
       companionEntry.installedVersion = undefined;
       companionEntry.installedSha256 = undefined;
+      companionEntry.installedForDriverVersion = undefined;
     }
     for (const artifact of disabledSet.artifacts) {
       if (artifact.source !== "managed") continue;
@@ -763,6 +792,9 @@ export class JdbcDriverArtifactService {
       targetEntry.managedFile = artifact.originalFile;
       targetEntry.installedVersion = artifact.version;
       targetEntry.installedSha256 = artifact.sha256;
+      if ("id" in targetEntry) {
+        targetEntry.installedForDriverVersion = disabledSet.artifacts.find((candidate) => candidate.kind === "driver")?.version;
+      }
     }
     this.inventory.disabledSets = this.inventory.disabledSets.filter((entry) => entry.id !== disabledSet.id);
   }
@@ -801,7 +833,10 @@ export class JdbcDriverArtifactService {
         entry.latestVersion = await this.fetchLatestVersion(contribution);
         for (const companion of contribution.companionArtifacts ?? []) {
           const companionEntry = this.getOrCreateCompanionEntry(entry, companion.id);
-          companionEntry.latestVersion = this.releaseVersion(companion, entry.latestVersion);
+          const requestedVersion = this.releaseVersion(companion, entry.latestVersion);
+          companionEntry.latestVersion = this.isApplicable(companion)
+            ? (await this.resolveCompanionRelease(companion, requestedVersion)).version
+            : requestedVersion;
           companionEntry.error = undefined;
           companionEntry.lastCheckedAt = entry.lastCheckedAt;
         }
@@ -955,12 +990,15 @@ export class JdbcDriverArtifactService {
     try {
       const driverVersion = driverEntry.latestVersion ?? await this.fetchLatestVersion(contribution);
       driverEntry.latestVersion = driverVersion;
-      const version = companion ? this.releaseVersion(companion, driverVersion) : driverVersion;
+      const companionRelease = companion
+        ? await this.resolveCompanionRelease(companion, this.releaseVersion(companion, driverVersion))
+        : undefined;
+      const version = companionRelease?.version ?? driverVersion;
       if (operation === "update" && entry.installedVersion === version) {
         return rejected(status, "The managed driver is already at the latest compatible version");
       }
       const contents = companion
-        ? await this.downloadCompanion(companion, version)
+        ? await this.downloadCompanion(companion, companionRelease!)
         : await this.downloadAndVerify(contribution, version);
       const sha256 = createHash("sha256").update(contents).digest("hex");
       const finalFile = companion
@@ -973,7 +1011,7 @@ export class JdbcDriverArtifactService {
       entry.latestVersion = version;
       entry.lastCheckedAt = this.now().toISOString();
       entry.error = undefined;
-      entry.pending = { operation, version, sha256, stagedFile, finalFile };
+      entry.pending = { operation, version, sha256, stagedFile, finalFile, ...(companion ? { driverVersion } : {}) };
       await this.writeInventory();
       status = (await this.list([contribution]))[0];
       return { accepted: true, status };
@@ -1004,7 +1042,9 @@ export class JdbcDriverArtifactService {
     const stagedFiles: string[] = [];
     try {
       const driverVersion = await this.fetchLatestVersion(contribution);
-      const versions = [driverVersion, ...companions.map((companion) => this.releaseVersion(companion, driverVersion))];
+      const companionReleases = await Promise.all(companions.map((companion) =>
+        this.resolveCompanionRelease(companion, this.releaseVersion(companion, driverVersion))));
+      const versions = [driverVersion, ...companionReleases.map((release) => release.version)];
       const membersHealthy = await Promise.all(members.map(async (entry, index) => Boolean(entry.managedFile
         && entry.installedVersion === versions[index]
         && entry.installedSha256
@@ -1015,7 +1055,7 @@ export class JdbcDriverArtifactService {
       }
       const contents = await Promise.all([
         this.downloadAndVerify(contribution, driverVersion),
-        ...companions.map((companion, index) => this.downloadCompanion(companion, versions[index + 1]))
+        ...companions.map((companion, index) => this.downloadCompanion(companion, companionReleases[index]))
       ]);
       const finalFiles = [
         join(this.libSharedDir, `${MANAGED_PREFIX}${contribution.artifactId}-${driverVersion}.jar`),
@@ -1048,7 +1088,8 @@ export class JdbcDriverArtifactService {
           version: versions[index],
           sha256: createHash("sha256").update(contents[index]).digest("hex"),
           stagedFile: stagedFiles[index],
-          finalFile: finalFiles[index]
+          finalFile: finalFiles[index],
+          ...(index > 0 ? { driverVersion } : {})
         };
       }
       await this.writeInventory();
@@ -1133,12 +1174,48 @@ export class JdbcDriverArtifactService {
     return jar;
   }
 
-  private async downloadCompanion(companion: JdbcDriverCompanionArtifact, releaseVersion: string): Promise<Buffer> {
-    const tag = companion.source.releaseTagTemplate.replace("{releaseVersion}", releaseVersion);
+  private async resolveCompanionRelease(
+    companion: JdbcDriverCompanionArtifact,
+    requestedVersion: string
+  ): Promise<ResolvedCompanionRelease> {
+    const tag = companion.source.releaseTagTemplate.replace("{releaseVersion}", requestedVersion);
     const metadataUrl = `${GITHUB_API_ORIGIN}/repos/${companion.source.repository}/releases/tags/${encodeURIComponent(tag)}`;
     const metadataResponse = await this.fetchGitHub(metadataUrl, false);
-    if (!metadataResponse.ok) throw new Error(`GitHub release metadata request failed with HTTP ${metadataResponse.status}`);
-    const metadata = await metadataResponse.json() as { assets?: Array<{ name?: unknown; browser_download_url?: unknown; digest?: unknown }> };
+    if (metadataResponse.ok) {
+      return { version: requestedVersion, metadata: await metadataResponse.json() as GitHubReleaseMetadata };
+    }
+    if (metadataResponse.status !== 404) {
+      throw new Error(`GitHub release metadata request failed with HTTP ${metadataResponse.status}`);
+    }
+
+    const requestedParts = requestedVersion.match(/^(\d+)\.(\d+)\.(\d+)$/);
+    const markerIndex = companion.source.releaseTagTemplate.indexOf("{releaseVersion}");
+    if (!requestedParts || markerIndex < 0) throw new Error("GitHub release metadata request failed with HTTP 404");
+    const prefix = companion.source.releaseTagTemplate.slice(0, markerIndex);
+    const suffix = companion.source.releaseTagTemplate.slice(markerIndex + "{releaseVersion}".length);
+    const releasesResponse = await this.fetchGitHub(
+      `${GITHUB_API_ORIGIN}/repos/${companion.source.repository}/releases?per_page=100`,
+      false
+    );
+    if (!releasesResponse.ok) throw new Error(`GitHub releases request failed with HTTP ${releasesResponse.status}`);
+    const releases = await releasesResponse.json() as GitHubReleaseMetadata[];
+    const candidates = releases.flatMap((metadata) => {
+      if (metadata.draft === true || metadata.prerelease === true || typeof metadata.tag_name !== "string"
+        || !metadata.tag_name.startsWith(prefix) || !metadata.tag_name.endsWith(suffix)) return [];
+      const version = metadata.tag_name.slice(prefix.length, suffix ? -suffix.length : undefined);
+      const parts = version.match(/^(\d+)\.(\d+)\.(\d+)$/);
+      if (!parts || parts[1] !== requestedParts[1] || parts[2] !== requestedParts[2]
+        || compareVersions(version, requestedVersion) > 0
+        || !metadata.assets?.some((asset) => asset.name === companion.source.assetName)) return [];
+      return [{ version, metadata }];
+    }).sort((left, right) => compareVersions(left.version, right.version));
+    const fallback = candidates.at(-1);
+    if (!fallback) throw new Error("GitHub release metadata request failed with HTTP 404");
+    return fallback;
+  }
+
+  private async downloadCompanion(companion: JdbcDriverCompanionArtifact, release: ResolvedCompanionRelease): Promise<Buffer> {
+    const { version: releaseVersion, metadata } = release;
     const asset = metadata.assets?.find((candidate) => candidate.name === companion.source.assetName);
     if (!asset || typeof asset.browser_download_url !== "string") throw new Error(`GitHub release asset '${companion.source.assetName}' is missing`);
     const expectedDigest = typeof asset.digest === "string" ? asset.digest.match(/^sha256:([a-fA-F0-9]{64})$/)?.[1].toLowerCase() : undefined;
@@ -1242,9 +1319,18 @@ export class JdbcDriverArtifactService {
     for (const contribution of contributions) {
       for (const companion of contribution.companionArtifacts ?? []) {
         if (!this.isApplicable(companion)) continue;
-        const name = names.find((candidate) => candidate.toLowerCase().endsWith(companion.expectedFileExtension)
-          && /^(?:mssql-jdbc_auth.*|sqljdbc_auth)\.dll$/i.test(candidate)
-          && !candidate.includes(".queryeer-managed."));
+        const inventoryEntry = this.findEntry(contribution);
+        const companionEntry = inventoryEntry ? this.findCompanionEntry(inventoryEntry, companion.id) : undefined;
+        let name: string | undefined;
+        for (const candidate of names) {
+          if (!candidate.toLowerCase().endsWith(companion.expectedFileExtension)
+            || !/^(?:mssql-jdbc_auth.*|sqljdbc_auth)\.dll$/i.test(candidate)
+            || candidate.includes(".queryeer-managed.")) continue;
+          const file = join(this.libNativeDir, candidate);
+          if (companionEntry?.managedFile === file && companionEntry.installedSha256 === await fileSha256(file)) continue;
+          name = candidate;
+          break;
+        }
         if (!name) continue;
         const version = name.match(/^mssql-jdbc_auth-([0-9]+\.[0-9]+\.[0-9]+)(?:\.[^.]+)?\.dll$/i)?.[1];
         result.set(artifactKey(contribution, companion.id), version ?? null);
@@ -1336,7 +1422,12 @@ export class JdbcDriverArtifactService {
       if (primary.installedVersion) {
         try {
           mismatch = !companionStatus.installedVersion
-            || companionStatus.installedVersion !== this.releaseVersion(declaration, primary.installedVersion);
+            || companionStatus.installedVersion !== this.installedCompanionVersion(
+              declaration,
+              entry,
+              entry ? this.findCompanionEntry(entry, declaration.id) : undefined,
+              primary.installedVersion
+            );
         } catch {
           mismatch = true;
         }
@@ -1418,7 +1509,7 @@ export class JdbcDriverArtifactService {
     for (const companion of this.lockedCompanions(contribution)) {
       let expectedVersion: string;
       try {
-        expectedVersion = this.releaseVersion(companion, drivers[0].version);
+        expectedVersion = disabledSet.version ?? this.releaseVersion(companion, drivers[0].version);
       } catch {
         return false;
       }
@@ -1438,6 +1529,19 @@ export class JdbcDriverArtifactService {
     const expression = new RegExp(companion.source.driverVersionToReleaseVersion.pattern);
     if (!expression.test(driverVersion)) throw new Error(`Driver version '${driverVersion}' cannot be mapped to a native release`);
     return driverVersion.replace(expression, companion.source.driverVersionToReleaseVersion.replacement);
+  }
+
+  private installedCompanionVersion(
+    companion: JdbcDriverCompanionArtifact,
+    driverEntry: InventoryEntry | undefined,
+    companionEntry: CompanionInventoryEntry | undefined,
+    driverVersion: string
+  ): string {
+    if (companionEntry?.installedForDriverVersion === driverVersion && companionEntry.installedVersion) {
+      return companionEntry.installedVersion;
+    }
+    if (driverEntry?.latestVersion === driverVersion && companionEntry?.latestVersion) return companionEntry.latestVersion;
+    return this.releaseVersion(companion, driverVersion);
   }
 
   private async readInventory(): Promise<InventoryDocument> {
