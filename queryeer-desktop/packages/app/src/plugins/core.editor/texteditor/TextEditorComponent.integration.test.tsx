@@ -1,6 +1,6 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import type { FilesRegistry } from "@queryeer/api/files/FilesRegistry";
 import type { ContextMenuProvider } from "@queryeer/api/extensions/ContextMenuExtension";
@@ -210,7 +210,7 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
   let root: Root;
   let registry: TextEditorRegistry;
   let filesById: Map<string, FileEntity>;
-  let markDirtySpy: ReturnType<typeof vi.fn>;
+  let markDirtySpy: Mock<(fileId: string) => void>;
 
   beforeEach(async () => {
     (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
