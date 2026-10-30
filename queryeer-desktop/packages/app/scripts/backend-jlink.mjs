@@ -21,6 +21,8 @@ async function main() {
     process.exit(1);
   }
 
+  run("Java runtime", "java -version");
+
   run("Maven build", [
     `"${mvnwPath}"`,
     "-q", "-T", "1C",
