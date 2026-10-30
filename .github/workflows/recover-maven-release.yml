@@ -131,7 +131,7 @@ jobs:
         if: steps.deployment.outputs.reupload == 'true' && steps.central-recheck.outputs.state == 'missing'
         uses: actions/setup-java@v5
         with:
-          java-version: "25"
+          java-version: "25.0.5+0.3.1"
           distribution: zulu
           cache: maven
           server-id: central

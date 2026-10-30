@@ -8,6 +8,13 @@ const packageJson = JSON.parse(
 );
 
 describe("packaging configuration", () => {
+  it("packages the audited Electron security baseline", () => {
+    const dependencyVersion = packageJson.devDependencies.electron.replace(/^\^/, "");
+
+    expect(dependencyVersion).toBe("45.0.0");
+    expect(packageJson.build.electronVersion).toBe(dependencyVersion);
+  });
+
   it("keeps platform application identities explicit", () => {
     expect(packageJson.desktopName).toBe("queryeer-desktop.desktop");
     expect(packageJson.build.linux).toMatchObject({

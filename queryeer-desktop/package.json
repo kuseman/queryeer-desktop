@@ -25,10 +25,8 @@
     "@rollup/rollup-win32-x64-msvc": "^4.62.4"
   },
   "overrides": {
-    "@queryeer/app": {
-      "monaco-editor": {
-        "dompurify": "3.4.13"
-      }
+    "monaco-editor": {
+      "dompurify": "3.4.17"
     }
   }
 }
