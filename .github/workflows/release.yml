@@ -45,7 +45,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
         uses: actions/setup-java@v5
         with:
-          java-version: "25"
+          java-version: "25.0.5.0.3"
           distribution: zulu
           cache: maven
 
@@ -53,7 +53,7 @@ jobs:
         if: github.event_name == 'push'
         uses: actions/setup-java@v5
         with:
-          java-version: "25"
+          java-version: "25.0.5.0.3"
           distribution: zulu
           cache: maven
 
@@ -120,7 +120,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: "24.22.1"
           cache: npm
           cache-dependency-path: queryeer-desktop/package-lock.json
 
@@ -132,7 +132,7 @@ jobs:
       - name: Set up JDK 25
         uses: actions/setup-java@v5
         with:
-          java-version: "25"
+          java-version: "25.0.5.0.3"
           distribution: zulu
           cache: maven
 
@@ -219,7 +219,7 @@ jobs:
       - name: Set up JDK 25 (publish)
         uses: actions/setup-java@v5
         with:
-          java-version: "25"
+          java-version: "25.0.5.0.3"
           distribution: zulu
           cache: maven
           server-id: central
@@ -309,7 +309,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: "24.22.1"
           registry-url: "https://registry.npmjs.org"
           cache: npm
           cache-dependency-path: queryeer-desktop/package-lock.json

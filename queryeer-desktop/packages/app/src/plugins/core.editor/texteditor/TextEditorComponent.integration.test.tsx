@@ -210,7 +210,7 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
   let root: Root;
   let registry: TextEditorRegistry;
   let filesById: Map<string, FileEntity>;
-  let markDirtySpy: ReturnType<typeof vi.fn>;
+  let markDirtySpy: ReturnType<typeof vi.fn<(fileId: string) => void>>;
 
   beforeEach(async () => {
     (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
