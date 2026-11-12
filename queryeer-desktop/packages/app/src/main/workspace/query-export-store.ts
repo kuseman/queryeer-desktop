@@ -15,8 +15,8 @@ function safeSegment(value: string): string {
 export class QueryExportStore {
   private readonly exportsDir: string;
   private readonly pathsByKey = new Map<string, string>();
-  // Chains append operations per stream so finalizeStream can await all pending writes.
-  private readonly appendChainByKey = new Map<string, Promise<void>>();
+  // Chains stream operations so finalizeStream can await fire-and-forget opens and appends.
+  private readonly streamChainByKey = new Map<string, Promise<void>>();
 
   public constructor(exportsDir: string) {
     this.exportsDir = exportsDir;
@@ -37,15 +37,18 @@ export class QueryExportStore {
 
   public async openStream(params: ExportParams): Promise<void> {
     const key = this.key(params);
-    const path = await this.ensurePath(params);
-    this.pathsByKey.set(key, path);
-    // Use wx flag so we don't overwrite if appendChunk already created the file
-    // (race between openExportStream and appendExportChunk on the same (executionId, resultSetIndex)).
-    try {
-      await writeFile(path, "", { flag: "wx" });
-    } catch {
-      // File already exists — nothing to do
-    }
+    const previous = this.streamChainByKey.get(key) ?? Promise.resolve();
+    const next = previous.then(async () => {
+      const path = await this.ensurePath(params);
+      // Use wx so a late open cannot overwrite rows already appended to the stream.
+      try {
+        await writeFile(path, "", { flag: "wx" });
+      } catch {
+        // File already exists — nothing to do
+      }
+    });
+    this.streamChainByKey.set(key, next);
+    await next;
   }
 
   public async appendChunk(params: ExportAppendParams): Promise<void> {
@@ -57,26 +60,14 @@ export class QueryExportStore {
       return;
     }
 
-    // Fast path: when the path is already known (openStream was called first),
-    // set up the chain entry synchronously before any await. This is critical
-    // for correctness when appendChunk is called concurrently without awaiting
-    // (fire-and-forget IPC pattern): callers that arrive before any yield still
-    // see each other's chain entries and form a complete serialised chain that
-    // finalizeStream can await.
-    const knownPath = this.pathsByKey.get(key);
-    if (knownPath) {
-      const prev = this.appendChainByKey.get(key) ?? Promise.resolve();
-      const next = prev.then(() => appendFile(knownPath, `${payload}\n`, "utf8"));
-      this.appendChainByKey.set(key, next);
-      await next;
-      return;
-    }
-
-    // Slow path: openStream was not called first — resolve the path first.
-    const path = await this.ensurePath(params);
-    const prev = this.appendChainByKey.get(key) ?? Promise.resolve();
-    const next = prev.then(() => appendFile(path, `${payload}\n`, "utf8"));
-    this.appendChainByKey.set(key, next);
+    // Register the append before any asynchronous path work so finalization
+    // cannot overtake fire-and-forget IPC calls from the renderer.
+    const previous = this.streamChainByKey.get(key) ?? Promise.resolve();
+    const next = previous.then(async () => {
+      const path = await this.ensurePath(params);
+      await appendFile(path, `${payload}\n`, "utf8");
+    });
+    this.streamChainByKey.set(key, next);
     await next;
   }
 
@@ -84,11 +75,11 @@ export class QueryExportStore {
     const key = this.key(params);
     // Wait for all in-flight appends before handing back the path so callers
     // get a complete file when they subsequently read it.
-    const pending = this.appendChainByKey.get(key);
+    const pending = this.streamChainByKey.get(key);
     if (pending) {
       await pending;
     }
-    this.appendChainByKey.delete(key);
+    this.streamChainByKey.delete(key);
     const path = await this.ensurePath(params);
     this.pathsByKey.delete(key);
     return pathToFileURL(path).toString();
@@ -101,10 +92,11 @@ export class QueryExportStore {
       return existing;
     }
 
-    await mkdir(this.exportsDir, { recursive: true });
     const name = `${safeSegment(params.executionId)}.${params.resultSetIndex}.${Date.now()}${EXTENSION}`;
     const path = join(this.exportsDir, name);
+    // Reserve the path before yielding so concurrent operations share one file.
     this.pathsByKey.set(key, path);
+    await mkdir(this.exportsDir, { recursive: true });
     return path;
   }
 
