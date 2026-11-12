@@ -83,6 +83,17 @@ describe("QueryExportStore.appendChunk", () => {
 });
 
 describe("QueryExportStore race condition — fire-and-forget concurrent appends", () => {
+  it("finalizeStream awaits an append started while openStream is still pending", async () => {
+    const store = makeStore();
+
+    const open = store.openStream(BASE);
+    const append = store.appendChunk({ ...BASE, rows: [[1, "alice"], [2, "bob"]] });
+    const url = await store.finalizeStream(BASE);
+    await Promise.all([open, append]);
+
+    expect(readRows(url)).toEqual([[1, "alice"], [2, "bob"]]);
+  });
+
   it("finalizeStream awaits all concurrent appendChunk operations started without await", async () => {
     const store = makeStore();
     await store.openStream(BASE);
