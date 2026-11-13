@@ -89,6 +89,33 @@ export type SettingsRegistry = SettingsContributionRegistry & {
   subscribe: (listener: () => void) => () => void;
 };
 
+export type CollectionSettingsListItem = {
+  id: string;
+  label: string;
+  subtitle?: string;
+  invalid?: boolean;
+};
+
+export type CollectionSettingsListEditorProps = {
+  items: readonly CollectionSettingsListItem[];
+  selectedId: string | undefined;
+  readonly: boolean;
+  addLabel?: string;
+  onSelect: (id: string) => void;
+  onAdd: () => void;
+  onClone: (id: string) => void;
+  onDelete: (id: string) => void;
+  renderDetails: (id: string | undefined) => ReactNode;
+};
+
+export type UseCollectionSettingsPersistence = <T>(options: {
+  persist: (items: T[]) => void;
+  debounceMs?: number;
+}) => {
+  persistNow: (items: T[]) => void;
+  persistDebounced: (items: T[]) => void;
+};
+
 export type PasswordFieldInputProps = {
   inputId: string;
   valueRef: string | SecretRefValue | undefined;

@@ -1,23 +1,11 @@
-import { useCallback, useEffect, useRef, type ReactNode } from "react";
+import type {
+  CollectionSettingsListEditorProps,
+  CollectionSettingsListItem,
+  UseCollectionSettingsPersistence
+} from "@queryeer/api/settings/SettingsExtension";
+import { useCallback, useEffect, useRef } from "react";
 
-export type CollectionSettingsListItem = {
-  id: string;
-  label: string;
-  subtitle?: string;
-  invalid?: boolean;
-};
-
-type Props = {
-  items: CollectionSettingsListItem[];
-  selectedId: string | undefined;
-  readonly: boolean;
-  addLabel?: string;
-  onSelect: (id: string) => void;
-  onAdd: () => void;
-  onClone: (id: string) => void;
-  onDelete: (id: string) => void;
-  renderDetails: (id: string | undefined) => ReactNode;
-};
+export type { CollectionSettingsListItem };
 
 export function CollectionSettingsListEditor({
   items,
@@ -29,7 +17,7 @@ export function CollectionSettingsListEditor({
   onClone,
   onDelete,
   renderDetails
-}: Props): JSX.Element {
+}: CollectionSettingsListEditorProps): JSX.Element {
   const hasItems = items.length > 0;
 
   return (
@@ -84,15 +72,15 @@ export function CollectionSettingsListEditor({
   );
 }
 
-export function useCollectionSettingsPersistence<T>(options: {
+export const useCollectionSettingsPersistence: UseCollectionSettingsPersistence = <T,>(options: {
   persist: (items: T[]) => void;
   debounceMs?: number;
-}): {
-  persistNow: (items: T[]) => void;
-  persistDebounced: (items: T[]) => void;
-} {
+}) => {
   const { persist, debounceMs = 300 } = options;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingItemsRef = useRef<T[] | null>(null);
+  const persistRef = useRef(persist);
+  persistRef.current = persist;
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -103,20 +91,31 @@ export function useCollectionSettingsPersistence<T>(options: {
 
   const persistNow = useCallback((items: T[]) => {
     clearTimer();
-    persist(items);
-  }, [clearTimer, persist]);
+    pendingItemsRef.current = null;
+    persistRef.current(items);
+  }, [clearTimer]);
 
   const persistDebounced = useCallback((items: T[]) => {
     clearTimer();
+    pendingItemsRef.current = items;
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
-      persist(items);
+      const pendingItems = pendingItemsRef.current;
+      pendingItemsRef.current = null;
+      if (pendingItems) {
+        persistRef.current(pendingItems);
+      }
     }, debounceMs);
-  }, [clearTimer, debounceMs, persist]);
+  }, [clearTimer, debounceMs]);
 
   useEffect(() => {
     return () => {
       clearTimer();
+      const pendingItems = pendingItemsRef.current;
+      pendingItemsRef.current = null;
+      if (pendingItems) {
+        persistRef.current(pendingItems);
+      }
     };
   }, [clearTimer]);
 
@@ -124,4 +123,4 @@ export function useCollectionSettingsPersistence<T>(options: {
     persistNow,
     persistDebounced
   };
-}
+};

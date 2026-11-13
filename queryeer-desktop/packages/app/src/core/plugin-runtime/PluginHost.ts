@@ -37,6 +37,10 @@ import {
   subscribeEffectiveSettings
 } from "../../plugins/core.settings/service";
 import { PasswordFieldInput } from "../../plugins/core.settings/PasswordFieldInput";
+import {
+  CollectionSettingsListEditor,
+  useCollectionSettingsPersistence
+} from "../../plugins/core.settings/CollectionSettingsListEditor";
 import { registerMonacoLanguageIdForMimeType } from "../../plugins/core.editor/texteditor/mime-types";
 
 export type PluginHostState = {
@@ -159,7 +163,9 @@ export class PluginHost {
       },
       components: {
         FrameworkEditor: this.options.frameworkEditor ?? (() => null) as unknown as ComponentType<FrameworkEditorProps>,
-        PasswordFieldInput
+        PasswordFieldInput,
+        CollectionSettingsListEditor,
+        useCollectionSettingsPersistence
       }
     };
 

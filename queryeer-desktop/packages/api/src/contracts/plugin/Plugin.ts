@@ -24,7 +24,11 @@ import type { PluginManifest } from "./PluginManifest.js";
 import type { JdbcDriverRegistry } from "../queryengine/JdbcDriverExtension.js";
 import type { NativeQueryEngineRegistry } from "../queryengine/NativeQueryEngineExtension.js";
 import type { EditorLanguageRegistry } from "../editor/EditorLanguageExtension.js";
-import type { PasswordFieldInputProps } from "../settings/SettingsExtension.js";
+import type {
+  CollectionSettingsListEditorProps,
+  PasswordFieldInputProps,
+  UseCollectionSettingsPersistence
+} from "../settings/SettingsExtension.js";
 
 export type Plugin = {
   manifest: PluginManifest;
@@ -64,6 +68,8 @@ export type PluginContext = {
   components: {
     FrameworkEditor: ComponentType<FrameworkEditorProps>;
     PasswordFieldInput: ComponentType<PasswordFieldInputProps>;
+    CollectionSettingsListEditor: ComponentType<CollectionSettingsListEditorProps>;
+    useCollectionSettingsPersistence: UseCollectionSettingsPersistence;
   };
 };
 
