@@ -71,6 +71,11 @@ function isInsideModalDialog(target: EventTarget | null): boolean {
   return element.closest("[role='dialog'][aria-modal='true']") !== null;
 }
 
+function isInsideInputKeybindingScope(target: EventTarget | null): boolean {
+  const element = target instanceof Element ? target : null;
+  return element?.closest("[data-keybinding-scope]")?.getAttribute("data-keybinding-scope") === "input";
+}
+
 /** True when Monaco has an open transient widget (suggest, find, parameter hints)
  *  that should receive Escape natively instead of our keybinding handler. */
 function monacoHasOpenWidget(): boolean {
@@ -186,6 +191,10 @@ export function createKeybindingService(options: KeybindingServiceOptions): Keyb
   const onKeyDown = (event: KeyboardEvent): void => {
     const normalized = eventToNormalizedKey(event);
     if (!normalized) {
+      return;
+    }
+
+    if (isInsideInputKeybindingScope(event.target)) {
       return;
     }
 

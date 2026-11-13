@@ -52,6 +52,7 @@ describe("PluginHost JDBC driver contexts", () => {
     expect(context?.queryEngines.invoke).toBeTypeOf("function");
     expect(context?.queryEngines.registerExecutionContextProvider).toBeTypeOf("function");
     expect(context?.queryEngines.onQueryEvent).toBeTypeOf("function");
+    expect(context?.queryEngines.registerEditorHeaderItem).toBeTypeOf("function");
     expect(context?.queryEngines.registerEditorStatusItem).toBeTypeOf("function");
     expect(context?.settings.getValue).toBeTypeOf("function");
     expect(context?.settings.subscribe).toBeTypeOf("function");

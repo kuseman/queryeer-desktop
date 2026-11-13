@@ -19,6 +19,7 @@ vi.mock("./QueryEngineService", () => ({
 }));
 
 import { createNativeQueryEngineRegistry, registerQueryExecutableEngine } from "./engine-registration";
+import { getQueryEditorHeaderItems } from "./query-editor-header-registry";
 import { getQueryEditorStatusItems } from "./query-editor-status-registry";
 
 function makeFile(overrides: Partial<FileEntity> = {}): FileEntity {
@@ -164,6 +165,7 @@ function createContext(file: FileEntity): PluginContext {
       invoke: vi.fn(),
       registerExecutionContextProvider: vi.fn(() => ({ dispose: vi.fn() })),
       onQueryEvent: vi.fn(() => ({ dispose: vi.fn() })),
+      registerEditorHeaderItem: vi.fn(() => ({ dispose: vi.fn() })),
       registerEditorStatusItem: vi.fn(() => ({ dispose: vi.fn() }))
     },
     editorLanguages: { registerMimeType: vi.fn(() => ({ dispose: vi.fn() })) },
@@ -228,7 +230,7 @@ describe("registerQueryExecutableEngine", () => {
     expect(resolver?.({ fileId: "missing" })).toBeUndefined();
   });
 
-  it("delegates invoke and status registration through the host registry", async () => {
+  it("delegates invoke and editor contribution registration through the host registry", async () => {
     const context = createContext(makeFile());
     const registry = createNativeQueryEngineRegistry(context.files);
     mocks.invokeMock.mockResolvedValue({ collections: ["orders"] });
@@ -252,6 +254,15 @@ describe("registerQueryExecutableEngine", () => {
     expect(getQueryEditorStatusItems().some((item) => item.id === "test.mongodb.status")).toBe(true);
     statusRegistration.dispose();
     expect(getQueryEditorStatusItems().some((item) => item.id === "test.mongodb.status")).toBe(false);
+
+    const headerRegistration = registry.registerEditorHeaderItem({
+      id: "test.mongodb.header",
+      order: 5,
+      render: () => "MongoDB query bar"
+    });
+    expect(getQueryEditorHeaderItems().some((item) => item.id === "test.mongodb.header")).toBe(true);
+    headerRegistration.dispose();
+    expect(getQueryEditorHeaderItems().some((item) => item.id === "test.mongodb.header")).toBe(false);
   });
 
   it("scopes execution context providers and query events to their engine", () => {

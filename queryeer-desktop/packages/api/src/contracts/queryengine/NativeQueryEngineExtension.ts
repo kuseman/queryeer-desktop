@@ -1,6 +1,7 @@
 import type { EngineInvokeParams } from "../backend/Types.js";
 import type { QueryExecuteOptions } from "../backend/Types.js";
 import type { Disposable } from "../editor/EditorApi.js";
+import type { QueryEditorHeaderItemContribution } from "./QueryEditorHeaderExtension.js";
 import type { QueryEditorStatusItemContribution } from "./QueryEditorStatusExtension.js";
 
 export type NativeQueryEngineContribution = {
@@ -47,5 +48,6 @@ export type NativeQueryEngineRegistry = {
     provider: NativeQueryExecutionContextProvider
   ) => Disposable;
   onQueryEvent: (engineId: string, listener: NativeQueryEventListener) => Disposable;
+  registerEditorHeaderItem: (contribution: QueryEditorHeaderItemContribution) => Disposable;
   registerEditorStatusItem: (contribution: QueryEditorStatusItemContribution) => Disposable;
 };

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { TextEditorComponent } from "../core.editor/texteditor/TextEditorComponent";
 import { OutputPanel } from "./output/OutputPanel";
 import { QueryEditorStatusBar } from "./output/QueryEditorStatusBar";
+import { QueryEditorHeader } from "./QueryEditorHeader";
 import type { OutputContext, OutputMessage, ResultSet, ColumnType, Column } from "@queryeer/api/queryengine/OutputExtension";
 import { IDLE_OUTPUT_CONTEXT } from "@queryeer/api/queryengine/OutputExtension";
 import type { CancelRequestOptions, ExecuteRequestOptions, QueryScheduleState, ScheduleRequestOptions } from "@queryeer/api/queryengine/QueryEngineTypes.js";
@@ -87,6 +88,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
   const [outputContext, setOutputContext] = useState<OutputContext>(IDLE_OUTPUT_CONTEXT);
   const [splitPercent, setSplitPercent] = useState(60);
   const [outputCollapsed, setOutputCollapsed] = useState(false);
+  const [editorHeaderCollapsed, setEditorHeaderCollapsed] = useState(false);
   const [selectedPrimaryId, setSelectedPrimaryId] = useState<string | null>(null);
   const [scheduleStatus, setScheduleStatus] = useState<QueryScheduleState | null>(null);
 
@@ -268,6 +270,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       ?? null;
     setSelectedPrimaryId(nextSelected);
     setOutputCollapsed(queryViewState.outputPanelCollapsed ?? false);
+    setEditorHeaderCollapsed(queryViewState.editorHeaderCollapsed ?? false);
     const restoredSplitPercent = queryViewState.editorSplitPercent ?? 60;
     splitPercentRef.current = restoredSplitPercent;
     setSplitPercent(restoredSplitPercent);
@@ -295,6 +298,9 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     return getQueryViewStateStore().subscribe(fileId, outputSessionIdRef.current, (state) => {
       if (state.outputPanelCollapsed !== undefined) {
         setOutputCollapsed(state.outputPanelCollapsed);
+      }
+      if (state.editorHeaderCollapsed !== undefined) {
+        setEditorHeaderCollapsed(state.editorHeaderCollapsed);
       }
       if (state.editorSplitPercent !== undefined) {
         splitPercentRef.current = state.editorSplitPercent;
@@ -1163,6 +1169,17 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     <div className={`query-editor${outputCollapsed ? " output-collapsed" : ""}`}>
       <div className="query-editor-split" ref={splitContainerRef}>
         <div className="query-editor-text-pane" style={{ flexBasis: outputCollapsed ? "100%" : `${splitPercent}%` }}>
+          <QueryEditorHeader
+            outputContext={outputContext}
+            file={file}
+            collapsed={editorHeaderCollapsed}
+            onToggleCollapsed={() => {
+              const fileId = file?.fileId;
+              if (fileId) {
+                getQueryViewStateStore().setEditorHeaderCollapsed(fileId, outputSessionIdRef.current, !editorHeaderCollapsed);
+              }
+            }}
+          />
           <TextEditorComponent
             file={file}
             registry={queryTextRegistry}

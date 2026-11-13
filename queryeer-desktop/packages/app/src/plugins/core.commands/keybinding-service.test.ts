@@ -118,6 +118,38 @@ describe("createKeybindingService", () => {
     service.dispose();
   });
 
+  it("lets an input keybinding scope handle function keys", async () => {
+    const executeCommand = vi.fn(async () => ({ commandId: "core.commands.about", executed: true }));
+    const service = createKeybindingService({
+      executeCommand,
+      getUserKeybindings: async () => ({
+        version: KEYBINDINGS_SCHEMA_VERSION,
+        bindings: [],
+        unbound: []
+      })
+    });
+    await service.initialize(makeExtensions());
+
+    const scope = document.createElement("div");
+    scope.dataset.keybindingScope = "input";
+    const input = document.createElement("input");
+    scope.appendChild(input);
+    document.body.appendChild(scope);
+    input.focus();
+
+    const scopedEvent = new KeyboardEvent("keydown", { key: "F1", bubbles: true, cancelable: true });
+    input.dispatchEvent(scopedEvent);
+    expect(executeCommand).not.toHaveBeenCalled();
+    expect(scopedEvent.defaultPrevented).toBe(false);
+
+    const outsideEvent = new KeyboardEvent("keydown", { key: "F1", bubbles: true, cancelable: true });
+    document.body.dispatchEvent(outsideEvent);
+    expect(executeCommand).toHaveBeenCalledWith("core.commands.about");
+
+    scope.remove();
+    service.dispose();
+  });
+
   it("executes modified global keybinding when select input is focused", async () => {
     const executeCommand = vi.fn(async () => ({ commandId: "core.files.save", executed: true }));
     const service = createKeybindingService({

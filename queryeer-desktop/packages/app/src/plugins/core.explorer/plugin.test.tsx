@@ -239,7 +239,7 @@ function createContext(args: {
     about: { registerChangelog: vi.fn() },
     notifications: createNotificationMock(),
     assistant: createAssistantRegistryMock(),
-    queryEngines: { registerEngine: vi.fn(), invoke: vi.fn(), registerExecutionContextProvider: vi.fn(), onQueryEvent: vi.fn(), registerEditorStatusItem: vi.fn() },
+    queryEngines: { registerEngine: vi.fn(), invoke: vi.fn(), registerExecutionContextProvider: vi.fn(), onQueryEvent: vi.fn(), registerEditorHeaderItem: vi.fn(), registerEditorStatusItem: vi.fn() },
     editorLanguages: { registerMimeType: vi.fn(() => ({ dispose: vi.fn() })) },
     payloadbuilderCatalog: { registerContribution: vi.fn() }
   };

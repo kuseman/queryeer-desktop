@@ -77,6 +77,7 @@ describe("QueryViewStateStore", () => {
 
     getQueryViewStateStore().setSelectedOutput("file-1", "session-a", "core.queryengine.output.text");
     getQueryViewStateStore().setEditorSplitPercent("file-1", "session-a", 35);
+    getQueryViewStateStore().setEditorHeaderCollapsed("file-1", "session-a", true);
     getQueryViewStateStore().setTextOutputFormat("file-1", "session-b", "json");
 
     const persisted = filesById.get("file-1")?.persistentViewState?.[QUERY_VIEW_STATE_KEY] as {
@@ -86,7 +87,8 @@ describe("QueryViewStateStore", () => {
     expect(persisted.version).toBe(2);
     expect(persisted.sessions["session-a"]).toMatchObject({
       executionTargetOutputId: "core.queryengine.output.text",
-      editorSplitPercent: 35
+      editorSplitPercent: 35,
+      editorHeaderCollapsed: true
     });
     expect(persisted.sessions["session-b"]).toMatchObject({
       textOutputFormat: "json"
@@ -97,6 +99,7 @@ describe("QueryViewStateStore", () => {
 
     expect(getQueryViewStateStore().read("file-1", "session-a").executionTargetOutputId).toBe("core.queryengine.output.text");
     expect(getQueryViewStateStore().read("file-1", "session-a").editorSplitPercent).toBe(35);
+    expect(getQueryViewStateStore().read("file-1", "session-a").editorHeaderCollapsed).toBe(true);
     expect(getQueryViewStateStore().read("file-1", "session-b").textOutputFormat).toBe("json");
   });
 
