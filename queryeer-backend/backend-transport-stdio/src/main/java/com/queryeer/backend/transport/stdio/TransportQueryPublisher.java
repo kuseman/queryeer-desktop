@@ -2,6 +2,7 @@ package com.queryeer.backend.transport.stdio;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import com.queryeer.backend.api.OutputEvent;
@@ -74,7 +75,7 @@ final class TransportQueryPublisher implements QueryPublisher
             {
                 payloads.add(new QueryChunkRowsNotification.MessagePayload(event.severity()
                         .name()
-                        .toLowerCase(), event.message(), event.details()));
+                        .toLowerCase(Locale.ROOT), event.message(), event.details()));
             }
         }
         notificationPublisher.publishForQuery(executionId, "queryengine.chunkRows", new QueryChunkRowsNotification(executionId, currentResultSetIndex, rows, payloads));

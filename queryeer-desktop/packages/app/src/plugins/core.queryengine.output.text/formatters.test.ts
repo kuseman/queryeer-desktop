@@ -32,6 +32,17 @@ describe("text output formatters", () => {
     expect(lines).toEqual(["\x1b[31mSomething broke\x1b[0m"]);
   });
 
+  it("preserves warning severity in plain output", () => {
+    const formatter = resolveTextOutputFormatter("plain");
+    const lines = formatter.format(
+      makeContext({
+        output: [{ severity: "warning", message: "Results were capped" }]
+      })
+    );
+
+    expect(lines[0]).toBe("Warning: Results were capped");
+  });
+
   it("shows failed message even when rows were streamed before failure", () => {
     const formatter = resolveTextOutputFormatter("plain");
     const lines = formatter.format(

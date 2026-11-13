@@ -182,11 +182,13 @@ function withLocationSuffix(message: string, fileId: string | undefined, line: n
 }
 
 function getOutputLines(context: OutputContext): string[] {
-  return (context.output ?? []).map((msg) =>
-    msg.severity === "error"
-      ? `${ANSI_RED}${withLocationSuffix(`Error: ${msg.message}`, context.fileId, msg.line, msg.column)}${ANSI_RESET}`
-      : withLocationSuffix(msg.message, context.fileId, msg.line, msg.column)
-  );
+  return (context.output ?? []).map((msg) => {
+    if (msg.severity === "error") {
+      return `${ANSI_RED}${withLocationSuffix(`Error: ${msg.message}`, context.fileId, msg.line, msg.column)}${ANSI_RESET}`;
+    }
+    const message = msg.severity === "warning" ? `Warning: ${msg.message}` : msg.message;
+    return withLocationSuffix(message, context.fileId, msg.line, msg.column);
+  });
 }
 
 function getStatusLines(context: OutputContext): string[] {

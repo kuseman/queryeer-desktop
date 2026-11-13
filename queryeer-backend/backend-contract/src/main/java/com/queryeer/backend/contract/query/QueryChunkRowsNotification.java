@@ -2,6 +2,7 @@ package com.queryeer.backend.contract.query;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
@@ -16,6 +17,17 @@ public record QueryChunkRowsNotification(String queryExecutionId, int resultSetI
     public record MessagePayload(String severity, String message, @JsonInclude(JsonInclude.Include.NON_NULL) Integer line, @JsonInclude(JsonInclude.Include.NON_NULL) Integer column,
             @JsonInclude(JsonInclude.Include.NON_NULL) Map<String, Object> details)
     {
+
+        private static final Set<String> SEVERITIES = Set.of("info", "warning", "error");
+
+        public MessagePayload
+        {
+            if (!SEVERITIES.contains(severity))
+            {
+                throw new IllegalArgumentException("Unsupported output severity: " + severity);
+            }
+        }
+
         public MessagePayload(String severity, String message)
         {
             this(severity, message, null, null, null);

@@ -521,6 +521,9 @@ Rules:
         "contentType": "application/json"
       }
     ]
+  ],
+  "messages": [
+    { "severity": "warning", "message": "Results were capped" }
   ]
 }
 ```
@@ -534,6 +537,7 @@ Rules:
 - Cells larger than the backend inline threshold SHOULD be emitted as `largeValue` refs.
 - `largeValue.preview` is the only value used for normal grid render/search/sort.
 - Clients fetch full `largeValue` content with `queryengine.largeValue.read` only on explicit user action.
+- `messages` is optional. Message severity MUST be `info`, `warning`, or `error`; `line`, `column`, and `details` are optional.
 
 ## 6.3 `queryengine.completed`
 
