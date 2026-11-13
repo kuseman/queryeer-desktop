@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { LayoutEditorContribution } from "@queryeer/api/extensions/LayoutExtension";
 import { DEFAULT_MIME_TYPE } from "@queryeer/api/files/Resolvers";
 import { FileRegistry } from "./FileRegistry";
+import { registerQueryEngineMimeOwner } from "./QueryEngineMimeRegistry";
 
 function makeEditor(
   id: string,
@@ -275,5 +276,32 @@ describe("FileRegistry dirtyVsDisk initialization", () => {
     registry.capabilities.registerPreferredExtension?.("application/x-custom", ".cust");
 
     expect(registry.capabilities.getPreferredExtension?.("application/x-custom")).toBe("cust");
+  });
+});
+
+describe("FileRegistry engine binding ownership", () => {
+  it("preserves a valid binding when a foreign binding update is rejected", () => {
+    const ownerRegistration = registerQueryEngineMimeOwner("mongodb", ["application/vnd.queryeer.mongodb"]);
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const registry = new FileRegistry().createFilesRegistry();
+      const file = registry.openFile({
+        uri: "file:///query.mongo",
+        mimeType: "application/vnd.queryeer.mongodb",
+        engineBinding: { engineId: "mongodb", connectionId: "mongo-x" }
+      });
+
+      const updated = registry.updateFile(file.fileId, {
+        engineBinding: { engineId: "jdbc" }
+      });
+
+      expect(updated?.engineBinding).toEqual({ engineId: "mongodb", connectionId: "mongo-x" });
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining("Engine 'jdbc'"));
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining("owned by engine 'mongodb'"));
+    } finally {
+      warning.mockRestore();
+      ownerRegistration.dispose();
+    }
   });
 });

@@ -6,6 +6,10 @@ import type {
 } from "@queryeer/api/queryengine/NativeQueryEngineExtension";
 import { getQueryEngineService } from "./QueryEngineService";
 import { registerQueryEditorStatusItem } from "./query-editor-status-registry";
+import {
+  getQueryEngineMimeOwner,
+  registerQueryEngineMimeOwner
+} from "../../core/plugin-runtime/QueryEngineMimeRegistry";
 
 type QueryExecutableRegistration = {
   engineId: string;
@@ -38,14 +42,29 @@ function emitRegistrationsChanged(): void {
   }
 }
 
+function sanitizeRegisteredEngineBindings(files: FilesRegistry): void {
+  for (const file of files.listFiles()) {
+    const owner = getQueryEngineMimeOwner(file.mimeType);
+    if (owner && file.engineBinding && file.engineBinding.engineId !== owner) {
+      // Engine registration normally precedes workspace hydration. For a late claim,
+      // frontend routing is corrected immediately; a stale backend session remains until
+      // the next mediator bind, but execution routing and engine state come from the frontend.
+      files.updateFile(file.fileId, { engineBinding: undefined });
+    }
+  }
+}
+
 export function registerQueryExecutableEngine(
   files: FilesRegistry,
   registration: NativeQueryEngineContribution
 ): Disposable {
   const mimeTypes = [...new Set(registration.mimeTypes)];
   const entry = { engineId: registration.engineId, mimeTypes };
+  const mimeOwnerRegistration = registerQueryEngineMimeOwner(registration.engineId, mimeTypes);
   registrations.push(entry);
   emitRegistrationsChanged();
+
+  sanitizeRegisteredEngineBindings(files);
 
   const capabilityRegistrations: Disposable[] = [];
   for (const mimeType of mimeTypes) {
@@ -72,6 +91,8 @@ export function registerQueryExecutableEngine(
     dispose: () => {
       unregisterResolver();
       capabilityRegistrations.forEach((capability) => capability.dispose());
+      mimeOwnerRegistration.dispose();
+      sanitizeRegisteredEngineBindings(files);
       const index = registrations.indexOf(entry);
       if (index >= 0) {
         registrations.splice(index, 1);

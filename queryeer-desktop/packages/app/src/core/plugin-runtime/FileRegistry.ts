@@ -22,6 +22,7 @@ import {
   type MimeResolver
 } from "@queryeer/api/files/Resolvers";
 import type { LayoutEditorContribution } from "@queryeer/api/extensions/LayoutExtension";
+import { getQueryEngineMimeOwner, normalizeEngineBinding } from "./QueryEngineMimeRegistry";
 
 let fileIdCounter = 0;
 
@@ -391,7 +392,7 @@ export class FileRegistry {
       uri: input.uri,
       mimeType: input.mimeType,
       editorId: input.editorId,
-      engineBinding: input.engineBinding,
+      engineBinding: normalizeEngineBinding(input.mimeType, input.engineBinding),
       dirtyVsBackend: false,
       dirtyVsDisk: false,
       diskState: "inSync",
@@ -420,7 +421,26 @@ export class FileRegistry {
       return undefined;
     }
 
-    const next: FileEntity = { ...existing, ...update };
+    const mimeType = update.mimeType ?? existing.mimeType;
+    const hasEngineBindingUpdate = Object.prototype.hasOwnProperty.call(update, "engineBinding");
+    const requestedBinding = hasEngineBindingUpdate ? update.engineBinding : existing.engineBinding;
+    const mimeOwner = getQueryEngineMimeOwner(mimeType);
+    const hasForeignBindingUpdate = Boolean(
+      hasEngineBindingUpdate
+      && requestedBinding
+      && mimeOwner
+      && requestedBinding.engineId !== mimeOwner
+    );
+    if (hasForeignBindingUpdate) {
+      console.warn(
+        `[FileRegistry] Engine '${requestedBinding?.engineId}' cannot bind file '${fileId}' because MIME type '${mimeType}' is owned by engine '${mimeOwner}'.`
+      );
+    }
+    const engineBinding = normalizeEngineBinding(
+      mimeType,
+      hasForeignBindingUpdate ? existing.engineBinding : requestedBinding
+    );
+    const next: FileEntity = { ...existing, ...update, engineBinding };
     this.files.set(fileId, next);
     this.emit();
     return next;
