@@ -41,14 +41,18 @@ export function JdbcNavigationView({ context }: Props) {
 
   const store = getJdbcNavigationStore();
   const activeFile = activeFileId ? context.files.getFile(activeFileId) : undefined;
+  const isSqlFile = activeFile?.mimeType === "application/sql";
   const connectionId = getConfiguredJdbcConnections().find(
-    (connection) => connection.enabled && connection.connectionId === activeFile?.engineBinding?.connectionId
+    (connection) => isSqlFile
+      && connection.enabled
+      && activeFile?.engineBinding?.engineId === "jdbc"
+      && connection.connectionId === activeFile.engineBinding.connectionId
   )?.connectionId;
-  const selectedDatabase = resolveSelectedDatabase(context.files, activeFileId, connectionId);
+  const selectedDatabase = resolveSelectedDatabase(context.files, isSqlFile ? activeFileId : null, connectionId);
 
   return (
     <div className="jdbc-nav-view">
-      {activeFileId ? (
+      {activeFileId && isSqlFile ? (
         <JdbcConnectionSelector
           key={activeFileId}
           fileId={activeFileId}

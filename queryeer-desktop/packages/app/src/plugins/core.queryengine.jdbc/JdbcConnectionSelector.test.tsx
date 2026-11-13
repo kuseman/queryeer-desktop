@@ -179,6 +179,43 @@ describe("JdbcConnectionSelector", () => {
     expect(databaseOptions).not.toContain("old-db");
   });
 
+  it("does not synchronize metadata for another engine's file", async () => {
+    const file = makeFile({
+      uri: "query.mongo",
+      mimeType: "application/vnd.queryeer.mongodb",
+      engineBinding: { engineId: "mongodb", connectionId: "mongo-1" }
+    });
+    const filesRegistry = makeFilesRegistry(file);
+    const fileMediator = makeFileMediator(file);
+
+    await act(async () => {
+      root.render(
+        <JdbcConnectionSelector fileId="file-1" fileMediator={fileMediator} filesRegistry={filesRegistry} />
+      );
+      await flush();
+    });
+
+    expect(fileMediator.bindEngine).not.toHaveBeenCalled();
+    expect(filesRegistry.setEditorState).not.toHaveBeenCalled();
+    expect(filesRegistry.updateFile).not.toHaveBeenCalled();
+  });
+
+  it("initializes JDBC metadata for an unbound SQL file", async () => {
+    const file = makeFile();
+    const filesRegistry = makeFilesRegistry(file);
+    const fileMediator = makeFileMediator(file);
+
+    await act(async () => {
+      root.render(
+        <JdbcConnectionSelector fileId="file-1" fileMediator={fileMediator} filesRegistry={filesRegistry} />
+      );
+      await flush();
+    });
+
+    expect(filesRegistry.updateFile).toHaveBeenCalledWith("file-1", { metadata: {} });
+    expect(fileMediator.bindEngine).not.toHaveBeenCalled();
+  });
+
   it("clears restored database when it belongs to another connection", async () => {
     const file = makeFile({ engineBinding: { engineId: "jdbc", connectionId: "conn-a" } });
     const filesRegistry = makeFilesRegistry(file, {

@@ -6,6 +6,7 @@ import {
   createFileMediator,
   type FileBackendSync
 } from "./FileMediator";
+import { registerQueryEngineMimeOwner } from "./QueryEngineMimeRegistry";
 
 function makeEditor(
   id: string,
@@ -583,6 +584,35 @@ describe("FileMediator.bindEngine", () => {
 
     expect(sync.openFile).not.toHaveBeenCalled();
     expect(sync.changeFile).not.toHaveBeenCalled();
+  });
+
+  it("rejects an engine that does not own the file MIME type", async () => {
+    const ownerRegistration = registerQueryEngineMimeOwner("mongodb", ["application/vnd.queryeer.mongodb"]);
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { mediator, registry, sync } = setupHarness();
+
+    try {
+      const file = await mediator.openFile("untitled:mongo", {
+        mimeType: "application/vnd.queryeer.mongodb",
+        engineBinding: { engineId: "mongodb", connectionId: "mongo-1" }
+      });
+      vi.mocked(sync.openFile).mockClear();
+
+      const result = await mediator.bindEngine(file.fileId, "jdbc");
+
+      expect(result).toBeUndefined();
+      expect(registry.createFilesRegistry().getFile(file.fileId)?.engineBinding).toEqual({
+        engineId: "mongodb",
+        connectionId: "mongo-1"
+      });
+      expect(sync.openFile).not.toHaveBeenCalled();
+      expect(sync.changeFile).not.toHaveBeenCalled();
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining("Engine 'jdbc'"));
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining("owned by engine 'mongodb'"));
+    } finally {
+      warning.mockRestore();
+      ownerRegistration.dispose();
+    }
   });
 });
 

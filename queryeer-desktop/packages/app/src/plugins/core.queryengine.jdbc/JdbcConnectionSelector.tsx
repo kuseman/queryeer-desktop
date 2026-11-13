@@ -55,7 +55,9 @@ type Props = {
 export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: Props) {
   const configuredConnections = getConfiguredJdbcConnections().filter((c) => c.enabled);
   const file = filesRegistry.getFile(fileId);
-  const restoredConnectionId = file?.engineBinding?.connectionId ?? "";
+  const restoredConnectionId = file?.engineBinding?.engineId === "jdbc"
+    ? (file.engineBinding.connectionId ?? "")
+    : "";
   const initialConnectionId = resolveEnabledConnectionId(restoredConnectionId, configuredConnections);
   const [connectionId, setConnectionId] = useState<string>(initialConnectionId);
   const [selectedDatabase, setSelectedDatabase] = useState<string>(
@@ -92,6 +94,10 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
 
   // Sync context metadata on mount so restored workspace state is immediately visible.
   useEffect(() => {
+    const engineId = filesRegistry.getFile(fileId)?.engineBinding?.engineId;
+    if (engineId && engineId !== "jdbc") {
+      return;
+    }
     const persisted = readSelectedDatabase(filesRegistry, fileId);
     if (restoredConnectionId && !initialConnectionId) {
       filesRegistry.setEditorState(fileId, JDBC_NAV_DB_KEY, undefined);
@@ -121,9 +127,9 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
   useEffect(() => {
     return filesRegistry.subscribe((files) => {
       const updated = files.find((f) => f.fileId === fileId);
-      if (updated) {
+      if (updated?.mimeType === "application/sql") {
         const nextConnectionId = resolveEnabledConnectionId(
-          updated.engineBinding?.connectionId,
+          updated.engineBinding?.engineId === "jdbc" ? updated.engineBinding.connectionId : undefined,
           getConfiguredJdbcConnections()
         );
         setConnectionId(nextConnectionId);
@@ -145,6 +151,9 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
   }, [connectionId, loadDatabases]);
 
   const handleConnectionChange = async (newConnId: string) => {
+    if (filesRegistry.getFile(fileId)?.mimeType !== "application/sql") {
+      return;
+    }
     setConnectionId(newConnId);
     setSelectedDatabase("");
     setDatabases([]);
@@ -157,6 +166,9 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
   };
 
   const handleDatabaseChange = (db: string) => {
+    if (filesRegistry.getFile(fileId)?.mimeType !== "application/sql") {
+      return;
+    }
     setSelectedDatabase(db);
     const currentConnId = connectionId;
     if (currentConnId && db) {

@@ -2,6 +2,7 @@ import type { FileMediator } from "@queryeer/api/files/FileMediator";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import type { FilesRegistry } from "@queryeer/api/files/FilesRegistry";
 import { pathToFileUri } from "@queryeer/api/files/Resolvers";
+import { getQueryEngineMimeOwner } from "./QueryEngineMimeRegistry";
 
 export type FileBackendSync = {
   openFile?: (file: FileEntity, initialText?: string) => void | Promise<void>;
@@ -330,6 +331,13 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
     async bindEngine(fileId, engineId, connectionId) {
       const existing = filesRegistry.getFile(fileId);
       if (!existing) {
+        return undefined;
+      }
+      const mimeOwner = getQueryEngineMimeOwner(existing.mimeType);
+      if (mimeOwner && mimeOwner !== engineId) {
+        console.warn(
+          `[FileMediator] Engine '${engineId}' cannot bind file '${fileId}' because MIME type '${existing.mimeType}' is owned by engine '${mimeOwner}'.`
+        );
         return undefined;
       }
       if (existing.engineBinding?.engineId === engineId

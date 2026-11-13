@@ -18,6 +18,7 @@ import {
   type RendererWorkspaceServiceOptions,
   type WorkspaceBridge
 } from "./workspace-service";
+import { registerQueryEngineMimeOwner } from "../../core/plugin-runtime/QueryEngineMimeRegistry";
 
 const applyRecoveredContentMock = vi.fn();
 
@@ -188,6 +189,28 @@ describe("RendererWorkspaceService.hydrate", () => {
     const activeFileId = service.restoredActiveFileId();
     expect(activeFileId).not.toBeNull();
     expect(filesRegistry.getFile(activeFileId!)?.uri).toBe("file:///b.txt");
+  });
+
+  it("drops a restored binding that conflicts with the MIME owner", async () => {
+    const ownerRegistration = registerQueryEngineMimeOwner("mongodb", ["application/vnd.queryeer.mongodb"]);
+    const snapshot: WorkspaceSnapshot = {
+      schemaVersion: WORKSPACE_SCHEMA_VERSION,
+      savedAt: "t",
+      files: [{
+        uri: "file:///query.mongo",
+        mimeType: "application/vnd.queryeer.mongodb",
+        engineBinding: { engineId: "jdbc", connectionId: "jdbc-1" }
+      }]
+    };
+
+    try {
+      const { service, filesRegistry } = makeHarness(snapshot);
+      await service.hydrate();
+
+      expect(filesRegistry.listFiles()[0]?.engineBinding).toBeUndefined();
+    } finally {
+      ownerRegistration.dispose();
+    }
   });
 
   it("prefers the persisted active editor group over legacy activeFileUri", async () => {
