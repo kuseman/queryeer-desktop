@@ -549,9 +549,10 @@ describe("FileMediator.bindEngine", () => {
       connectionId: undefined
     });
     expect(sync.openFile).toHaveBeenCalledTimes(1);
+    expect(sync.openFile).toHaveBeenCalledWith(bound, "resolved-content");
   });
 
-  it("does not call openFile on rebind (backend auto-upserts)", async () => {
+  it("sends the current text and updated binding on rebind", async () => {
     const { mediator, sync } = setupHarness();
     const file = await mediator.openFile("untitled:r", {
       mimeType: "text/plain",
@@ -561,6 +562,27 @@ describe("FileMediator.bindEngine", () => {
     await mediator.bindEngine(file.fileId, "payloadbuilder", "conn-2");
 
     expect(sync.openFile).toHaveBeenCalledTimes(1);
+    expect(sync.changeFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileId: file.fileId,
+        engineBinding: { engineId: "payloadbuilder", connectionId: "conn-2" }
+      }),
+      "resolved-content"
+    );
+  });
+
+  it("does not synchronize an unchanged binding", async () => {
+    const { mediator, sync } = setupHarness();
+    const file = await mediator.openFile("untitled:s", {
+      mimeType: "text/plain",
+      engineBinding: { engineId: "payloadbuilder", connectionId: "conn-1" }
+    });
+    vi.mocked(sync.openFile).mockClear();
+
+    await mediator.bindEngine(file.fileId, "payloadbuilder", "conn-1");
+
+    expect(sync.openFile).not.toHaveBeenCalled();
+    expect(sync.changeFile).not.toHaveBeenCalled();
   });
 });
 

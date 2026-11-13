@@ -332,6 +332,10 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
       if (!existing) {
         return undefined;
       }
+      if (existing.engineBinding?.engineId === engineId
+        && existing.engineBinding.connectionId === connectionId) {
+        return existing;
+      }
       const next = filesRegistry.updateFile(fileId, {
         engineBinding: { engineId, connectionId }
       });
@@ -339,14 +343,16 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
         return undefined;
       }
       const wasBound = Boolean(existing.engineBinding);
+      const currentText = resolveFileContent?.(fileId, next.uri);
+      try {
         if (!wasBound) {
-          try {
-            await backendSync?.openFile?.(next);
-          } catch {
-            // best effort - backend may not be running
-          }
+          await backendSync?.openFile?.(next, currentText);
+        } else if (currentText !== undefined) {
+          await backendSync?.changeFile?.(next, currentText);
         }
-        // On rebind, backend auto-upserts on next query — no explicit bindFile needed
+      } catch {
+        // best effort - backend may not be running
+      }
       return next;
     },
 
