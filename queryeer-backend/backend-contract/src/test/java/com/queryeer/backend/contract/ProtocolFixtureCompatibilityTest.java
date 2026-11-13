@@ -37,6 +37,13 @@ class ProtocolFixtureCompatibilityTest
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
+    void outputMessageSeveritiesAreValidated()
+    {
+        Assertions.assertEquals("warning", new QueryChunkRowsNotification.MessagePayload("warning", "Results were capped").severity());
+        Assertions.assertThrows(IllegalArgumentException.class, () -> new QueryChunkRowsNotification.MessagePayload("debug", "Details"));
+    }
+
+    @Test
     void handshakeFixturesAreCompatible() throws IOException
     {
         BackendEnvelope request = readFixture("request-handshake.json");

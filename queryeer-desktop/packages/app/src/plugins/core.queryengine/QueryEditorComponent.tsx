@@ -5,7 +5,7 @@ import { QueryEditorStatusBar } from "./output/QueryEditorStatusBar";
 import type { OutputContext, OutputMessage, ResultSet, ColumnType, Column } from "@queryeer/api/queryengine/OutputExtension";
 import { IDLE_OUTPUT_CONTEXT } from "@queryeer/api/queryengine/OutputExtension";
 import type { CancelRequestOptions, ExecuteRequestOptions, QueryScheduleState, ScheduleRequestOptions } from "@queryeer/api/queryengine/QueryEngineTypes.js";
-import type { QueryResultCell } from "@queryeer/api/backend/Types.js";
+import type { OutputSeverity, QueryResultCell } from "@queryeer/api/backend/Types.js";
 import { getQueryEngineService } from "./QueryEngineService";
 import { resolveOutputMaxRows } from "./output-limits";
 import { getOutputRegistry } from "./output/OutputRegistry";
@@ -542,7 +542,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
             const p = event.params as {
               resultSetIndex: number;
               rows: QueryResultCell[][];
-              messages?: Array<{ severity: string; message: string; line?: number; column?: number }>;
+              messages?: Array<{ severity: OutputSeverity; message: string; line?: number; column?: number; details?: Record<string, unknown> }>;
             };
             const registry = getOutputRegistry();
 
@@ -557,10 +557,10 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
               const outputMessages: OutputMessage[] = p.messages.map((m) => ({
                 ...toAbsoluteLocation(
                   executionAnchor,
-                  m.line ?? (typeof (m as { details?: Record<string, unknown> }).details?.line === "number" ? (m as { details?: Record<string, unknown> }).details!.line as number : undefined),
-                  m.column ?? (typeof (m as { details?: Record<string, unknown> }).details?.column === "number" ? (m as { details?: Record<string, unknown> }).details!.column as number : undefined)
+                  m.line ?? (typeof m.details?.line === "number" ? m.details.line : undefined),
+                  m.column ?? (typeof m.details?.column === "number" ? m.details.column : undefined)
                 ),
-                severity: m.severity as "info" | "error",
+                severity: m.severity,
                 message: m.message
               }));
               updateOutputContextForFile(targetFileId, (prev) => ({

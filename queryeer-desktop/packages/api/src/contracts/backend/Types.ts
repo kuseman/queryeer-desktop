@@ -284,7 +284,7 @@ export type QueryChunkStartNotification = {
   };
 };
 
-export type OutputSeverity = "info" | "error";
+export type OutputSeverity = "info" | "warning" | "error";
 
 export type MessagePayload = {
   severity: OutputSeverity;
