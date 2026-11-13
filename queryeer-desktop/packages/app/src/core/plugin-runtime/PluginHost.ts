@@ -34,6 +34,7 @@ import { createNativeQueryEngineRegistry } from "../../plugins/core.queryengine/
 import {
   getAllEffectiveSettings,
   getEffectiveSetting,
+  openCoreSettings,
   subscribeEffectiveSettings
 } from "../../plugins/core.settings/service";
 import { PasswordFieldInput } from "../../plugins/core.settings/PasswordFieldInput";
@@ -144,7 +145,8 @@ export class PluginHost {
         ...settingsContributions,
         getValue: getEffectiveSetting,
         getAllValues: getAllEffectiveSettings,
-        subscribe: subscribeEffectiveSettings
+        subscribe: subscribeEffectiveSettings,
+        open: openCoreSettings
       },
       quickcommand: this.extensionRegistry.createQuickCommandRegistry(),
       outline: this.extensionRegistry.createOutlineRegistry(),

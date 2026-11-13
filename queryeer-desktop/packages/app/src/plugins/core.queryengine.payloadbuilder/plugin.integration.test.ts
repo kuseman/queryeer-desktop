@@ -185,7 +185,8 @@ function createContext(): PluginContext {
       getAdvancedValidator: vi.fn(),
       getValue: vi.fn(),
       getAllValues: vi.fn(() => ({})),
-      subscribe: vi.fn(() => () => {})
+      subscribe: vi.fn(() => () => {}),
+      open: vi.fn()
     },
     quickcommand: { registerProvider: vi.fn() },
     contextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },

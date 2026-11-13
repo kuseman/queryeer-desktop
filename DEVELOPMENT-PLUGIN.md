@@ -609,6 +609,7 @@ All contribution points are accessed through the `PluginContext` object passed t
 | `settings.getValue<T>(id)` | `T \| undefined` | Read the current effective value without resolving secrets; returns `undefined` until the settings service is ready |
 | `settings.getAllValues()` | `Readonly<Record<string, unknown>>` | Snapshot all effective values |
 | `settings.subscribe(cb)` | `() => void` | Subscribe to effective-value changes; call the returned function during deactivation |
+| `settings.open(id?)` | `void` | Open Settings, optionally selecting a specific setting ID |
 
 Use `context.components.PasswordFieldInput` in advanced settings renderers for credentials. The component stores plaintext through the host vault and reports only a `SecretRefValue` to the plugin.
 
