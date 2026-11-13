@@ -427,9 +427,89 @@ describe("core.files plugin", () => {
     const options = toolbarMenu?.getItems() ?? [];
     expect(options.map((option) => option.value)).toEqual([
       "application/plbsql",
-      "application/sql"
+      "application/sql",
+      "application/json"
     ]);
-    expect(options.map((option) => option.label)).toEqual(["Payloadbuilder", "SQL Query"]);
+    expect(options.map((option) => option.label)).toEqual(["Payloadbuilder", "SQL Query", "JSON"]);
+  });
+
+  it("adds a late creatable mime type when mime settings are absent", async () => {
+    const harness = createHarness();
+    settingsServiceMock.getValue.mockReturnValue(undefined);
+    const listCreatable = harness.context.files.capabilities.listMimeTypesByCapability as ReturnType<typeof vi.fn>;
+
+    coreFilesPlugin.activate(harness.context);
+    listCreatable.mockReturnValue([
+      "application/sql",
+      "application/plbsql",
+      "application/json",
+      "application/vnd.queryeer.flow+plain"
+    ]);
+
+    const newItem = harness.menuItems.find((item) => item.id === "core.files.menu.new") as {
+      dynamicItems: () => Promise<Array<{ commandId?: string }>>;
+    };
+    const dynamicItems = await newItem.dynamicItems();
+    const commandId = "core.files.new.fromMime.application/vnd.queryeer.flow+plain";
+
+    expect(dynamicItems.map((item) => item.commandId)).toContain(commandId);
+    await harness.commands.get(commandId)?.();
+    expect(harness.createUntitledFile).toHaveBeenCalledWith({
+      mimeType: "application/vnd.queryeer.flow+plain",
+      extension: "txt",
+      cloneFromFileId: null
+    });
+  });
+
+  it("appends a late unmentioned creatable mime type to configured New options", () => {
+    const harness = createHarness();
+    const listCreatable = harness.context.files.capabilities.listMimeTypesByCapability as ReturnType<typeof vi.fn>;
+
+    coreFilesPlugin.activate(harness.context);
+    listCreatable.mockReturnValue([
+      "application/sql",
+      "application/plbsql",
+      "application/json",
+      "application/vnd.queryeer.flow+plain"
+    ]);
+
+    const toolbarMenu = harness.toolbarActions.find(
+      (item) => item.id === "core.files.toolbar.new.menu"
+    ) as { getItems: () => Array<{ value: string }> };
+
+    expect(toolbarMenu.getItems().map((option) => option.value)).toEqual([
+      "application/plbsql",
+      "application/sql",
+      "application/json",
+      "application/vnd.queryeer.flow+plain"
+    ]);
+  });
+
+  it("keeps an explicitly disabled late creatable mime type out of New options", async () => {
+    const harness = createHarness();
+    const lateMimeType = "application/vnd.queryeer.flow+plain";
+    settingsServiceMock.getValue.mockImplementation((settingId) => {
+      if (settingId === "core.files.mimeTypes") {
+        return [
+          { mimeType: "application/sql", enableForNew: true },
+          { mimeType: lateMimeType, enableForNew: false }
+        ];
+      }
+      return undefined;
+    });
+    const listCreatable = harness.context.files.capabilities.listMimeTypesByCapability as ReturnType<typeof vi.fn>;
+
+    coreFilesPlugin.activate(harness.context);
+    listCreatable.mockReturnValue(["application/sql", lateMimeType]);
+
+    const newItem = harness.menuItems.find((item) => item.id === "core.files.menu.new") as {
+      dynamicItems: () => Promise<Array<{ commandId?: string }>>;
+    };
+    const dynamicItems = await newItem.dynamicItems();
+
+    expect(dynamicItems.map((item) => item.commandId)).toEqual([
+      "core.files.new.fromMime.application/sql"
+    ]);
   });
 
   it("uses all creatable mime types when setting is empty", async () => {
