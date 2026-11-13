@@ -60,6 +60,13 @@ final class PluginManifestValidation
             {
                 throw new PluginDiscoveryException("backend.classpath.include must contain at least one entry for plugin " + manifest.id() + " in " + sourceDescription);
             }
+            for (String include : classpath.include())
+            {
+                if (isBlank(include))
+                {
+                    throw new PluginDiscoveryException("backend.classpath.include entries must not be blank for plugin " + manifest.id() + " in " + sourceDescription);
+                }
+            }
         }
 
         if (manifest.frontend() != null

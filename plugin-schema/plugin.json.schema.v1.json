@@ -11,6 +11,10 @@
     "version"
   ],
   "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri-reference"
+    },
     "schemaVersion": {
       "type": "integer",
       "const": 1
@@ -54,11 +58,16 @@
     "backend": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "entrypointClass"
+      "anyOf": [
+        { "required": ["entrypointClass"] },
+        { "required": ["factoryClass"] }
       ],
       "properties": {
         "entrypointClass": {
+          "type": "string",
+          "minLength": 1
+        },
+        "factoryClass": {
           "type": "string",
           "minLength": 1
         },
@@ -66,7 +75,8 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "root"
+            "root",
+            "include"
           ],
           "properties": {
             "root": {
@@ -75,8 +85,10 @@
             },
             "include": {
               "type": "array",
+              "minItems": 1,
               "items": {
-                "type": "string"
+                "type": "string",
+                "pattern": "\\S"
               }
             }
           }
@@ -126,6 +138,67 @@
           }
         }
       }
+    },
+    "runtime": {
+      "type": "object",
+      "description": "Trusted shared-runtime declaration for built-in plugins. External plugins must provide backend and/or frontend entrypoints; runtime-only external packages are not loaded.",
+      "additionalProperties": false,
+      "required": ["shared"],
+      "properties": {
+        "shared": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "parentFirstPackagePrefixes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^(?!com\\.$|org\\.$).{3,}\\.$"
+              },
+              "uniqueItems": true
+            },
+            "nativeLibraries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["filePatterns", "loaderClass"],
+                "properties": {
+                  "os": { "type": "string", "minLength": 1 },
+                  "arch": { "type": "string", "minLength": 1 },
+                  "searchPaths": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "filePatterns": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "not": { "pattern": "(?:\\.\\.|[/\\\\])" }
+                    }
+                  },
+                  "required": { "type": "boolean" },
+                  "loaderClass": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            "sharedArtifacts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["pattern"],
+                "properties": {
+                  "pattern": { "type": "string", "minLength": 1 },
+                  "required": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "allOf": [
@@ -139,6 +212,11 @@
         {
           "required": [
             "frontend"
+          ]
+        },
+        {
+          "required": [
+            "runtime"
           ]
         }
       ]

@@ -169,6 +169,29 @@ class PluginManifestDiscoveryTest
     }
 
     @Test
+    void throwsForBlankBackendClasspathIncludeEntry() throws IOException
+    {
+        Path pluginFolder = tempDir.resolve("blank-classpath-include");
+        Files.createDirectories(pluginFolder);
+        Files.writeString(pluginFolder.resolve("plugin.json"), """
+                {
+                  "schemaVersion": 1,
+                  "id": "blank.classpath.include",
+                  "name": "Blank Classpath Include",
+                  "version": "1.0.0",
+                  "backend": {
+                    "entrypointClass": "com.example.DoesNotMatter",
+                    "classpath": { "root": ".", "include": ["   "] }
+                  }
+                }
+                """, StandardCharsets.UTF_8);
+
+        PluginDiscoveryException error = Assertions.assertThrows(PluginDiscoveryException.class, () -> new PluginManifestLoader().load(pluginFolder));
+        Assertions.assertTrue(error.getMessage()
+                .contains("must not be blank"));
+    }
+
+    @Test
     void loadsSharedRuntimeManifest() throws IOException
     {
         Path pluginFolder = tempDir.resolve("runtime-plugin");
