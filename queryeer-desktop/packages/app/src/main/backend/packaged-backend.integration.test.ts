@@ -1,6 +1,7 @@
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { BackendGateway } from "./backend-gateway.js";
 import { ProdBackendTransport } from "./backend-transport-prod.js";
@@ -61,6 +62,19 @@ describe("Packaged backend", () => {
       )
     );
     expect([...status.runtimeStatus!.activatedPluginIds].sort()).toEqual(expectedPluginIds);
+  });
+
+  it("includes the DNS naming provider required by mongodb+srv", () => {
+    const javaExecutable = join(
+      releaseResources,
+      "backend",
+      "runtime",
+      "bin",
+      process.platform === "win32" ? "java.exe" : "java"
+    );
+    const modules = execFileSync(javaExecutable, ["--list-modules"], { encoding: "utf8" });
+
+    expect(modules).toMatch(/^jdk\.naming\.dns@/m);
   });
 
 });
