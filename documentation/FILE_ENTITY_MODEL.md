@@ -205,11 +205,9 @@ Additive, backward-compatible (protocol minor bump). Java DTOs go under `queryee
 { "fileId": "f-001" }
 ```
 
-### 6.4 `file.bind` (request)
+### 6.4 Engine rebinding
 
-```json
-{ "fileId": "f-001", "engineId": "payloadbuilder", "connectionId": "conn-001" }
-```
+`file.bind` is not a protocol request. `FileMediator.bindEngine` updates the frontend entity and immediately sends `file.change` with the current text and updated `engineBinding`, allowing the backend file registry to close the old engine session and open the new one. If the host cannot resolve the file's current text, it defers backend synchronization until the next editor change.
 
 ### 6.5 `queryengine.execute` extension
 
@@ -261,7 +259,7 @@ Five independently merge-able increments. The app stays bootable after each. **I
 | 1 | Core FE registry | done | `core.files` plugin, `FileEntity` type, `FileRegistry`, wired into `PluginContext`. `ShellApp.tsx` now drives tabs from `openFileIds`. |
 | 2 | Resolvers + mime | done | `MimeResolver` / `EditorResolver` chains; `LayoutEditorContribution.supportedMimeTypes` added. `dev-query-probe` declares `application/x-payloadbuilder`. |
 | 3 | Mediator | done | `FileMediator` with openFile / closeFile / saveFile / notifyChanged / bindEngine / executeFile / reloadFile / acceptExternalChange / discardExternalChange. Backend-sync hook + onFileChanged hook for workspace autosave. Owns the change debouncing. |
-| 4 | Protocol + Java registry | done | `file.open/close/bind` requests + `file.change` notification on both sides. Fixtures + Java `ProtocolFixtureCompatibilityTest`. `FileRegistry` + `FileSessionHandler` + `FileSessionHandlerRegistry` SPI in `backend-api`. `DefaultFileRegistry` in `backend-core`. Request/notification handlers in `backend-transport-stdio`. `queryengine.execute` now requires `fileId`. |
+| 4 | Protocol + Java registry | done | `file.open/close` requests + binding-aware `file.change` notification on both sides. Fixtures + Java `ProtocolFixtureCompatibilityTest`. `FileRegistry` + `FileSessionHandler` + `FileSessionHandlerRegistry` SPI in `backend-api`. `DefaultFileRegistry` in `backend-core`. Request/notification handlers in `backend-transport-stdio`. `queryengine.execute` now requires `fileId`. |
 | 5 | Engine binding + execute | **deferred** | `files.registerEngineResolver`; payloadbuilder implements `FileSessionHandler` and caches parse trees; backend reuses cached parse tree via `queryengine.execute.fileId`. Premature without an editor + output wiring; revisit when those land. |
 
 ## 9. Key decisions (locked)

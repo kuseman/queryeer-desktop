@@ -456,7 +456,7 @@ Success result:
 { "fileId": "file-001", "accepted": true }
 ```
 
-> **Note:** `file.bind` has been removed from the protocol. Re-binding is handled automatically by the backend on `queryengine.execute` (auto-upsert). The frontend no longer sends `file.bind` — the backend detects connection changes from `engineState.connectionId` and updates the file session internally.
+> **Note:** `file.bind` has been removed from the protocol. The frontend rebinds an existing file session by sending `file.change` with the current `engineBinding` and text. The backend applies the binding before processing the matching text change.
 
 ## 5.6d `queryengine.execute` fileId session binding
 
@@ -985,7 +985,7 @@ Current Java stdio scaffold implementation status:
 - JDBC provider action `jdbc.schema.status` returns crawl status/statistics for all configured connections (or a single connection when `connectionId` is provided). Each status entry includes: `connectionId`, `connectionTitle`, `scope` (`top`|`deep`), `databaseKey` (null for top), `lastSuccessAt`, `lastAttemptAt`, `lastFailureAt`, `nextDueAt`, `consecutiveFailures`, `usageScore`, `enabled`, `objectCount`, `lastError`.
 - JDBC provider action `jdbc.connection.test` accepts `{ "connectionId": "..." }` whole body for a connection.
 - JDBC provider action `jdbc.connection.sessions` returns file-scoped JDBC session metadata (`fileId`, `connectionId`, optional `sessionId`, optional `lastAccessTimeMs`, `status=alive|dead`) for UI session badges and connection health views.
-- `file.open` / `file.close` request handlers implemented against `DefaultFileRegistry`; JDBC provider registers `FileSessionHandler` for file-scoped connection lifecycle and cleanup. `file.bind` has been removed — backend auto-upserts on `queryengine.execute`.
+- `file.open` / `file.close` request handlers implemented against `DefaultFileRegistry`; JDBC provider registers `FileSessionHandler` for file-scoped connection lifecycle and cleanup. `file.bind` has been removed; binding changes are carried by `file.change`.
 - `file.change` notification handler implemented
 
 JDBC file-session cleanup configuration:
