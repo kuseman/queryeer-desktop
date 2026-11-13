@@ -14,6 +14,7 @@ class BackendRunnerModuleTest
     {
         String previousAppDir = System.getProperty("queryeer.app.dir");
         String previousResourcesDir = System.getProperty("queryeer.resources.dir");
+        String previousBuiltinsDir = System.getProperty("queryeer.builtins.dir");
         String previousSettingsDir = System.getProperty("queryeer.settings.dir");
         String previousSettingsPath = System.getProperty("queryeer.settings.path");
         String previousPluginsDir = System.getProperty("queryeer.plugins.dir");
@@ -23,6 +24,7 @@ class BackendRunnerModuleTest
         {
             System.setProperty("queryeer.app.dir", " C:/appdata ");
             System.setProperty("queryeer.resources.dir", " C:/install/resources ");
+            System.setProperty("queryeer.builtins.dir", " C:/install/builtins ");
             System.setProperty("queryeer.settings.dir", " C:/appdata/settings ");
             System.setProperty("queryeer.settings.path", " C:/appdata/settings/core.queryengine.jdbc.json ");
             System.setProperty("queryeer.plugins.safeMode", "true");
@@ -33,6 +35,7 @@ class BackendRunnerModuleTest
 
             Assertions.assertEquals("C:/appdata", values.get("queryeer.app.dir"));
             Assertions.assertEquals("C:/install/resources", values.get("queryeer.resources.dir"));
+            Assertions.assertEquals("C:/install/builtins", values.get("queryeer.builtins.dir"));
             Assertions.assertEquals("C:/appdata/settings", values.get("queryeer.settings.dir"));
             Assertions.assertEquals("C:/appdata/settings/core.queryengine.jdbc.json", values.get("queryeer.settings.path"));
             Assertions.assertEquals(Path.of("C:/appdata", "plugins")
@@ -44,12 +47,25 @@ class BackendRunnerModuleTest
         {
             restoreProperty("queryeer.app.dir", previousAppDir);
             restoreProperty("queryeer.resources.dir", previousResourcesDir);
+            restoreProperty("queryeer.builtins.dir", previousBuiltinsDir);
             restoreProperty("queryeer.settings.dir", previousSettingsDir);
             restoreProperty("queryeer.settings.path", previousSettingsPath);
             restoreProperty("queryeer.plugins.dir", previousPluginsDir);
             restoreProperty("queryeer.plugins.safeMode", previousSafeMode);
             restoreProperty("queryeer.plugins.disabledIds", previousDisabledIds);
         }
+    }
+
+    @Test
+    void explicitBuiltinsDirectoryTakesPrecedence()
+    {
+        Path configured = Path.of("configured-builtins")
+                .toAbsolutePath()
+                .normalize();
+
+        Path resolved = BackendRunnerModule.resolveBuiltinsDir(configured.toString(), Path.of("resources"), Path.of("app"));
+
+        Assertions.assertEquals(configured, resolved);
     }
 
     @Test

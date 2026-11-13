@@ -1002,6 +1002,7 @@ JDBC file-session cleanup configuration:
 Backend bootstrap configuration (desktop -> backend process env -> backend config service):
 
 - `QUERYEER_APP_DIR` maps to `queryeer.app.dir`.
+- `QUERYEER_BUILTINS_DIR` maps to `queryeer.builtins.dir` and explicitly selects the builtin plugin directory for standalone runner launches.
 - `QUERYEER_SETTINGS_DIR` maps to `queryeer.settings.dir`.
 - `QUERYEER_SETTINGS_PATH` maps to `queryeer.settings.path`.
 - Desktop passes `queryeer.plugins.dir` as `${queryeer.app.dir}/plugins` for per-user external plugins.
