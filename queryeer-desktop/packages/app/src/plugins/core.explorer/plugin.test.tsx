@@ -234,7 +234,7 @@ function createContext(args: {
       onActiveEditorChanged: vi.fn(() => ({ dispose: vi.fn() }))
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    components: { FrameworkEditor: vi.fn() as any, PasswordFieldInput: vi.fn() as any },
+    components: { FrameworkEditor: vi.fn() as any, PasswordFieldInput: vi.fn() as any, CollectionSettingsListEditor: vi.fn() as any, useCollectionSettingsPersistence: vi.fn() as any },
     about: { registerChangelog: vi.fn() },
     notifications: createNotificationMock(),
     assistant: createAssistantRegistryMock(),
