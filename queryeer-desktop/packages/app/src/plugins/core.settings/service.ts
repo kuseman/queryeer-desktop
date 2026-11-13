@@ -4,6 +4,7 @@ import { SettingsService } from "../../renderer/settings/settings-service";
 let coreSettingsService: SettingsService | null = null;
 let coreSettingsServiceReady = false;
 let pendingOpenRequest: { settingId?: string } | null = null;
+let registrySync = Promise.resolve();
 const coreSettingsServiceSubscribers = new Set<(service: SettingsService) => void>();
 
 export async function initializeCoreSettingsService(registry: SettingsContributionRegistry): Promise<SettingsService> {
@@ -95,4 +96,16 @@ export function openCoreSettings(settingId?: string): void {
   } else {
     coreSettingsService.openModal();
   }
+}
+
+export function refreshCoreSettingsRegistry(): void {
+  if (!coreSettingsServiceReady || !coreSettingsService) {
+    return;
+  }
+  coreSettingsService.refreshSchemaFromRegistry();
+  registrySync = registrySync
+    .then(() => coreSettingsService?.syncRegistryModules())
+    .catch((error: unknown) => {
+      console.error("Failed to synchronize registered settings", error);
+    });
 }

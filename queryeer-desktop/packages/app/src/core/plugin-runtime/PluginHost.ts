@@ -35,6 +35,7 @@ import {
   getAllEffectiveSettings,
   getEffectiveSetting,
   openCoreSettings,
+  refreshCoreSettingsRegistry,
   subscribeEffectiveSettings
 } from "../../plugins/core.settings/service";
 import { PasswordFieldInput } from "../../plugins/core.settings/PasswordFieldInput";
@@ -143,6 +144,10 @@ export class PluginHost {
       tooltip: this.extensionRegistry.createTooltipRegistry(),
       settings: {
         ...settingsContributions,
+        registerSettings: (contribution) => {
+          settingsContributions.registerSettings(contribution);
+          refreshCoreSettingsRegistry();
+        },
         getValue: getEffectiveSetting,
         getAllValues: getAllEffectiveSettings,
         subscribe: subscribeEffectiveSettings,

@@ -615,7 +615,7 @@ Use `context.components.PasswordFieldInput` in advanced settings renderers for c
 
 Use `context.components.CollectionSettingsListEditor` for host-styled add, clone, delete, selection, validation markers, read-only behavior, and a caller-rendered detail pane. `context.components.useCollectionSettingsPersistence` provides `persistNow` and debounced persistence helpers; the latest pending debounced value is flushed when the component unmounts.
 
-The settings service may still be initializing while a plugin's `activate` function runs. Plugins that need a setting during activation should register `settings.subscribe` first and read the value from the callback; the callback runs when settings become ready and on later changes.
+The settings service may still be initializing while a plugin's `activate` function runs. Plugins that need a setting during activation should register `settings.subscribe` first and read the value from the callback; the callback runs when settings become ready and on later changes. Settings contributions registered after initialization are refreshed and hydrated automatically.
 
 ### 7.8 Native Query Engines
 
