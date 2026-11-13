@@ -95,6 +95,50 @@
   flex-direction: column;
 }
 
+.query-editor-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.query-editor-header.is-collapsed {
+  padding-block: 2px;
+}
+
+.query-editor-header-toggle {
+  flex: 0 0 auto;
+  border: 0;
+  padding: 1px 3px;
+  background: transparent;
+  color: var(--text-1);
+  cursor: pointer;
+}
+
+.query-editor-header-title {
+  align-self: center;
+  color: var(--text-1);
+  font-size: var(--ui-font-size-sm);
+}
+
+.query-editor-header-items {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 0;
+}
+
+.query-editor-header-item {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
 .query-editor-divider {
   height: 4px;
   background: var(--border);

@@ -5,6 +5,7 @@ type PluginErrorBoundaryProps = {
   children: ReactNode;
   pluginId?: string;
   pluginName?: string;
+  sourceName?: string;
 };
 
 type PluginErrorBoundaryState = {
@@ -23,13 +24,13 @@ class PluginErrorBoundary extends Component<PluginErrorBoundaryProps, PluginErro
   }
 
   override componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    const name = this.props.pluginName ?? this.props.pluginId ?? "unknown";
+    const name = this.props.sourceName ?? this.props.pluginName ?? this.props.pluginId ?? "unknown";
     console.error(`[PluginErrorBoundary] Error in plugin '${name}':`, error.message, errorInfo.componentStack);
   }
 
   override render(): ReactNode {
     if (this.state.hasError) {
-      const name = this.props.pluginName ?? this.props.pluginId ?? "Plugin";
+      const name = this.props.sourceName ?? this.props.pluginName ?? this.props.pluginId ?? "Plugin";
       return (
         <div className="plugin-error-boundary">
           <p className="plugin-error-boundary-title">Plugin error: {name}</p>

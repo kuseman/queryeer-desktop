@@ -632,6 +632,13 @@ const databases = await context.queryEngines.invoke<string[]>({
   action: "mongodb.databases"
 }, { silent: true });
 
+context.queryEngines.registerEditorHeaderItem({
+  id: "com.example.mongodb.queryBar",
+  engineId: "mongodb",
+  title: "Query",
+  render: ({ fileId }) => <QueryBar fileId={fileId} />
+});
+
 context.queryEngines.registerEditorStatusItem({
   id: "com.example.mongodb.connection",
   engineId: "mongodb",
@@ -650,6 +657,8 @@ context.queryEngines.onQueryEvent("mongodb", (event, execution) => {
   }
 });
 ```
+
+Editor header items render in an engine-scoped, wrapping strip above the text editor. Return `null` when an item does not apply to the current file; the strip is omitted when no items render content. Users can collapse the strip independently for each file. An item's optional `title` is shown while the strip is collapsed. Host keybindings continue to work inside header controls. A plugin control that needs to own its keys can opt out locally with `data-keybinding-scope="input"`; apply it only to the smallest control subtree that needs the override.
 
 A MIME type claimed through `queryEngines.registerEngine` is owned by that engine. `fileMediator.bindEngine` rejects attempts to bind a file with that MIME type to another engine; MIME types not claimed by an engine remain freely bindable.
 

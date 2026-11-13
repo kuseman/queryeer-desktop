@@ -158,7 +158,7 @@ function createContext(file?: FileEntity) {
       clearAll: vi.fn(),
       subscribe: vi.fn(() => () => {})
     },
-    queryEngines: { registerEngine: vi.fn(), invoke: vi.fn(), registerExecutionContextProvider: vi.fn(), onQueryEvent: vi.fn(), registerEditorStatusItem: vi.fn() },
+    queryEngines: { registerEngine: vi.fn(), invoke: vi.fn(), registerExecutionContextProvider: vi.fn(), onQueryEvent: vi.fn(), registerEditorHeaderItem: vi.fn(), registerEditorStatusItem: vi.fn() },
     editorLanguages: { registerMimeType: vi.fn(() => ({ dispose: vi.fn() })) },
     assistant: {
       registerContextContribution: vi.fn(() => () => {}),

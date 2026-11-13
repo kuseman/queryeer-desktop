@@ -11,6 +11,7 @@ import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistr
 import { getQueryViewStateStore } from "./QueryViewStateStore";
 import { getQueryOutputFormatRegistry } from "./QueryOutputFormatRegistry";
 import { TEXT_OUTPUT_FORMATTERS } from "../core.queryengine.output.text/formatters";
+import { registerQueryEditorHeaderItem } from "./query-editor-header-registry";
 
 const mocks = vi.hoisted(() => {
   type ActiveEditorMock = {
@@ -669,6 +670,38 @@ const filesRegistry = {
       root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
     });
     expect((rootElement.querySelector(".query-editor-text-pane") as HTMLDivElement).style.flexBasis).toBe("35%");
+  });
+
+  it("renders the editor header above the text editor and persists its collapsed state", async () => {
+    const registration = registerQueryEditorHeaderItem({
+      id: "test.query-bar",
+      engineId: "mongodb",
+      render: () => <div>Mongo query bar</div>
+    });
+    const file = makeFile({
+      fileId: "file-1",
+      uri: "file:///query.mongodb",
+      engineBinding: { engineId: "mongodb" }
+    });
+
+    try {
+      await act(async () => {
+        root.render(<QueryEditorComponent file={file} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+      });
+
+      const textPane = rootElement.querySelector(".query-editor-text-pane") as HTMLDivElement;
+      expect(textPane.firstElementChild?.classList.contains("query-editor-header")).toBe(true);
+      expect(textPane.lastElementChild?.getAttribute("data-testid")).toBe("mock-editor");
+
+      await act(async () => {
+        (rootElement.querySelector(".query-editor-header-toggle") as HTMLButtonElement).click();
+      });
+
+      expect(rootElement.querySelector(".query-editor-header")?.classList.contains("is-collapsed")).toBe(true);
+      expect(getQueryViewStateStore().read("file-1", "file-1").editorHeaderCollapsed).toBe(true);
+    } finally {
+      await act(async () => registration.dispose());
+    }
   });
 
   it("keeps divider positions independent when the same file is split into two editor groups", async () => {

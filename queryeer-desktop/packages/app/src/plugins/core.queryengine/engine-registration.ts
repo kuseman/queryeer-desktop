@@ -6,6 +6,7 @@ import type {
 } from "@queryeer/api/queryengine/NativeQueryEngineExtension";
 import { getQueryEngineService } from "./QueryEngineService";
 import { registerQueryEditorStatusItem } from "./query-editor-status-registry";
+import { registerQueryEditorHeaderItem } from "./query-editor-header-registry";
 import {
   getQueryEngineMimeOwner,
   registerQueryEngineMimeOwner
@@ -125,6 +126,7 @@ export function createNativeQueryEngineRegistry(files: FilesRegistry): NativeQue
       });
       return { dispose: unregister };
     },
+    registerEditorHeaderItem: registerQueryEditorHeaderItem,
     registerEditorStatusItem: registerQueryEditorStatusItem
   };
 }
