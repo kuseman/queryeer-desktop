@@ -158,17 +158,16 @@ function listConfiguredNewFileMimeTypeOptions(
     }
     const item = entry as Record<string, unknown>;
     const mimeType = String(item.mimeType ?? "");
-    if (!item.enableForNew) {
-      continue;
-    }
     const option = optionByMimeType.get(mimeType);
     if (!option) {
       continue;
     }
-    sorted.push(option);
     optionByMimeType.delete(mimeType);
+    if (item.enableForNew) {
+      sorted.push(option);
+    }
   }
-  return sorted;
+  return [...sorted, ...optionByMimeType.values()];
 }
 
 function listAllMimeTypeOptions(
@@ -437,8 +436,12 @@ export const coreFilesPlugin: Plugin = {
       }
     });
 
-    const mimeTypeOptions = listNewFileMimeTypeOptions(context);
-    for (const option of mimeTypeOptions) {
+    const registeredNewFileCommandMimeTypes = new Set<string>();
+    const ensureNewFileCommand = (option: NewFileMimeTypeOption) => {
+      if (registeredNewFileCommandMimeTypes.has(option.mimeType)) {
+        return;
+      }
+      registeredNewFileCommandMimeTypes.add(option.mimeType);
       const commandId = `core.files.new.fromMime.${option.mimeType}`;
       context.commands.registerCommand({
         id: commandId,
@@ -447,6 +450,9 @@ export const coreFilesPlugin: Plugin = {
           await createNewFileFromMimeType(context, option.mimeType);
         }
       });
+    };
+    for (const option of listNewFileMimeTypeOptions(context)) {
+      ensureNewFileCommand(option);
     }
 
     context.commands.registerCommand({
@@ -603,6 +609,9 @@ export const coreFilesPlugin: Plugin = {
       icon: "file-new",
       dynamicItems: async () => {
         const options = listConfiguredNewFileMimeTypeOptions(context);
+        for (const option of options) {
+          ensureNewFileCommand(option);
+        }
         if (options.length === 0) {
           return [
             {
