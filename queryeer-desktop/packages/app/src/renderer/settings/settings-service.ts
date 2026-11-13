@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type {
   AdvancedValidationResult,
   SettingDefinition,
-  SettingsRegistry
+  SettingsContributionRegistry
 } from "@queryeer/api/settings/SettingsExtension";
 import {
   type SettingsIndexDocument,
@@ -20,7 +20,7 @@ type SettingsBridge = {
 };
 
 export type SettingsServiceOptions = {
-  registry: SettingsRegistry;
+  registry: SettingsContributionRegistry;
   bridge: SettingsBridge;
   notifyBackendModuleChanged?: (moduleId: string, version: number) => Promise<void>;
   debounceMs?: number;
@@ -30,7 +30,7 @@ export type SettingsServiceOptions = {
 const DEFAULT_DEBOUNCE_MS = 500;
 
 export class SettingsService {
-  private readonly registry: SettingsRegistry;
+  private readonly registry: SettingsContributionRegistry;
   private readonly bridge: SettingsBridge;
   private readonly notifyBackendModuleChanged?: (moduleId: string, version: number) => Promise<void>;
   private readonly debounceMs: number;
@@ -79,6 +79,9 @@ export class SettingsService {
       return a.title.localeCompare(b.title);
     });
     this.rebuildEffectiveValues();
+    if (this.initialized) {
+      this.emitValuesChanged();
+    }
   }
 
   public async syncRegistryModules(): Promise<void> {
@@ -336,10 +339,17 @@ export class SettingsService {
         return { ok: true };
       }
       case "password": {
-        if (typeof value !== "string") {
-          return { ok: false, message: "Expected a password reference string value" };
+        if (typeof value === "string") {
+          return { ok: true };
         }
-        return { ok: true };
+        if (
+          typeof value === "object"
+          && value !== null
+          && typeof (value as { secretRef?: unknown }).secretRef === "string"
+        ) {
+          return { ok: true };
+        }
+        return { ok: false, message: "Expected a password secret reference value" };
       }
       case "number": {
         if (typeof value !== "number" || Number.isNaN(value)) {

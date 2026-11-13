@@ -30,6 +30,14 @@ import type {
   JdbcDriverSubscriber,
   RegisteredJdbcManagedDriverContribution
 } from "@queryeer/api/queryengine/JdbcDriverExtension";
+import { createNativeQueryEngineRegistry } from "../../plugins/core.queryengine/engine-registration";
+import {
+  getAllEffectiveSettings,
+  getEffectiveSetting,
+  subscribeEffectiveSettings
+} from "../../plugins/core.settings/service";
+import { PasswordFieldInput } from "../../plugins/core.settings/PasswordFieldInput";
+import { registerMonacoLanguageIdForMimeType } from "../../plugins/core.editor/texteditor/mime-types";
 
 export type PluginHostState = {
   startedAt: string;
@@ -115,6 +123,7 @@ export class PluginHost {
       }))
     };
 
+    const settingsContributions = this.extensionRegistry.createSettingsRegistry();
     const sharedContext: Omit<PluginContext, "jdbcDrivers"> = {
       commands: this.extensionRegistry.createCommandRegistry(),
       filesystems: this.extensionRegistry.createFileSystemRegistry(),
@@ -127,7 +136,12 @@ export class PluginHost {
       keybindings: this.extensionRegistry.createKeybindingRegistry(),
       dialog: this.extensionRegistry.createDialogRegistry(),
       tooltip: this.extensionRegistry.createTooltipRegistry(),
-      settings: this.extensionRegistry.createSettingsRegistry(),
+      settings: {
+        ...settingsContributions,
+        getValue: getEffectiveSetting,
+        getAllValues: getAllEffectiveSettings,
+        subscribe: subscribeEffectiveSettings
+      },
       quickcommand: this.extensionRegistry.createQuickCommandRegistry(),
       outline: this.extensionRegistry.createOutlineRegistry(),
       editors: this.extensionRegistry.createEditorRegistry(),
@@ -138,9 +152,14 @@ export class PluginHost {
       about: { registerChangelog },
       notifications: getNotificationService(),
       assistant: this.extensionRegistry.createAssistantRegistry(),
+      queryEngines: createNativeQueryEngineRegistry(this.extensionRegistry.createFilesRegistry()),
       payloadbuilderCatalog: createPayloadbuilderCatalogRegistry(),
+      editorLanguages: {
+        registerMimeType: registerMonacoLanguageIdForMimeType
+      },
       components: {
-        FrameworkEditor: this.options.frameworkEditor ?? (() => null) as unknown as ComponentType<FrameworkEditorProps>
+        FrameworkEditor: this.options.frameworkEditor ?? (() => null) as unknown as ComponentType<FrameworkEditorProps>,
+        PasswordFieldInput
       }
     };
 

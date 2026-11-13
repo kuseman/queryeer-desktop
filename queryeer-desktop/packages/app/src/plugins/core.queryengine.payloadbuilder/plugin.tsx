@@ -5,8 +5,6 @@ import { registerWhenExpressionVariables } from "../core.commands/when-expressio
 import { registerWhenExpressionTemplates } from "../core.commands/when-expression-template-registry";
 import { registerSymbolActionTemplate } from "../core.queryengine/symbol-action-template-registry";
 import { registerTableActionTemplate } from "../core.queryengine.output.table/table-action-template-registry";
-import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
-import { registerQueryExecutableEngine } from "../core.queryengine/engine-registration";
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../core.settings/service";
 import { CatalogInstancesSettingsEditor } from "./CatalogInstancesSettingsEditor";
 import { PayloadbuilderEnvironmentsSettingsEditor } from "./PayloadbuilderEnvironmentsSettingsEditor";
@@ -83,7 +81,7 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
     });
 
     getPayloadbuilderCatalogStore().initialize(context.files);
-    registerQueryExecutableEngine(context, {
+    context.queryEngines.registerEngine({
       engineId: "payloadbuilder",
       mimeTypes: ["application/plbsql"]
     });
@@ -259,20 +257,17 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
       }
     });
 
-    getQueryEngineService().registerExecutionContextProvider((params) => {
-      if (params.engineId !== "payloadbuilder") {
-        return undefined;
-      }
+    context.queryEngines.registerExecutionContextProvider("payloadbuilder", (params) => {
       return {
         engineState: getPayloadbuilderCatalogStore().buildEngineState(params.fileId)
       };
     });
 
-    getQueryEngineService().onQueryEvent((event, executeContext) => {
+    context.queryEngines.onQueryEvent("payloadbuilder", (event, executeContext) => {
       if (event.method !== "queryengine.completed") {
         return;
       }
-      if (executeContext?.engineId !== "payloadbuilder" || !executeContext.fileId) {
+      if (!executeContext.fileId) {
         return;
       }
       const file = context.files.getFile(executeContext.fileId);

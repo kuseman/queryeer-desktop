@@ -1,5 +1,4 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
-import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import { getQueryViewStateStore } from "../core.queryengine/QueryViewStateStore";
 import { registerJdbcDialect } from "../core.queryengine.jdbc/jdbc-dialect-registry";
 import { registerWhenExpressionTemplates } from "../core.commands/when-expression-template-registry";
@@ -73,8 +72,8 @@ export const coreQueryEngineJdbcPostgresPlugin: Plugin = {
     });
 
     // Execution context provider: intercepts normal execute when Actual Plan toggle is on
-    getQueryEngineService().registerExecutionContextProvider((params) => {
-      if (params.engineId !== "jdbc" || !params.fileId) {
+    context.queryEngines.registerExecutionContextProvider("jdbc", (params) => {
+      if (!params.fileId) {
         return undefined;
       }
 

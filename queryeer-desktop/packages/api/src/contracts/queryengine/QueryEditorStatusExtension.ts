@@ -10,19 +10,8 @@ export type QueryEditorStatusItemContext = {
 
 export type QueryEditorStatusItemContribution = {
   id: string;
+  engineId?: string;
   alignment?: "left" | "right";
   order?: number;
   render: (context: QueryEditorStatusItemContext) => ReactNode;
 };
-
-const items = new Map<string, QueryEditorStatusItemContribution>();
-
-export function registerQueryEditorStatusItem(
-  item: QueryEditorStatusItemContribution
-): void {
-  items.set(item.id, item);
-}
-
-export function getQueryEditorStatusItems(): QueryEditorStatusItemContribution[] {
-  return [...items.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-}

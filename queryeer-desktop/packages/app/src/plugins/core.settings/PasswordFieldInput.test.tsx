@@ -37,6 +37,7 @@ const mocks = vi.hoisted(() => {
       mocks.security.peekSecret.mockClear();
       mocks.security.ensureUnlockedForSecretAccess.mockClear();
       mocks.security.storeSecret.mockClear();
+      mocks.security.storeSecret.mockImplementation(async () => ({ secretRef: "secret-1" }));
       mocks.security.deleteSecret.mockClear();
     }
   };
@@ -61,6 +62,7 @@ describe("PasswordFieldInput", () => {
     rootElement = document.createElement("div");
     document.body.appendChild(rootElement);
     root = createRoot(rootElement);
+    vi.useFakeTimers();
   });
 
   afterEach(async () => {
@@ -68,6 +70,7 @@ describe("PasswordFieldInput", () => {
       root.unmount();
     });
     rootElement.remove();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -91,5 +94,63 @@ describe("PasswordFieldInput", () => {
 
     const after = Array.from(rootElement.querySelectorAll("input[type='password']")) as HTMLInputElement[];
     expect(after.every((x) => !x.readOnly)).toBe(true);
+  });
+
+  it("stores plaintext in the host vault and emits only a secret reference", async () => {
+    const onChangeRef = vi.fn();
+    await act(async () => {
+      root.render(<PasswordFieldInput inputId="secret" valueRef={undefined} onChangeRef={onChangeRef} />);
+      mocks.emitStatus({ unlocked: true, hasPersistedVault: true, hasStoredMasterPassword: false });
+    });
+
+    const input = rootElement.querySelector("input") as HTMLInputElement;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(input, "super-secret");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(mocks.security.storeSecret).toHaveBeenCalledWith("super-secret", undefined);
+    expect(onChangeRef).toHaveBeenCalledWith({ secretRef: "secret-1" });
+    expect(onChangeRef).not.toHaveBeenCalledWith("super-secret");
+  });
+
+  it("serializes overlapping writes without clearing a newer draft", async () => {
+    let resolveFirst: ((value: { secretRef: string }) => void) | undefined;
+    mocks.security.storeSecret
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveFirst = resolve;
+      }))
+      .mockResolvedValueOnce({ secretRef: "secret-2" });
+
+    const onChangeRef = vi.fn();
+    await act(async () => {
+      root.render(<PasswordFieldInput inputId="secret" valueRef={undefined} onChangeRef={onChangeRef} />);
+      mocks.emitStatus({ unlocked: true, hasPersistedVault: true, hasStoredMasterPassword: false });
+    });
+
+    const input = rootElement.querySelector("input") as HTMLInputElement;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    await act(async () => {
+      setter?.call(input, "first");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      await vi.advanceTimersByTimeAsync(300);
+      setter?.call(input, "second");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(mocks.security.storeSecret).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      resolveFirst?.({ secretRef: "secret-1" });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.security.storeSecret).toHaveBeenNthCalledWith(2, "second", "secret-1");
+    expect(onChangeRef).toHaveBeenNthCalledWith(1, { secretRef: "secret-1" });
+    expect(onChangeRef).toHaveBeenNthCalledWith(2, { secretRef: "secret-2" });
+    expect(input.value).toBe("second");
   });
 });

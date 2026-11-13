@@ -202,6 +202,21 @@ describe("FileRegistry editor resolution", () => {
     expect(registry.resolveEditor(file)).toBe("editor.exec");
   });
 
+  it("reference-counts disposable capability registrations", () => {
+    const registry = new FileRegistry().createFilesRegistry();
+    const first = registry.capabilities.registerCapabilities("application/custom", ["queryexecutable"]);
+    const second = registry.capabilities.registerCapabilities("application/custom", ["queryexecutable"]);
+
+    first.dispose();
+    expect(registry.capabilities.hasCapability("application/custom", "queryexecutable")).toBe(true);
+    second.dispose();
+    expect(registry.capabilities.hasCapability("application/custom", "queryexecutable")).toBe(false);
+
+    const defaultCapability = registry.capabilities.registerCapabilities("text/plain", ["editable"]);
+    defaultCapability.dispose();
+    expect(registry.capabilities.hasCapability("text/plain", "editable")).toBe(true);
+  });
+
   it("falls back to core.files.unsupported when no editor matches", () => {
     const editors = [
       makeEditor("core.files.unsupported", ["*/*"], { priority: -1000 })

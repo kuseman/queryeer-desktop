@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AdvancedSettingsRenderer,
   AdvancedSettingsValidator,
-  SettingsRegistry
+  SettingsContributionRegistry
 } from "@queryeer/api/settings/SettingsExtension";
 import { SettingsService } from "./settings-service";
 
-function makeRegistry(): SettingsRegistry {
-  const contributions: ReturnType<SettingsRegistry["listSettingsContributions"]> = [
+function makeRegistry(): SettingsContributionRegistry {
+  const contributions: ReturnType<SettingsContributionRegistry["listSettingsContributions"]> = [
     {
       moduleId: "core.editor.texteditor",
       title: "Editor",
@@ -112,6 +112,65 @@ describe("SettingsService", () => {
 
     expect(service.getValue("core.editor.texteditor.tabSize")).toBe(2);
     expect(service.getValue("core.editor.texteditor.wordWrap")).toBe("off");
+    expect(service.getAllValues()).toMatchObject({
+      "core.editor.texteditor.tabSize": 2,
+      "core.editor.texteditor.wordWrap": "off"
+    });
+  });
+
+  it("hydrates settings registered after initialization", async () => {
+    const baseRegistry = makeRegistry();
+    const externalContribution = {
+      moduleId: "external.test",
+      title: "External Test",
+      settings: [
+        {
+          id: "external.test.value",
+          moduleId: "external.test",
+          title: "Value",
+          sectionPath: ["External Test"],
+          type: "string" as const,
+          defaultValue: "default"
+        }
+      ]
+    };
+    let includeExternal = false;
+    const registry: SettingsContributionRegistry = {
+      ...baseRegistry,
+      listSettingsContributions: () => [
+        ...baseRegistry.listSettingsContributions(),
+        ...(includeExternal ? [externalContribution] : [])
+      ],
+      listSettingsDefinitions: () => [
+        ...baseRegistry.listSettingsDefinitions(),
+        ...(includeExternal ? externalContribution.settings : [])
+      ]
+    };
+    const service = new SettingsService({
+      registry,
+      bridge: {
+        getSettingsIndex: async () => ({ version: 1, updatedAt: "now", modules: {} }),
+        getSettingsModule: async ({ moduleId }) => ({
+          version: 1,
+          moduleId,
+          updatedAt: "now",
+          values: moduleId === "external.test" ? { "external.test.value": "persisted" } : {}
+        }),
+        saveSettingsIndex: async () => ({ accepted: true }),
+        saveSettingsModule: async () => ({ accepted: true })
+      }
+    });
+    await service.initialize();
+
+    includeExternal = true;
+    const listener = vi.fn();
+    service.subscribe(listener);
+    service.refreshSchemaFromRegistry();
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(service.getValue("external.test.value")).toBe("default");
+    await service.syncRegistryModules();
+
+    expect(service.getValue("external.test.value")).toBe("persisted");
   });
 
   it("increments version on setValue and notifies backend after persist", async () => {
@@ -138,8 +197,12 @@ describe("SettingsService", () => {
       debounceMs: 100
     });
     await service.initialize();
+    const listener = vi.fn();
+    const unsubscribe = service.subscribe(listener);
 
     await service.setValue("core.editor.texteditor.tabSize", 8);
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
 
     expect(saveSettingsModule).not.toHaveBeenCalled();
     expect(notifyBackendModuleChanged).not.toHaveBeenCalled();
@@ -235,10 +298,10 @@ describe("SettingsService", () => {
     });
     await service.initialize();
 
-    const result = await service.setValue("core.editor.texteditor.tokenRef", "secret-ref-1");
+    const result = await service.setValue("core.editor.texteditor.tokenRef", { secretRef: "secret-ref-1" });
 
     expect(result.ok).toBe(true);
-    expect(service.getValue("core.editor.texteditor.tokenRef")).toBe("secret-ref-1");
+    expect(service.getValue("core.editor.texteditor.tokenRef")).toEqual({ secretRef: "secret-ref-1" });
   });
 
   it("searches by title and tags", async () => {

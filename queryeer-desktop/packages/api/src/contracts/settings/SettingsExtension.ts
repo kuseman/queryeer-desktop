@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { SecretRefValue } from "../security/Security.js";
 
 export type SettingsValueType =
   | "boolean"
@@ -72,7 +73,7 @@ export type AdvancedSettingsValidator = {
   }) => AdvancedValidationResult | Promise<AdvancedValidationResult>;
 };
 
-export type SettingsRegistry = {
+export type SettingsContributionRegistry = {
   registerSettings: (contribution: SettingsContribution) => void;
   registerAdvancedRenderer: (renderer: AdvancedSettingsRenderer) => void;
   registerAdvancedValidator: (validator: AdvancedSettingsValidator) => void;
@@ -80,4 +81,17 @@ export type SettingsRegistry = {
   listSettingsDefinitions: () => SettingDefinition[];
   getAdvancedRenderer: (id: string) => AdvancedSettingsRenderer | undefined;
   getAdvancedValidator: (id: string) => AdvancedSettingsValidator | undefined;
+};
+
+export type SettingsRegistry = SettingsContributionRegistry & {
+  getValue: <T = unknown>(settingId: string) => T | undefined;
+  getAllValues: () => Readonly<Record<string, unknown>>;
+  subscribe: (listener: () => void) => () => void;
+};
+
+export type PasswordFieldInputProps = {
+  inputId: string;
+  valueRef: string | SecretRefValue | undefined;
+  readonly?: boolean;
+  onChangeRef: (nextRef: SecretRefValue | undefined) => void;
 };

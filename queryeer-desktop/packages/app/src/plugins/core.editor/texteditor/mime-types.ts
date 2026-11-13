@@ -7,6 +7,7 @@ import {
   registerMimeTypeBundle,
   type MimeTypeRegistration
 } from "../../core.files/mime-registration";
+import type { Disposable } from "@queryeer/api/editor/EditorApi";
 
 type TextMimeTypeRegistration = MimeTypeRegistration & {
   monacoLanguageId: string;
@@ -103,6 +104,7 @@ const TEXT_EDITOR_MIME_TYPES: TextMimeTypeRegistration[] = [
 
 const resolveMimeTypeByExtension = createExtensionMimeResolver(TEXT_EDITOR_MIME_TYPES);
 const MIME_TYPE_TO_LANGUAGE = new Map<string, string>();
+const MIME_TYPE_LANGUAGE_OVERRIDES = new Map<string, { token: symbol; languageId: string }[]>();
 
 for (const registration of TEXT_EDITOR_MIME_TYPES) {
   MIME_TYPE_TO_LANGUAGE.set(registration.mimeType, registration.monacoLanguageId);
@@ -117,11 +119,37 @@ export function listTextEditorMimeTypeRegistrations(): readonly TextMimeTypeRegi
 }
 
 export function resolveMonacoLanguageId(mimeType: string): string {
-  return MIME_TYPE_TO_LANGUAGE.get(mimeType) ?? "plaintext";
+  const overrides = MIME_TYPE_LANGUAGE_OVERRIDES.get(mimeType);
+  return overrides?.at(-1)?.languageId ?? MIME_TYPE_TO_LANGUAGE.get(mimeType) ?? "plaintext";
 }
 
-export function registerMonacoLanguageIdForMimeType(mimeType: string, monacoLanguageId: string): void {
-  MIME_TYPE_TO_LANGUAGE.set(mimeType, monacoLanguageId);
+export function registerMonacoLanguageIdForMimeType(mimeType: string, monacoLanguageId: string): Disposable {
+  const normalizedMimeType = mimeType.trim();
+  const normalizedLanguageId = monacoLanguageId.trim();
+  if (!normalizedMimeType || !normalizedLanguageId) {
+    throw new Error("MIME type and language id must be non-empty");
+  }
+
+  const token = Symbol(normalizedMimeType);
+  const overrides = MIME_TYPE_LANGUAGE_OVERRIDES.get(normalizedMimeType) ?? [];
+  overrides.push({ token, languageId: normalizedLanguageId });
+  MIME_TYPE_LANGUAGE_OVERRIDES.set(normalizedMimeType, overrides);
+
+  return {
+    dispose: () => {
+      const current = MIME_TYPE_LANGUAGE_OVERRIDES.get(normalizedMimeType);
+      if (!current) {
+        return;
+      }
+      const index = current.findIndex((entry) => entry.token === token);
+      if (index >= 0) {
+        current.splice(index, 1);
+      }
+      if (current.length === 0) {
+        MIME_TYPE_LANGUAGE_OVERRIDES.delete(normalizedMimeType);
+      }
+    }
+  };
 }
 
 export function registerTextEditorMimeTypes(files: FilesRegistry): void {

@@ -10,7 +10,6 @@ import {
 
 const mocks = vi.hoisted(() => ({
   registerExecutionContextProviderMock: vi.fn(),
-  registerEngineResolverMock: vi.fn(),
   onQueryEventMock: vi.fn(),
   executeQueryForFlowMock: vi.fn(),
   buildEngineStateMock: vi.fn(),
@@ -20,14 +19,6 @@ const mocks = vi.hoisted(() => ({
   listContributionsMock: vi.fn<() => PayloadbuilderCatalogContribution[]>(() => []),
   subscribeContributionsMock: vi.fn<(listener: () => void) => () => void>(() => () => {}),
   onSettingsInitializedMock: vi.fn<(listener: (service: unknown) => void) => () => void>(() => () => {})
-}));
-
-vi.mock("../core.queryengine/QueryEngineService", () => ({
-  getQueryEngineService: () => ({
-    registerExecutionContextProvider: mocks.registerExecutionContextProviderMock,
-    registerEngineResolver: mocks.registerEngineResolverMock,
-    onQueryEvent: mocks.onQueryEventMock
-  })
 }));
 
 vi.mock("../core.queryengine/flow-query-execution", () => ({
@@ -191,7 +182,10 @@ function createContext(): PluginContext {
       listSettingsContributions: vi.fn(() => []),
       listSettingsDefinitions: vi.fn(() => []),
       getAdvancedRenderer: vi.fn(),
-      getAdvancedValidator: vi.fn()
+      getAdvancedValidator: vi.fn(),
+      getValue: vi.fn(),
+      getAllValues: vi.fn(() => ({})),
+      subscribe: vi.fn(() => () => {})
     },
     quickcommand: { registerProvider: vi.fn() },
     contextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
@@ -211,10 +205,18 @@ function createContext(): PluginContext {
       onActiveEditorChanged: vi.fn(() => ({ dispose: vi.fn() }))
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    components: { FrameworkEditor: vi.fn() as any },
+    components: { FrameworkEditor: vi.fn() as any, PasswordFieldInput: vi.fn() as any },
     about: { registerChangelog: vi.fn() },
     notifications: createNotificationMock(),
     assistant: createAssistantRegistryMock(),
+    queryEngines: {
+      registerEngine: vi.fn(),
+      invoke: vi.fn(),
+      registerExecutionContextProvider: mocks.registerExecutionContextProviderMock,
+      onQueryEvent: mocks.onQueryEventMock,
+      registerEditorStatusItem: vi.fn()
+    },
+    editorLanguages: { registerMimeType: vi.fn(() => ({ dispose: vi.fn() })) },
     payloadbuilderCatalog: { registerContribution: vi.fn() }
   };
 }
@@ -246,7 +248,6 @@ function createNotificationMock() {
 describe("core.queryengine.payloadbuilder plugin integration", () => {
   beforeEach(() => {
     mocks.registerExecutionContextProviderMock.mockReset();
-    mocks.registerEngineResolverMock.mockReset();
     mocks.onQueryEventMock.mockReset();
     mocks.executeQueryForFlowMock.mockReset();
     mocks.buildEngineStateMock.mockReset();
@@ -865,7 +866,8 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
 
     coreQueryEnginePayloadbuilderPlugin.activate(context);
 
-    const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[0] as
+    expect(mocks.registerExecutionContextProviderMock.mock.calls[0]?.[0]).toBe("payloadbuilder");
+    const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[1] as
       | ((params: { engineId: string; text: string; fileId?: string }) => unknown)
       | undefined;
     expect(provider).toBeTypeOf("function");
@@ -881,13 +883,6 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
       engineState: { payloadbuilder: { catalogs: { jdbc1: {} } } }
     });
 
-    const otherEnginePatch = provider?.({
-      engineId: "jdbc",
-      text: "select 1",
-      fileId: "file-1"
-    });
-
-    expect(otherEnginePatch).toBeUndefined();
     expect(mocks.buildEngineStateMock).toHaveBeenCalledTimes(1);
   });
 
@@ -896,12 +891,10 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
 
     coreQueryEnginePayloadbuilderPlugin.activate(context);
 
-    expect(mocks.registerEngineResolverMock).toHaveBeenCalledTimes(1);
-
-    expect(context.files.capabilities.registerCapabilities).toHaveBeenCalledWith(
-      "application/plbsql",
-      ["queryexecutable"]
-    );
+    expect(context.queryEngines.registerEngine).toHaveBeenCalledWith({
+      engineId: "payloadbuilder",
+      mimeTypes: ["application/plbsql"]
+    });
 
     const registerViewMock = context.layout.registerView as ReturnType<typeof vi.fn>;
     expect(registerViewMock).toHaveBeenCalledWith(
@@ -928,7 +921,8 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
     const context = createContext();
     coreQueryEnginePayloadbuilderPlugin.activate(context);
 
-    const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+    expect(mocks.onQueryEventMock.mock.calls[0]?.[0]).toBe("payloadbuilder");
+    const listener = mocks.onQueryEventMock.mock.calls[0]?.[1] as
       | ((
           event: { method: string; params?: { engineState?: unknown } },
           executeContext?: { engineId?: string; fileId?: string }
@@ -972,10 +966,6 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
       undefined
     );
 
-    listener?.(
-      { method: "queryengine.completed", params: { engineState: { ignored: true } } },
-      { engineId: "jdbc", fileId: "file-1" }
-    );
     listener?.({ method: "queryengine.completed", params: {} }, { engineId: "payloadbuilder", fileId: "file-1" });
     listener?.(
       { method: "queryengine.completed", params: { engineState: { ignored: true } } },
@@ -993,7 +983,7 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
     const context = createContext();
     coreQueryEnginePayloadbuilderPlugin.activate(context);
 
-    const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+    const listener = mocks.onQueryEventMock.mock.calls[0]?.[1] as
       | ((
           event: { method: string; params?: { engineState?: unknown } },
           executeContext?: { engineId?: string; fileId?: string }
@@ -1028,7 +1018,7 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
     const context = createContext();
     coreQueryEnginePayloadbuilderPlugin.activate(context);
 
-    const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+    const listener = mocks.onQueryEventMock.mock.calls[0]?.[1] as
       | ((
           event: { method: string; params?: { engineState?: unknown } },
           executeContext?: { engineId?: string; fileId?: string }
@@ -1068,7 +1058,7 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
     mocks.applyEngineStatePatchMock.mockReturnValue(false);
     coreQueryEnginePayloadbuilderPlugin.activate(context);
 
-    const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+    const listener = mocks.onQueryEventMock.mock.calls[0]?.[1] as
       | ((
           event: { method: string; params?: { engineState?: unknown } },
           executeContext?: { engineId?: string; fileId?: string; engineState?: unknown }

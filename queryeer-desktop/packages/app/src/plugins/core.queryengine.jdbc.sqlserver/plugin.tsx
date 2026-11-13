@@ -1,5 +1,4 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
-import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import { getQueryViewStateStore } from "../core.queryengine/QueryViewStateStore";
 import { getCoreSettingsService } from "../core.settings/service";
 import { registerJdbcDialect } from "../core.queryengine.jdbc/jdbc-dialect-registry";
@@ -182,8 +181,8 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
     }
 
     // Execution context provider: adds SQL Server plan options to queries
-    getQueryEngineService().registerExecutionContextProvider((params) => {
-      if (params.engineId !== "jdbc" || !params.fileId) {
+    context.queryEngines.registerExecutionContextProvider("jdbc", (params) => {
+      if (!params.fileId) {
         return undefined;
       }
 

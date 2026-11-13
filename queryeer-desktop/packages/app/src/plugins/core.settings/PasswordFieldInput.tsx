@@ -1,19 +1,18 @@
-import { useEffect, useState } from "react";
-import type { SecretRefValue } from "@queryeer/api/security/Security";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { PasswordFieldInputProps } from "@queryeer/api/settings/SettingsExtension";
 import { getCoreSecurityService } from "../core.security/service";
 
-type Props = {
-  inputId: string;
-  valueRef: string | SecretRefValue | undefined;
-  readonly: boolean;
-  onChangeRef: (nextRef: SecretRefValue | undefined) => void;
-};
-
-export function PasswordFieldInput({ inputId, valueRef, readonly, onChangeRef }: Props): JSX.Element {
+export function PasswordFieldInput({ inputId, valueRef, readonly = false, onChangeRef }: PasswordFieldInputProps): JSX.Element {
   const security = getCoreSecurityService();
   const [draft, setDraft] = useState("");
   const [dirty, setDirty] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
+  const draftRef = useRef(draft);
+  const secretRefRef = useRef<string | undefined>(undefined);
+  const editVersionRef = useRef(0);
+  const persistedVersionRef = useRef(0);
+  const writeChainRef = useRef<Promise<void>>(Promise.resolve());
+  const observedSecretRef = useRef<{ value: string | undefined } | undefined>(undefined);
 
   useEffect(() => {
     if (!security) {
@@ -43,39 +42,72 @@ export function PasswordFieldInput({ inputId, valueRef, readonly, onChangeRef }:
   const currentSecretRef = getSecretRef(valueRef);
 
   useEffect(() => {
+    if (observedSecretRef.current?.value === currentSecretRef) {
+      return;
+    }
+    observedSecretRef.current = { value: currentSecretRef };
+    if (currentSecretRef === secretRefRef.current) {
+      return;
+    }
+    secretRefRef.current = currentSecretRef;
+    if (dirty) {
+      return;
+    }
     if (!currentSecretRef || !security) {
+      draftRef.current = "";
       setDraft("");
       return;
     }
 
     const cached = security.peekSecret(currentSecretRef);
-    setDraft(cached ?? "");
+    const nextDraft = cached ?? "";
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
     setDirty(false);
-  }, [security, currentSecretRef]);
+  }, [dirty, security, currentSecretRef]);
 
-  const persistDraft = async (): Promise<boolean> => {
+  const persistDraft = useCallback(async (): Promise<boolean> => {
     if (readonly || !security || !unlocked) {
       return false;
     }
 
-    try {
-      if (!draft.trim()) {
-        if (currentSecretRef) {
-          await security.deleteSecret(currentSecretRef);
-        }
-        onChangeRef(undefined);
-        setDirty(false);
+    const draftToPersist = draft;
+    const editVersion = editVersionRef.current;
+    const persist = async (): Promise<boolean> => {
+      if (editVersion <= persistedVersionRef.current) {
         return true;
       }
 
-      const stored = await security.storeSecret(draft, currentSecretRef);
-      onChangeRef({ secretRef: stored.secretRef });
-      setDirty(false);
-      return true;
-    } catch {
-      return false;
-    }
-  };
+      try {
+        if (!draftToPersist.trim()) {
+          if (secretRefRef.current) {
+            await security.deleteSecret(secretRefRef.current);
+          }
+          secretRefRef.current = undefined;
+          onChangeRef(undefined);
+        } else {
+          const stored = await security.storeSecret(draftToPersist, secretRefRef.current);
+          secretRefRef.current = stored.secretRef;
+          onChangeRef({ secretRef: stored.secretRef });
+        }
+
+        persistedVersionRef.current = editVersion;
+        if (draftRef.current === draftToPersist) {
+          setDirty(false);
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const result = writeChainRef.current.then(persist, persist);
+    writeChainRef.current = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return result;
+  }, [draft, onChangeRef, readonly, security, unlocked]);
 
   const unlockVault = async (): Promise<void> => {
     if (!security || readonly) {
@@ -98,7 +130,7 @@ export function PasswordFieldInput({ inputId, valueRef, readonly, onChangeRef }:
     return () => {
       clearTimeout(timer);
     };
-  }, [draft, dirty, readonly, security]);
+  }, [dirty, persistDraft, readonly, security, unlocked]);
 
   return (
     <div>
@@ -110,6 +142,8 @@ export function PasswordFieldInput({ inputId, valueRef, readonly, onChangeRef }:
         readOnly={readonly || !security || !unlocked}
         autoComplete="off"
         onChange={(event) => {
+          editVersionRef.current += 1;
+          draftRef.current = event.target.value;
           setDraft(event.target.value);
           setDirty(true);
         }}
@@ -138,7 +172,7 @@ export function PasswordFieldInput({ inputId, valueRef, readonly, onChangeRef }:
   );
 }
 
-function getSecretRef(valueRef: string | SecretRefValue | undefined): string | undefined {
+function getSecretRef(valueRef: PasswordFieldInputProps["valueRef"]): string | undefined {
   if (typeof valueRef === "string") {
     return valueRef || undefined;
   }

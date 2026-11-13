@@ -1,6 +1,7 @@
 import type { FileEntity, FileEntityUpdate, FileOpenInput } from "./FileEntity.js";
 import type { EditorResolver, MimeHint, MimeResolver } from "./Resolvers.js";
 import type { JSX } from "react";
+import type { Disposable } from "../editor/EditorApi.js";
 
 export type FilesSubscriber = (files: FileEntity[]) => void;
 
@@ -29,7 +30,7 @@ export type MimeIconContribution = {
 };
 
 export type MimeCapabilityRegistry = {
-  registerCapabilities: (mimeType: string, capabilities: MimeCapability[]) => void;
+  registerCapabilities: (mimeType: string, capabilities: MimeCapability[]) => Disposable;
   hasCapability: (mimeType: string, capability: MimeCapability) => boolean;
   listMimeTypesByCapability: (capability: MimeCapability) => string[];
   listAllMimeTypes: () => string[];

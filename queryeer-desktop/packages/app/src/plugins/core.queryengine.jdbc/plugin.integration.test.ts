@@ -208,7 +208,10 @@ function createContext(): PluginContext {
       listSettingsContributions: vi.fn(() => []),
       listSettingsDefinitions: vi.fn(() => []),
       getAdvancedRenderer: vi.fn(),
-      getAdvancedValidator: vi.fn()
+      getAdvancedValidator: vi.fn(),
+      getValue: vi.fn(),
+      getAllValues: vi.fn(() => ({})),
+      subscribe: vi.fn(() => () => {})
     },
     quickcommand: { registerProvider: vi.fn() },
     contextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
@@ -229,10 +232,18 @@ function createContext(): PluginContext {
       onActiveEditorChanged: vi.fn(() => ({ dispose: vi.fn() }))
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    components: { FrameworkEditor: vi.fn() as any },
+    components: { FrameworkEditor: vi.fn() as any, PasswordFieldInput: vi.fn() as any },
     about: { registerChangelog: vi.fn() },
     notifications: createNotificationMock(),
     assistant: createAssistantRegistryMock(),
+    queryEngines: {
+      registerEngine: vi.fn(() => ({ dispose: vi.fn() })),
+      invoke: vi.fn(),
+      registerExecutionContextProvider: mocks.registerExecutionContextProviderMock,
+      onQueryEvent: mocks.onQueryEventMock,
+      registerEditorStatusItem: vi.fn(() => ({ dispose: vi.fn() }))
+    },
+    editorLanguages: { registerMimeType: vi.fn(() => ({ dispose: vi.fn() })) },
     payloadbuilderCatalog: { registerContribution: vi.fn() }
   };
 }
@@ -290,6 +301,14 @@ describe("core.queryengine.jdbc plugin integration", () => {
   it("keeps driver management in a dedicated settings section", () => {
     const context = createContext();
     coreQueryEngineJdbcPlugin.activate(context);
+
+    expect(context.queryEngines.registerEngine).toHaveBeenCalledWith({
+      engineId: "jdbc",
+      mimeTypes: ["application/sql"]
+    });
+    expect(context.queryEngines.registerEditorStatusItem).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "core.queryengine.jdbc.connectionStatus" })
+    );
 
     const contribution = vi.mocked(context.settings.registerSettings).mock.calls[0][0];
     expect(contribution.settings.find((setting) => setting.title === "Database Connections")?.sectionPath)
@@ -601,7 +620,8 @@ describe("core.queryengine.jdbc plugin integration", () => {
 
     coreQueryEngineJdbcPlugin.activate(context);
 
-    const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[0] as
+    expect(mocks.registerExecutionContextProviderMock.mock.calls[0]?.[0]).toBe("jdbc");
+    const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[1] as
       | ((params: { engineId: string; text: string; fileId?: string }) => unknown)
       | undefined;
     expect(provider).toBeTypeOf("function");
@@ -611,8 +631,6 @@ describe("core.queryengine.jdbc plugin integration", () => {
       engineState: { connectionId: "conn-a", database: "reporting" }
     });
 
-    const otherEnginePatch = provider?.({ engineId: "payloadbuilder", text: "select 1", fileId: "file-1" });
-    expect(otherEnginePatch).toBeUndefined();
   });
 
   it("includes sessionId from runtime metadata in JDBC engineState", () => {
@@ -628,7 +646,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
     coreQueryEngineJdbcPlugin.activate(context);
 
     // Populate sessionConnectionUuidMap by simulating a completed query event
-    const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+    const listener = mocks.onQueryEventMock.mock.calls[0]?.[1] as
       | ((
           event: { method: string; params?: { engineState?: unknown } },
           executeContext?: { engineId?: string; fileId?: string }
@@ -639,7 +657,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
       { engineId: "jdbc", fileId: "file-1" }
     );
 
-    const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[0] as
+    const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[1] as
       | ((params: { engineId: string; text: string; fileId?: string }) => unknown)
       | undefined;
 
@@ -662,7 +680,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
 
     coreQueryEngineJdbcPlugin.activate(context);
 
-    const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[0] as
+    const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[1] as
       | ((params: { engineId: string; text: string; fileId?: string }) => unknown)
       | undefined;
 
@@ -681,7 +699,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
 
     coreQueryEngineJdbcPlugin.activate(context);
 
-    const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[0] as
+    const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[1] as
       | ((params: { engineId: string; text: string; fileId?: string }) => unknown)
       | undefined;
     expect(provider).toBeTypeOf("function");
@@ -704,7 +722,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
 
     coreQueryEngineJdbcPlugin.activate(context);
 
-    const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[0] as
+    const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[1] as
       | ((params: { engineId: string; text: string; fileId?: string }) => unknown)
       | undefined;
     expect(provider).toBeTypeOf("function");
@@ -731,7 +749,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
 
     coreQueryEngineJdbcPlugin.activate(context);
 
-    const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[0] as
+    const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]?.[1] as
       | ((params: { engineId: string; text: string; fileId?: string }) => unknown)
       | undefined;
     expect(provider).toBeTypeOf("function");
@@ -786,7 +804,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
 
     coreQueryEngineJdbcPlugin.activate(context);
 
-    const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+    const listener = mocks.onQueryEventMock.mock.calls[0]?.[1] as
       | ((
           event: { method: string; params?: { engineState?: unknown } },
           executeContext?: { engineId?: string; fileId?: string }
@@ -810,11 +828,6 @@ describe("core.queryengine.jdbc plugin integration", () => {
       { connectionId: "conn-a", database: "newdb" }
     );
 
-    // Non-jdbc events should be ignored
-    listener?.(
-      { method: "queryengine.completed", params: { engineState: { database: "ignored" } } },
-      { engineId: "payloadbuilder", fileId: "file-1" }
-    );
     listener?.(
       { method: "queryengine.completed", params: {} },
       { engineId: "jdbc", fileId: "file-1" }
@@ -837,7 +850,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
 
     coreQueryEngineJdbcPlugin.activate(context);
 
-    const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+    const listener = mocks.onQueryEventMock.mock.calls[0]?.[1] as
       | ((
           event: { method: string; params?: { engineState?: unknown } },
           executeContext?: { engineId?: string; fileId?: string }
@@ -874,7 +887,7 @@ describe("core.queryengine.jdbc plugin integration", () => {
 
     coreQueryEngineJdbcPlugin.activate(context);
 
-    const listener = mocks.onQueryEventMock.mock.calls[0]?.[0] as
+    const listener = mocks.onQueryEventMock.mock.calls[0]?.[1] as
       | ((
           event: { method: string; params?: { engineState?: unknown } },
           executeContext?: { engineId?: string; fileId?: string }

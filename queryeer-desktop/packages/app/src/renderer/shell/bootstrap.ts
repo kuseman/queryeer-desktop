@@ -279,6 +279,7 @@ export async function bootstrapShell() {
   host.setExternalLoadErrors(discovery.loadErrors);
 
   const settings = getCoreSettingsService();
+  settings?.refreshSchemaFromRegistry();
   await settings?.syncRegistryModules();
   await getJdbcDriverManagementService().initialize({
     contributions: host.getJdbcDrivers(),
