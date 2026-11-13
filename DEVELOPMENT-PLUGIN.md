@@ -270,6 +270,8 @@ export function injectStyles(): void {
 }
 ```
 
+Plugin CSS may rely on these stable host theme variables: `--bg-0` through `--bg-3`, `--text-0` through `--text-3`, `--accent`, `--accent-muted`, `--focus-border`, `--border`, `--input-bg`, `--surface-1`, `--surface-overlay-weak`, `--surface-overlay-soft`, `--state-error`, `--state-error-soft`, `--state-warning`, `--success`, `--state-select-bg`, `--state-select-bg-hover`, `--ui-font-size-xs`, `--ui-font-size-sm`, `--ui-font-size-md`, `--ui-font-size-title`, `--font-mono`, and `--editor-font`. Host CSS class names are implementation details and are not a plugin API.
+
 **Build output:** `dist/` will contain a subfolder named after the plugin directory (e.g., `dist/hello-world-panel/`) with `plugin.js` (self-contained bundle) and `plugin.json` (manifest with `entryModule: "./plugin.js"` adjusted for the deployable context). Copy that subfolder to Queryeer's per-user managed plugins directory and it works as-is.
 
 ### 4.7 Installation
@@ -648,7 +650,7 @@ context.queryEngines.onQueryEvent("mongodb", (event, execution) => {
 });
 ```
 
-Execution-context providers and query-event listeners are filtered by the supplied engine ID, so a contribution only observes and decorates that engine's executions. Providers may return `engineState`, query `options`, or both. Returned `options` replace the existing options object, so spread `context.options` when returning options to preserve values such as `maxRows` and `timeoutMs`. The provider also decorates `queryEngines.invoke` calls that include a `fileId` and object payload without an explicit `engineState`. `queryEngines.invoke` uses the host's backend-health checks and vault-unlock retry. Registration methods return `Disposable`; plugins should dispose registrations during deactivation if they manage a shorter lifecycle. External plugins are loaded once at startup and are not hot-reloaded.
+Execution-context providers and query-event listeners are filtered by the supplied engine ID, so a contribution only observes and decorates that engine's executions. Providers may return `engineState`, query `options`, or both. Returned `options` replace the existing options object, so spread `context.options` when returning options to preserve values such as `maxRows` and `timeoutMs`. The provider also decorates `queryEngines.invoke` calls that include a `fileId` and object payload without an explicit `engineState`. `queryEngines.invoke` resolves directly to the backend provider's result value; only raw protocol consumers see that value nested in the response envelope. It uses the host's backend-health checks and vault-unlock retry. Registration methods return `Disposable`; plugins should dispose registrations during deactivation if they manage a shorter lifecycle. External plugins are loaded once at startup and are not hot-reloaded.
 
 ### 7.9 Quick Commands (Command Palette)
 
