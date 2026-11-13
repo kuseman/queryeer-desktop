@@ -87,6 +87,7 @@ export type SettingsRegistry = SettingsContributionRegistry & {
   getValue: <T = unknown>(settingId: string) => T | undefined;
   getAllValues: () => Readonly<Record<string, unknown>>;
   subscribe: (listener: () => void) => () => void;
+  open: (settingId?: string) => void;
 };
 
 export type CollectionSettingsListItem = {

@@ -3,6 +3,7 @@ import { SettingsService } from "../../renderer/settings/settings-service";
 
 let coreSettingsService: SettingsService | null = null;
 let coreSettingsServiceReady = false;
+let pendingOpenRequest: { settingId?: string } | null = null;
 const coreSettingsServiceSubscribers = new Set<(service: SettingsService) => void>();
 
 export async function initializeCoreSettingsService(registry: SettingsContributionRegistry): Promise<SettingsService> {
@@ -25,6 +26,15 @@ export async function initializeCoreSettingsService(registry: SettingsContributi
     coreSettingsServiceReady = true;
     for (const subscriber of coreSettingsServiceSubscribers) {
       subscriber(coreSettingsService);
+    }
+  }
+  if (pendingOpenRequest) {
+    const { settingId } = pendingOpenRequest;
+    pendingOpenRequest = null;
+    if (settingId) {
+      coreSettingsService.openModalForSetting(settingId);
+    } else {
+      coreSettingsService.openModal();
     }
   }
   return coreSettingsService;
@@ -73,4 +83,16 @@ export function subscribeEffectiveSettings(listener: () => void): () => void {
     unsubscribeReady();
     unsubscribeValues?.();
   };
+}
+
+export function openCoreSettings(settingId?: string): void {
+  if (!coreSettingsServiceReady || !coreSettingsService) {
+    pendingOpenRequest = { settingId };
+    return;
+  }
+  if (settingId) {
+    coreSettingsService.openModalForSetting(settingId);
+  } else {
+    coreSettingsService.openModal();
+  }
 }
