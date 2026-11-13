@@ -68,8 +68,11 @@ export function SettingsModalHost(): JSX.Element | null {
       return;
     }
     if (requestedSettingId) {
-      setQueryInput("");
-      setQuery("");
+      if (queryInput.length > 0 || query.length > 0) {
+        setQueryInput("");
+        setQuery("");
+        return;
+      }
       const targetNodeKey = findNodeKeyBySettingId(tree, requestedSettingId);
       if (targetNodeKey) {
         setSelectedNodeKey(targetNodeKey);
@@ -95,7 +98,7 @@ export function SettingsModalHost(): JSX.Element | null {
         setSelectedNodeKey(firstNodeKey);
       }
     }
-  }, [definitions, requestedSettingId, selectedNodeKey, tree, isOpen, service]);
+  }, [definitions, requestedSettingId, selectedNodeKey, tree, isOpen, service, query, queryInput]);
 
   useEffect(() => {
     if (!isOpen || !service) {
