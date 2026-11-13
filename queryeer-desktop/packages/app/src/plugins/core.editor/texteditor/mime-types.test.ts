@@ -18,10 +18,27 @@ describe("text editor mime type registrations", () => {
     expect(resolveMonacoLanguageId("application/sql")).toBe("sql");
     expect(resolveMonacoLanguageId("text/markdown")).toBe("markdown");
 
-    registerMonacoLanguageIdForMimeType("application/x-test-flow", "qflow");
+    const registration = registerMonacoLanguageIdForMimeType("application/x-test-flow", "qflow");
     expect(resolveMonacoLanguageId("application/x-test-flow")).toBe("qflow");
+    registration.dispose();
+    expect(resolveMonacoLanguageId("application/x-test-flow")).toBe("plaintext");
 
     expect(resolveMonacoLanguageId("image/png")).toBe("plaintext");
+  });
+
+  it("preserves newer language registrations when older registrations are disposed", () => {
+    const first = registerMonacoLanguageIdForMimeType("application/x-stacked", "json");
+    const second = registerMonacoLanguageIdForMimeType("application/x-stacked", "javascript");
+
+    first.dispose();
+    expect(resolveMonacoLanguageId("application/x-stacked")).toBe("javascript");
+    second.dispose();
+    expect(resolveMonacoLanguageId("application/x-stacked")).toBe("plaintext");
+  });
+
+  it("rejects blank language registrations", () => {
+    expect(() => registerMonacoLanguageIdForMimeType("", "json")).toThrow("non-empty");
+    expect(() => registerMonacoLanguageIdForMimeType("application/x-test", " ")).toThrow("non-empty");
   });
 
   it("registers resolver, capabilities and text categories", () => {

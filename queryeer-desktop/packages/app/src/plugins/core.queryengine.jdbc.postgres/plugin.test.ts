@@ -28,7 +28,8 @@ function createContext(): PluginContext
     fileMediator: { getActiveFileId: vi.fn() },
     files: { getFile: vi.fn() },
     settings: { registerSettings: vi.fn() },
-    jdbcDrivers: { registerDriver: vi.fn() }
+    jdbcDrivers: { registerDriver: vi.fn() },
+    queryEngines: { registerExecutionContextProvider: vi.fn(() => ({ dispose: vi.fn() })) }
   } as unknown as PluginContext;
 }
 
@@ -43,13 +44,18 @@ describe("coreQueryEngineJdbcPostgresPlugin", () => {
   });
 
   it("registers JDBC dialect on activation", () => {
-    coreQueryEngineJdbcPostgresPlugin.activate(createContext());
+    const context = createContext();
+    coreQueryEngineJdbcPostgresPlugin.activate(context);
 
     expect(registerJdbcDialect).toHaveBeenCalledWith(
       expect.objectContaining({
         dialectId: "postgres",
         supportsQueryPlan: true
       })
+    );
+    expect(context.queryEngines.registerExecutionContextProvider).toHaveBeenCalledWith(
+      "jdbc",
+      expect.any(Function)
     );
   });
 

@@ -1,8 +1,17 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import type { OutputContext } from "@queryeer/api/queryengine/OutputExtension";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import type { QueryScheduleState } from "@queryeer/api/queryengine/QueryEngineTypes.js";
-import { getQueryEditorStatusItems } from "@queryeer/api/queryengine/QueryEditorStatusExtension";
+import type { QueryEditorStatusItemContribution } from "@queryeer/api/queryengine/QueryEditorStatusExtension";
+import {
+  getQueryEditorStatusItems,
+  subscribeQueryEditorStatusItems
+} from "../query-editor-status-registry";
+import {
+  getRegisteredQueryExecutableEngines,
+  subscribeRegisteredQueryExecutableEngines
+} from "../engine-registration";
+import PluginErrorBoundary from "../../core.layout/PluginErrorBoundary";
 
 type Props = {
   outputContext: OutputContext;
@@ -10,6 +19,18 @@ type Props = {
   schedule?: QueryScheduleState | null;
   onStopSchedule?: () => void;
 };
+
+function QueryEditorStatusItem({
+  item,
+  file,
+  outputContext
+}: {
+  item: QueryEditorStatusItemContribution;
+  file: FileEntity | undefined;
+  outputContext: OutputContext;
+}): JSX.Element {
+  return <>{item.render({ fileId: file?.fileId ?? "", file, outputContext })}</>;
+}
 
 export function QueryEditorStatusBar({ outputContext, file, schedule, onStopSchedule }: Props): JSX.Element {
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -32,9 +53,21 @@ export function QueryEditorStatusBar({ outputContext, file, schedule, onStopSche
     ? (context.metrics?.rowCount ?? context.fetchedRowCount)
     : context.fetchedRowCount;
 
-  const statusItems = useMemo(() => getQueryEditorStatusItems(), []);
-  const leftItems = statusItems.filter((i) => (i.alignment ?? "left") === "left");
-  const rightItems = statusItems.filter((i) => i.alignment === "right");
+  const statusItems = useSyncExternalStore(
+    subscribeQueryEditorStatusItems,
+    getQueryEditorStatusItems,
+    getQueryEditorStatusItems
+  );
+  const engineRegistrations = useSyncExternalStore(
+    subscribeRegisteredQueryExecutableEngines,
+    getRegisteredQueryExecutableEngines,
+    getRegisteredQueryExecutableEngines
+  );
+  const engineId = file?.engineBinding?.engineId
+    ?? engineRegistrations.find((entry) => entry.mimeTypes.includes(file?.mimeType ?? ""))?.engineId;
+  const applicableItems = statusItems.filter((item) => !item.engineId || item.engineId === engineId);
+  const leftItems = applicableItems.filter((i) => (i.alignment ?? "left") === "left");
+  const rightItems = applicableItems.filter((i) => i.alignment === "right");
   const nextRunSeconds = schedule?.nextRunAtMs !== undefined
     ? Math.max(0, Math.ceil((schedule.nextRunAtMs - nowMs) / 1000))
     : null;
@@ -60,14 +93,18 @@ export function QueryEditorStatusBar({ outputContext, file, schedule, onStopSche
         ) : null}
         {leftItems.map((item) => (
           <span key={item.id} className="query-output-status-item">
-            {item.render({ fileId: file?.fileId ?? "", file, outputContext: context })}
+            <PluginErrorBoundary pluginId={item.id}>
+              <QueryEditorStatusItem item={item} file={file} outputContext={context} />
+            </PluginErrorBoundary>
           </span>
         ))}
       </div>
       <div className="query-output-status-bar-right">
         {rightItems.map((item) => (
           <span key={item.id} className="query-output-status-item">
-            {item.render({ fileId: file?.fileId ?? "", file, outputContext: context })}
+            <PluginErrorBoundary pluginId={item.id}>
+              <QueryEditorStatusItem item={item} file={file} outputContext={context} />
+            </PluginErrorBoundary>
           </span>
         ))}
       </div>

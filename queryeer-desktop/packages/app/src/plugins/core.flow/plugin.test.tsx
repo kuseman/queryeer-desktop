@@ -4,6 +4,7 @@ import type { PluginContext } from "@queryeer/api/plugin/Plugin";
 import {
   FLOW_DOCUMENT_EDITOR_ID,
   FLOW_DOCUMENT_EXTENSION,
+  FLOW_MONACO_LANGUAGE_ID,
   FLOW_DOCUMENT_MIME_TYPE
 } from "@queryeer/api/flow/constants";
 import { coreFlowPlugin } from "./plugin";
@@ -179,6 +180,9 @@ function createContext(): PluginContext {
       getActiveEditor: vi.fn(() => null),
       onActiveEditorChanged: vi.fn(() => ({ dispose: vi.fn() }))
     },
+    editorLanguages: {
+      registerMimeType: vi.fn(() => ({ dispose: vi.fn() }))
+    },
     contextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
     tableOutputContextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
     jdbcTreeContextMenu: { registerContribution: vi.fn(), unregisterContribution: vi.fn(), getItemsForNode: vi.fn() },
@@ -212,6 +216,10 @@ describe("core.flow plugin", () => {
     expect(context.files.capabilities.registerPreferredExtension).toHaveBeenCalledWith(
       FLOW_DOCUMENT_MIME_TYPE,
       FLOW_DOCUMENT_EXTENSION
+    );
+    expect(context.editorLanguages.registerMimeType).toHaveBeenCalledWith(
+      FLOW_DOCUMENT_MIME_TYPE,
+      FLOW_MONACO_LANGUAGE_ID
     );
     expect(context.layout.registerEditor).toHaveBeenCalledWith(
       expect.objectContaining({

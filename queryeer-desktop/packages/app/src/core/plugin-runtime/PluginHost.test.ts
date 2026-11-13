@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Plugin } from "@queryeer/api/plugin/Plugin";
+import type { Plugin, PluginContext } from "@queryeer/api/plugin/Plugin";
 import { PluginHost } from "./PluginHost";
 
 describe("PluginHost JDBC driver contexts", () => {
@@ -29,5 +29,33 @@ describe("PluginHost JDBC driver contexts", () => {
       { dialectId: "one", ownerPluginId: "plugin.one" },
       { dialectId: "two", ownerPluginId: "plugin.two" }
     ]);
+  });
+
+  it("provides external-engine host services to activating plugins", async () => {
+    const host = new PluginHost({
+      fileWatcher: {
+        watch: async () => ({ subscriptionId: "test", unsubscribe: async () => {} }),
+        mutePath: async () => {}
+      }
+    });
+    let context: PluginContext | undefined;
+    host.register({
+      manifest: { id: "plugin.engine", name: "Engine", version: "1.0.0", kind: "feature" },
+      activate: (value) => {
+        context = value;
+      }
+    });
+
+    await host.start();
+
+    expect(context?.queryEngines.registerEngine).toBeTypeOf("function");
+    expect(context?.queryEngines.invoke).toBeTypeOf("function");
+    expect(context?.queryEngines.registerExecutionContextProvider).toBeTypeOf("function");
+    expect(context?.queryEngines.onQueryEvent).toBeTypeOf("function");
+    expect(context?.queryEngines.registerEditorStatusItem).toBeTypeOf("function");
+    expect(context?.settings.getValue).toBeTypeOf("function");
+    expect(context?.settings.subscribe).toBeTypeOf("function");
+    expect(context?.editorLanguages.registerMimeType).toBeTypeOf("function");
+    expect(context?.components.PasswordFieldInput).toBeTypeOf("function");
   });
 });

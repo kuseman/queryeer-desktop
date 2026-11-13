@@ -121,7 +121,10 @@ function createContext(file?: FileEntity) {
       listSettingsContributions: vi.fn(() => []),
       listSettingsDefinitions: vi.fn(() => []),
       getAdvancedRenderer: vi.fn(),
-      getAdvancedValidator: vi.fn()
+      getAdvancedValidator: vi.fn(),
+      getValue: vi.fn(),
+      getAllValues: vi.fn(() => ({})),
+      subscribe: vi.fn(() => () => {})
     },
     quickcommand: { registerProvider: vi.fn() },
     contextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
@@ -141,7 +144,7 @@ function createContext(file?: FileEntity) {
       onActiveEditorChanged: vi.fn(() => ({ dispose: vi.fn() }))
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    components: { FrameworkEditor: vi.fn() as any },
+    components: { FrameworkEditor: vi.fn() as any, PasswordFieldInput: vi.fn() as any },
     about: { registerChangelog: vi.fn() },
     notifications: {
       notify: vi.fn(),
@@ -154,6 +157,8 @@ function createContext(file?: FileEntity) {
       clearAll: vi.fn(),
       subscribe: vi.fn(() => () => {})
     },
+    queryEngines: { registerEngine: vi.fn(), invoke: vi.fn(), registerExecutionContextProvider: vi.fn(), onQueryEvent: vi.fn(), registerEditorStatusItem: vi.fn() },
+    editorLanguages: { registerMimeType: vi.fn(() => ({ dispose: vi.fn() })) },
     assistant: {
       registerContextContribution: vi.fn(() => () => {}),
       registerToolContribution: vi.fn(() => () => {}),

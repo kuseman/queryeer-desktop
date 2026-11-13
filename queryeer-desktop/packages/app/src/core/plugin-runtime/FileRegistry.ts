@@ -40,6 +40,7 @@ export class FileRegistry {
   private readonly mimeResolvers: MimeResolver[] = [];
   private readonly editorResolvers: EditorResolver[] = [];
   private readonly mimeCapabilities = new Map<string, Set<MimeCapability>>();
+  private readonly mimeCapabilityRegistrations = new Map<string, { count: number; wasPresent: boolean }>();
   private readonly mimeLabels = new Map<string, string>();
   private readonly preferredExtensionsByMimeType = new Map<string, string>();
   private readonly preferredNewFileMimeTypes = new Map<string, number>();
@@ -111,9 +112,43 @@ export class FileRegistry {
           set = new Set();
           this.mimeCapabilities.set(mimeType, set);
         }
-        for (const cap of capabilities) {
+        const uniqueCapabilities = [...new Set(capabilities)];
+        for (const cap of uniqueCapabilities) {
+          const key = `${mimeType}\0${cap}`;
+          const registration = this.mimeCapabilityRegistrations.get(key);
+          if (registration) {
+            registration.count += 1;
+          } else {
+            this.mimeCapabilityRegistrations.set(key, { count: 1, wasPresent: set.has(cap) });
+          }
           set.add(cap);
         }
+        let disposed = false;
+        return {
+          dispose: () => {
+            if (disposed) {
+              return;
+            }
+            disposed = true;
+            for (const cap of uniqueCapabilities) {
+              const key = `${mimeType}\0${cap}`;
+              const registration = this.mimeCapabilityRegistrations.get(key);
+              if (!registration) {
+                continue;
+              }
+              registration.count -= 1;
+              if (registration.count === 0) {
+                this.mimeCapabilityRegistrations.delete(key);
+                if (!registration.wasPresent) {
+                  set.delete(cap);
+                }
+              }
+            }
+            if (set.size === 0) {
+              this.mimeCapabilities.delete(mimeType);
+            }
+          }
+        };
       },
       hasCapability: (mimeType, capability) => {
         const set = this.mimeCapabilities.get(mimeType);

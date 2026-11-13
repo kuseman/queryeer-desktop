@@ -1,4 +1,5 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
+import type { Disposable } from "@queryeer/api/editor/EditorApi";
 import {
   FLOW_DOCUMENT_EDITOR_ID,
   FLOW_DOCUMENT_EXTENSION,
@@ -7,7 +8,6 @@ import {
 } from "@queryeer/api/flow/constants";
 import { getEditorRegistryHost, getOutlineRegistry } from "../../core/plugin-runtime/ExtensionRegistry";
 import { setFilesRegistry } from "../core.commands/files-registry-accessor";
-import { registerMonacoLanguageIdForMimeType } from "../core.editor/texteditor/mime-types";
 import { setupQflowLanguage } from "./qflow-language";
 import { FlowIcon } from "./FlowIcon";
 import { FlowEditorComponent, flowTextRegistry } from "./FlowEditorComponent";
@@ -18,6 +18,8 @@ import {
   FLOW_ENVIRONMENTS_SETTING_ID
 } from "./flow-environment";
 import { getCoreSettingsService } from "../core.settings/service";
+
+let languageRegistration: Disposable | undefined;
 
 export const coreFlowPlugin: Plugin = {
   manifest: {
@@ -48,7 +50,11 @@ export const coreFlowPlugin: Plugin = {
         ? FLOW_DOCUMENT_MIME_TYPE
         : undefined;
     });
-    registerMonacoLanguageIdForMimeType(FLOW_DOCUMENT_MIME_TYPE, FLOW_MONACO_LANGUAGE_ID);
+    languageRegistration?.dispose();
+    languageRegistration = context.editorLanguages.registerMimeType(
+      FLOW_DOCUMENT_MIME_TYPE,
+      FLOW_MONACO_LANGUAGE_ID
+    );
     context.files.mimeIcons.registerMimeIcon({
       moduleId: "core.flow",
       mimeType: FLOW_DOCUMENT_MIME_TYPE,
@@ -132,5 +138,9 @@ export const coreFlowPlugin: Plugin = {
     });
 
     void setupQflowLanguage();
+  },
+  deactivate: () => {
+    languageRegistration?.dispose();
+    languageRegistration = undefined;
   }
 };

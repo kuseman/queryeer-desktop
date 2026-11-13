@@ -24,7 +24,7 @@ import type {
   AdvancedSettingsValidator,
   SettingDefinition,
   SettingsContribution,
-  SettingsRegistry
+  SettingsContributionRegistry
 } from "@queryeer/api/settings/SettingsExtension";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import type { FilesRegistry } from "@queryeer/api/files/FilesRegistry";
@@ -663,7 +663,7 @@ export class ExtensionRegistry {
     };
   }
 
-  public createSettingsRegistry(): SettingsRegistry {
+  public createSettingsRegistry(): SettingsContributionRegistry {
     return {
       registerSettings: (contribution) => {
         for (const setting of contribution.settings) {

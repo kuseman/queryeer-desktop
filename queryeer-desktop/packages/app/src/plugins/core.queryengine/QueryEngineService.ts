@@ -1,5 +1,5 @@
 import { BackendNotReadyError } from "@queryeer/api/backend/BackendNotReadyError";
-import type { QueryExecuteOptions, QueryResultCell } from "@queryeer/api/backend/Types.js";
+import type { EngineInvokeParams, QueryExecuteOptions, QueryResultCell } from "@queryeer/api/backend/Types.js";
 import type { Column } from "@queryeer/api/queryengine/OutputExtension.js";
 import type { CancelRequestOptions, CollectedResultSet, CollectedResults, ExecuteRequestOptions, QueryScheduleState, ScheduleRequestOptions } from "@queryeer/api/queryengine/QueryEngineTypes.js";
 import { getCoreSecurityService } from "../core.security/service";
@@ -27,13 +27,6 @@ type ExecuteParams = {
   options?: QueryExecuteOptions;
   targetOutputSessionId?: string;
   interactiveSecurity?: boolean;
-};
-
-type EngineInvokeParams = {
-  engineId: string;
-  fileId?: string;
-  action: string;
-  payload?: unknown;
 };
 
 type ExecuteRequestConsumeTarget = {

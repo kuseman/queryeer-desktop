@@ -36,10 +36,7 @@ vi.mock("../core.queryengine/symbol-action-template-registry", () => ({
 }));
 
 vi.mock("../core.queryengine/QueryEngineService", () => ({
-  getQueryEngineService: () => ({
-    registerExecutionContextProvider: mocks.registerExecutionContextProviderMock,
-    requestExecute: mocks.requestExecuteMock
-  })
+  getQueryEngineService: () => ({ requestExecute: mocks.requestExecuteMock })
 }));
 
 vi.mock("../core.queryengine/QueryViewStateStore", () => ({
@@ -144,6 +141,9 @@ function createContext(): PluginContext {
       registerConfirmDialog: vi.fn()
     },
     jdbcDrivers: { registerDriver: mocks.registerDriverMock },
+    queryEngines: {
+      registerExecutionContextProvider: mocks.registerExecutionContextProviderMock
+    }
   } as unknown as PluginContext;
 }
 
@@ -273,17 +273,9 @@ describe("coreQueryEngineJdbcSqlServerPlugin", () => {
       coreQueryEngineJdbcSqlServerPlugin.activate(context);
 
       expect(mocks.registerExecutionContextProviderMock).toHaveBeenCalledWith(
+        "jdbc",
         expect.any(Function)
       );
-    });
-
-    it("returns undefined for non-JDBC engines", () => {
-      const context = createContext();
-      coreQueryEngineJdbcSqlServerPlugin.activate(context);
-
-      const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]![0];
-      const result = provider({ engineId: "payloadbuilder", fileId: "file-1" });
-      expect(result).toBeUndefined();
     });
 
     it("returns undefined when file has no sqlserver dialect", () => {
@@ -294,7 +286,7 @@ describe("coreQueryEngineJdbcSqlServerPlugin", () => {
       });
       coreQueryEngineJdbcSqlServerPlugin.activate(context);
 
-      const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]![0];
+      const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]![1];
       const result = provider({ engineId: "jdbc", fileId: "file-1" });
       expect(result).toBeUndefined();
     });
@@ -309,7 +301,7 @@ describe("coreQueryEngineJdbcSqlServerPlugin", () => {
       mocks.getCoreSettingsValueMock.mockReturnValue("suppress");
       coreQueryEngineJdbcSqlServerPlugin.activate(context);
 
-      const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]![0];
+      const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]![1];
       const result = provider({ engineId: "jdbc", fileId: "file-1" });
       expect(result).toMatchObject({
         options: {
@@ -328,7 +320,7 @@ describe("coreQueryEngineJdbcSqlServerPlugin", () => {
       mocks.readViewStateMock.mockReturnValue({ includeActualPlan: true });
       coreQueryEngineJdbcSqlServerPlugin.activate(context);
 
-      const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]![0];
+      const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]![1];
       const result = provider({ engineId: "jdbc", fileId: "file-1", options: { intent: "plan.estimated" } });
       expect(result?.options?.intent).toBe("plan.estimated");
     });
@@ -342,7 +334,7 @@ describe("coreQueryEngineJdbcSqlServerPlugin", () => {
       mocks.readViewStateMock.mockReturnValue({ includeActualPlan: false });
       coreQueryEngineJdbcSqlServerPlugin.activate(context);
 
-      const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]![0];
+      const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]![1];
       const result = provider({ engineId: "jdbc", fileId: "file-1" });
       expect(result?.options?.intent).toBeUndefined();
     });

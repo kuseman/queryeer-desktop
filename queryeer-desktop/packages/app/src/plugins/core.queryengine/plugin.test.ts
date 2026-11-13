@@ -220,7 +220,10 @@ function createContext(fileOrFiles: FileEntity | FileEntity[]): PluginContext {
       listSettingsContributions: vi.fn(() => []),
       listSettingsDefinitions: vi.fn(() => []),
       getAdvancedRenderer: vi.fn(),
-      getAdvancedValidator: vi.fn()
+      getAdvancedValidator: vi.fn(),
+      getValue: vi.fn(),
+      getAllValues: vi.fn(() => ({})),
+      subscribe: vi.fn(() => () => {})
     },
     quickcommand: { registerProvider: vi.fn() },
     contextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
@@ -240,10 +243,12 @@ function createContext(fileOrFiles: FileEntity | FileEntity[]): PluginContext {
       onActiveEditorChanged: vi.fn(() => ({ dispose: vi.fn() }))
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    components: { FrameworkEditor: vi.fn() as any },
+    components: { FrameworkEditor: vi.fn() as any, PasswordFieldInput: vi.fn() as any },
     about: { registerChangelog: vi.fn() },
     notifications: createNotificationMock(),
     assistant: createAssistantRegistryMock(),
+    queryEngines: { registerEngine: vi.fn(), invoke: vi.fn(), registerExecutionContextProvider: vi.fn(), onQueryEvent: vi.fn(), registerEditorStatusItem: vi.fn() },
+    editorLanguages: { registerMimeType: vi.fn(() => ({ dispose: vi.fn() })) },
     payloadbuilderCatalog: { registerContribution: vi.fn() }
   };
 }

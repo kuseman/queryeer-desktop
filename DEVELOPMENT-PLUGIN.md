@@ -1,6 +1,6 @@
 # Developing Queryeer Plugins
 
-Queryeer is an extensible desktop application for data querying and exploration. Plugins can extend both the **frontend** (Electron + React + TypeScript) and the **backend** (Java 21+), or one side alone.
+Queryeer is an extensible desktop application for data querying and exploration. Plugins can extend both the **frontend** (Electron + React + TypeScript) and the **backend** (Java 25+), or one side alone.
 
 ---
 
@@ -46,7 +46,7 @@ Queryeer runs in three co-operating processes:
 | Layer | Technology | Plugin Interface |
 |-------|-----------|-----------------|
 | Renderer | TypeScript, React 18 | `Plugin` (`@queryeer/api`) |
-| Backend | Java 21+, Maven | `BackendPlugin` (`backend-api`) |
+| Backend | Java 25+, Maven | `BackendPlugin` (`backend-api`) |
 | IPC | NDJSON over stdio | Contract types in `@queryeer/api` / `backend-contract` |
 
 ### The `@queryeer/api` Package
@@ -56,7 +56,7 @@ Frontend plugins depend on the [`@queryeer/api`](https://www.npmjs.com/package/@
 ```json
 {
   "devDependencies": {
-    "@queryeer/api": "^0.10.0"
+    "@queryeer/api": "^0.19.0"
   }
 }
 ```
@@ -93,7 +93,7 @@ Every plugin **must** have a `plugin.json` file at its root. The schema is versi
   "frontend": {
     "entryModule": "./module.js",
     "moduleFormat": "esm",
-    "apiVersion": "^0.10.0"
+    "apiVersion": "^0.19.0"
   },
   "packaging": {
     "layout": {
@@ -241,7 +241,7 @@ The `package.json` should include esbuild and a build script:
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@queryeer/api": "^0.10.0",
+    "@queryeer/api": "^0.19.0",
     "@types/react": "^18.3.0",
     "esbuild": "^0.23.0",
     "react": "^18.3.1",
@@ -560,6 +560,7 @@ All contribution points are accessed through the `PluginContext` object passed t
 |--------|------|-------------|
 | `editors.getActiveEditor()` | `EditorHandle \| null` | Get active editor handle |
 | `editors.onActiveEditorChanged(cb)` | `Disposable` | Subscribe to editor changes |
+| `editorLanguages.registerMimeType(mime, languageId)` | `Disposable` | Map a MIME type to a Monaco language; dispose it during plugin deactivation |
 
 ### 7.3 Files & MIME
 
@@ -603,21 +604,64 @@ All contribution points are accessed through the `PluginContext` object passed t
 | `settings.registerSettings(s)` | `SettingDefinition[]` | Register settings |
 | `settings.registerAdvancedRenderer(r)` | `AdvancedRenderer` | Custom settings UI |
 | `settings.registerAdvancedValidator(v)` | `AdvancedValidator` | Settings validation |
+| `settings.getValue<T>(id)` | `T \| undefined` | Read the current effective value without resolving secrets; returns `undefined` until the settings service is ready |
+| `settings.getAllValues()` | `Readonly<Record<string, unknown>>` | Snapshot all effective values |
+| `settings.subscribe(cb)` | `() => void` | Subscribe to effective-value changes; call the returned function during deactivation |
 
-### 7.8 Quick Commands (Command Palette)
+Use `context.components.PasswordFieldInput` in advanced settings renderers for credentials. The component stores plaintext through the host vault and reports only a `SecretRefValue` to the plugin.
+
+The settings service may still be initializing while a plugin's `activate` function runs. Plugins that need a setting during activation should register `settings.subscribe` first and read the value from the callback; the callback runs when settings become ready and on later changes.
+
+### 7.8 Native Query Engines
+
+Frontend plugins can bind MIME types to a backend query engine registered under the same engine ID:
+
+```tsx
+const engineRegistration = context.queryEngines.registerEngine({
+  engineId: "mongodb",
+  mimeTypes: ["application/vnd.queryeer.mongodb"]
+});
+
+const databases = await context.queryEngines.invoke<string[]>({
+  engineId: "mongodb",
+  action: "mongodb.databases"
+}, { silent: true });
+
+context.queryEngines.registerEditorStatusItem({
+  id: "com.example.mongodb.connection",
+  engineId: "mongodb",
+  alignment: "right",
+  render: ({ file }) => <span>{file?.engineBinding?.connectionId ?? "Not connected"}</span>
+});
+
+context.queryEngines.registerExecutionContextProvider("mongodb", ({ fileId }) => ({
+  engineState: { connectionId: context.files.getFile(fileId)?.engineBinding?.connectionId }
+}));
+
+context.queryEngines.onQueryEvent("mongodb", (event, execution) => {
+  if (event.method === "queryengine.completed") {
+    const { engineState } = event.params as { engineState?: unknown };
+    // Persist completed engine state for execution.fileId when needed.
+  }
+});
+```
+
+Execution-context providers and query-event listeners are filtered by the supplied engine ID, so a contribution only observes and decorates that engine's executions. Providers may return `engineState`, query `options`, or both. Returned `options` replace the existing options object, so spread `context.options` when returning options to preserve values such as `maxRows` and `timeoutMs`. The provider also decorates `queryEngines.invoke` calls that include a `fileId` and object payload without an explicit `engineState`. `queryEngines.invoke` uses the host's backend-health checks and vault-unlock retry. Registration methods return `Disposable`; plugins should dispose registrations during deactivation if they manage a shorter lifecycle. External plugins are loaded once at startup and are not hot-reloaded.
+
+### 7.9 Quick Commands (Command Palette)
 
 | Method | Type | Description |
 |--------|------|-------------|
 | `quickcommand.registerProvider(p)` | `QuickCommandProvider` | Command palette items |
 
-### 7.9 Outline
+### 7.10 Outline
 
 | Method | Type | Description |
 |--------|------|-------------|
 | `outline.registerOutlineProvider(r)` | `OutlineProviderRegistration` | Outline/symbol provider |
 | `outline.registerSupplementaryOutlineProvider(r)` | `OutlineProviderRegistration` | Additional outline provider |
 
-### 7.10 Notifications
+### 7.11 Notifications
 
 | Method | Type | Description |
 |--------|------|-------------|
@@ -626,13 +670,13 @@ All contribution points are accessed through the `PluginContext` object passed t
 | `notifications.unreadCount()` | `number` | Unread count |
 | `notifications.markRead(id)` | `void` | Mark notification as read |
 
-### 7.10.1 JDBC Drivers
+### 7.12 JDBC Drivers
 
 JDBC dialect frontend plugins can register driver metadata through `jdbcDrivers.registerDriver(contribution)`. The common JDBC settings UI handles status, periodic update checks, notifications, and managed installation. The plugin host records the activating plugin as the contribution owner.
 
 The primary artifact uses Maven Central coordinates. Contributions may add typed, platform-constrained native companion archive declarations. Set `versionLockedToDriver: true` when an applicable companion must share the primary driver's lifecycle and derived release version; the UI keeps separate status rows but exposes one package action. Automatic downloads are currently allowlisted to Queryeer's builtin PostgreSQL, SQL Server, and SQLite contributions, and the main process replaces trusted metadata with canonical descriptors. For those trusted providers, duplicate runtime files are moved to recoverable provider-specific `disabled` folders before Java starts; retained version sets are exposed through `JdbcDriverStatus.disabledSets` and can be restored through the common settings UI. External contributions and companions remain visible but are manual-only. See [`documentation/JDBC_DRIVER_MANAGEMENT.md`](./documentation/JDBC_DRIVER_MANAGEMENT.md).
 
-### 7.11 Dialog
+### 7.13 Dialog
 
 | Method | Type | Description |
 |--------|------|-------------|
@@ -640,20 +684,20 @@ The primary artifact uses Maven Central coordinates. Contributions may add typed
 | `dialog.showOpenDialog(opts)` | `Promise<OpenResult>` | Open file/folder dialog |
 | `dialog.showSaveDialog(opts)` | `Promise<SaveResult>` | Save file dialog |
 
-### 7.12 Menu
+### 7.14 Menu
 
 | Method | Type | Description |
 |--------|------|-------------|
 | `menu.registerMenuItem(item)` | `MenuItemContribution` | Native menu item |
 | `menu.rebuildMenu()` | `Promise<void>` | Rebuild native menu |
 
-### 7.13 About
+### 7.15 About
 
 | Method | Type | Description |
 |--------|------|-------------|
 | `about.registerChangelog(entry)` | `PluginChangelogEntry` | Plugin changelog entry |
 
-### 7.14 Assistant (AI)
+### 7.16 Assistant (AI)
 
 | Method | Type | Description |
 |--------|------|-------------|
@@ -847,10 +891,10 @@ List `react`, `react-dom`, and `@queryeer/api` as **`peerDependencies`** — the
   "peerDependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "@queryeer/api": "^0.10.0"
+    "@queryeer/api": "^0.19.0"
   },
   "devDependencies": {
-    "@queryeer/api": "^0.10.0",
+    "@queryeer/api": "^0.19.0",
     "esbuild": "^0.23.0",
     "react": "^18.3.1",
     "typescript": "^5.5.0"
@@ -914,7 +958,7 @@ Version compatibility between plugins is not enforced beyond simple dependency I
 
 ### 10.4 Plugin Configuration UI
 
-There is no dedicated UI for users to enable/disable plugins or view plugin metadata. Plugin status can be monitored via the `backend.runtimeStatus` notification.
+The Plugin Manager shows installed external plugin metadata and supports local ZIP installation, enable/disable, and uninstall. Changes that affect loaded code are applied after restart. Backend activation status is also available through the `backend.runtimeStatus` notification.
 
 ### 10.5 Hot-Reload
 

@@ -1,11 +1,11 @@
-import type { SettingsRegistry } from "@queryeer/api/settings/SettingsExtension";
+import type { SettingsContributionRegistry } from "@queryeer/api/settings/SettingsExtension";
 import { SettingsService } from "../../renderer/settings/settings-service";
 
 let coreSettingsService: SettingsService | null = null;
 let coreSettingsServiceReady = false;
 const coreSettingsServiceSubscribers = new Set<(service: SettingsService) => void>();
 
-export async function initializeCoreSettingsService(registry: SettingsRegistry): Promise<SettingsService> {
+export async function initializeCoreSettingsService(registry: SettingsContributionRegistry): Promise<SettingsService> {
   if (!coreSettingsService) {
     coreSettingsService = new SettingsService({
       registry,
@@ -43,5 +43,34 @@ export function onCoreSettingsServiceInitialized(
   }
   return () => {
     coreSettingsServiceSubscribers.delete(listener);
+  };
+}
+
+export function getEffectiveSetting<T = unknown>(settingId: string): T | undefined {
+  return coreSettingsServiceReady ? coreSettingsService?.getValue(settingId) as T | undefined : undefined;
+}
+
+export function getAllEffectiveSettings(): Readonly<Record<string, unknown>> {
+  return coreSettingsServiceReady ? (coreSettingsService?.getAllValues() ?? {}) : {};
+}
+
+export function subscribeEffectiveSettings(listener: () => void): () => void {
+  let disposed = false;
+  let unsubscribeValues: (() => void) | undefined;
+  const unsubscribeReady = onCoreSettingsServiceInitialized((service) => {
+    if (disposed || unsubscribeValues) {
+      return;
+    }
+    unsubscribeValues = service.subscribe(listener);
+    listener();
+  });
+
+  return () => {
+    if (disposed) {
+      return;
+    }
+    disposed = true;
+    unsubscribeReady();
+    unsubscribeValues?.();
   };
 }

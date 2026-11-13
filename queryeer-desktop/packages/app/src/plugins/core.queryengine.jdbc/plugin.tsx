@@ -1,6 +1,5 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
 import type { LayoutToolbarContext } from "@queryeer/api/extensions/LayoutExtension";
-import { registerQueryExecutableEngine } from "../core.queryengine/engine-registration";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import { QUERY_PLAN_ARTIFACT_REQUEST, QUERY_PLAN_OUTPUT_ID as PLAN_OUTPUT_ID } from "../core.queryengine/query-plan/constants";
 import { getQueryViewStateStore } from "../core.queryengine/QueryViewStateStore";
@@ -42,7 +41,6 @@ import {
   JDBC_SCHEMA_GRAPH_EXTENSION,
   JDBC_SCHEMA_GRAPH_MIME_TYPE
 } from "./jdbc-schema-graph-constants";
-import { registerQueryEditorStatusItem } from "@queryeer/api/queryengine/QueryEditorStatusExtension";
 import { JdbcConnectionStatus } from "./JdbcConnectionStatus";
 import { getCommandContext } from "../core.commands/command-context-accessor";
 import { toQueryOutputSessionId } from "../core.queryengine/query-session";
@@ -114,7 +112,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       { name: "activeFile.metadata.core.queryengine.jdbc.sessionState", type: "string", description: "State of the JDBC session: 'alive', 'dead', or 'none'" },
     ]);
 
-    registerQueryExecutableEngine(context, {
+    context.queryEngines.registerEngine({
       engineId: "jdbc",
       mimeTypes: ["application/sql"]
     });
@@ -473,8 +471,8 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       }
     });
 
-    getQueryEngineService().registerExecutionContextProvider((params) => {
-      if (params.engineId !== "jdbc" || !params.fileId) {
+    context.queryEngines.registerExecutionContextProvider("jdbc", (params) => {
+      if (!params.fileId) {
         return undefined;
       }
 
@@ -504,11 +502,11 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       return { engineState };
     });
 
-    getQueryEngineService().onQueryEvent((event, executeContext) => {
+    context.queryEngines.onQueryEvent("jdbc", (event, executeContext) => {
       if (event.method !== "queryengine.completed") {
         return;
       }
-      if (executeContext?.engineId !== "jdbc" || !executeContext.fileId) {
+      if (!executeContext.fileId) {
         return;
       }
       const file = context.files.getFile(executeContext.fileId);
@@ -832,8 +830,9 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       }
     });
 
-    registerQueryEditorStatusItem({
+    context.queryEngines.registerEditorStatusItem({
       id: "core.queryengine.jdbc.connectionStatus",
+      engineId: "jdbc",
       alignment: "right",
       order: 100,
       render: ({ file }) => <JdbcConnectionStatus file={file} />
