@@ -104,6 +104,8 @@ Every plugin **must** have a `plugin.json` file at its root. The schema is versi
 }
 ```
 
+Backend plugins may use `backend.factoryClass` instead of `backend.entrypointClass`. The factory form is recommended when construction needs host services. When `backend.classpath` is present, both `root` and at least one `include` pattern are required; this matches backend manifest validation. The checked-in schema also describes trusted shared-runtime declarations used by builtin plugins. Runtime-only manifests are reserved for those builtins and are not an external plugin entrypoint. Compatibility fields such as `frontend.apiVersion` and `backend.minJavaVersion` are currently descriptive and are not yet enforced during discovery.
+
 | Property | Required | Description |
 |----------|----------|-------------|
 | `schemaVersion` | **yes** | Must be `1` |
