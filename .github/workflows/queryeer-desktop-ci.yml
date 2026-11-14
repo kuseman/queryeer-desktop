@@ -61,12 +61,25 @@ jobs:
       - name: Run desktop build
         run: npm run build
 
+      # The examples are built against the @queryeer/api in this commit, not the npm registry.
+      # Their range points at the version being released, which isn't published yet while the
+      # release workflow runs (e.g. on the "prepare for next development iteration" commit).
+      - name: Pack @queryeer/api from source
+        id: api-pack
+        shell: bash
+        working-directory: queryeer-desktop
+        run: |
+          npm run -w @queryeer/api build
+          mkdir -p "$RUNNER_TEMP/queryeer-api"
+          npm pack -w @queryeer/api --pack-destination "$RUNNER_TEMP/queryeer-api"
+          echo "tarball=$(ls "$RUNNER_TEMP"/queryeer-api/queryeer-api-*.tgz)" >> "$GITHUB_OUTPUT"
+
       - name: Build frontend example plugins
         run: |
           for dir in hello-world-panel custom-editor csv-exporter; do
             echo "::group::Building $dir"
             cd "${{ github.workspace }}/plugins-examples/$dir"
-            npm install --no-audit --no-fund --ignore-scripts
+            npm install --no-audit --no-fund --ignore-scripts --no-save "${{ steps.api-pack.outputs.tarball }}"
             npm run package
             echo "::endgroup::"
           done
@@ -89,9 +102,28 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: "24.22.1"
+          cache: npm
+          cache-dependency-path: queryeer-desktop/package-lock.json
 
       - name: Make Maven wrapper executable
         run: chmod +x ./queryeer-backend/mvnw
+
+      - name: Install desktop dependencies (for @queryeer/api)
+        working-directory: queryeer-desktop
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      # The examples are built against the @queryeer/api in this commit, not the npm registry.
+      # Their range points at the version being released, which isn't published yet while the
+      # release workflow runs (e.g. on the "prepare for next development iteration" commit).
+      - name: Pack @queryeer/api from source
+        id: api-pack
+        shell: bash
+        working-directory: queryeer-desktop
+        run: |
+          npm run -w @queryeer/api build
+          mkdir -p "$RUNNER_TEMP/queryeer-api"
+          npm pack -w @queryeer/api --pack-destination "$RUNNER_TEMP/queryeer-api"
+          echo "tarball=$(ls "$RUNNER_TEMP"/queryeer-api/queryeer-api-*.tgz)" >> "$GITHUB_OUTPUT"
 
       - name: Run backend clean install
         run: ./queryeer-backend/mvnw -f queryeer-backend/pom.xml clean install
@@ -102,7 +134,9 @@ jobs:
             echo "::group::Building $dir"
             cd "${{ github.workspace }}/plugins-examples/$dir"
             chmod +x backend/mvnw
-            if [ -f package.json ]; then
+            if grep -q '"@queryeer/api"' package.json 2>/dev/null; then
+              npm install --no-audit --no-fund --ignore-scripts --no-save "${{ steps.api-pack.outputs.tarball }}"
+            elif [ -f package.json ]; then
               npm install --no-audit --no-fund --ignore-scripts
             fi
             npm run package
