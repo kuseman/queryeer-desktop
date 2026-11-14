@@ -85,7 +85,8 @@ export function MongoConnectionsSettingsEditor({ value, readonly, setValue }: Pr
     if (!source) {
       return;
     }
-    const clone = { ...source, id: crypto.randomUUID(), connectionId: generateConnectionId() };
+    // Never share a secretRef between rows; editing one would overwrite the other.
+    const clone = { ...source, id: crypto.randomUUID(), connectionId: generateConnectionId(), authPassword: undefined };
     syncRows([...rows, clone], clone.id);
   };
 

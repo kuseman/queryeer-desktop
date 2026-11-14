@@ -122,7 +122,9 @@ export function KafkaConnectionsSettingsEditor({ value, readonly, setValue }: Pr
     const clone: Row = {
       ...source,
       id: crypto.randomUUID(),
-      connectionId: generateConnectionId()
+      connectionId: generateConnectionId(),
+      // Never share a secretRef between rows; editing one would overwrite the other.
+      saslJaasConfig: undefined
     };
     syncRows([...rows, clone], clone.id);
   };

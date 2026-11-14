@@ -70,7 +70,13 @@ export function PayloadbuilderEnvironmentsSettingsEditor({ value, readonly, setV
     onClone={(id) => {
       const source = rows.find((r) => r.id === id);
       if (!source) return;
-      const clone = { ...source, id: crypto.randomUUID(), envId: crypto.randomUUID() };
+      // Never share a secretRef between environments; editing one would overwrite the other.
+      const clone = {
+        ...source,
+        id: crypto.randomUUID(),
+        envId: crypto.randomUUID(),
+        variables: source.variables.map((v) => ({ ...v, id: crypto.randomUUID(), secretRef: undefined }))
+      };
       sync([...rows, clone]);
       setSelectedId(clone.id);
     }}
