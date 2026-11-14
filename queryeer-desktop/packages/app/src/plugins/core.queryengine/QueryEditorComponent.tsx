@@ -1146,6 +1146,12 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
         takePendingRequestForCurrentFile();
         return;
       }
+      if (pending && executingRef.current) {
+        // Meant for this (active) editor now, which is still starting a run: drop it instead of
+        // leaving it queued for a later run or a newly created editor.
+        service.discardExecuteRequest(pending);
+        return;
+      }
       handleExecuteRef.current();
     });
     const unsubCancel = service.onCancelRequest((options) => {
