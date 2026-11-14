@@ -25,7 +25,7 @@ runs:
 
     - name: Cache Electron binary
       if: inputs.mode == 'cache'
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.electron
         key: ${{ runner.os }}-electron-${{ steps.electron-version.outputs.version }}

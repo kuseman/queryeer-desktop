@@ -18,13 +18,13 @@ env:
 jobs:
   publish:
     name: Recover GitHub Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       actions: read
       contents: write
     steps:
       - name: Checkout release tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag_name }}
           fetch-depth: 0
@@ -59,7 +59,7 @@ jobs:
         run: node queryeer-desktop/packages/app/scripts/generate-changelog.mjs
 
       - name: Download release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           run-id: ${{ inputs.source_run_id }}
           github-token: ${{ github.token }}
@@ -68,7 +68,7 @@ jobs:
           merge-multiple: true
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ inputs.tag_name }}
           name: Queryeer ${{ env.QUERYEER_RELEASE_VERSION }}

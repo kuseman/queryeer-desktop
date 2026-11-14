@@ -27,12 +27,12 @@ concurrency:
 jobs:
   backend-verify:
     name: Backend Verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Refuse manual publish
         if: github.event_name == 'workflow_dispatch' && inputs.dry_run != true
@@ -80,11 +80,11 @@ jobs:
             os: macos-latest
             artifact-name: queryeer-macos
           - name: Linux
-            os: ubuntu-latest
+            os: ubuntu-24.04
             artifact-name: queryeer-linux
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -118,7 +118,7 @@ jobs:
           fi
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "24.22.1"
           cache: npm
@@ -179,7 +179,7 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "${apps[0]}"
 
       - name: Upload platform artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact-name }}
           path: |
@@ -191,14 +191,14 @@ jobs:
 
   publish-maven-central:
     name: Publish Maven Central
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: backend-verify
     permissions:
       actions: read
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Check previous release runs
         id: previous-release-runs
@@ -298,16 +298,16 @@ jobs:
 
   publish-npm:
     name: Publish npm Package
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: backend-verify
     permissions:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "24.22.1"
           registry-url: "https://registry.npmjs.org"
@@ -362,7 +362,7 @@ jobs:
 
   publish:
     name: Publish GitHub Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs:
       - build
       - publish-npm
@@ -370,7 +370,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -390,14 +390,14 @@ jobs:
         run: node queryeer-desktop/packages/app/scripts/generate-changelog.mjs
 
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: release-artifacts
           merge-multiple: true
 
       - name: Create GitHub release
         if: github.event_name == 'push'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: Queryeer ${{ env.QUERYEER_RELEASE_VERSION }}
