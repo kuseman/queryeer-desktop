@@ -1,4 +1,5 @@
 import type { Column } from "./OutputExtension.js";
+import type { Disposable } from "../editor/EditorApi.js";
 
 export type TableOutputSelectedCell = {
   rowIndex: number;
@@ -21,6 +22,10 @@ export type TableOutputContextMenuContext = {
   selection: TableOutputSelectionSnapshot;
   /** Full cell values keyed by row index for all columns on rows that intersect the selection. Populated by the table grid. */
   cellValuesByRow?: Record<number, unknown[]>;
+  /** The query file whose results the grid shows. Use it instead of the active file, which can differ with split editors. */
+  fileId?: string;
+  /** Engine the file is bound to (`engineBinding.engineId`) when the menu opened, if any. */
+  engineId?: string;
 };
 
 export type TableOutputContextMenuItem = {
@@ -38,6 +43,7 @@ export type TableOutputContextMenuProvider = {
 };
 
 export type TableOutputContextMenuRegistry = {
-  registerProvider(provider: TableOutputContextMenuProvider): void;
+  /** Registers a provider (replacing one with the same id). Disposing removes it unless it was replaced since. */
+  registerProvider(provider: TableOutputContextMenuProvider): Disposable;
   unregisterProvider(id: string): void;
 };

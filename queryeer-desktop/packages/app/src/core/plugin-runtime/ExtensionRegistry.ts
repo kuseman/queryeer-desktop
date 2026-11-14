@@ -616,6 +616,14 @@ export class ExtensionRegistry {
         } else {
           this.tableOutputContextMenuProviders.push(provider);
         }
+        return {
+          dispose: () => {
+            const idx = this.tableOutputContextMenuProviders.indexOf(provider);
+            if (idx !== -1) {
+              this.tableOutputContextMenuProviders.splice(idx, 1);
+            }
+          }
+        };
       },
       unregisterProvider: (id: string) => {
         const idx = this.tableOutputContextMenuProviders.findIndex((p) => p.id === id);

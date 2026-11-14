@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import type { FilesRegistry } from "@queryeer/api/files/FilesRegistry";
+import { setFilesRegistry } from "../core.commands/files-registry-accessor";
 import {
   buildClipboardGridFromRows,
   computeNextSelectionFromClick,
@@ -11,7 +13,30 @@ import {
   isTableViewStateForSession,
   toGridColumns,
   toCsvScalar,
+  resolveTableOutputFileInfo,
 } from "./plugin";
+
+describe("table output context menu file info", () => {
+  afterEach(() => {
+    setFilesRegistry(null as unknown as FilesRegistry);
+  });
+
+  it("names the grid's file and its bound engine", () => {
+    setFilesRegistry({
+      getFile: (fileId: string) => (fileId === "file-1"
+        ? { fileId, engineBinding: { engineId: "mongodb", connectionId: "c1" } }
+        : fileId === "file-2" ? { fileId } : undefined)
+    } as unknown as FilesRegistry);
+
+    expect(resolveTableOutputFileInfo("file-1")).toEqual({ fileId: "file-1", engineId: "mongodb" });
+    expect(resolveTableOutputFileInfo("file-2")).toEqual({ fileId: "file-2" });
+    expect(resolveTableOutputFileInfo(undefined)).toEqual({});
+  });
+
+  it("still names the file when no files registry is available", () => {
+    expect(resolveTableOutputFileInfo("file-1")).toEqual({ fileId: "file-1" });
+  });
+});
 
 describe("table output split view state", () => {
   it("isolates result state by output session and result set", () => {

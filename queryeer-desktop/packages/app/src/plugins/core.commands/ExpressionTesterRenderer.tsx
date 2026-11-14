@@ -49,6 +49,8 @@ function buildMergedContext(file: FileEntity | undefined, liveCtx: ContextValues
       isSingleRowSelection: false,
       columns: [] as { name: string; type: string }[],
       columnNames: [] as string[],
+      fileId: "",
+      engineId: "",
     },
   };
 }
