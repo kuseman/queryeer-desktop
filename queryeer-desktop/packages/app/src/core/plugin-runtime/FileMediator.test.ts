@@ -36,6 +36,7 @@ function setupHarness(options?: {
   changeDebounceMs?: number;
   readFile?: (uri: string) => Promise<{ success: boolean; content: string }>;
   onFileChanged?: (file: FileEntity, text: string) => void;
+  seedFileContent?: (fileId: string, content: string) => void;
 }): Harness {
   const registry = new FileRegistry({
     getEditors: () => options?.editors ?? []
@@ -57,6 +58,7 @@ function setupHarness(options?: {
     readFile,
     resolveFileContent,
     onFileChanged: options?.onFileChanged,
+    seedFileContent: options?.seedFileContent,
     changeDebounceMs: options?.changeDebounceMs ?? 50,
     showSaveDialog
   });
@@ -180,6 +182,23 @@ describe("FileMediator.openFile", () => {
 });
 
 describe("FileMediator.createUntitledFile", () => {
+  it("seeds initial content for the new file", async () => {
+    const seedFileContent = vi.fn();
+    const { mediator } = setupHarness({ seedFileContent });
+
+    const created = await mediator.createUntitledFile({ extension: "sql", mimeType: "application/sql", initialContent: "select 1" });
+    await mediator.createUntitledFile({ extension: "sql", mimeType: "application/sql" });
+
+    expect(seedFileContent).toHaveBeenCalledTimes(1);
+    expect(seedFileContent).toHaveBeenCalledWith(created.fileId, "select 1");
+  });
+
+  it("rejects initial content when the host cannot seed it", async () => {
+    const { mediator } = setupHarness();
+
+    await expect(mediator.createUntitledFile({ extension: "sql", initialContent: "x" })).rejects.toThrow("initialContent");
+  });
+
   it("creates Untitled<n> using current counter and extension", async () => {
     const { mediator } = setupHarness();
 

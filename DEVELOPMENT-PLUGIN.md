@@ -698,6 +698,22 @@ context.queryEngines.onQueryEvent("mongodb", (event, execution) => {
 
 Editor header items render in an engine-scoped, wrapping strip above the text editor. Return `null` when an item does not apply to the current file; the strip is omitted when no items render content. Users can collapse the strip independently for each file. An item's optional `title` is shown while the strip is collapsed. Host keybindings continue to work inside header controls. A plugin control that needs to own its keys can opt out locally with `data-keybinding-scope="input"`; apply it only to the smallest control subtree that needs the override.
 
+To open a new query tab with generated text and optionally run it, seed the file with `initialContent` and request the run with `queryEngines.execute`:
+
+```ts
+const file = await context.fileMediator.createUntitledFile({
+  mimeType: "application/vnd.queryeer.mongodb",
+  extension: "mongo",
+  title: "orders",
+  initialContent: text
+});
+await context.fileMediator.bindEngine(file.fileId, "mongodb", connectionId);
+context.files.setEditorState(file.fileId, "mongodb.database", { connectionId, database });
+context.queryEngines.execute({ fileId: file.fileId, text });
+```
+
+`initialContent` is applied when the file's editor model is created and leaves the file dirty, so it does not depend on the tab being active. `queryEngines.execute` runs the file now if its query editor shows it, otherwise as soon as the editor switches to it; there is no need to wait for the tab to mount. Pass `text` for a file you just created, since the editor content may not be loaded when the run starts; without `text` the file's current content (or selection) is run. Only one run request is pending at a time, so a later request replaces one that no editor has picked up yet. Bind the engine and set editor state before calling `execute`, since the execution-context provider reads them when the run starts.
+
 A MIME type claimed through `queryEngines.registerEngine` is owned by that engine. `fileMediator.bindEngine` rejects attempts to bind a file with that MIME type to another engine; MIME types not claimed by an engine remain freely bindable.
 
 Execution-context providers and query-event listeners are filtered by the supplied engine ID, so a contribution only observes and decorates that engine's executions. Providers may return `engineState`, query `options`, or both. Returned `options` replace the existing options object, so spread `context.options` when returning options to preserve values such as `maxRows` and `timeoutMs`. The provider also decorates `queryEngines.invoke` calls that include a `fileId` and object payload without an explicit `engineState`. `queryEngines.invoke` resolves directly to the backend provider's result value; only raw protocol consumers see that value nested in the response envelope. It uses the host's backend-health checks and vault-unlock retry. Registration methods return `Disposable`; plugins should dispose registrations during deactivation if they manage a shorter lifecycle. External plugins are loaded once at startup and are not hot-reloaded.

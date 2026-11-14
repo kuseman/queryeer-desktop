@@ -34,8 +34,8 @@ const mocks = vi.hoisted(() => {
   const selectedPrimaryBySessionRef = new Map<string, string | null>();
   return {
     executeMock: vi.fn(async () => "exec-1"),
-    consumeExecuteOptionsMock: vi.fn(() => null as { outputIdOverride?: string; optionsOverride?: QueryExecuteOptions } | null),
-    peekExecuteOptionsMock: vi.fn(() => null as { fileIdOverride?: string } | null),
+    consumeExecuteOptionsMock: vi.fn(() => null as { outputIdOverride?: string; optionsOverride?: QueryExecuteOptions; fileIdOverride?: string; textOverride?: string } | null),
+    peekExecuteOptionsMock: vi.fn(() => null as { fileIdOverride?: string; textOverride?: string } | null),
     cancelMock: vi.fn(async () => {}),
     ensureUnlockedForSecretAccessMock: vi.fn(async () => true),
     notifyExecutionStartMock: vi.fn(),
@@ -240,6 +240,8 @@ describe("QueryEditorComponent execution state across tab switches", () => {
     mocks.executeMock.mockReset();
     mocks.consumeExecuteOptionsMock.mockReset();
     mocks.consumeExecuteOptionsMock.mockReturnValue(null);
+    mocks.peekExecuteOptionsMock.mockReset();
+    mocks.peekExecuteOptionsMock.mockReturnValue(null);
     mocks.cancelMock.mockReset();
     mocks.subscribeMock.mockClear();
     mocks.onExecuteRequestMock.mockClear();
@@ -883,6 +885,30 @@ const filesRegistry = {
         requestedArtifacts: [{ capability: "plan", kind: "graph" }]
       }
     }));
+  });
+
+  it("runs a request aimed at a file when the editor switches to that file", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+    const file2 = makeFile({ fileId: "file-2", uri: "untitled:New.sql" });
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+    expect(mocks.executeMock).not.toHaveBeenCalled();
+
+    // A plugin created file-2 and requested its run before the editor showed it.
+    const request = { fileIdOverride: "file-2", textOverride: "select 2" };
+    mocks.peekExecuteOptionsMock.mockReturnValue(request);
+    mocks.consumeExecuteOptionsMock.mockReturnValueOnce(request);
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file2} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+      await Promise.resolve();
+    });
+
+    expect(mocks.consumeExecuteOptionsMock).toHaveBeenCalledWith(expect.objectContaining({ fileId: "file-2" }));
+    expect(mocks.executeMock).toHaveBeenCalledTimes(1);
+    expect(mocks.executeMock).toHaveBeenCalledWith(expect.objectContaining({ fileId: "file-2", text: "select 2" }));
   });
 
   it("tracks concurrent executions per file across tab switches", async () => {

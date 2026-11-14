@@ -6,7 +6,8 @@ const mocks = vi.hoisted(() => ({
   registerEngineResolverMock: vi.fn(),
   invokeMock: vi.fn(),
   registerExecutionContextProviderMock: vi.fn(),
-  onQueryEventMock: vi.fn()
+  onQueryEventMock: vi.fn(),
+  requestExecuteMock: vi.fn()
 }));
 
 vi.mock("./QueryEngineService", () => ({
@@ -14,7 +15,8 @@ vi.mock("./QueryEngineService", () => ({
     registerEngineResolver: mocks.registerEngineResolverMock,
     invoke: mocks.invokeMock,
     registerExecutionContextProvider: mocks.registerExecutionContextProviderMock,
-    onQueryEvent: mocks.onQueryEventMock
+    onQueryEvent: mocks.onQueryEventMock,
+    requestExecute: mocks.requestExecuteMock
   })
 }));
 
@@ -166,7 +168,8 @@ function createContext(file: FileEntity): PluginContext {
       registerExecutionContextProvider: vi.fn(() => ({ dispose: vi.fn() })),
       onQueryEvent: vi.fn(() => ({ dispose: vi.fn() })),
       registerEditorHeaderItem: vi.fn(() => ({ dispose: vi.fn() })),
-      registerEditorStatusItem: vi.fn(() => ({ dispose: vi.fn() }))
+      registerEditorStatusItem: vi.fn(() => ({ dispose: vi.fn() })),
+      execute: vi.fn()
     },
     editorLanguages: {
       registerMimeType: vi.fn(() => ({ dispose: vi.fn() })),
@@ -308,6 +311,18 @@ describe("registerQueryExecutableEngine", () => {
     eventRegistration.dispose();
     expect(mocks.registerExecutionContextProviderMock.mock.results[0]?.value).toHaveBeenCalledOnce();
     expect(mocks.onQueryEventMock.mock.results[0]?.value).toHaveBeenCalledOnce();
+  });
+
+  it("requests a run of a specific file, with optional text", () => {
+    const registry = createNativeQueryEngineRegistry(createContext(makeFile()).files);
+    mocks.requestExecuteMock.mockClear();
+
+    registry.execute({ fileId: "file-9", text: "select 1" });
+    registry.execute({ fileId: "file-9" });
+
+    expect(mocks.requestExecuteMock).toHaveBeenNthCalledWith(1, { fileIdOverride: "file-9", textOverride: "select 1" });
+    expect(mocks.requestExecuteMock).toHaveBeenNthCalledWith(2, { fileIdOverride: "file-9" });
+    expect(() => registry.execute({ fileId: " " })).toThrow("fileId");
   });
 
   it("returns an engine registration disposable", () => {

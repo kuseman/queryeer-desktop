@@ -96,6 +96,9 @@ export class PluginHost {
       readFile: options.readFile,
       muteFileWatcherPath: options.muteFileWatcherPath,
       resolveFileContent: options.resolveFileContent,
+      seedFileContent: (fileId, content) => {
+        this.extensionRegistry.getEditorRegistryHost().applyRecoveredContent(fileId, content);
+      },
       showSaveDialog: options.showSaveDialog
     });
   }

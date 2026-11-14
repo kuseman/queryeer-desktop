@@ -37,6 +37,16 @@ export type NativeQueryEventListener = (
   context: NativeQueryExecutionContext
 ) => void;
 
+export type NativeQueryExecuteRequest = {
+  /** The query file to run. Its query editor runs it now if mounted, otherwise as soon as it shows the file. */
+  fileId: string;
+  /**
+   * Text to run instead of the editor's content or selection. Pass it when the file was just
+   * created, since the editor content may not be loaded yet when the run starts.
+   */
+  text?: string;
+};
+
 export type NativeQueryEngineRegistry = {
   registerEngine: (contribution: NativeQueryEngineContribution) => Disposable;
   invoke: <TResult = unknown>(
@@ -50,4 +60,10 @@ export type NativeQueryEngineRegistry = {
   onQueryEvent: (engineId: string, listener: NativeQueryEventListener) => Disposable;
   registerEditorHeaderItem: (contribution: QueryEditorHeaderItemContribution) => Disposable;
   registerEditorStatusItem: (contribution: QueryEditorStatusItemContribution) => Disposable;
+  /**
+   * Requests a run of a query file, like the Execute Query command but aimed at `fileId`
+   * instead of the active editor. Only one request is pending at a time; a later request
+   * (from any source) replaces one whose editor has not picked it up yet.
+   */
+  execute: (request: NativeQueryExecuteRequest) => void;
 };

@@ -26,6 +26,11 @@ export type FileMediator = {
     cloneFromFileId?: string | null;
     /** Display name for the tab (without extension). Defaults to "Untitled". */
     title?: string;
+    /**
+     * Text to put in the new file. The file starts dirty. The content is applied when the
+     * file's editor model is created, so it does not depend on the tab being active.
+     */
+    initialContent?: string;
   }) => Promise<FileEntity>;
   getUntitledCounter: () => number;
   setUntitledCounter: (counter: number) => void;

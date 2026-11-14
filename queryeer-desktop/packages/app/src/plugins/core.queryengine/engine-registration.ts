@@ -127,6 +127,15 @@ export function createNativeQueryEngineRegistry(files: FilesRegistry): NativeQue
       return { dispose: unregister };
     },
     registerEditorHeaderItem: registerQueryEditorHeaderItem,
-    registerEditorStatusItem: registerQueryEditorStatusItem
+    registerEditorStatusItem: registerQueryEditorStatusItem,
+    execute: ({ fileId, text }) => {
+      if (!fileId?.trim()) {
+        throw new Error("queryEngines.execute requires a fileId");
+      }
+      getQueryEngineService().requestExecute({
+        fileIdOverride: fileId,
+        ...(text !== undefined ? { textOverride: text } : {})
+      });
+    }
   };
 }
