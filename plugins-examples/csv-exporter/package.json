@@ -10,10 +10,10 @@
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "peerDependencies": {
-    "@queryeer/api": "^0.18.0"
+    "@queryeer/api": "^0.19.0"
   },
   "devDependencies": {
-    "@queryeer/api": "^0.18.0",
+    "@queryeer/api": "^0.19.0",
     "esbuild": "^0.28.2",
     "typescript": "^5.9.3"
   }
