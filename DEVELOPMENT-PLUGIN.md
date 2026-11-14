@@ -61,6 +61,8 @@ Frontend plugins depend on the [`@queryeer/api`](https://www.npmjs.com/package/@
 }
 ```
 
+Use `^` plus the host's minor version (`^0.<minor>.0` for Queryeer 0.<minor>.x), both here and in the manifest's `frontend.apiVersion`. For 0.x versions npm's `^` stays within that minor version. The snippets in this guide and the example plugins are updated to the new version as part of each release.
+
 The API package exports types for:
 - Plugin core: `Plugin`, `PluginContext`, `PluginManifest`, `PluginModule`
 - All extension points: editors, layouts, menus, commands, keybindings, tooltips, settings, context menus, outline providers, quick commands, etc.
