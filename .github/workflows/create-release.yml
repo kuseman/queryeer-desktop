@@ -93,6 +93,23 @@ jobs:
           npm version -w @queryeer/app ${{ steps.versions.outputs.NEW_VERSION }} --no-git-tag-version --allow-same-version
           npm version -w @queryeer/api ${{ steps.versions.outputs.NEW_VERSION }} --no-git-tag-version --allow-same-version
 
+      - name: Update @queryeer/api ranges in examples and plugin guide
+        shell: bash
+        run: |
+          NEW_RANGE="^${{ steps.versions.outputs.NEW_VERSION }}"
+          # Example plugins list @queryeer/api twice (peerDependencies and devDependencies); the
+          # plugin guide's JSON snippets use the same range for the dependency and the manifest apiVersion.
+          FILES=(plugins-examples/*/package.json DEVELOPMENT-PLUGIN.md)
+          KEY='"(@queryeer/api|apiVersion)": "'
+          EXPECTED=$(cat "${FILES[@]}" | grep -cE "${KEY}[~^]?[0-9]+\.[0-9]+\.[0-9]+\"")
+          sed -i -E "s#(${KEY})\^[0-9]+\.[0-9]+\.[0-9]+\"#\1${NEW_RANGE}\"#g" "${FILES[@]}"
+          UPDATED=$(cat "${FILES[@]}" | grep -cF -e "\"@queryeer/api\": \"${NEW_RANGE}\"" -e "\"apiVersion\": \"${NEW_RANGE}\"")
+          if [ "${EXPECTED}" -eq 0 ] || [ "${UPDATED}" -ne "${EXPECTED}" ]; then
+            grep -nE "${KEY}" "${FILES[@]}" || true
+            echo "::error::Expected ${EXPECTED} @queryeer/api ranges to become ${NEW_RANGE}, found ${UPDATED}"
+            exit 1
+          fi
+
       - name: Make Maven wrapper executable
         run: chmod +x ./queryeer-backend/mvnw
 
@@ -106,7 +123,7 @@ jobs:
 
       - name: Commit and tag release
         run: |
-          git add queryeer-desktop/package.json queryeer-desktop/package-lock.json queryeer-desktop/packages/app/package.json queryeer-desktop/packages/api/package.json queryeer-backend
+          git add queryeer-desktop/package.json queryeer-desktop/package-lock.json queryeer-desktop/packages/app/package.json queryeer-desktop/packages/api/package.json queryeer-backend plugins-examples DEVELOPMENT-PLUGIN.md
           git commit -m "release: v${{ steps.versions.outputs.NEW_VERSION }}"
           git tag v${{ steps.versions.outputs.NEW_VERSION }}
 
