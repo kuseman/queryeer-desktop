@@ -696,7 +696,7 @@ context.queryEngines.onQueryEvent("mongodb", (event, execution) => {
 });
 ```
 
-Editor header items render in an engine-scoped, wrapping strip above the text editor. Return `null` when an item does not apply to the current file; the strip is omitted when no items render content. Users can collapse the strip independently for each file. An item's optional `title` is shown while the strip is collapsed. Host keybindings continue to work inside header controls. A plugin control that needs to own its keys can opt out locally with `data-keybinding-scope="input"`; apply it only to the smallest control subtree that needs the override.
+Editor header items render in an engine-scoped, wrapping strip above the text editor. Return `null` when an item does not apply to the current file; the strip is omitted when no items render content. Users can collapse the strip independently for each file. An item's optional `title` is shown while the strip is collapsed. Host keybindings continue to work inside header controls. A plugin control that needs to own its keys can opt out locally with `data-keybinding-scope="input"`; apply it only to the smallest control subtree that needs the override. Popups may be portalled to `document.body` (e.g. to escape the text pane's `overflow: hidden`); the editor group does not take focus on mousedown inside them, so plain elements such as `div` list options work without `preventDefault()` workarounds.
 
 To open a new query tab with generated text and optionally run it, seed the file with `initialContent` and request the run with `queryEngines.execute`:
 

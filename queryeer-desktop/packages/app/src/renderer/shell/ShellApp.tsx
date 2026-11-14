@@ -64,6 +64,7 @@ import {
 } from "./editor-workbench-state";
 import { createEditorInstanceId } from "./editor-instance-id";
 import { applyEditorGroupSizePreview, getEditorGroupElements } from "./editor-split-resize";
+import { shouldFocusEditorGroupOnPointerDown } from "./editor-group-pointer-focus";
 import "./shell-app.css";
 
 const OPEN_NEW_FILES_LAST_SETTING_ID = "core.files.openNewFilesLast";
@@ -799,8 +800,7 @@ export function ShellApp({
 
   const focusEditorGroupFromPointer = (event: ReactMouseEvent<HTMLDivElement>): void => {
     focusGroup(event.currentTarget.dataset.editorGroupId ?? "");
-    const target = event.target instanceof HTMLElement ? event.target : null;
-    if (target?.closest("input, textarea, select, button, [contenteditable='true'], [role='button']")) {
+    if (!shouldFocusEditorGroupOnPointerDown(event.currentTarget, event.target)) {
       return;
     }
     event.currentTarget.focus({ preventScroll: true });
