@@ -171,7 +171,7 @@ function createContext(providers: QuickCommandProvider[]): PluginContext {
     about: { registerChangelog: vi.fn() },
     notifications: createNotificationMock(),
     assistant: createAssistantRegistryMock(),
-    queryEngines: { registerEngine: vi.fn(), invoke: vi.fn(), registerExecutionContextProvider: vi.fn(), onQueryEvent: vi.fn(), registerEditorHeaderItem: vi.fn(), registerEditorStatusItem: vi.fn() },
+    queryEngines: { registerEngine: vi.fn(), invoke: vi.fn(), registerExecutionContextProvider: vi.fn(), onQueryEvent: vi.fn(), registerEditorHeaderItem: vi.fn(), registerEditorStatusItem: vi.fn(), execute: vi.fn() },
     editorLanguages: {
       registerMimeType: vi.fn(() => ({ dispose: vi.fn() })),
       registerLanguage: vi.fn(() => ({ dispose: vi.fn() }))

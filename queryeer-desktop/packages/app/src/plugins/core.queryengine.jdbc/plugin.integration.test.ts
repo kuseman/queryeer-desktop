@@ -243,7 +243,8 @@ function createContext(): PluginContext {
       registerExecutionContextProvider: mocks.registerExecutionContextProviderMock,
       onQueryEvent: mocks.onQueryEventMock,
       registerEditorHeaderItem: vi.fn(() => ({ dispose: vi.fn() })),
-      registerEditorStatusItem: vi.fn(() => ({ dispose: vi.fn() }))
+      registerEditorStatusItem: vi.fn(() => ({ dispose: vi.fn() })),
+      execute: vi.fn()
     },
     editorLanguages: {
       registerMimeType: vi.fn(() => ({ dispose: vi.fn() })),

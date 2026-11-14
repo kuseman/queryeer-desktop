@@ -1049,6 +1049,29 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     handleCancelRef.current = handleCancel;
   }, [handleCancel]);
 
+  // The editor component is reused across the files of a group, so a run requested for a file
+  // that was not shown yet (e.g. a just-created tab) is picked up when this editor switches to it.
+  // Only requests aimed at this file are taken; the mount effect below handles untargeted ones.
+  const currentFileId = file?.fileId;
+  useEffect(() => {
+    if (!currentFileId) {
+      return;
+    }
+    const service = getQueryEngineService();
+    if (service.peekExecuteOptions()?.fileIdOverride !== currentFileId) {
+      return;
+    }
+    const pendingOptions = service.consumeExecuteOptions({
+      fileId: currentFileId,
+      targetOutputSessionId: outputSessionIdRef.current,
+      targetEditorGroupId: editorGroupIdRef.current,
+      isActiveEditorGroup: isActiveEditorGroupRef.current
+    });
+    if (pendingOptions) {
+      handleExecuteRef.current(pendingOptions);
+    }
+  }, [currentFileId]);
+
   useEffect(() => {
     const service = getQueryEngineService();
 

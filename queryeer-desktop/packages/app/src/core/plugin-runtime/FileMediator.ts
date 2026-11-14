@@ -16,6 +16,8 @@ export type FileMediatorOptions = {
   writeFile?: (uri: string, text: string) => Promise<{ success: boolean }>;
   readFile?: (uri: string) => Promise<{ success: boolean; content: string }>;
   resolveFileContent?: (fileId: string, uri: string) => string | undefined;
+  /** Seeds editor content for a newly created file (applied when its model is created). */
+  seedFileContent?: (fileId: string, content: string) => void;
   onFileChanged?: (file: FileEntity, text: string) => void;
   changeDebounceMs?: number;
   now?: () => number;
@@ -34,6 +36,7 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
     writeFile,
     readFile,
     resolveFileContent,
+    seedFileContent,
     onFileChanged,
     showSaveDialog
   } = options;
@@ -232,6 +235,13 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
         delete metadata["core.queryengine.hasRunningQuery"];
         delete metadata["core.queryengine.scheduleByGroup"];
         filesRegistry.updateFile(file.fileId, { metadata });
+      }
+
+      if (createOptions?.initialContent !== undefined) {
+        if (!seedFileContent) {
+          throw new Error("createUntitledFile: initialContent is not supported by this host");
+        }
+        seedFileContent(file.fileId, createOptions.initialContent);
       }
 
       return file;
