@@ -563,6 +563,44 @@ All contribution points are accessed through the `PluginContext` object passed t
 | `editors.getActiveEditor()` | `EditorHandle \| null` | Get active editor handle |
 | `editors.onActiveEditorChanged(cb)` | `Disposable` | Subscribe to editor changes |
 | `editorLanguages.registerMimeType(mime, languageId)` | `Disposable` | Map a MIME type to a Monaco language; dispose it during plugin deactivation |
+| `editorLanguages.registerLanguage(definition)` | `Disposable` | Register a new Monaco language (Monarch tokenizer + optional brackets/comments/auto-closing configuration, no validation); map a MIME type to it with `registerMimeType` |
+
+A plugin whose files don't fit an existing Monaco language (for example MongoDB shell syntax,
+which `json` and `javascript` both flag as errors) registers its own language first:
+
+```ts
+const language = context.editorLanguages.registerLanguage({
+  id: "mongodb",
+  aliases: ["MongoDB"],
+  monarch: {
+    tokenizer: {
+      root: [
+        [/\/\/.*$/, "comment"],
+        [/"([^"\\]|\\.)*"/, "string"],
+        [/\b(db|find|aggregate|sort|limit)\b/, "keyword"],
+        [/[{}()[\]]/, "@brackets"]
+      ]
+    }
+  },
+  configuration: {
+    comments: { lineComment: "//", blockComment: ["/*", "*/"] },
+    brackets: [["{", "}"], ["[", "]"], ["(", ")"]],
+    autoClosingPairs: [{ open: "{", close: "}" }, { open: "[", close: "]" }, { open: "(", close: ")" }, { open: "\"", close: "\"" }]
+  }
+});
+const mapping = context.editorLanguages.registerMimeType("application/x-mongodb", "mongodb");
+// dispose both on deactivate
+```
+
+The id must not be a built-in Monaco language (`json`, `sql`, ...); such registrations are ignored
+with a warning. Registering an id another plugin already registered throws. Monaco cannot remove a
+language, so disposing a registration clears its tokenizer and configuration and frees the id for a
+later `registerLanguage` call.
+
+The definition is applied after Monaco loads, so `registerLanguage` returns a `Disposable` even when the
+tokenizer is broken (a bad regex, a rule pointing at a missing state). Such errors, and the built-in id
+warning above, only appear in the developer console (`[editorLanguages] ...`); check it when a language
+doesn't highlight as expected.
 
 ### 7.3 Files & MIME
 

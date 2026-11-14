@@ -191,7 +191,10 @@ function createHarness(): Harness {
     notifications: createNotificationMock(),
     assistant: createAssistantRegistryMock(),
     queryEngines: { registerEngine: vi.fn(), invoke: vi.fn(), registerExecutionContextProvider: vi.fn(), onQueryEvent: vi.fn(), registerEditorHeaderItem: vi.fn(), registerEditorStatusItem: vi.fn() },
-    editorLanguages: { registerMimeType: vi.fn(() => ({ dispose: vi.fn() })) },
+    editorLanguages: {
+      registerMimeType: vi.fn(() => ({ dispose: vi.fn() })),
+      registerLanguage: vi.fn(() => ({ dispose: vi.fn() }))
+    },
     payloadbuilderCatalog: { registerContribution: vi.fn() }
   };
 

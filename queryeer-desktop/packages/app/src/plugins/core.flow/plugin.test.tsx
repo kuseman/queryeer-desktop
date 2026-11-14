@@ -181,7 +181,8 @@ function createContext(): PluginContext {
       onActiveEditorChanged: vi.fn(() => ({ dispose: vi.fn() }))
     },
     editorLanguages: {
-      registerMimeType: vi.fn(() => ({ dispose: vi.fn() }))
+      registerMimeType: vi.fn(() => ({ dispose: vi.fn() })),
+      registerLanguage: vi.fn(() => ({ dispose: vi.fn() }))
     },
     contextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
     tableOutputContextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },

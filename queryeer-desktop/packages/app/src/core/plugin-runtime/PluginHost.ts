@@ -44,6 +44,7 @@ import {
   useCollectionSettingsPersistence
 } from "../../plugins/core.settings/CollectionSettingsListEditor";
 import { registerMonacoLanguageIdForMimeType } from "../../plugins/core.editor/texteditor/mime-types";
+import { registerEditorLanguage } from "../../plugins/core.editor/texteditor/editor-languages";
 
 export type PluginHostState = {
   startedAt: string;
@@ -166,7 +167,8 @@ export class PluginHost {
       queryEngines: createNativeQueryEngineRegistry(this.extensionRegistry.createFilesRegistry()),
       payloadbuilderCatalog: createPayloadbuilderCatalogRegistry(),
       editorLanguages: {
-        registerMimeType: registerMonacoLanguageIdForMimeType
+        registerMimeType: registerMonacoLanguageIdForMimeType,
+        registerLanguage: registerEditorLanguage
       },
       components: {
         FrameworkEditor: this.options.frameworkEditor ?? (() => null) as unknown as ComponentType<FrameworkEditorProps>,
