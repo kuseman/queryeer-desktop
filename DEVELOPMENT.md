@@ -25,7 +25,7 @@ Monorepo containing the Queryeer Desktop Electron shell and the Java backend run
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 24.22.1+ (`engines` in `queryeer-desktop/packages/app/package.json`; CI uses the same version)
 - Java 25 compatible JDK on `PATH`
 - Maven wrapper from the repository root of `queryeer-backend/` (`mvnw` / `mvnw.cmd`)
 
