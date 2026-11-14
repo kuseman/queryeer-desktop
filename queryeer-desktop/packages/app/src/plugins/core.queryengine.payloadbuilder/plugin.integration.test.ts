@@ -218,7 +218,10 @@ function createContext(): PluginContext {
       registerEditorHeaderItem: vi.fn(),
       registerEditorStatusItem: vi.fn()
     },
-    editorLanguages: { registerMimeType: vi.fn(() => ({ dispose: vi.fn() })) },
+    editorLanguages: {
+      registerMimeType: vi.fn(() => ({ dispose: vi.fn() })),
+      registerLanguage: vi.fn(() => ({ dispose: vi.fn() }))
+    },
     payloadbuilderCatalog: { registerContribution: vi.fn() }
   };
 }

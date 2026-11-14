@@ -58,6 +58,7 @@ describe("PluginHost JDBC driver contexts", () => {
     expect(context?.settings.subscribe).toBeTypeOf("function");
     expect(context?.settings.open).toBeTypeOf("function");
     expect(context?.editorLanguages.registerMimeType).toBeTypeOf("function");
+    expect(context?.editorLanguages.registerLanguage).toBeTypeOf("function");
     expect(context?.components.PasswordFieldInput).toBeTypeOf("function");
     expect(context?.components.CollectionSettingsListEditor).toBeTypeOf("function");
     expect(context?.components.useCollectionSettingsPersistence).toBeTypeOf("function");

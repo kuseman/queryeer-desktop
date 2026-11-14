@@ -159,7 +159,10 @@ function createContext(file?: FileEntity) {
       subscribe: vi.fn(() => () => {})
     },
     queryEngines: { registerEngine: vi.fn(), invoke: vi.fn(), registerExecutionContextProvider: vi.fn(), onQueryEvent: vi.fn(), registerEditorHeaderItem: vi.fn(), registerEditorStatusItem: vi.fn() },
-    editorLanguages: { registerMimeType: vi.fn(() => ({ dispose: vi.fn() })) },
+    editorLanguages: {
+      registerMimeType: vi.fn(() => ({ dispose: vi.fn() })),
+      registerLanguage: vi.fn(() => ({ dispose: vi.fn() }))
+    },
     assistant: {
       registerContextContribution: vi.fn(() => () => {}),
       registerToolContribution: vi.fn(() => () => {}),
