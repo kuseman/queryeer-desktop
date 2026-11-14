@@ -4,7 +4,7 @@ Electron + React + TypeScript desktop shell for Queryeer. In development it star
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 24.22.1+ (`engines` in `packages/app/package.json`; CI uses the same version)
 - Java 25 compatible JDK on `PATH`
 - Run `npm install` once in this folder
 

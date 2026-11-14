@@ -162,7 +162,7 @@ Each plugin's `activate(context)` method is called in dependency order. The `Plu
 
 ### 4.1 Prerequisites
 
-- Node.js 18+
+- Node.js 22+ to build the plugin (24 matches the Queryeer toolchain)
 - TypeScript 5.x
 - `@queryeer/api` as a dependency
 
