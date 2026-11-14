@@ -11,6 +11,7 @@ import { getExpressionRuntime } from "../core.expressions/runtime";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegistry";
 import { addFrontendLogEntry } from "../core.panel.console/console-state";
+import { buildTableSelectionWhenContext } from "./table-when-context";
 
 export function buildTableActionData(ctx: TableOutputContextMenuContext): TableActionData {
   const { columns, selection } = ctx;
@@ -62,16 +63,7 @@ export function createTableActionProvider(context: PluginContext): TableOutputCo
       const mergedContext = {
         ...baseContext,
         tableData,
-        tableSelection: {
-          hasSelection: ctx.selection.hasSelection,
-          selectedCellCount: ctx.selection.selectedCells.length,
-          selectedRowCount: ctx.selection.selectedRowIndexes.length,
-          selectedColumnCount: ctx.selection.selectedColumnIndexes.length,
-          isSingleColumnSelection: ctx.selection.isSingleColumnSelection,
-          isSingleRowSelection: ctx.selection.isSingleRowSelection,
-          columns: ctx.columns,
-          columnNames: ctx.columns.map((c) => c.name),
-        },
+        tableSelection: buildTableSelectionWhenContext(ctx),
       };
 
       const matching: TableAction[] = [];

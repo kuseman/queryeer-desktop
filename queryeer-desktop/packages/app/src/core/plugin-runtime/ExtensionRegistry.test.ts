@@ -61,6 +61,25 @@ describe("ExtensionRegistry settings registration", () => {
     tableRegistry.unregisterProvider("missing");
   });
 
+  it("removes a table output context menu provider through its disposable", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const extensionRegistry = new ExtensionRegistry();
+    const tableRegistry = extensionRegistry.createTableOutputContextMenuRegistry();
+
+    const first = tableRegistry.registerProvider({ id: "provider-b", getItems: async () => [] });
+    first.dispose();
+    expect(getTableOutputContextMenuProviders().length).toBe(0);
+
+    // A stale disposable must not remove the provider that replaced it.
+    const stale = tableRegistry.registerProvider({ id: "provider-b", getItems: async () => [] });
+    const replacement = tableRegistry.registerProvider({ id: "provider-b", when: "global", getItems: async () => [] });
+    stale.dispose();
+    expect(getTableOutputContextMenuProviders().map((p) => p.when)).toEqual(["global"]);
+    replacement.dispose();
+    replacement.dispose();
+    expect(getTableOutputContextMenuProviders().length).toBe(0);
+  });
+
   it("collects assistant context and lists tools in deterministic applicable order", async () => {
     vi.stubGlobal("window", {
       appShell: {

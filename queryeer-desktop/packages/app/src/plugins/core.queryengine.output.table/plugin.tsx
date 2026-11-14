@@ -42,6 +42,8 @@ import { getTableResultStore } from "./table-result-store";
 import { cellValueToString, formatLargeValueTitle, isLargeValueCell } from "./large-value-cell";
 import { GridComponent } from "../../renderer/components/GridComponent";
 import type { GridComponentColumn, GridComponentRow, GridComponentSelectionSnapshot, GridComponentState, GridSearchHandle } from "../../renderer/components/GridComponent";
+import { getFilesRegistry } from "../core.commands/files-registry-accessor";
+import { buildTableSelectionWhenContext } from "./table-when-context";
 
 const GRID_STATE_KEY = defineStateKey<Record<string, GridComponentState>>("core.queryengine.output.table.gridState");
 const ACTIVE_RESULT_SET_KEY = defineStateKey<Record<string, number>>("core.queryengine.output.table.activeResultSet");
@@ -190,6 +192,15 @@ export function buildSelectionSnapshot(
   };
 }
 
+/** The file (and its bound engine) whose results a grid shows, for the context menu context. */
+export function resolveTableOutputFileInfo(fileId: string | undefined): Pick<TableOutputContextMenuContext, "fileId" | "engineId"> {
+  if (!fileId) {
+    return {};
+  }
+  const engineId = getFilesRegistry()?.getFile(fileId)?.engineBinding?.engineId;
+  return engineId ? { fileId, engineId } : { fileId };
+}
+
 async function resolveTableContextMenuItems(
   providers: TableOutputContextMenuProvider[],
   context: TableOutputContextMenuContext
@@ -197,16 +208,7 @@ async function resolveTableContextMenuItems(
   const runtime = getExpressionRuntime();
   const baseContext = getCommandContext();
   const tableContext = {
-    tableSelection: {
-      hasSelection: context.selection.hasSelection,
-      selectedCellCount: context.selection.selectedCells.length,
-      selectedRowCount: context.selection.selectedRowIndexes.length,
-      selectedColumnCount: context.selection.selectedColumnIndexes.length,
-      isSingleColumnSelection: context.selection.isSingleColumnSelection,
-      isSingleRowSelection: context.selection.isSingleRowSelection,
-      columns: context.columns,
-      columnNames: context.columns.map((c) => c.name),
-    }
+    tableSelection: buildTableSelectionWhenContext(context)
   };
   const mergedContext = { ...baseContext, ...tableContext };
 
@@ -451,7 +453,13 @@ const TableGrid = forwardRef<GridSearchHandle, TableGridProps>(function TableGri
               cellValuesByRow[ri] = data.__values;
             }
           }
-          const menuContext: TableOutputContextMenuContext = { resultSetIndex, columns: schema.columns, selection, cellValuesByRow };
+          const menuContext: TableOutputContextMenuContext = {
+            resultSetIndex,
+            columns: schema.columns,
+            selection,
+            cellValuesByRow,
+            ...resolveTableOutputFileInfo(fileId)
+          };
           void resolveTableContextMenuItems(getTableOutputContextMenuProviders(), menuContext).then((sections) => {
             if (sections.length === 0) {
               setContextMenu(null);
@@ -1193,6 +1201,8 @@ export const coreQueryEngineOutputTablePlugin: Plugin = {
     registerWhenExpressionVariables([
       { name: "tableSelection.columns", type: "string", description: "Array<{name, type}> — Columns of the current table selection" },
       { name: "tableSelection.columnNames", type: "string", description: "string[] — Column names of the current table selection" },
+      { name: "tableSelection.fileId", type: "string", description: "File whose results the grid shows (use instead of activeFile, which can differ with split editors)" },
+      { name: "tableSelection.engineId", type: "string", description: "Engine the grid's file is bound to, e.g. 'jdbc'; undefined when unbound" },
       { name: "tableData", type: "string", description: "Full table selection data. Access cell values via tableData.rows[tableData.primaryRowIndex].columnName" },
       { name: "tableData.rows", type: "string", description: "Record<string, unknown>[] — Selected rows keyed by column name. e.g. tableData.rows[0].correlationId" },
       { name: "tableData.columns", type: "string", description: "{name: string, type: string}[] — Column metadata" },

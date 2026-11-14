@@ -630,8 +630,10 @@ doesn't highlight as expected.
 | Method | Type | Description |
 |--------|------|-------------|
 | `contextMenu.registerProvider(p)` | `ContextMenuProvider` | Editor context menu |
-| `tableOutputContextMenu.registerProvider(p)` | `TableOutputContextMenuProvider` | Table result context menu |
+| `tableOutputContextMenu.registerProvider(p)` | `TableOutputContextMenuProvider` | Table result context menu; returns a `Disposable` |
 | `jdbcTreeContextMenu.registerContribution(c)` | `JdbcTreeContextMenuContribution` | JDBC tree context menu |
+
+A table result provider's `getItems(context)` receives the selection (`selection`, `cellValuesByRow`), the result set's `columns` and `resultSetIndex`, and the grid's `fileId` plus the file's bound `engineId` when it has one. Act on `context.fileId` rather than the active file: with split editors, or when focus is elsewhere, the active file can be a different one. Filter on `context.engineId` to add items only for your engine's results. Provider and item `when` expressions see the same values as `tableSelection.fileId` and `tableSelection.engineId` (e.g. `when: "tableSelection.engineId == 'mongodb'"`); `activeFile.*` in a table menu `when` refers to the active file, not the grid's.
 
 ### 7.6 Tooltips
 
