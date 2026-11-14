@@ -17,7 +17,6 @@ on:
         type: string
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
 concurrency:

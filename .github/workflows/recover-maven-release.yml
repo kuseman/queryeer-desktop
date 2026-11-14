@@ -13,9 +13,6 @@ on:
         required: true
         type: string
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 concurrency:
   group: recover-maven-${{ inputs.release_version }}
   cancel-in-progress: false
