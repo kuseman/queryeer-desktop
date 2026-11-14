@@ -106,7 +106,9 @@ export function ElasticsearchConnectionsSettingsEditor({ value, readonly, setVal
     const clone: Row = {
       ...source,
       id: crypto.randomUUID(),
-      connectionId: generateConnectionId()
+      connectionId: generateConnectionId(),
+      // Never share a secretRef between rows; editing one would overwrite the other.
+      authPassword: undefined
     };
     syncRows([...rows, clone], clone.id);
   };

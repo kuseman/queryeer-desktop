@@ -144,7 +144,10 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
     const clone: Row = {
       ...source,
       id: crypto.randomUUID(),
-      connectionId: generateConnectionId()
+      connectionId: generateConnectionId(),
+      // A secretRef points at one vault entry; sharing it would make edits to either
+      // connection's password overwrite the other's. The clone starts without one.
+      password: undefined
     };
     syncRows([...rows, clone], clone.id);
   };
