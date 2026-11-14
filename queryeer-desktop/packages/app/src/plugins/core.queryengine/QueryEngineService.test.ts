@@ -1,6 +1,6 @@
 import { BackendNotReadyError } from "@queryeer/api/backend/BackendNotReadyError";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { QueryEngineService } from "./QueryEngineService";
+import { QueryEngineService, TARGETED_EXECUTE_REQUEST_TTL_MS } from "./QueryEngineService";
 
 const securityMocks = vi.hoisted(() => ({
   getCoreSecurityServiceMock: vi.fn<() => unknown>(() => null)
@@ -627,6 +627,84 @@ describe("QueryEngineService backend readiness", () => {
       targetOutputSessionId: "session-a"
     }));
     expect(service.peekExecuteOptions()).toBeNull();
+  });
+
+  it("drops a request aimed at a file that no editor takes in time", () => {
+    vi.useFakeTimers();
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+    try {
+      const service = new QueryEngineService();
+
+      service.requestExecute({ fileIdOverride: "file-1", textOverride: "select 1" });
+      vi.advanceTimersByTime(TARGETED_EXECUTE_REQUEST_TTL_MS - 1);
+      expect(service.peekExecuteOptions()).toEqual(expect.objectContaining({ fileIdOverride: "file-1" }));
+
+      vi.advanceTimersByTime(2);
+      expect(service.peekExecuteOptions()).toBeNull();
+      expect(debug).toHaveBeenCalledWith(expect.stringContaining("file-1"));
+      expect(service.consumeExecuteOptions({ fileId: "file-1", isActiveEditorGroup: true })).toBeNull();
+
+      // Untargeted requests are taken by the active editor right away and do not expire.
+      service.requestExecute({ textOverride: "select 2" });
+      vi.advanceTimersByTime(TARGETED_EXECUTE_REQUEST_TTL_MS * 2);
+      expect(service.peekExecuteOptions()).toEqual(expect.objectContaining({ textOverride: "select 2" }));
+    } finally {
+      vi.useRealTimers();
+      debug.mockRestore();
+    }
+  });
+
+  it("keeps a held request past the expiry until its editor takes it", () => {
+    vi.useFakeTimers();
+    try {
+      const service = new QueryEngineService();
+
+      service.requestExecute({ fileIdOverride: "file-1", textOverride: "select 1" });
+      // The editor showing file-1 defers it while another run is starting, e.g. behind a vault prompt.
+      service.holdExecuteRequest("file-1");
+      vi.advanceTimersByTime(TARGETED_EXECUTE_REQUEST_TTL_MS * 3);
+
+      expect(service.consumeExecuteOptions({ fileId: "file-1", isActiveEditorGroup: true }))
+        .toEqual(expect.objectContaining({ fileIdOverride: "file-1", textOverride: "select 1" }));
+
+      // Holding only applies to the file the request is aimed at.
+      service.requestExecute({ fileIdOverride: "file-2" });
+      service.holdExecuteRequest("file-other");
+      vi.advanceTimersByTime(TARGETED_EXECUTE_REQUEST_TTL_MS + 1);
+      const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+      expect(service.peekExecuteOptions()).toBeNull();
+      debug.mockRestore();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("restarts the time limit of a held request when it is released", () => {
+    vi.useFakeTimers();
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+    try {
+      const service = new QueryEngineService();
+
+      service.requestExecute({ fileIdOverride: "file-1" });
+      service.holdExecuteRequest("file-1");
+      vi.advanceTimersByTime(TARGETED_EXECUTE_REQUEST_TTL_MS * 3);
+      service.releaseExecuteRequest("file-1");
+
+      vi.advanceTimersByTime(TARGETED_EXECUTE_REQUEST_TTL_MS - 1);
+      expect(service.peekExecuteOptions()).toEqual(expect.objectContaining({ fileIdOverride: "file-1" }));
+      vi.advanceTimersByTime(2);
+      expect(service.peekExecuteOptions()).toBeNull();
+
+      // Releasing a request that was never held doesn't extend its time limit.
+      service.requestExecute({ fileIdOverride: "file-2" });
+      vi.advanceTimersByTime(TARGETED_EXECUTE_REQUEST_TTL_MS - 1);
+      service.releaseExecuteRequest("file-2");
+      vi.advanceTimersByTime(2);
+      expect(service.peekExecuteOptions()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+      debug.mockRestore();
+    }
   });
 
   it("does not consume generic execute options from inactive group", () => {

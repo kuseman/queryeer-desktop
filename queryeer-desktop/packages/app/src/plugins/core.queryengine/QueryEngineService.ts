@@ -42,6 +42,9 @@ class SecuritySessionClosedError extends Error {
   }
 }
 
+/** How long a run request aimed at a specific file waits for an editor to show that file. */
+export const TARGETED_EXECUTE_REQUEST_TTL_MS = 10_000;
+
 let serviceInstance: QueryEngineService | undefined;
 
 export function getQueryEngineService(): QueryEngineService {
@@ -69,6 +72,7 @@ export class QueryEngineService {
   private readonly pendingEventBuffers = new Map<string, QueryEvent[]>();
   private initialized = false;
   private pendingExecuteOptions: ExecuteRequestOptions | null = null;
+  private pendingExecuteExpiresAtMs: number | null = null;
 
   initialize(): void {
     if (this.initialized) return;
@@ -334,18 +338,23 @@ export class QueryEngineService {
 
   requestExecute(options?: ExecuteRequestOptions): void {
     this.pendingExecuteOptions = options ?? null;
+    // A request aimed at a file waits until an editor shows that file. Drop it if none does soon,
+    // so it can't run minutes later (or never, if the file sits in an inactive group or closes).
+    this.pendingExecuteExpiresAtMs = options?.fileIdOverride ? Date.now() + TARGETED_EXECUTE_REQUEST_TTL_MS : null;
     for (const listener of this.executeRequestListeners) {
       listener();
     }
   }
 
   peekExecuteOptions(): ExecuteRequestOptions | null {
+    this.dropExpiredExecuteRequest();
     return this.pendingExecuteOptions;
   }
 
   consumeExecuteOptions(fileId?: string): ExecuteRequestOptions | null;
   consumeExecuteOptions(target?: ExecuteRequestConsumeTarget): ExecuteRequestOptions | null;
   consumeExecuteOptions(target?: string | ExecuteRequestConsumeTarget): ExecuteRequestOptions | null {
+    this.dropExpiredExecuteRequest();
     const opts = this.pendingExecuteOptions;
     if (!opts) return null;
 
@@ -366,7 +375,40 @@ export class QueryEngineService {
       return null;
     }
     this.pendingExecuteOptions = null;
+    this.pendingExecuteExpiresAtMs = null;
     return opts;
+  }
+
+  /**
+   * Called by an editor that shows `fileId` but has to defer the pending request aimed at it
+   * (it is still starting another run). Clears the expiry, which is meant only for requests
+   * that no editor shows; the request is still replaced by any later request.
+   */
+  holdExecuteRequest(fileId: string): void {
+    this.dropExpiredExecuteRequest();
+    if (this.pendingExecuteOptions?.fileIdOverride === fileId) {
+      this.pendingExecuteExpiresAtMs = null;
+    }
+  }
+
+  /**
+   * Called by an editor that held the request for `fileId` but no longer shows that file when
+   * it could take it. Restarts the expiry so the request can't run much later.
+   */
+  releaseExecuteRequest(fileId: string): void {
+    if (this.pendingExecuteOptions?.fileIdOverride === fileId && this.pendingExecuteExpiresAtMs === null) {
+      this.pendingExecuteExpiresAtMs = Date.now() + TARGETED_EXECUTE_REQUEST_TTL_MS;
+    }
+  }
+
+  private dropExpiredExecuteRequest(): void {
+    if (this.pendingExecuteExpiresAtMs !== null && Date.now() > this.pendingExecuteExpiresAtMs) {
+      console.debug(
+        `[queryengine] Dropped a run request for file ${this.pendingExecuteOptions?.fileIdOverride ?? "?"}: no editor showed the file within ${TARGETED_EXECUTE_REQUEST_TTL_MS} ms`
+      );
+      this.pendingExecuteOptions = null;
+      this.pendingExecuteExpiresAtMs = null;
+    }
   }
 
   requestCancel(options?: CancelRequestOptions): void {

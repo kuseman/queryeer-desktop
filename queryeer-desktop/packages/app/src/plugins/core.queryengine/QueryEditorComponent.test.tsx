@@ -35,6 +35,8 @@ const mocks = vi.hoisted(() => {
   return {
     executeMock: vi.fn(async () => "exec-1"),
     consumeExecuteOptionsMock: vi.fn(() => null as { outputIdOverride?: string; optionsOverride?: QueryExecuteOptions; fileIdOverride?: string; textOverride?: string } | null),
+    holdExecuteRequestMock: vi.fn(),
+    releaseExecuteRequestMock: vi.fn(),
     peekExecuteOptionsMock: vi.fn(() => null as { fileIdOverride?: string; textOverride?: string } | null),
     cancelMock: vi.fn(async () => {}),
     ensureUnlockedForSecretAccessMock: vi.fn(async () => true),
@@ -124,7 +126,9 @@ vi.mock("./QueryEngineService", () => ({
     notifyScheduleChanged: mocks.notifyScheduleChangedMock,
     onToggleOutputPanelRequest: mocks.onToggleOutputPanelRequestMock,
     consumeExecuteOptions: mocks.consumeExecuteOptionsMock,
-    peekExecuteOptions: mocks.peekExecuteOptionsMock
+    peekExecuteOptions: mocks.peekExecuteOptionsMock,
+    holdExecuteRequest: mocks.holdExecuteRequestMock,
+    releaseExecuteRequest: mocks.releaseExecuteRequestMock
   })
 }));
 
@@ -242,6 +246,8 @@ describe("QueryEditorComponent execution state across tab switches", () => {
     mocks.consumeExecuteOptionsMock.mockReturnValue(null);
     mocks.peekExecuteOptionsMock.mockReset();
     mocks.peekExecuteOptionsMock.mockReturnValue(null);
+    mocks.holdExecuteRequestMock.mockClear();
+    mocks.releaseExecuteRequestMock.mockClear();
     mocks.cancelMock.mockReset();
     mocks.subscribeMock.mockClear();
     mocks.onExecuteRequestMock.mockClear();
@@ -909,6 +915,129 @@ const filesRegistry = {
     expect(mocks.consumeExecuteOptionsMock).toHaveBeenCalledWith(expect.objectContaining({ fileId: "file-2" }));
     expect(mocks.executeMock).toHaveBeenCalledTimes(1);
     expect(mocks.executeMock).toHaveBeenCalledWith(expect.objectContaining({ fileId: "file-2", text: "select 2" }));
+  });
+
+  it("keeps a request aimed at a file pending while another run is starting, then runs it", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+    const file2 = makeFile({ fileId: "file-2", uri: "untitled:New.sql" });
+
+    let resolveFirstStart: ((executionId: string) => void) | undefined;
+    mocks.executeMock.mockImplementationOnce(
+      () => new Promise<string>((resolve) => {
+        resolveFirstStart = resolve;
+      })
+    );
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+    // Start a run for file-1 whose backend start does not finish yet.
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+    expect(mocks.executeMock).toHaveBeenCalledTimes(1);
+
+    const request = { fileIdOverride: "file-2", textOverride: "select 2" };
+    mocks.peekExecuteOptionsMock.mockReturnValue(request);
+    mocks.consumeExecuteOptionsMock.mockReturnValueOnce(request);
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file2} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+      await Promise.resolve();
+    });
+    // Not taken while file-1's run is starting, so it isn't lost, and held so it doesn't expire.
+    expect(mocks.consumeExecuteOptionsMock).not.toHaveBeenCalledWith(expect.objectContaining({ fileId: "file-2" }));
+    expect(mocks.holdExecuteRequestMock).toHaveBeenCalledWith("file-2");
+
+    await act(async () => {
+      resolveFirstStart?.("exec-1");
+      for (let i = 0; i < 5; i++) {
+        await Promise.resolve();
+      }
+    });
+
+    expect(mocks.executeMock).toHaveBeenCalledTimes(2);
+    expect(mocks.executeMock).toHaveBeenLastCalledWith(expect.objectContaining({ fileId: "file-2", text: "select 2" }));
+  });
+
+  it("holds a request aimed at the shown file while its own run is starting", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+
+    let resolveFirstStart: ((executionId: string) => void) | undefined;
+    mocks.executeMock.mockImplementationOnce(
+      () => new Promise<string>((resolve) => {
+        resolveFirstStart = resolve;
+      })
+    );
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+
+    // E.g. a plugin re-runs the active tab while its first run waits on a vault prompt.
+    const request = { fileIdOverride: "file-1", textOverride: "select again" };
+    mocks.peekExecuteOptionsMock.mockReturnValue(request);
+    mocks.consumeExecuteOptionsMock.mockReturnValueOnce(request);
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+    expect(mocks.holdExecuteRequestMock).toHaveBeenCalledWith("file-1");
+    expect(mocks.executeMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFirstStart?.("exec-1");
+      for (let i = 0; i < 5; i++) {
+        await Promise.resolve();
+      }
+    });
+
+    expect(mocks.executeMock).toHaveBeenCalledTimes(2);
+    expect(mocks.executeMock).toHaveBeenLastCalledWith(expect.objectContaining({ fileId: "file-1", text: "select again" }));
+  });
+
+  it("restarts the time limit of a held request when the editor leaves its file", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+    const file2 = makeFile({ fileId: "file-2", uri: "untitled:New.sql" });
+
+    mocks.executeMock.mockImplementationOnce(() => new Promise<string>(() => {}));
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+
+    mocks.peekExecuteOptionsMock.mockReturnValue({ fileIdOverride: "file-2", textOverride: "select 2" });
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file2} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+      await Promise.resolve();
+    });
+    expect(mocks.holdExecuteRequestMock).toHaveBeenCalledWith("file-2");
+    expect(mocks.releaseExecuteRequestMock).not.toHaveBeenCalled();
+
+    // The user switches back before file-1's start finishes.
+    mocks.peekExecuteOptionsMock.mockReturnValue(null);
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+      await Promise.resolve();
+    });
+    expect(mocks.releaseExecuteRequestMock).toHaveBeenCalledWith("file-2");
   });
 
   it("tracks concurrent executions per file across tab switches", async () => {
