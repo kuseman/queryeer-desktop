@@ -23,16 +23,16 @@ concurrency:
 jobs:
   recover:
     name: Verify or Recover Maven Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       actions: read
       contents: read
     steps:
       - name: Checkout recovery tooling
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Checkout release tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: v${{ inputs.release_version }}
           path: release-source
