@@ -105,6 +105,8 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
   const editorGroupIdRef = useRef(editorGroupId);
   const isActiveEditorGroupRef = useRef<boolean>(isActiveEditorGroup !== false);
   const disposedRef = useRef(false);
+  // File whose pending run request this editor holds while it finishes starting another run.
+  const heldRequestFileIdRef = useRef<string | null>(null);
   fileIdRef.current = file?.fileId;
   outputSessionIdRef.current = outputSessionId;
   outputSessionStorageKeyRef.current = outputSessionStorageKey;
@@ -343,6 +345,45 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       setSelectedPrimaryId(selected);
     }
   }, [readOutputContextForFile]);
+
+  // Runs a pending request aimed at the file this editor currently shows. The editor component is
+  // reused across a group's files, so a request for a tab that was not shown yet (e.g. a just-created
+  // tab) is taken when the editor switches to it. While a run is still starting the request is left
+  // in the queue (handleExecute would drop it) and taken when that start finishes. The editor holds
+  // it meanwhile, so a slow start (e.g. a vault unlock prompt) doesn't let it expire. A held request
+  // the editor doesn't take (it left the file) gets its time limit back; see releaseHeldRequest.
+  const takePendingRequestForCurrentFile = (): void => {
+    const targetFileId = fileIdRef.current;
+    if (!targetFileId || disposedRef.current) {
+      return;
+    }
+    const service = getQueryEngineService();
+    if (service.peekExecuteOptions()?.fileIdOverride !== targetFileId) {
+      return;
+    }
+    if (executingRef.current) {
+      service.holdExecuteRequest(targetFileId);
+      heldRequestFileIdRef.current = targetFileId;
+      return;
+    }
+    const pendingOptions = service.consumeExecuteOptions({
+      fileId: targetFileId,
+      targetOutputSessionId: outputSessionIdRef.current,
+      targetEditorGroupId: editorGroupIdRef.current,
+      isActiveEditorGroup: isActiveEditorGroupRef.current
+    });
+    if (pendingOptions) {
+      handleExecuteRef.current(pendingOptions);
+    }
+  };
+
+  const releaseHeldRequest = (): void => {
+    const heldFileId = heldRequestFileIdRef.current;
+    heldRequestFileIdRef.current = null;
+    if (heldFileId) {
+      getQueryEngineService().releaseExecuteRequest(heldFileId);
+    }
+  };
 
   const handleExecute = useCallback((retryExecuteOptions?: ExecuteRequestOptions | null) => {
     if (executingRef.current) {
@@ -942,6 +983,13 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
 
     run().finally(() => {
       executingRef.current = false;
+      const heldFileId = heldRequestFileIdRef.current;
+      heldRequestFileIdRef.current = null;
+      takePendingRequestForCurrentFile();
+      // Still pending if the editor left the file meanwhile: restart its time limit.
+      if (heldFileId) {
+        getQueryEngineService().releaseExecuteRequest(heldFileId);
+      }
     });
   }, [
     file?.fileId,
@@ -1049,27 +1097,17 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     handleCancelRef.current = handleCancel;
   }, [handleCancel]);
 
-  // The editor component is reused across the files of a group, so a run requested for a file
-  // that was not shown yet (e.g. a just-created tab) is picked up when this editor switches to it.
-  // Only requests aimed at this file are taken; the mount effect below handles untargeted ones.
+  // Take a request aimed at a file when this editor switches to it. Untargeted requests are
+  // handled by the mount effect and the execute-request listener below.
   const currentFileId = file?.fileId;
   useEffect(() => {
-    if (!currentFileId) {
-      return;
-    }
-    const service = getQueryEngineService();
-    if (service.peekExecuteOptions()?.fileIdOverride !== currentFileId) {
-      return;
-    }
-    const pendingOptions = service.consumeExecuteOptions({
-      fileId: currentFileId,
-      targetOutputSessionId: outputSessionIdRef.current,
-      targetEditorGroupId: editorGroupIdRef.current,
-      isActiveEditorGroup: isActiveEditorGroupRef.current
-    });
-    if (pendingOptions) {
-      handleExecuteRef.current(pendingOptions);
-    }
+    takePendingRequestForCurrentFile();
+    return () => {
+      // Leaving the file (or unmounting) while holding its request: restart its time limit.
+      if (heldRequestFileIdRef.current === currentFileId) {
+        releaseHeldRequest();
+      }
+    };
   }, [currentFileId]);
 
   useEffect(() => {
@@ -1101,6 +1139,11 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
         return;
       }
       if (!pending?.targetOutputSessionId && !pending?.targetEditorGroupId && isActiveEditorGroupRef.current === false) {
+        return;
+      }
+      if (pending?.fileIdOverride) {
+        // Aimed at the file this editor shows: take it, or hold it while a run is starting.
+        takePendingRequestForCurrentFile();
         return;
       }
       handleExecuteRef.current();
