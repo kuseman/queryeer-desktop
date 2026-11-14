@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => {
     executeMock: vi.fn(async () => "exec-1"),
     consumeExecuteOptionsMock: vi.fn(() => null as { outputIdOverride?: string; optionsOverride?: QueryExecuteOptions; fileIdOverride?: string; textOverride?: string } | null),
     holdExecuteRequestMock: vi.fn(),
+    discardExecuteRequestMock: vi.fn(),
     releaseExecuteRequestMock: vi.fn(),
     peekExecuteOptionsMock: vi.fn(() => null as { fileIdOverride?: string; textOverride?: string } | null),
     cancelMock: vi.fn(async () => {}),
@@ -128,6 +129,7 @@ vi.mock("./QueryEngineService", () => ({
     consumeExecuteOptions: mocks.consumeExecuteOptionsMock,
     peekExecuteOptions: mocks.peekExecuteOptionsMock,
     holdExecuteRequest: mocks.holdExecuteRequestMock,
+    discardExecuteRequest: mocks.discardExecuteRequestMock,
     releaseExecuteRequest: mocks.releaseExecuteRequestMock
   })
 }));
@@ -247,6 +249,7 @@ describe("QueryEditorComponent execution state across tab switches", () => {
     mocks.peekExecuteOptionsMock.mockReset();
     mocks.peekExecuteOptionsMock.mockReturnValue(null);
     mocks.holdExecuteRequestMock.mockClear();
+    mocks.discardExecuteRequestMock.mockClear();
     mocks.releaseExecuteRequestMock.mockClear();
     mocks.cancelMock.mockReset();
     mocks.subscribeMock.mockClear();
@@ -1005,6 +1008,47 @@ const filesRegistry = {
 
     expect(mocks.executeMock).toHaveBeenCalledTimes(2);
     expect(mocks.executeMock).toHaveBeenLastCalledWith(expect.objectContaining({ fileId: "file-1", text: "select again" }));
+  });
+
+  it("drops an untargeted request that arrives while the editor is still starting a run", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+    let resolveFirstStart: ((executionId: string) => void) | undefined;
+    mocks.executeMock.mockImplementationOnce(
+      () => new Promise<string>((resolve) => {
+        resolveFirstStart = resolve;
+      })
+    );
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+
+    // E.g. a shortcut runs a snippet while the first run waits on a vault prompt.
+    const request = { textOverride: "select 2" };
+    mocks.peekExecuteOptionsMock.mockReturnValue(request);
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) {
+        listener();
+      }
+      await Promise.resolve();
+    });
+    expect(mocks.discardExecuteRequestMock).toHaveBeenCalledWith(request);
+    expect(mocks.holdExecuteRequestMock).not.toHaveBeenCalled();
+
+    mocks.peekExecuteOptionsMock.mockReturnValue(null);
+    await act(async () => {
+      resolveFirstStart?.("exec-1");
+      for (let i = 0; i < 5; i++) {
+        await Promise.resolve();
+      }
+    });
+    expect(mocks.executeMock).toHaveBeenCalledTimes(1);
   });
 
   it("restarts the time limit of a held request when the editor leaves its file", async () => {

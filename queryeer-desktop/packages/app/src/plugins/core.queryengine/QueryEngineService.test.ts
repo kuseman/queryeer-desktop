@@ -1,6 +1,6 @@
 import { BackendNotReadyError } from "@queryeer/api/backend/BackendNotReadyError";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { QueryEngineService, TARGETED_EXECUTE_REQUEST_TTL_MS } from "./QueryEngineService";
+import { QueryEngineService, EXECUTE_REQUEST_TTL_MS } from "./QueryEngineService";
 
 const securityMocks = vi.hoisted(() => ({
   getCoreSecurityServiceMock: vi.fn<() => unknown>(() => null)
@@ -636,7 +636,7 @@ describe("QueryEngineService backend readiness", () => {
       const service = new QueryEngineService();
 
       service.requestExecute({ fileIdOverride: "file-1", textOverride: "select 1" });
-      vi.advanceTimersByTime(TARGETED_EXECUTE_REQUEST_TTL_MS - 1);
+      vi.advanceTimersByTime(EXECUTE_REQUEST_TTL_MS - 1);
       expect(service.peekExecuteOptions()).toEqual(expect.objectContaining({ fileIdOverride: "file-1" }));
 
       vi.advanceTimersByTime(2);
@@ -644,10 +644,12 @@ describe("QueryEngineService backend readiness", () => {
       expect(debug).toHaveBeenCalledWith(expect.stringContaining("file-1"));
       expect(service.consumeExecuteOptions({ fileId: "file-1", isActiveEditorGroup: true })).toBeNull();
 
-      // Untargeted requests are taken by the active editor right away and do not expire.
+      // Untargeted requests get the same limit as a backstop, so one nobody took can't fire later.
       service.requestExecute({ textOverride: "select 2" });
-      vi.advanceTimersByTime(TARGETED_EXECUTE_REQUEST_TTL_MS * 2);
+      vi.advanceTimersByTime(EXECUTE_REQUEST_TTL_MS - 1);
       expect(service.peekExecuteOptions()).toEqual(expect.objectContaining({ textOverride: "select 2" }));
+      vi.advanceTimersByTime(2);
+      expect(service.peekExecuteOptions()).toBeNull();
     } finally {
       vi.useRealTimers();
       debug.mockRestore();
@@ -662,7 +664,7 @@ describe("QueryEngineService backend readiness", () => {
       service.requestExecute({ fileIdOverride: "file-1", textOverride: "select 1" });
       // The editor showing file-1 defers it while another run is starting, e.g. behind a vault prompt.
       service.holdExecuteRequest("file-1");
-      vi.advanceTimersByTime(TARGETED_EXECUTE_REQUEST_TTL_MS * 3);
+      vi.advanceTimersByTime(EXECUTE_REQUEST_TTL_MS * 3);
 
       expect(service.consumeExecuteOptions({ fileId: "file-1", isActiveEditorGroup: true }))
         .toEqual(expect.objectContaining({ fileIdOverride: "file-1", textOverride: "select 1" }));
@@ -670,12 +672,33 @@ describe("QueryEngineService backend readiness", () => {
       // Holding only applies to the file the request is aimed at.
       service.requestExecute({ fileIdOverride: "file-2" });
       service.holdExecuteRequest("file-other");
-      vi.advanceTimersByTime(TARGETED_EXECUTE_REQUEST_TTL_MS + 1);
+      vi.advanceTimersByTime(EXECUTE_REQUEST_TTL_MS + 1);
       const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
       expect(service.peekExecuteOptions()).toBeNull();
       debug.mockRestore();
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it("discards a turned-down request only while it is still the pending one", () => {
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+    try {
+      const service = new QueryEngineService();
+
+      const first = { textOverride: "select 1" };
+      service.requestExecute(first);
+      service.discardExecuteRequest(first);
+      expect(service.peekExecuteOptions()).toBeNull();
+
+      const replaced = { textOverride: "select 2" };
+      const current = { textOverride: "select 3" };
+      service.requestExecute(replaced);
+      service.requestExecute(current);
+      service.discardExecuteRequest(replaced);
+      expect(service.peekExecuteOptions()).toBe(current);
+    } finally {
+      debug.mockRestore();
     }
   });
 
@@ -687,17 +710,17 @@ describe("QueryEngineService backend readiness", () => {
 
       service.requestExecute({ fileIdOverride: "file-1" });
       service.holdExecuteRequest("file-1");
-      vi.advanceTimersByTime(TARGETED_EXECUTE_REQUEST_TTL_MS * 3);
+      vi.advanceTimersByTime(EXECUTE_REQUEST_TTL_MS * 3);
       service.releaseExecuteRequest("file-1");
 
-      vi.advanceTimersByTime(TARGETED_EXECUTE_REQUEST_TTL_MS - 1);
+      vi.advanceTimersByTime(EXECUTE_REQUEST_TTL_MS - 1);
       expect(service.peekExecuteOptions()).toEqual(expect.objectContaining({ fileIdOverride: "file-1" }));
       vi.advanceTimersByTime(2);
       expect(service.peekExecuteOptions()).toBeNull();
 
       // Releasing a request that was never held doesn't extend its time limit.
       service.requestExecute({ fileIdOverride: "file-2" });
-      vi.advanceTimersByTime(TARGETED_EXECUTE_REQUEST_TTL_MS - 1);
+      vi.advanceTimersByTime(EXECUTE_REQUEST_TTL_MS - 1);
       service.releaseExecuteRequest("file-2");
       vi.advanceTimersByTime(2);
       expect(service.peekExecuteOptions()).toBeNull();
