@@ -110,6 +110,8 @@ type AppShellApi = {
   uninstallPlugin: (params: { pluginId: string }) => Promise<ManagedPluginUninstallResult>;
   listJdbcDrivers: (contributions: RegisteredJdbcManagedDriverContribution[]) => Promise<JdbcDriverStatus[]>;
   checkJdbcDrivers: (contributions: RegisteredJdbcManagedDriverContribution[]) => Promise<JdbcDriverStatus[]>;
+  /** Records that the user approved core installing this plugin driver. Install and update refuse an unapproved one. */
+  approveJdbcDriver: (contribution: RegisteredJdbcManagedDriverContribution) => Promise<JdbcDriverOperationResult>;
   installJdbcDriver: (contribution: RegisteredJdbcManagedDriverContribution, artifactId?: string) => Promise<JdbcDriverOperationResult>;
   updateJdbcDriver: (contribution: RegisteredJdbcManagedDriverContribution, artifactId?: string) => Promise<JdbcDriverOperationResult>;
   removeJdbcDriver: (contribution: RegisteredJdbcManagedDriverContribution, artifactId?: string) => Promise<JdbcDriverOperationResult>;
@@ -299,6 +301,9 @@ const appShellApi: AppShellApi = {
   },
   checkJdbcDrivers: async (contributions) => {
     return ipcRenderer.invoke("jdbc-drivers:check", contributions);
+  },
+  approveJdbcDriver: async (contribution) => {
+    return ipcRenderer.invoke("jdbc-drivers:approve", contribution);
   },
   installJdbcDriver: async (contribution, artifactId) => {
     return ipcRenderer.invoke("jdbc-drivers:install", contribution, artifactId);

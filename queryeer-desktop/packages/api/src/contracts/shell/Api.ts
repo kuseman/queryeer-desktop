@@ -59,6 +59,8 @@ export interface ShellApi {
   uninstallPlugin: (params: { pluginId: string }) => Promise<ManagedPluginUninstallResult>;
   listJdbcDrivers: (contributions: RegisteredJdbcManagedDriverContribution[]) => Promise<JdbcDriverStatus[]>;
   checkJdbcDrivers: (contributions: RegisteredJdbcManagedDriverContribution[]) => Promise<JdbcDriverStatus[]>;
+  /** Records that the user approved core installing this plugin driver. Install and update refuse an unapproved one. */
+  approveJdbcDriver: (contribution: RegisteredJdbcManagedDriverContribution) => Promise<JdbcDriverOperationResult>;
   installJdbcDriver: (contribution: RegisteredJdbcManagedDriverContribution, artifactId?: string) => Promise<JdbcDriverOperationResult>;
   updateJdbcDriver: (contribution: RegisteredJdbcManagedDriverContribution, artifactId?: string) => Promise<JdbcDriverOperationResult>;
   removeJdbcDriver: (contribution: RegisteredJdbcManagedDriverContribution, artifactId?: string) => Promise<JdbcDriverOperationResult>;

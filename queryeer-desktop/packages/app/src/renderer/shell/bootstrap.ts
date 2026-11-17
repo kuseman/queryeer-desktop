@@ -40,6 +40,7 @@ import {
   JDBC_DRIVERS_SETTING_ID,
   JDBC_DRIVER_UPDATE_CHECK_SETTING_ID
 } from "../../plugins/core.queryengine.jdbc/jdbc-driver-management-service";
+import { describeJdbcDriverApproval } from "../../plugins/core.queryengine.jdbc/jdbc-driver-approval";
 
 export async function bootstrapShell() {
   const chain = createContextChain();
@@ -289,6 +290,18 @@ export async function bootstrapShell() {
       settings?.openModalForSetting(JDBC_DRIVERS_SETTING_ID);
     },
     confirmOperation: async (operation, contribution, artifact) => {
+      if (operation === "approve") {
+        const approval = describeJdbcDriverApproval(contribution);
+        const result = await requestMessageDialog({
+          ...approval,
+          severity: "warning",
+          options: [
+            { label: "Install", value: "confirm" },
+            { label: "Cancel", value: "cancel" }
+          ]
+        });
+        return result.action === "confirm";
+      }
       const verb = `${operation[0].toUpperCase()}${operation.slice(1)}`;
       const selectedName = artifact.managedWithPrimary ? `${contribution.displayName} package` : artifact.displayName;
       const result = await requestMessageDialog({

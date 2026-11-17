@@ -20,6 +20,7 @@ const SQLITE_MIGRATION_NOTICE_STORAGE_KEY = "queryeer.jdbcDrivers.sqliteMigratio
 type DriverShell = Pick<ShellApi,
   | "listJdbcDrivers"
   | "checkJdbcDrivers"
+  | "approveJdbcDriver"
   | "installJdbcDriver"
   | "updateJdbcDriver"
   | "removeJdbcDriver"
@@ -34,7 +35,8 @@ export type JdbcDriverManagementOptions = {
   notifications: NotificationService;
   openSettings: () => void | Promise<void>;
   confirmOperation: (
-    operation: "install" | "update" | "remove" | "activate" | "discard",
+    /** `approve`: a plugin driver's first install or update, before the user has approved it. */
+    operation: "approve" | "install" | "update" | "remove" | "activate" | "discard",
     contribution: RegisteredJdbcManagedDriverContribution,
     artifact: JdbcDriverArtifactStatus
   ) => Promise<boolean>;
@@ -242,11 +244,8 @@ export class JdbcDriverManagementService {
       ?? (await this.refresh()).find((entry) => entry.contribution.dialectId === dialectId);
     const artifact = artifactsOf(currentStatus).find((entry) => entry.id === (artifactId ?? contribution.artifactId));
     if (!artifact) throw new Error(`JDBC driver artifact '${artifactId}' is unavailable`);
-    if (!mainProcessConfirms(operationName, currentStatus) && !await options.confirmOperation(operationName, contribution, artifact)) {
-      const status = currentStatus;
-      if (!status) throw new Error(`JDBC driver status '${dialectId}' is unavailable`);
-      return { accepted: false, reason: "Database driver operation cancelled", status };
-    }
+    const refusal = await this.confirm(operationName, contribution, artifact, currentStatus);
+    if (refusal) return refusal;
     const result = artifactId === undefined
       ? await options.shell[operation](contribution)
       : await options.shell[operation](contribution, artifactId);
@@ -318,11 +317,39 @@ export class JdbcDriverManagementService {
     }
   }
 
+  /**
+   * Asks the user before an operation. A plugin driver the user has not approved yet gets the approval dialog, which
+   * names what core will download, in place of the plain confirmation, and the main process records the approval.
+   * Returns undefined when the operation may go ahead, otherwise the result to report.
+   */
+  private async confirm(
+    operation: "install" | "update" | "remove",
+    contribution: RegisteredJdbcManagedDriverContribution,
+    artifact: JdbcDriverArtifactStatus,
+    status: JdbcDriverStatus | undefined
+  ): Promise<JdbcDriverOperationResult | undefined> {
+    const options = this.requireOptions();
+    const approval = operation !== "remove" && status?.approvalRequired === true;
+    if (await options.confirmOperation(approval ? "approve" : operation, contribution, artifact)) {
+      if (!approval) return undefined;
+      const result = await options.shell.approveJdbcDriver(contribution);
+      return result.accepted ? undefined : result;
+    }
+    if (!status) throw new Error(`JDBC driver status '${contribution.dialectId}' is unavailable`);
+    return { accepted: false, reason: "Database driver operation cancelled", status };
+  }
+
   private async installUpdate(status: JdbcDriverStatus, artifact: JdbcDriverArtifactStatus): Promise<boolean> {
     const options = this.requireOptions();
     const operation = artifact.source === "managed" ? "updateJdbcDriver" : "installJdbcDriver";
     const operationName = artifact.source === "managed" ? "update" : "install";
-    if (!mainProcessConfirms(operationName, status) && !await options.confirmOperation(operationName, status.contribution, artifact)) return false;
+    const refusal = await this.confirm(operationName, status.contribution, artifact, status);
+    if (refusal) {
+      if (refusal.reason && !/cancelled/i.test(refusal.reason)) {
+        options.notifications.notify({ title: "Database driver update failed", message: refusal.reason, severity: "error" });
+      }
+      return false;
+    }
     const result = artifact.id === status.contribution.artifactId
       ? await options.shell[operation](status.contribution)
       : await options.shell[operation](status.contribution, artifact.id);
@@ -401,14 +428,6 @@ export class JdbcDriverManagementService {
     if (!this.options) throw new Error("Database driver management service is not initialized");
     return this.options;
   }
-}
-
-/**
- * A plugin driver the user has not approved yet gets the main process's approval dialog on install or update, which
- * says more than ours. Asking here too would show two dialogs in a row.
- */
-function mainProcessConfirms(operation: "install" | "update" | "remove", status: JdbcDriverStatus | undefined): boolean {
-  return operation !== "remove" && status?.approvalRequired === true;
 }
 
 function artifactsOf(status: JdbcDriverStatus | undefined): JdbcDriverArtifactStatus[] {

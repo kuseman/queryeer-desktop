@@ -42,6 +42,7 @@ describe("JdbcDriversSettingsEditor", () => {
       shell: {
         listJdbcDrivers: vi.fn(async () => [manualStatus]),
         checkJdbcDrivers: vi.fn(async () => [manualStatus]),
+        approveJdbcDriver: vi.fn(),
         installJdbcDriver: vi.fn(),
         updateJdbcDriver: vi.fn(),
         removeJdbcDriver: vi.fn(),
@@ -112,6 +113,7 @@ describe("JdbcDriversSettingsEditor", () => {
       shell: {
         listJdbcDrivers: vi.fn(async () => [nativeStatus]),
         checkJdbcDrivers: vi.fn(async () => [nativeStatus]),
+        approveJdbcDriver: vi.fn(),
         installJdbcDriver: install,
         updateJdbcDriver: vi.fn(),
         removeJdbcDriver: vi.fn(),
@@ -173,6 +175,7 @@ describe("JdbcDriversSettingsEditor", () => {
       shell: {
         listJdbcDrivers: vi.fn(async () => [packageStatus]),
         checkJdbcDrivers: vi.fn(async () => [packageStatus]),
+        approveJdbcDriver: vi.fn(),
         installJdbcDriver: install,
         updateJdbcDriver: vi.fn(),
         removeJdbcDriver: vi.fn(),
@@ -222,6 +225,7 @@ describe("JdbcDriversSettingsEditor", () => {
       shell: {
         listJdbcDrivers: vi.fn(async () => [disabledStatus]),
         checkJdbcDrivers: vi.fn(async () => [disabledStatus]),
+        approveJdbcDriver: vi.fn(),
         installJdbcDriver: vi.fn(),
         updateJdbcDriver: vi.fn(),
         removeJdbcDriver: vi.fn(),
