@@ -6,6 +6,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -23,16 +24,35 @@ import java.util.stream.Stream;
  * plugin classes — this ensures {@link java.sql.DriverManager#isDriverAllowed} can reach drivers found in {@code libShared} through parent-delegation.
  *
  * <p>
- * Drop {@code mssql-jdbc-*.jar} (or any other JDBC driver) into {@code libShared} to make it available to all dialect plugins without bundling it in the distribution.
+ * Drop a JDBC driver jar into {@code libShared} to make it available to all dialect plugins without bundling it in the distribution.
+ * </p>
+ *
+ * <p>
+ * For the driver classes the host passes in (the drivers registered by plugins), only one jar per driver class is loaded: the managed one if there is one, otherwise the newest by
+ * {@code Implementation-Version}. Jars of other drivers are all loaded.
  * </p>
  */
 final class SharedLibraryLoader
 {
     private static final String MANAGED_PREFIX = "000-queryeer-managed-";
-    private static final List<String> KNOWN_JDBC_DRIVERS = List.of("org/postgresql/Driver.class", "com/microsoft/sqlserver/jdbc/SQLServerDriver.class", "org/sqlite/JDBC.class");
     private static final Pattern VERSION_PART = Pattern.compile("\\d+|\\D+");
 
-    static List<URL> collect(String appDir)
+    /** Parses the host's comma-separated {@code queryeer.jdbc.driverClasses} value. */
+    static List<String> parseDriverClasses(String value)
+    {
+        if (value == null
+                || value.isBlank())
+        {
+            return List.of();
+        }
+        return Stream.of(value.split(","))
+                .map(String::trim)
+                .filter(name -> !name.isEmpty())
+                .distinct()
+                .toList();
+    }
+
+    static List<URL> collect(String appDir, Collection<String> driverClassNames)
     {
         if (appDir == null
                 || appDir.isBlank())
@@ -58,11 +78,14 @@ final class SharedLibraryLoader
         {
             return List.of();
         }
+        List<String> driverEntries = driverClassNames.stream()
+                .map(name -> name.replace('.', '/') + ".class")
+                .toList();
         Set<Path> providerJars = new HashSet<>();
         Map<String, List<Path>> providerCandidates = new HashMap<>();
         for (Path path : paths)
         {
-            List<String> drivers = knownDrivers(path);
+            List<String> drivers = knownDrivers(path, driverEntries);
             if (drivers == null
                     || drivers.size() > 1)
             {
@@ -106,11 +129,15 @@ final class SharedLibraryLoader
         return Collections.unmodifiableList(urls);
     }
 
-    private static List<String> knownDrivers(Path path)
+    private static List<String> knownDrivers(Path path, List<String> driverEntries)
     {
+        if (driverEntries.isEmpty())
+        {
+            return List.of();
+        }
         try (JarFile jar = new JarFile(path.toFile()))
         {
-            return KNOWN_JDBC_DRIVERS.stream()
+            return driverEntries.stream()
                     .filter(driver -> jar.getJarEntry(driver) != null)
                     .toList();
         }

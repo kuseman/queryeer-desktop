@@ -301,6 +301,21 @@ describe("JdbcDriverManagementService", () => {
     expect(setup.shell.installJdbcDriver).not.toHaveBeenCalled();
   });
 
+  it("leaves the confirmation of an unapproved plugin driver to the main process", async () => {
+    const setup = options({ updateChecksEnabled: () => false });
+    vi.mocked(setup.shell.listJdbcDrivers).mockResolvedValue([status({ approvalRequired: true })]);
+    await service.initialize(setup);
+
+    await service.install("sqlite");
+    expect(setup.confirmOperation).not.toHaveBeenCalled();
+    expect(setup.shell.installJdbcDriver).toHaveBeenCalledWith(sqlite);
+
+    vi.mocked(setup.shell.listJdbcDrivers).mockResolvedValue([status({ approvalRequired: true, source: "managed" })]);
+    await service.refresh();
+    await service.remove("sqlite");
+    expect(setup.confirmOperation).toHaveBeenCalledWith("remove", sqlite, expect.anything());
+  });
+
   it("targets and names a companion artifact independently", async () => {
     const native = {
       id: "native-auth",

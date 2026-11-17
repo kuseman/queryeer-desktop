@@ -18,6 +18,8 @@ class SharedLibraryLoaderTest
 {
     private static final String SQL_SERVER_DRIVER = "com/microsoft/sqlserver/jdbc/SQLServerDriver.class";
     private static final String POSTGRES_DRIVER = "org/postgresql/Driver.class";
+    private static final String MARIADB_DRIVER = "org/mariadb/jdbc/Driver.class";
+    private static final List<String> DRIVERS = List.of("com.microsoft.sqlserver.jdbc.SQLServerDriver", "org.postgresql.Driver");
 
     @TempDir
     Path tempDir;
@@ -30,7 +32,7 @@ class SharedLibraryLoaderTest
         Path managed = createJar(libShared.resolve("000-queryeer-managed-mssql-jdbc-13.4.0.jre11.jar"), "13.4.0.jre11", SQL_SERVER_DRIVER);
         Path unrelated = createJar(libShared.resolve("unrelated.jar"), "1.0", "example/Unrelated.class");
 
-        List<URL> result = SharedLibraryLoader.collect(tempDir.toString());
+        List<URL> result = SharedLibraryLoader.collect(tempDir.toString(), DRIVERS);
 
         assertEquals(List.of(managed.toUri()
                 .toURL(),
@@ -49,7 +51,7 @@ class SharedLibraryLoaderTest
         Path newest = createJar(libShared.resolve("mssql-jdbc-13.4.0.jre11.jar"), "13.4.0.jre11", SQL_SERVER_DRIVER);
 
         assertEquals(List.of(newest.toUri()
-                .toURL()), SharedLibraryLoader.collect(tempDir.toString()));
+                .toURL()), SharedLibraryLoader.collect(tempDir.toString(), DRIVERS));
     }
 
     @Test
@@ -60,7 +62,7 @@ class SharedLibraryLoaderTest
         createJar(libShared.resolve("sqlserver-b.jar"), null, SQL_SERVER_DRIVER);
         createJar(libShared.resolve("multi-provider.jar"), "1.0", SQL_SERVER_DRIVER, POSTGRES_DRIVER);
 
-        assertEquals(List.of(), SharedLibraryLoader.collect(tempDir.toString()));
+        assertEquals(List.of(), SharedLibraryLoader.collect(tempDir.toString(), DRIVERS));
     }
 
     @Test
@@ -70,7 +72,31 @@ class SharedLibraryLoaderTest
         Path driver = createJar(libShared.resolve("mssql-jdbc-13.4.0.JAR"), "13.4.0.jre11", SQL_SERVER_DRIVER);
 
         assertEquals(List.of(driver.toUri()
-                .toURL()), SharedLibraryLoader.collect(tempDir.toString()));
+                .toURL()), SharedLibraryLoader.collect(tempDir.toString(), DRIVERS));
+    }
+
+    @Test
+    void selectsAmongVersionsOnlyForRegisteredDriverClasses() throws Exception
+    {
+        Path libShared = Files.createDirectories(tempDir.resolve("libShared"));
+        Path older = createJar(libShared.resolve("mariadb-java-client-3.4.1.jar"), "3.4.1", MARIADB_DRIVER);
+        Path newer = createJar(libShared.resolve("mariadb-java-client-3.5.6.jar"), "3.5.6", MARIADB_DRIVER);
+
+        assertEquals(List.of(older.toUri()
+                .toURL(),
+                newer.toUri()
+                        .toURL()),
+                SharedLibraryLoader.collect(tempDir.toString(), List.of()));
+        assertEquals(List.of(newer.toUri()
+                .toURL()), SharedLibraryLoader.collect(tempDir.toString(), List.of("org.mariadb.jdbc.Driver")));
+    }
+
+    @Test
+    void parsesTheHostDriverClassList()
+    {
+        assertEquals(List.of(), SharedLibraryLoader.parseDriverClasses(null));
+        assertEquals(List.of(), SharedLibraryLoader.parseDriverClasses(" "));
+        assertEquals(List.of("org.postgresql.Driver", "org.mariadb.jdbc.Driver"), SharedLibraryLoader.parseDriverClasses("org.postgresql.Driver, org.mariadb.jdbc.Driver,,org.postgresql.Driver"));
     }
 
     private Path createJar(Path path, String version, String... entries) throws Exception

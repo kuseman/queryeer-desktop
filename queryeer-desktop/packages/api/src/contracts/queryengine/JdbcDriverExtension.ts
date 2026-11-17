@@ -85,6 +85,11 @@ export type JdbcDriverStatus = {
   updateAvailable: boolean;
   restartRequired: boolean;
   managementAvailable: boolean;
+  /**
+   * The user has not yet confirmed that core may install this plugin's driver. The host asks before the first
+   * install, and again when the plugin changes what it declares.
+   */
+  approvalRequired?: boolean;
   versionMismatch?: boolean;
   warning?: string;
   artifacts?: JdbcDriverArtifactStatus[];

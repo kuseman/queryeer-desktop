@@ -20,6 +20,7 @@ const GITHUB_DOWNLOAD_HOSTS = new Set(["github.com", "objects.githubusercontent.
 const MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024;
 const MANAGED_PREFIX = "000-queryeer-managed-";
 const INVENTORY_VERSION = 2;
+const INSTALL_NOT_CONFIRMED = "Database driver installation cancelled";
 
 type GitHubReleaseMetadata = {
   tag_name?: unknown;
@@ -89,7 +90,15 @@ type InventoryDocument = {
   version: 2;
   drivers: InventoryEntry[];
   disabledSets: DisabledSetEntry[];
+  /**
+   * Plugin driver contributions the user confirmed before their first install, as they were declared then.
+   * A changed declaration needs a new confirmation. Built-in contributions are approved without one.
+   */
+  approved?: RegisteredJdbcManagedDriverContribution[];
 };
+
+/** Asks the user to confirm the first install of a plugin's driver. Resolves to false when they decline. */
+export type JdbcDriverInstallConfirmation = (contribution: RegisteredJdbcManagedDriverContribution) => Promise<boolean>;
 
 type ActiveArtifactCandidate = {
   contribution: RegisteredJdbcManagedDriverContribution;
@@ -102,7 +111,11 @@ type ActiveArtifactCandidate = {
   file: string;
 };
 
-const TRUSTED_CONTRIBUTIONS: readonly RegisteredJdbcManagedDriverContribution[] = [
+/**
+ * Core's own driver contributions. They are approved without asking, and their declaration here wins over the one
+ * the renderer sends, so a plugin cannot change their compatibility policy or companions.
+ */
+const BUILTIN_CONTRIBUTIONS: readonly RegisteredJdbcManagedDriverContribution[] = [
   {
     ownerPluginId: "core.queryengine.jdbc.postgres",
     dialectId: "postgres",
@@ -170,6 +183,7 @@ export class JdbcDriverArtifactService {
   private readonly arch: string;
   private readonly moveArtifact: typeof rename;
   private readonly trashArtifact: (path: string) => Promise<void>;
+  private readonly confirmInstall: JdbcDriverInstallConfirmation;
   private mutationQueue: Promise<void> = Promise.resolve();
 
   public constructor(options: {
@@ -182,6 +196,8 @@ export class JdbcDriverArtifactService {
     arch?: string;
     moveArtifact?: typeof rename;
     trashArtifact?: (path: string) => Promise<void>;
+    /** Without it, a plugin driver that is not yet approved cannot be installed. */
+    confirmInstall?: JdbcDriverInstallConfirmation;
   }) {
     this.libSharedDir = join(options.appDir, "libShared");
     this.libNativeDir = join(options.appDir, "libNative");
@@ -194,6 +210,74 @@ export class JdbcDriverArtifactService {
     this.arch = normalizeArch(options.arch ?? process.arch);
     this.moveArtifact = options.moveArtifact ?? rename;
     this.trashArtifact = options.trashArtifact ?? ((path) => rm(path));
+    this.confirmInstall = options.confirmInstall ?? (async () => false);
+  }
+
+  /**
+   * The driver classes core manages: the built-in ones and every approved plugin driver. The backend loads one jar
+   * per class from `libShared` when several versions are present.
+   */
+  public managedDriverClassNames(): string[] {
+    return [...new Set(this.managedContributions().map((contribution) => contribution.driverClassName))];
+  }
+
+  /** Built-in contributions plus the approved plugin contributions, which startup maintenance runs for. */
+  private managedContributions(): RegisteredJdbcManagedDriverContribution[] {
+    const approved = (this.inventory.approved ?? []).filter((contribution) => !BUILTIN_CONTRIBUTIONS.some((builtin) =>
+      sameOwner(builtin, contribution)));
+    return [...BUILTIN_CONTRIBUTIONS, ...approved];
+  }
+
+  private isApproved(contribution: RegisteredJdbcManagedDriverContribution): boolean {
+    return BUILTIN_CONTRIBUTIONS.includes(contribution)
+      || (this.inventory.approved ?? []).some((approved) => sameDeclaration(approved, contribution));
+  }
+
+  /** Whether disabled sets of this contribution can be restored: only those of contributions core manages. */
+  private isManagedOwner(contribution: RegisteredJdbcManagedDriverContribution): boolean {
+    return this.managedContributions().some((managed) => sameOwner(managed, contribution));
+  }
+
+  /**
+   * Why core cannot manage this contribution next to the ones it already manages, or undefined when it can:
+   * - it claims a built-in's plugin ID and dialect with a different declaration;
+   * - another managed contribution already uses its driver class, so startup could not tell their jars apart;
+   * - one of its native companions has file names that overlap another managed contribution's.
+   */
+  private managementConflict(contribution: RegisteredJdbcManagedDriverContribution): string | undefined {
+    const builtin = BUILTIN_CONTRIBUTIONS.find((candidate) => sameOwner(candidate, contribution));
+    if (builtin) {
+      return builtin === contribution
+        ? undefined
+        : `This declaration uses the plugin ID of the built-in ${builtin.displayName} with different coordinates`;
+    }
+    for (const other of this.managedContributions()) {
+      if (sameOwner(other, contribution)) continue;
+      if (other.driverClassName === contribution.driverClassName) {
+        return `The driver class ${contribution.driverClassName} is already managed for ${other.ownerPluginId} (${other.dialectId})`;
+      }
+      for (const companion of contribution.companionArtifacts ?? []) {
+        const stem = companionFileStem(companion).toLowerCase();
+        for (const otherCompanion of other.companionArtifacts ?? []) {
+          const otherStem = companionFileStem(otherCompanion).toLowerCase();
+          if (stem.startsWith(otherStem) || otherStem.startsWith(stem)) {
+            return `The file names of ${companion.displayName} overlap those of ${otherCompanion.displayName} from ${other.ownerPluginId}`;
+          }
+        }
+      }
+    }
+    return undefined;
+  }
+
+  private async ensureApproved(contribution: RegisteredJdbcManagedDriverContribution): Promise<boolean> {
+    if (this.isApproved(contribution)) return true;
+    if (!await this.confirmInstall(contribution)) return false;
+    this.inventory.approved = [
+      ...(this.inventory.approved ?? []).filter((approved) => !sameOwner(approved, contribution)),
+      contribution
+    ];
+    await this.writeInventory();
+    return true;
   }
 
   public async initialize(): Promise<void> {
@@ -321,7 +405,7 @@ export class JdbcDriverArtifactService {
 
   private async repairRetainedManagedCompanions(): Promise<boolean> {
     let changed = false;
-    for (const contribution of TRUSTED_CONTRIBUTIONS) {
+    for (const contribution of this.managedContributions()) {
       const driverEntry = this.findEntry(contribution);
       if (!driverEntry?.managedFile || !driverEntry.installedVersion || !driverEntry.installedSha256
         || !existsSync(driverEntry.managedFile) || await fileSha256(driverEntry.managedFile) !== driverEntry.installedSha256) continue;
@@ -473,9 +557,10 @@ export class JdbcDriverArtifactService {
   }
 
   private async reconcileConflictingArtifacts(): Promise<void> {
-    const candidates = await this.scanActiveArtifactCandidates([...TRUSTED_CONTRIBUTIONS]);
+    const managed = this.managedContributions();
+    const candidates = await this.scanActiveArtifactCandidates(managed);
     const disabledSets: DisabledSetEntry[] = [];
-    for (const contribution of TRUSTED_CONTRIBUTIONS) {
+    for (const contribution of managed) {
       const providerCandidates = candidates.filter((candidate) => candidate.contribution.dialectId === contribution.dialectId);
       const disabled: ActiveArtifactCandidate[] = [];
       const driverCandidates = providerCandidates.filter((candidate) => candidate.kind === "driver");
@@ -594,7 +679,7 @@ export class JdbcDriverArtifactService {
     }
     let nativeNames: string[] = [];
     try {
-      nativeNames = (await readdir(this.libNativeDir)).filter((name) => /^(?:mssql-jdbc_auth.*|sqljdbc_auth)\.dll$/i.test(name)).sort();
+      nativeNames = (await readdir(this.libNativeDir)).sort();
     } catch {
       // Missing directories have no active artifacts.
     }
@@ -602,6 +687,7 @@ export class JdbcDriverArtifactService {
       for (const companion of contribution.companionArtifacts ?? []) {
         if (!this.isApplicable(companion)) continue;
         for (const name of nativeNames) {
+          if (!isCompanionFamilyFile(companion, name)) continue;
           const file = join(this.libNativeDir, name);
           const sha256 = await fileSha256(file);
           const inventoryEntry = this.findEntry(contribution);
@@ -612,7 +698,7 @@ export class JdbcDriverArtifactService {
             artifactId: companion.id,
             kind: "nativeLibrary",
             source: inventoryOwned ? "managed" : "manual",
-            version: name.match(/^mssql-jdbc_auth-([0-9]+\.[0-9]+\.[0-9]+)(?:\.[^.]+)?(?:\.queryeer-managed)?\.dll$/i)?.[1],
+            version: companionFileVersion(companion, name),
             sha256,
             file
           });
@@ -719,7 +805,7 @@ export class JdbcDriverArtifactService {
   }
 
   private async applyDisabledSetRestore(disabledSet: DisabledSetEntry): Promise<void> {
-    const contribution = TRUSTED_CONTRIBUTIONS.find((entry) => entry.ownerPluginId === disabledSet.ownerPluginId
+    const contribution = this.managedContributions().find((entry) => entry.ownerPluginId === disabledSet.ownerPluginId
       && entry.dialectId === disabledSet.dialectId);
     if (!contribution || !disabledSet.artifacts.some((artifact) => artifact.kind === "driver")) {
       throw new Error(`Disabled JDBC set '${disabledSet.id}' cannot be restored`);
@@ -827,7 +913,7 @@ export class JdbcDriverArtifactService {
   private async checkInternal(contributions: unknown): Promise<JdbcDriverStatus[]> {
     const validated = validateContributions(contributions).map(canonicalizeContribution);
     for (const contribution of validated) {
-      if (!isTrusted(contribution)) continue;
+      if (this.managementConflict(contribution)) continue;
       const entry = this.getOrCreateEntry(contribution);
       try {
         entry.latestVersion = await this.fetchLatestVersion(contribution);
@@ -868,7 +954,9 @@ export class JdbcDriverArtifactService {
       const contribution = canonicalizeContribution(validateContribution(contributionValue));
       const disabledSetId = validateDisabledSetId(disabledSetIdValue);
       let status = (await this.list([contribution]))[0];
-      if (!isTrusted(contribution)) return rejected(status, "Artifact restore is not available for this contribution");
+      const conflict = this.managementConflict(contribution);
+      if (conflict) return rejected(status, conflict);
+      if (!this.isManagedOwner(contribution)) return rejected(status, "Artifact restore is not available for this contribution");
       const disabledSet = this.inventory.disabledSets.find((entry) => entry.id === disabledSetId
         && entry.ownerPluginId === contribution.ownerPluginId && entry.dialectId === contribution.dialectId);
       if (!disabledSet) return rejected(status, "Disabled JDBC artifact set was not found");
@@ -899,7 +987,9 @@ export class JdbcDriverArtifactService {
       const contribution = canonicalizeContribution(validateContribution(contributionValue));
       const disabledSetId = validateDisabledSetId(disabledSetIdValue);
       let status = (await this.list([contribution]))[0];
-      if (!isTrusted(contribution)) return rejected(status, "Retained artifact removal is not available for this contribution");
+      const conflict = this.managementConflict(contribution);
+      if (conflict) return rejected(status, conflict);
+      if (!this.isManagedOwner(contribution)) return rejected(status, "Retained artifact removal is not available for this contribution");
       const disabledSet = this.inventory.disabledSets.find((entry) => entry.id === disabledSetId
         && entry.ownerPluginId === contribution.ownerPluginId && entry.dialectId === contribution.dialectId);
       if (!disabledSet) return rejected(status, "Retained JDBC artifact set was not found");
@@ -935,7 +1025,8 @@ export class JdbcDriverArtifactService {
   private async removeInternal(contributionValue: unknown, artifactId?: string): Promise<JdbcDriverOperationResult> {
     const contribution = canonicalizeContribution(validateContribution(contributionValue));
     const status = (await this.list([contribution]))[0];
-    if (!isTrusted(contribution)) return rejected(status, "Automatic management is not available for this contribution");
+    const conflict = this.managementConflict(contribution);
+    if (conflict) return rejected(status, conflict);
     if (this.inventory.disabledSets.some((entry) => entry.pendingRestore)) {
       return rejected(status, "A JDBC artifact restore is already pending");
     }
@@ -961,7 +1052,8 @@ export class JdbcDriverArtifactService {
   private async stageInstall(contributionValue: unknown, operation: "install" | "update", artifactId?: string): Promise<JdbcDriverOperationResult> {
     const contribution = canonicalizeContribution(validateContribution(contributionValue));
     let status = (await this.list([contribution]))[0];
-    if (!isTrusted(contribution)) return rejected(status, "Automatic management is not available for this contribution");
+    const conflict = this.managementConflict(contribution);
+    if (conflict) return rejected(status, conflict);
     if (this.inventory.disabledSets.some((entry) => entry.pendingRestore)) {
       return rejected(status, "A JDBC artifact restore is already pending");
     }
@@ -983,6 +1075,7 @@ export class JdbcDriverArtifactService {
     if (operation === "update" && !entry.managedFile) {
       return rejected(status, "No managed driver is installed");
     }
+    if (!await this.ensureApproved(contribution)) return rejected(status, INSTALL_NOT_CONFIRMED);
 
     const token = `${companion?.id ?? contribution.artifactId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const extension = companion?.expectedFileExtension ?? ".jar";
@@ -1002,8 +1095,9 @@ export class JdbcDriverArtifactService {
         : await this.downloadAndVerify(contribution, version);
       const sha256 = createHash("sha256").update(contents).digest("hex");
       const finalFile = companion
-        ? join(this.libNativeDir, `mssql-jdbc_auth-${version}.${this.arch}.dll`)
+        ? join(this.libNativeDir, companionFileName(companion, version, this.arch))
         : join(this.libSharedDir, `${MANAGED_PREFIX}${contribution.artifactId}-${version}.jar`);
+      if (!this.isManagedPath(finalFile)) throw new Error(`JDBC driver target '${basename(finalFile)}' is not a valid managed file name`);
       if (existsSync(finalFile) && finalFile !== entry.managedFile) {
         throw new Error(`JDBC driver target '${basename(finalFile)}' already exists`);
       }
@@ -1037,6 +1131,7 @@ export class JdbcDriverArtifactService {
     if (members.some((entry) => entry.pending)) return rejected(initialStatus, "A JDBC driver package operation is already pending");
     const anyManaged = members.some((entry) => Boolean(entry.managedFile));
     if (operation === "update" && !anyManaged) return rejected(initialStatus, "No managed JDBC driver package is installed");
+    if (!await this.ensureApproved(contribution)) return rejected(initialStatus, INSTALL_NOT_CONFIRMED);
 
     const bundleId = `${contribution.dialectId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const stagedFiles: string[] = [];
@@ -1059,11 +1154,10 @@ export class JdbcDriverArtifactService {
       ]);
       const finalFiles = [
         join(this.libSharedDir, `${MANAGED_PREFIX}${contribution.artifactId}-${driverVersion}.jar`),
-        ...companions.map((_companion, index) => join(
-          this.libNativeDir,
-          `mssql-jdbc_auth-${versions[index + 1]}.${this.arch}.dll`
-        ))
+        ...companions.map((companion, index) => join(this.libNativeDir, companionFileName(companion, versions[index + 1], this.arch)))
       ];
+      const invalidTarget = finalFiles.find((file) => !this.isManagedPath(file));
+      if (invalidTarget) throw new Error(`JDBC package target '${basename(invalidTarget)}' is not a valid managed file name`);
       for (let index = 0; index < finalFiles.length; index += 1) {
         if (existsSync(finalFiles[index]) && finalFiles[index] !== members[index].managedFile
           && await fileSha256(finalFiles[index]) !== createHash("sha256").update(contents[index]).digest("hex")) {
@@ -1323,17 +1417,14 @@ export class JdbcDriverArtifactService {
         const companionEntry = inventoryEntry ? this.findCompanionEntry(inventoryEntry, companion.id) : undefined;
         let name: string | undefined;
         for (const candidate of names) {
-          if (!candidate.toLowerCase().endsWith(companion.expectedFileExtension)
-            || !/^(?:mssql-jdbc_auth.*|sqljdbc_auth)\.dll$/i.test(candidate)
-            || candidate.includes(".queryeer-managed.")) continue;
+          if (!isCompanionFamilyFile(companion, candidate) || candidate.includes(".queryeer-managed.")) continue;
           const file = join(this.libNativeDir, candidate);
           if (companionEntry?.managedFile === file && companionEntry.installedSha256 === await fileSha256(file)) continue;
           name = candidate;
           break;
         }
         if (!name) continue;
-        const version = name.match(/^mssql-jdbc_auth-([0-9]+\.[0-9]+\.[0-9]+)(?:\.[^.]+)?\.dll$/i)?.[1];
-        result.set(artifactKey(contribution, companion.id), version ?? null);
+        result.set(artifactKey(contribution, companion.id), companionFileVersion(companion, name) ?? null);
       }
     }
     return result;
@@ -1370,6 +1461,7 @@ export class JdbcDriverArtifactService {
       ? entry.pending.version
       : managedFileExists ? entry?.installedVersion : manualVersion;
     const latestVersion = entry?.latestVersion;
+    const conflict = this.managementConflict(contribution);
     const primary: JdbcDriverArtifactStatus = {
       id: contribution.artifactId,
       displayName: "JDBC JAR",
@@ -1380,7 +1472,8 @@ export class JdbcDriverArtifactService {
       ...(latestVersion ? { latestVersion } : {}),
       updateAvailable: Boolean(installedVersion && latestVersion && compareVersions(installedVersion, latestVersion) < 0),
       restartRequired: Boolean(entry?.pending),
-      managementAvailable: isTrusted(contribution),
+      managementAvailable: !conflict,
+      ...(conflict ? { warning: conflict } : {}),
       ...(entry?.pending ? { pendingOperation: entry.pending.operation } : {}),
       ...(entry?.error ? { error: entry.error } : {})
     };
@@ -1405,7 +1498,7 @@ export class JdbcDriverArtifactService {
         ...(latestVersion ? { latestVersion } : {}),
         updateAvailable: Boolean(installedVersion && latestVersion && compareVersions(installedVersion, latestVersion) < 0),
         restartRequired: Boolean(companionEntry?.pending),
-        managementAvailable: applicable && isTrusted(contribution),
+        managementAvailable: applicable && !conflict,
         ...(companionEntry?.pending ? { pendingOperation: companionEntry.pending.operation } : {}),
         ...(companionEntry?.error ? { error: companionEntry.error } : {})
       };
@@ -1444,7 +1537,7 @@ export class JdbcDriverArtifactService {
       }
       const manualDetected = manualCompanions.has(artifactKey(contribution, declaration.id));
       if (manualDetected && companionStatus.source === "managed") {
-        packageWarning = "A manual SQL Server authentication DLL is also present. Remove it to eliminate ambiguity.";
+        packageWarning = `A manually supplied ${declaration.displayName} file is also present. Remove it to eliminate ambiguity.`;
         companionStatus.warning = packageWarning;
       }
     }
@@ -1455,9 +1548,10 @@ export class JdbcDriverArtifactService {
       ...(latestVersion ? { latestVersion } : {}),
       updateAvailable: primary.updateAvailable,
       restartRequired: primary.restartRequired || disabledSets.some((disabledSet) => disabledSet.pendingRestore),
-      managementAvailable: isTrusted(contribution),
+      managementAvailable: !conflict,
+      ...(conflict || this.isApproved(contribution) ? {} : { approvalRequired: true }),
       ...(packageVersionMismatch ? { versionMismatch: true } : {}),
-      ...(packageWarning ? { warning: packageWarning } : {}),
+      ...(conflict ?? packageWarning ? { warning: conflict ?? packageWarning } : {}),
       artifacts: [primary, ...companions],
       ...(disabledSets.length > 0 ? { disabledSets } : {}),
       ...(entry?.pending ? { pendingOperation: entry.pending.operation } : {}),
@@ -1547,7 +1641,17 @@ export class JdbcDriverArtifactService {
   private async readInventory(): Promise<InventoryDocument> {
     try {
       const parsed = JSON.parse(await readFile(this.inventoryPath, "utf8")) as InventoryDocument | { version: 1; drivers: InventoryEntry[] };
-      if (parsed.version === INVENTORY_VERSION && Array.isArray(parsed.drivers) && Array.isArray(parsed.disabledSets)) return parsed;
+      if (parsed.version === INVENTORY_VERSION && Array.isArray(parsed.drivers) && Array.isArray(parsed.disabledSets)) {
+        const approved = Array.isArray(parsed.approved) ? parsed.approved.flatMap((value) => {
+          try {
+            return [validateContribution(value)];
+          } catch {
+            return [];
+          }
+        }) : [];
+        const { approved: _ignored, ...rest } = parsed;
+        return approved.length > 0 ? { ...rest, approved } : rest;
+      }
       if (parsed.version === 1 && Array.isArray(parsed.drivers)) {
         return { version: INVENTORY_VERSION, drivers: parsed.drivers, disabledSets: [] };
       }
@@ -1569,7 +1673,8 @@ export class JdbcDriverArtifactService {
 
   private isManagedPath(path: string): boolean {
     return (dirname(path) === this.libSharedDir && basename(path).startsWith(MANAGED_PREFIX))
-      || (dirname(path) === this.libNativeDir && /^mssql-jdbc_auth-[0-9]+\.[0-9]+\.[0-9]+\.(?:x64|x86|arm64)(?:\.queryeer-managed)?\.dll$/i.test(basename(path)));
+      || (dirname(path) === this.libNativeDir && this.managedContributions().some((contribution) =>
+        (contribution.companionArtifacts ?? []).some((companion) => companionFileVersion(companion, basename(path)) !== undefined)));
   }
 
   private isStagedPath(path: string): boolean {
@@ -1667,18 +1772,101 @@ function validateCompanions(value: unknown): JdbcDriverCompanionArtifact[] {
       throw new Error("Invalid JDBC companion version lock");
     }
     try { new RegExp(mapping.pattern); } catch { throw new Error("Invalid JDBC companion version mapping"); }
+    const entryTemplate = source.archiveEntryTemplate as string;
+    const fileTemplate = entryTemplate.slice(entryTemplate.lastIndexOf("/") + 1);
+    if (!/^[A-Za-z0-9_.{}-]+$/.test(fileTemplate)
+      || !fileTemplate.includes("{releaseVersion}")
+      || /[{}]/.test(fileTemplate.replaceAll("{releaseVersion}", "").replaceAll("{arch}", ""))
+      || !fileTemplate.toLowerCase().endsWith(input.expectedFileExtension as string)
+      || fileTemplate.split("{")[0].replace(/[-_.]+$/, "").length < 3) {
+      throw new Error("Invalid JDBC companion file name: the archive entry must end in a file name with a fixed prefix and {releaseVersion}");
+    }
     return item as JdbcDriverCompanionArtifact;
   });
 }
 
-function isTrusted(contribution: RegisteredJdbcManagedDriverContribution): boolean {
-  return TRUSTED_CONTRIBUTIONS.includes(contribution);
+function sameOwner(left: RegisteredJdbcManagedDriverContribution, right: RegisteredJdbcManagedDriverContribution): boolean {
+  return left.ownerPluginId === right.ownerPluginId && left.dialectId === right.dialectId;
+}
+
+/** Whether two declarations make core fetch and accept the same artifacts. Display names and pages don't count. */
+function sameDeclaration(left: RegisteredJdbcManagedDriverContribution, right: RegisteredJdbcManagedDriverContribution): boolean {
+  const identity = (contribution: RegisteredJdbcManagedDriverContribution): string => JSON.stringify([
+    contribution.ownerPluginId,
+    contribution.dialectId,
+    contribution.groupId,
+    contribution.artifactId,
+    contribution.driverClassName,
+    contribution.compatibleVersionRegex ?? null,
+    (contribution.companionArtifacts ?? []).map((companion) => [
+      companion.id,
+      companion.kind,
+      companion.platforms.map((platform) => `${platform.os}/${platform.arch}`).sort(),
+      companion.source.type,
+      companion.source.repository,
+      companion.source.releaseTagTemplate,
+      companion.source.assetName,
+      companion.source.driverVersionToReleaseVersion.pattern,
+      companion.source.driverVersionToReleaseVersion.replacement,
+      companion.source.archiveEntryTemplate,
+      companion.targetDirectory,
+      companion.expectedFileExtension,
+      companion.versionLockedToDriver === true
+    ])
+  ]);
+  return identity(left) === identity(right);
+}
+
+/** The installed file name template of a companion: its archive entry's file name. */
+function companionFileTemplate(companion: JdbcDriverCompanionArtifact): string {
+  const template = companion.source.archiveEntryTemplate;
+  return template.slice(template.lastIndexOf("/") + 1);
+}
+
+/** A companion installs under its archive entry's file name, which is the name its driver loads it by. */
+export function companionFileName(companion: JdbcDriverCompanionArtifact, releaseVersion: string, arch: string): string {
+  return companionFileTemplate(companion).replaceAll("{releaseVersion}", releaseVersion).replaceAll("{arch}", arch);
+}
+
+/** The fixed start of a companion's file name, e.g. `mssql-jdbc_auth` for `mssql-jdbc_auth-{releaseVersion}.{arch}.dll`. */
+function companionFileStem(companion: JdbcDriverCompanionArtifact): string {
+  const template = companionFileTemplate(companion);
+  const placeholder = template.indexOf("{");
+  const stem = placeholder < 0 ? template.slice(0, -companion.expectedFileExtension.length) : template.slice(0, placeholder);
+  return stem.replace(/[-_.]+$/, "");
+}
+
+/** Any file of a companion's family, whatever its version or arch, including manually supplied ones. */
+function isCompanionFamilyFile(companion: JdbcDriverCompanionArtifact, name: string): boolean {
+  const lower = name.toLowerCase();
+  return lower.startsWith(companionFileStem(companion).toLowerCase())
+    && lower.endsWith(companion.expectedFileExtension.toLowerCase());
+}
+
+/**
+ * The release version in a file named after the companion's template, or undefined when the name doesn't follow it.
+ * Accepts the `.queryeer-managed` infix of older managed installs.
+ */
+function companionFileVersion(companion: JdbcDriverCompanionArtifact, name: string): string | undefined {
+  const template = companionFileTemplate(companion);
+  const extension = companion.expectedFileExtension;
+  const body = template.slice(0, -extension.length)
+    .split(/(\{releaseVersion\}|\{arch\})/)
+    .map((part) => part === "{releaseVersion}"
+      ? "([0-9A-Za-z][0-9A-Za-z._+-]*?)"
+      : part === "{arch}" ? "(?:x64|x86|arm64)" : escapeRegExp(part))
+    .join("");
+  return name.match(new RegExp(`^${body}(?:\\.queryeer-managed)?${escapeRegExp(extension)}$`, "i"))?.[1];
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function canonicalizeContribution(
   contribution: RegisteredJdbcManagedDriverContribution
 ): RegisteredJdbcManagedDriverContribution {
-  const trusted = TRUSTED_CONTRIBUTIONS.find((candidate) =>
+  const trusted = BUILTIN_CONTRIBUTIONS.find((candidate) =>
     candidate.ownerPluginId === contribution.ownerPluginId
     && candidate.dialectId === contribution.dialectId);
   if (!trusted) return contribution;
