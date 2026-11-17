@@ -24,6 +24,8 @@
         <mockito.core.version>5.23.0</mockito.core.version>
         <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
         <payloadbuilder.version>1.14.0</payloadbuilder.version>
+        <tree-sitter.version>0.26.6</tree-sitter.version>
+        <tree-sitter-sql.version>gh-pages-a</tree-sitter-sql.version>
         <testcontainers.version>1.21.3</testcontainers.version>
         <maven.dependency.plugin.version>3.10.0</maven.dependency.plugin.version>
         <maven.assembly.plugin.version>3.8.0</maven.assembly.plugin.version>

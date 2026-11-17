@@ -83,7 +83,7 @@ public final class SqlCompletionSupport
             tree = resolveTree(parseSessions, engineId, fileId, params.text());
             if (tree != null)
             {
-                completionContext = SqlContextDetector.detectContext(tree, params.text(), cursor.line(), cursor.column());
+                completionContext = SqlContextDetector.detectContextInTree(tree, params.text(), cursor.line(), cursor.column());
             }
         }
         context.put("completionContext", completionContext.name());
@@ -144,13 +144,24 @@ public final class SqlCompletionSupport
     // -- Alias extraction --
 
     /**
-     * Walks the tree-sitter AST to extract table aliases from FROM/JOIN clauses using a TSQuery, falling back to text-based regex scanning when the tree cannot be parsed (ERROR nodes).
+     * The table aliases visible at the cursor, from FROM/JOIN clauses, parsed here. This is the entry point for other plugins: the parser's API carries no tree-sitter types, so tree-sitter stays
+     * inside the JDBC engine.
      *
      * @param line cursor line (1-indexed)
      * @param column cursor column (1-indexed)
-     * @return Map of alias → table name (as written in SQL, e.g. "schema.table" or just "table"). Unaliased tables are included with their own name as the alias key.
+     * @return Map of alias → table name (as written in SQL, e.g. "schema.table" or just "table"). Unaliased tables are included with their own name as the alias key. Empty for a blank text.
      */
-    public static Map<String, String> extractAliases(TSTree tree, String text, int line, int column)
+    public static Map<String, String> extractAliases(String text, int line, int column)
+    {
+        if (isBlank(text))
+        {
+            return Map.of();
+        }
+        return SqlRelationExtractor.extractAliases(text, line, column);
+    }
+
+    /** {@link #extractAliases(String, int, int)}, or nothing when the text did not parse. */
+    static Map<String, String> extractAliases(TSTree tree, String text, int line, int column)
     {
         if (tree == null
                 || isBlank(text))

@@ -66,6 +66,7 @@ public final class BackendRunnerModule
         try
         {
             discoveredPlugins = discoverPlugins(discoveryService, services, builtinsDir);
+            classLoaderFactory.publishExports(discoveredPlugins);
             for (DiscoveredPlugin discovered : discoveredPlugins)
             {
                 runtime.register(discovered.plugin());

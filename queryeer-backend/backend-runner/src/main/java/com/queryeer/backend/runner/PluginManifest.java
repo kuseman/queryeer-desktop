@@ -105,8 +105,21 @@ record PluginManifest(int schemaVersion, String id, String name, String version,
                 : requiredCapabilities;
     }
 
-    record BackendTarget(String entrypointClass, String factoryClass, Classpath classpath)
+    /**
+     * @param exports package prefixes (ending in {@code .}) that plugins declaring a dependency on this one load from this plugin's own jars, e.g. {@code com.queryeer.backend.queryengine.jdbc.}
+     */
+    record BackendTarget(String entrypointClass, String factoryClass, Classpath classpath, List<String> exports)
     {
+        BackendTarget(String entrypointClass, String factoryClass, Classpath classpath)
+        {
+            this(entrypointClass, factoryClass, classpath, null);
+        }
+
+        List<String> exportsOrEmpty()
+        {
+            return exports == null ? List.of()
+                    : exports;
+        }
     }
 
     record FrontendTarget(String entryModule, String moduleFormat, String apiVersion)

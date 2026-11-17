@@ -204,7 +204,7 @@ class SqlContextDetectorTest
     void returnsOtherForEmptyText()
     {
         TSTree tree = parser.parseString(null, "");
-        assertEquals(OTHER, SqlContextDetector.detectContext(tree, 1, 1));
+        assertEquals(OTHER, SqlContextDetector.detectContextInTree(tree, 1, 1));
     }
 
     @Test
@@ -216,7 +216,7 @@ class SqlContextDetectorTest
     private void assertContext(String sql, int line, int column, SqlParseContext expected)
     {
         TSTree tree = parser.parseString(null, sql);
-        SqlParseContext result = SqlContextDetector.detectContext(tree, sql, line, column);
+        SqlParseContext result = SqlContextDetector.detectContextInTree(tree, sql, line, column);
         assertEquals(expected, result, "Expected " + expected + " for cursor at (" + line + "," + column + ") in: " + sql);
     }
 }

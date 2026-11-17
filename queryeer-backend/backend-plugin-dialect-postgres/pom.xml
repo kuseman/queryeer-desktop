@@ -42,6 +42,19 @@
             <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
+        <!-- The parser's tests in this module's flat test classpath need tree-sitter; at runtime it comes from queryengine.jdbc -->
+        <dependency>
+            <groupId>io.github.bonede</groupId>
+            <artifactId>tree-sitter</artifactId>
+            <version>${tree-sitter.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.github.bonede</groupId>
+            <artifactId>tree-sitter-sql</artifactId>
+            <version>${tree-sitter-sql.version}</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>

@@ -3,6 +3,7 @@ package com.queryeer.backend.runner;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import com.queryeer.backend.core.SemVer;
 
@@ -81,7 +82,41 @@ final class PluginManifestValidation
         }
 
         validateDependencies(manifest, sourceDescription);
+        validateExports(manifest, sourceDescription);
         validateRuntime(manifest, sourceDescription);
+    }
+
+    /** A package prefix of at least two Java identifiers, ending in a dot: {@code org.treesitter.}, {@code com.example.api.}. */
+    private static final Pattern EXPORT_PREFIX = Pattern.compile("^[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*)+\\.$");
+
+    /** Exported prefixes must name the plugin's own packages: specific enough, and never the JVM's or Queryeer's API, which every plugin already gets from the parent. */
+    private void validateExports(PluginManifest manifest, String sourceDescription)
+    {
+        if (manifest.backend() == null)
+        {
+            return;
+        }
+        for (String prefix : manifest.backend()
+                .exportsOrEmpty())
+        {
+            boolean tooBroad = isBlank(prefix)
+                    || !EXPORT_PREFIX.matcher(prefix)
+                            .matches();
+            boolean hostPackage = !tooBroad
+                    && PluginClassLoaderFactory.BASE_PARENT_FIRST_PREFIXES.stream()
+                            .anyMatch(base -> prefix.startsWith(base)
+                                    || base.startsWith(prefix));
+            if (tooBroad
+                    || hostPackage)
+            {
+                throw new PluginDiscoveryException("Invalid backend.exports entry for plugin " + manifest.id()
+                                                   + " in "
+                                                   + sourceDescription
+                                                   + ": "
+                                                   + prefix
+                                                   + " (a package prefix ending in '.' with at least two parts, e.g. com.example.api., outside the JVM's and Queryeer's API packages)");
+            }
+        }
     }
 
     private void validateDependencies(PluginManifest manifest, String sourceDescription)
@@ -157,10 +192,6 @@ final class PluginManifestValidation
                 {
                     throw new PluginDiscoveryException("Invalid runtime.shared.nativeLibraries.filePatterns entry for plugin " + manifest.id() + " in " + sourceDescription + ": " + pattern);
                 }
-            }
-            if (isBlank(library.loaderClass()))
-            {
-                throw new PluginDiscoveryException("runtime.shared.nativeLibraries.loaderClass is required for plugin " + manifest.id() + " in " + sourceDescription);
             }
         }
     }

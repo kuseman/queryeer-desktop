@@ -34,7 +34,7 @@ class PluginManifestDependenciesTest
         assertEquals(List.of("queryengine.runtime.sql-parser", "queryengine.jdbc", "other"), manifest.dependenciesOrEmpty());
         assertEquals(Map.of("queryengine.jdbc", "^0.20.0"), manifest.dependencyVersions());
 
-        PluginDescriptor descriptor = new PluginManifestBackedPlugin(manifest, null).descriptor();
+        PluginDescriptor descriptor = new PluginManifestBackedPlugin(manifest, (com.queryeer.backend.api.BackendPlugin) null).descriptor();
         assertEquals(List.of("queryengine.runtime.sql-parser", "queryengine.jdbc", "other"), descriptor.dependencies());
         assertEquals(Map.of("queryengine.jdbc", "^0.20.0"), descriptor.dependencyVersions());
     }

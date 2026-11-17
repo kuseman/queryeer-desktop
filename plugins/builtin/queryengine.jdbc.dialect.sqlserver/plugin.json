@@ -23,8 +23,7 @@
           "arch": "any",
           "searchPaths": ["libNative"],
           "filePatterns": ["mssql-jdbc_auth*.dll", "sqljdbc_auth.dll"],
-          "required": false,
-          "loaderClass": "com.queryeer.backend.queryengine.jdbc.runtime.SharedNativeLibraryLoader"
+          "required": false
         }
       ],
       "sharedArtifacts": [

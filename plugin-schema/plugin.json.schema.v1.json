@@ -92,6 +92,15 @@
           "type": "string",
           "minLength": 1
         },
+        "exports": {
+          "description": "Package prefixes (ending in '.') that plugins declaring a dependency on this one load from this plugin's own jars, e.g. com.example.api.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*)+\\.$"
+          }
+        },
         "classpath": {
           "type": "object",
           "additionalProperties": false,
@@ -183,7 +192,7 @@
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["filePatterns", "loaderClass"],
+                "required": ["filePatterns"],
                 "properties": {
                   "os": { "type": "string", "minLength": 1 },
                   "arch": { "type": "string", "minLength": 1 },

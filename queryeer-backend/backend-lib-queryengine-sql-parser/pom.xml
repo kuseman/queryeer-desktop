@@ -14,9 +14,6 @@
     <description>Tree-sitter based SQL parser library for Queryeer plugins</description>
 
     <properties>
-        <tree-sitter.version>0.26.6</tree-sitter.version>
-        <tree-sitter-sql.version>gh-pages-a</tree-sitter-sql.version>
-        <queryeer.plugin.id>queryengine.runtime.sql-parser</queryeer.plugin.id>
     </properties>
 
     <dependencies>
@@ -26,15 +23,22 @@
             <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
+        <!--
+            Implementation dependencies of a published API library are optional: plugins that depend on the parser do not
+            inherit them, so they cannot compile against tree-sitter types. The parser's API takes SQL text. Whoever bundles
+            the parser (queryengine.jdbc) declares tree-sitter itself.
+        -->
         <dependency>
             <groupId>io.github.bonede</groupId>
             <artifactId>tree-sitter</artifactId>
             <version>${tree-sitter.version}</version>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>io.github.bonede</groupId>
             <artifactId>tree-sitter-sql</artifactId>
             <version>${tree-sitter-sql.version}</version>
+            <optional>true</optional>
         </dependency>
 
         <!-- TEST -->
@@ -50,45 +54,4 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-dependency-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>write-queryeer-plugin-deps</id>
-                        <phase>generate-resources</phase>
-                        <goals>
-                            <goal>build-classpath</goal>
-                        </goals>
-                        <configuration>
-                            <includeScope>runtime</includeScope>
-                            <outputFile>${project.build.directory}/queryeer-plugin-deps.txt</outputFile>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <configuration>
-                    <descriptors>
-                        <descriptor>${project.parent.basedir}/src/assembly/backend-plugin.xml</descriptor>
-                    </descriptors>
-                    <finalName>${queryeer.plugin.id}</finalName>
-                    <appendAssemblyId>false</appendAssemblyId>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>assemble-queryeer-plugin</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>single</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
 </project>
