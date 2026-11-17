@@ -220,7 +220,13 @@ public final class BackendRunnerModule
                                 : pluginsDir) + ", safeMode=" + safeMode + ", disabledExternalPlugins=" + disabledPluginIds.size() + ")",
                         null));
 
-        List<DiscoveredPlugin> builtin = new BuiltinPluginDiscovery(discoveryService, builtinsDir).discover();
+        String backendVersion = BackendVersion.get();
+        if (backendVersion == null)
+        {
+            services.logger()
+                    .warn(withCorrelation("Backend version unknown; built-in plugins keep their manifest versions, so dependency version ranges on them may not match", null));
+        }
+        List<DiscoveredPlugin> builtin = new BuiltinPluginDiscovery(discoveryService, builtinsDir, backendVersion).discover();
         if (safeMode
                 || isBlank(pluginsDir))
         {

@@ -115,7 +115,7 @@ Backend plugins may use `backend.factoryClass` instead of `backend.entrypointCla
 | `name` | **yes** | Human-readable name |
 | `version` | **yes** | SemVer string |
 | `description` | no | Brief description |
-| `dependencies` | no | Array of plugin IDs this plugin depends on |
+| `dependencies` | no | Plugins this plugin depends on: plugin IDs, or `{ "id": ..., "version": ... }` with a SemVer range (see 3.3) |
 | `providesCapabilities` | no | Capabilities this plugin provides to others |
 | `requiredCapabilities` | no | Capabilities this plugin needs from others |
 | `backend` | see note | Backend target configuration (required if plugin has a Java side) |
@@ -151,6 +151,19 @@ Manifests are validated for required fields, duplicate IDs, and schema version. 
 ### 3.3 Dependency Resolution
 
 Plugins are activated in dependency order using a topological sort (Kahn's algorithm). Dependencies are resolved by plugin ID. Circular dependencies are detected and rejected.
+
+**Backend version ranges.** A dependency can name the versions it works with, as an npm-style SemVer range:
+
+```json
+"dependencies": [{ "id": "queryengine.jdbc", "version": "^0.20.0" }]
+```
+
+- Supported: `1.2.3`, `=`, `>`, `>=`, `<`, `<=`, `^`, `~`, wildcards (`1.x`, `*`), partial versions (`1.2`), hyphen ranges (`1.2.3 - 2.0.0`), comparators joined by spaces (and) and `||` (or).
+- **Built-in plugins report the Queryeer backend version**, not the `version` in their manifest, so a range on a built-in such as `queryengine.jdbc` targets a Queryeer release. A development build (`0.20.0-SNAPSHOT`) counts as the release it becomes.
+- Other prereleases follow npm: `1.2.0-beta.1` satisfies a range only when the range names a prerelease of `1.2.0`.
+- A plain ID accepts any version. An invalid range rejects the manifest.
+
+**Skipped plugins.** The backend skips, with a reason shown in the runtime status, a plugin whose dependency is missing (`Missing dependency: <id>`), out of range (`Needs <id> <range>, but <version> is installed`) or itself skipped (`Dependency <id> was skipped`), and one whose required capability is only provided by skipped plugins. These checks are backend-only; the frontend resolves a plugin's dependencies from the `manifest` in its TypeScript plugin object.
 
 ### 3.4 Activation
 

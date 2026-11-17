@@ -1,6 +1,10 @@
 package com.queryeer.backend.runner;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+
+import com.queryeer.backend.core.SemVer;
 
 final class PluginManifestValidation
 {
@@ -76,7 +80,41 @@ final class PluginManifestValidation
             throw new PluginDiscoveryException("Frontend entryModule is required for plugin " + manifest.id() + " in " + sourceDescription);
         }
 
+        validateDependencies(manifest, sourceDescription);
         validateRuntime(manifest, sourceDescription);
+    }
+
+    private void validateDependencies(PluginManifest manifest, String sourceDescription)
+    {
+        Set<String> seen = new HashSet<>();
+        for (PluginManifest.Dependency dependency : listOrEmpty(manifest.dependencies()))
+        {
+            if (dependency != null
+                    && dependency.problem() != null)
+            {
+                throw new PluginDiscoveryException("Invalid dependencies entry for plugin " + manifest.id() + " in " + sourceDescription + ": " + dependency.problem());
+            }
+            if (dependency == null
+                    || isBlank(dependency.id()))
+            {
+                throw new PluginDiscoveryException("dependencies entries need an id for plugin " + manifest.id() + " in " + sourceDescription);
+            }
+            if (!seen.add(dependency.id()))
+            {
+                throw new PluginDiscoveryException("Duplicate dependency " + dependency.id() + " for plugin " + manifest.id() + " in " + sourceDescription);
+            }
+            if (dependency.version() != null)
+            {
+                try
+                {
+                    SemVer.validateRange(dependency.version());
+                }
+                catch (IllegalArgumentException e)
+                {
+                    throw new PluginDiscoveryException("Invalid version range for dependency " + dependency.id() + " of plugin " + manifest.id() + " in " + sourceDescription + ": " + e.getMessage());
+                }
+            }
+        }
     }
 
     private void validateRuntime(PluginManifest manifest, String sourceDescription)

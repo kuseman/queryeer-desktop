@@ -35,9 +35,30 @@
       "type": "string"
     },
     "dependencies": {
+      "description": "Plugins this plugin needs. A plugin id, or { id, version } where version is a SemVer range in npm syntax (e.g. ^0.20.0). Built-in plugins report the Queryeer version.",
       "type": "array",
       "items": {
-        "type": "string"
+        "oneOf": [
+          {
+            "type": "string",
+            "minLength": 1
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        ]
       },
       "uniqueItems": true
     },
