@@ -50,7 +50,7 @@ public final class BackendRunnerModule
         Path builtinsDir = resolveBuiltinsDir(config.get("queryeer.builtins.dir"), Path.of(resourcesDir), Path.of(appDir));
         List<PluginRuntimeContributionCollector.ManifestSource> builtinManifests = loadBuiltinManifests(builtinsDir);
         PluginRuntimeContributionCollector.PluginRuntimeContributions runtimeContributions = new PluginRuntimeContributionCollector().collect(builtinManifests);
-        List<URL> sharedLibUrls = new ArrayList<>(SharedLibraryLoader.collect(config.get("queryeer.app.dir")));
+        List<URL> sharedLibUrls = new ArrayList<>(SharedLibraryLoader.collect(config.get("queryeer.app.dir"), SharedLibraryLoader.parseDriverClasses(config.get("queryeer.jdbc.driverClasses"))));
         sharedLibUrls.addAll(runtimeContributions.sharedClasspath());
 
         SharedClassLoader sharedLoader = new SharedClassLoader(sharedLibUrls, appClassLoader);
@@ -177,6 +177,7 @@ public final class BackendRunnerModule
         putIfPresent(values, "queryeer.plugins.dir", pluginsDir);
         putIfPresent(values, "queryeer.plugins.safeMode", System.getProperty("queryeer.plugins.safeMode"));
         putIfPresent(values, "queryeer.plugins.disabledIds", System.getProperty("queryeer.plugins.disabledIds"));
+        putIfPresent(values, "queryeer.jdbc.driverClasses", System.getProperty("queryeer.jdbc.driverClasses"));
         return Map.copyOf(values);
     }
 

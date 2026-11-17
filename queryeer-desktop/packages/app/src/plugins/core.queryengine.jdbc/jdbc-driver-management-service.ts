@@ -242,7 +242,7 @@ export class JdbcDriverManagementService {
       ?? (await this.refresh()).find((entry) => entry.contribution.dialectId === dialectId);
     const artifact = artifactsOf(currentStatus).find((entry) => entry.id === (artifactId ?? contribution.artifactId));
     if (!artifact) throw new Error(`JDBC driver artifact '${artifactId}' is unavailable`);
-    if (!await options.confirmOperation(operationName, contribution, artifact)) {
+    if (!mainProcessConfirms(operationName, currentStatus) && !await options.confirmOperation(operationName, contribution, artifact)) {
       const status = currentStatus;
       if (!status) throw new Error(`JDBC driver status '${dialectId}' is unavailable`);
       return { accepted: false, reason: "Database driver operation cancelled", status };
@@ -322,7 +322,7 @@ export class JdbcDriverManagementService {
     const options = this.requireOptions();
     const operation = artifact.source === "managed" ? "updateJdbcDriver" : "installJdbcDriver";
     const operationName = artifact.source === "managed" ? "update" : "install";
-    if (!await options.confirmOperation(operationName, status.contribution, artifact)) return false;
+    if (!mainProcessConfirms(operationName, status) && !await options.confirmOperation(operationName, status.contribution, artifact)) return false;
     const result = artifact.id === status.contribution.artifactId
       ? await options.shell[operation](status.contribution)
       : await options.shell[operation](status.contribution, artifact.id);
@@ -401,6 +401,14 @@ export class JdbcDriverManagementService {
     if (!this.options) throw new Error("Database driver management service is not initialized");
     return this.options;
   }
+}
+
+/**
+ * A plugin driver the user has not approved yet gets the main process's approval dialog on install or update, which
+ * says more than ours. Asking here too would show two dialogs in a row.
+ */
+function mainProcessConfirms(operation: "install" | "update" | "remove", status: JdbcDriverStatus | undefined): boolean {
+  return operation !== "remove" && status?.approvalRequired === true;
 }
 
 function artifactsOf(status: JdbcDriverStatus | undefined): JdbcDriverArtifactStatus[] {

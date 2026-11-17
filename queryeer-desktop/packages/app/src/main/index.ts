@@ -1,4 +1,4 @@
-import { app, BrowserWindow, webContents, nativeImage, shell, screen, type Rectangle } from "electron";
+import { app, BrowserWindow, dialog, webContents, nativeImage, shell, screen, type Rectangle } from "electron";
 import { join } from "node:path";
 import { readFile, writeFile, readdir, stat, mkdir } from "node:fs/promises";
 import { memoryUsage, versions } from "node:process";
@@ -35,6 +35,7 @@ import { defaultPluginsDirPath } from "./plugins/plugin-paths.js";
 import { defaultPluginsLockfilePath, PluginInventoryService } from "./plugins/plugin-inventory-service.js";
 import { defaultWindowStatePath, type WindowStateSnapshot, WindowStateStore } from "./window/window-state-store.js";
 import { JdbcDriverArtifactService } from "./jdbc-drivers/jdbc-driver-artifact-service.js";
+import { confirmJdbcDriverInstall } from "./jdbc-drivers/jdbc-driver-install-confirmation.js";
 
 const isDev = !app.isPackaged;
 const queryeerReleasesUrl = "https://api.github.com/repos/kuseman/queryeer-desktop/releases";
@@ -60,7 +61,8 @@ function createBackendFactory(): BackendTransportFactory {
           settingsDirPath,
           pluginsDirPath,
           pluginsSafeMode,
-          getDisabledPluginIds: () => pluginInventoryService?.getDisabledPluginIds() ?? []
+          getDisabledPluginIds: () => pluginInventoryService?.getDisabledPluginIds() ?? [],
+          getJdbcDriverClassNames: () => jdbcDriverArtifactService?.managedDriverClassNames() ?? []
         })
     };
   }
@@ -73,7 +75,8 @@ function createBackendFactory(): BackendTransportFactory {
         settingsDirPath,
         pluginsDirPath,
         pluginsSafeMode,
-        getDisabledPluginIds: () => pluginInventoryService?.getDisabledPluginIds() ?? []
+        getDisabledPluginIds: () => pluginInventoryService?.getDisabledPluginIds() ?? [],
+        getJdbcDriverClassNames: () => jdbcDriverArtifactService?.managedDriverClassNames() ?? []
       })
   };
 }
@@ -96,6 +99,7 @@ let queryExportStore: QueryExportStore | null = null;
 let recentFilesStore: RecentFilesStore | null = null;
 let securityService: SecurityService | null = null;
 let pluginInventoryService: PluginInventoryService | null = null;
+let jdbcDriverArtifactService: JdbcDriverArtifactService | null = null;
 let windowStateStore: WindowStateStore | null = null;
 let mainWindow: BrowserWindow | null = null;
 
@@ -494,35 +498,39 @@ app.whenReady().then(async () => {
     const enabledPluginIds = new Set(inventory.plugins.filter((plugin) => plugin.enabled).map((plugin) => plugin.id));
     return (await discoverExternalFrontendPlugins(pluginsDirPath)).filter((plugin) => enabledPluginIds.has(plugin.id));
   });
-  const jdbcDriverArtifactService = new JdbcDriverArtifactService({
+  const driverService = new JdbcDriverArtifactService({
     appDir: appDataDir,
     settingsDir: settingsDirPath,
-    trashArtifact: (path) => shell.trashItem(path)
+    trashArtifact: (path) => shell.trashItem(path),
+    confirmInstall: (contribution) => confirmJdbcDriverInstall(contribution, (options) => mainWindow
+      ? dialog.showMessageBox(mainWindow, options)
+      : dialog.showMessageBox(options))
   });
-  await jdbcDriverArtifactService.initialize();
+  await driverService.initialize();
+  jdbcDriverArtifactService = driverService;
   ipcMain.handle("jdbc-drivers:list", async (_event, contributions: unknown) => {
-    return jdbcDriverArtifactService.list(contributions);
+    return driverService.list(contributions);
   });
   ipcMain.handle("jdbc-drivers:check", async (_event, contributions: unknown) => {
-    return jdbcDriverArtifactService.check(contributions);
+    return driverService.check(contributions);
   });
   ipcMain.handle("jdbc-drivers:install", async (_event, contribution: unknown, artifactId?: unknown) => {
-    return jdbcDriverArtifactService.install(contribution, artifactId);
+    return driverService.install(contribution, artifactId);
   });
   ipcMain.handle("jdbc-drivers:update", async (_event, contribution: unknown, artifactId?: unknown) => {
-    return jdbcDriverArtifactService.update(contribution, artifactId);
+    return driverService.update(contribution, artifactId);
   });
   ipcMain.handle("jdbc-drivers:remove", async (_event, contribution: unknown, artifactId?: unknown) => {
-    return jdbcDriverArtifactService.remove(contribution, artifactId);
+    return driverService.remove(contribution, artifactId);
   });
   ipcMain.handle("jdbc-drivers:restore", async (_event, contribution: unknown, disabledSetId: unknown) => {
-    return jdbcDriverArtifactService.restore(contribution, disabledSetId);
+    return driverService.restore(contribution, disabledSetId);
   });
   ipcMain.handle("jdbc-drivers:discard-retained", async (_event, contribution: unknown, disabledSetId: unknown) => {
-    return jdbcDriverArtifactService.discardRetainedSet(contribution, disabledSetId);
+    return driverService.discardRetainedSet(contribution, disabledSetId);
   });
   ipcMain.handle("jdbc-drivers:restart-backend", async () => {
-    return backendGateway.restart(() => jdbcDriverArtifactService.applyPending());
+    return backendGateway.restart(() => driverService.applyPending());
   });
   ipcMain.handle("file:read", async (_event, { uri }: { uri: string }) => {
     try {
