@@ -17,6 +17,13 @@
     </properties>
 
     <build>
+        <resources>
+            <resource>
+                <!-- backend-version.properties: the backend's version, which built-in plugins report for dependency version checks -->
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>

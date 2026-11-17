@@ -48,59 +48,92 @@ public final class PluginValidation
         Map<String, String> skipReasons = new LinkedHashMap<>();
         Map<String, PluginRuntimeState> preStates = new LinkedHashMap<>();
 
-        for (PluginDescriptor descriptor : descriptorById.values())
+        // Skipping a plugin can leave its dependents without a dependency or a capability, so repeat until nothing changes
+        boolean changed = true;
+        while (changed)
         {
-            String id = descriptor.id();
-
-            if (hasMissingDependency(descriptor, descriptorById.keySet()))
+            changed = false;
+            Set<String> providedCapabilities = new LinkedHashSet<>();
+            for (PluginDescriptor descriptor : descriptorById.values())
             {
-                skipReasons.put(id, "Missing dependency");
-                preStates.put(id, PluginRuntimeState.SKIPPED);
-                continue;
+                if (!skipReasons.containsKey(descriptor.id()))
+                {
+                    providedCapabilities.addAll(descriptor.providesCapabilities());
+                }
             }
-
-            if (hasMissingRequiredCapability(descriptor, descriptorById.values()))
+            for (PluginDescriptor descriptor : descriptorById.values())
             {
-                skipReasons.put(id, "Missing required capability");
-                preStates.put(id, PluginRuntimeState.SKIPPED);
-                continue;
+                if (skipReasons.containsKey(descriptor.id()))
+                {
+                    continue;
+                }
+                String reason = dependencyProblem(descriptor, descriptorById, skipReasons);
+                if (reason == null)
+                {
+                    reason = missingRequiredCapability(descriptor, providedCapabilities);
+                }
+                if (reason != null)
+                {
+                    skipReasons.put(descriptor.id(), reason);
+                    changed = true;
+                }
             }
+        }
 
-            preStates.put(id, PluginRuntimeState.LOADED);
+        for (String id : descriptorById.keySet())
+        {
+            preStates.put(id, skipReasons.containsKey(id) ? PluginRuntimeState.SKIPPED
+                    : PluginRuntimeState.LOADED);
         }
 
         List<BackendPlugin> sorted = topologicalSort(pluginById, descriptorById, skipReasons.keySet());
         return new PluginValidationPlan(sorted, skipReasons, preStates);
     }
 
-    private static boolean hasMissingDependency(PluginDescriptor descriptor, Set<String> knownPluginIds)
+    /** Why a plugin's dependencies are not satisfied, or null when they are. */
+    private static String dependencyProblem(PluginDescriptor descriptor, Map<String, PluginDescriptor> descriptorById, Map<String, String> skipReasons)
     {
         for (String dependency : descriptor.dependencies())
         {
-            if (!knownPluginIds.contains(dependency))
+            PluginDescriptor target = descriptorById.get(dependency);
+            if (target == null)
             {
-                return true;
+                return "Missing dependency: " + dependency;
+            }
+            String range = descriptor.dependencyVersions()
+                    .get(dependency);
+            if (range != null)
+            {
+                try
+                {
+                    if (!SemVer.satisfies(target.version(), range))
+                    {
+                        return "Needs " + dependency + " " + range + ", but " + target.version() + " is installed";
+                    }
+                }
+                catch (IllegalArgumentException e)
+                {
+                    return "Cannot check the version of " + dependency + ": " + e.getMessage();
+                }
+            }
+            if (skipReasons.containsKey(dependency))
+            {
+                return "Dependency " + dependency + " was skipped";
             }
         }
-        return false;
+        return null;
     }
 
-    private static boolean hasMissingRequiredCapability(PluginDescriptor descriptor, Iterable<PluginDescriptor> allDescriptors)
+    private static String missingRequiredCapability(PluginDescriptor descriptor, Set<String> providedCapabilities)
     {
-        Set<String> providedCapabilities = new LinkedHashSet<>();
-        for (PluginDescriptor candidate : allDescriptors)
-        {
-            providedCapabilities.addAll(candidate.providesCapabilities());
-        }
-
         for (String required : descriptor.requiredCapabilities())
         {
             if (!providedCapabilities.contains(required))
             {
-                return true;
+                return "Missing required capability: " + required;
             }
         }
-        return false;
+        return null;
     }
 
     private static List<BackendPlugin> topologicalSort(Map<String, BackendPlugin> pluginById, Map<String, PluginDescriptor> descriptorById, Set<String> skipped)
