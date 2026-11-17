@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 
@@ -25,6 +26,7 @@ import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryExecutor;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaTarget;
+import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionSetupDefinition;
 
 final class SqliteDialect implements JdbcDialect
 {
@@ -62,6 +64,12 @@ final class SqliteDialect implements JdbcDialect
     private final JdbcQueryExecutor queryExecutor = new AbstractJdbcQueryExecutor()
     {
     };
+
+    @Override
+    public Optional<JdbcConnectionSetupDefinition> connectionSetup()
+    {
+        return Optional.of(SqliteConnectionSetup.build());
+    }
 
     @Override
     public JdbcDialectMetadata metadata()

@@ -215,3 +215,12 @@
   font-family: var(--editor-font-family, monospace);
   font-size: var(--ui-font-size-xs);
 }
+
+.jdbc-settings-path {
+  display: flex;
+  gap: 4px;
+}
+
+.jdbc-settings-path .jdbc-settings-input {
+  flex: 1;
+}

@@ -22,6 +22,7 @@ import type { NotificationService } from "../extensions/NotificationExtension.js
 import type { AssistantRegistry } from "../assistant/Assistant.js";
 import type { PluginManifest } from "./PluginManifest.js";
 import type { JdbcDriverRegistry } from "../queryengine/JdbcDriverExtension.js";
+import type { JdbcDialectRegistry } from "../queryengine/JdbcDialectExtension.js";
 import type { NativeQueryEngineRegistry } from "../queryengine/NativeQueryEngineExtension.js";
 import type { EditorLanguageRegistry } from "../editor/EditorLanguageExtension.js";
 import type {
@@ -58,6 +59,8 @@ export type PluginContext = {
   tableOutputContextMenu: TableOutputContextMenuRegistry;
   jdbcTreeContextMenu: JdbcTreeContextMenuRegistry;
   jdbcDrivers: JdbcDriverRegistry;
+  /** Frontend additions for JDBC dialects: a custom connection form, its subtitle and validation, query plan support. */
+  jdbcDialects: JdbcDialectRegistry;
   graphNodeTypes: GraphNodeTypeRegistry;
   about: AboutExtension;
   notifications: NotificationService;

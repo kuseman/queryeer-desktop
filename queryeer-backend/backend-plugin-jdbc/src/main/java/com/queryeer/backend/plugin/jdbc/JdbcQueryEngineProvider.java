@@ -43,6 +43,8 @@ import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaStore;
 import com.queryeer.backend.queryengine.jdbc.CancellableJdbcQueryExecutor;
 import com.queryeer.backend.queryengine.jdbc.FileFormatDetector;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
+import com.queryeer.backend.queryengine.jdbc.JdbcDialect;
+import com.queryeer.backend.queryengine.jdbc.JdbcDialectMetadata;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
 import com.queryeer.backend.queryengine.jdbc.JdbcSqlEditorServices;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryEventListener;
@@ -346,7 +348,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
         return switch (action)
         {
             case ACTION_CONNECTION_SETUP -> connectionSetup();
-            case ACTION_CONNECTION_DIALECTS -> registry.all();
+            case ACTION_CONNECTION_DIALECTS -> connectionDialects();
             case ACTION_CONNECTION_TEST -> connectionTest(payload);
             case ACTION_SCHEMA_SNAPSHOT -> schemaActions.snapshot(payload);
             case ACTION_SCHEMA_REFRESH -> schemaActions.refresh(payload);
@@ -362,6 +364,26 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
             case ACTION_ENGINE_CAPABILITIES -> engineCapabilities();
             default -> QueryEngineProvider.super.invoke(fileId, action, payload);
         };
+    }
+
+    /** The registered dialects, each with its connection form fields ({@code connectionSetup}) when it defines them. */
+    private List<Map<String, Object>> connectionDialects()
+    {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (JdbcDialectMetadata metadata : registry.all())
+        {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("id", metadata.id());
+            entry.put("displayName", metadata.displayName());
+            entry.put("defaultPort", metadata.defaultPort());
+            entry.put("jdbcUrlTemplate", metadata.jdbcUrlTemplate());
+            entry.put("driverClassName", metadata.driverClassName());
+            registry.find(metadata.id())
+                    .flatMap(JdbcDialect::connectionSetup)
+                    .ifPresent(setup -> entry.put("connectionSetup", setup));
+            result.add(entry);
+        }
+        return result;
     }
 
     private JdbcConnectionSetupDefinition connectionSetup()

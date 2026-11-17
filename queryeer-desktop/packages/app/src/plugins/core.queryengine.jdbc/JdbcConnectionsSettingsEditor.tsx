@@ -12,13 +12,25 @@ import {
   parseJdbcConnectionDefinitions,
   type JdbcConnectionDefinition
 } from "./jdbc-settings";
-import { getJdbcDialect } from "./jdbc-dialect-registry";
+import { getJdbcDialect, subscribeJdbcDialects } from "./jdbc-dialect-registry";
+import type { JdbcConnectionSetupDefinition } from "@queryeer/api/queryengine/JdbcDialectExtension.js";
+import {
+  JdbcConnectionFieldsForm,
+  fieldsSubtitle,
+  parseConnectionSetup,
+  validateFields,
+  withFieldDefaults
+} from "./jdbc-connection-fields";
 import "./jdbc-settings.css";
 
 type JdbcDialectOption = {
   id: string;
   displayName: string;
+  /** The connection form fields the backend dialect defines; without them, the generic URL form. */
+  connectionSetup?: JdbcConnectionSetupDefinition;
 };
+
+type SetupLookup = (dialectId: string) => JdbcConnectionSetupDefinition | undefined;
 
 type Row = {
   id: string;
@@ -45,6 +57,8 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
   const [rows, setRows] = useState<Row[]>(() => toRows(parseJdbcConnectionDefinitions(value)));
   const [selectedRowId, setSelectedRowId] = useState<string | undefined>(() => rows[0]?.id);
   const [dialects, setDialects] = useState<JdbcDialectOption[]>([{ id: "jdbc", displayName: "Other Database (JDBC)" }]);
+  // Until the backend's dialect list arrives, a dialect's fields are unknown
+  const [dialectsState, setDialectsState] = useState<"loading" | "loaded" | "failed">("loading");
   const [appDir, setAppDir] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,7 +76,7 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
           return;
         }
         const next = result
-          .filter((entry): entry is { id: string; displayName: string } => {
+          .filter((entry): entry is { id: string; displayName: string; connectionSetup?: unknown } => {
             return (
               typeof entry === "object" &&
               entry !== null &&
@@ -70,14 +84,22 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
               typeof (entry as { displayName?: unknown }).displayName === "string"
             );
           })
-          .map((entry) => ({ id: entry.id, displayName: entry.displayName }));
+          .map((entry) => ({ id: entry.id, displayName: entry.displayName, connectionSetup: parseConnectionSetup(entry.connectionSetup) }));
         if (next.length > 0) {
           setDialects(next);
         }
+        setDialectsState("loaded");
       })
       .catch(() => {
+        setDialectsState("failed");
       });
   }, []);
+
+  // A plugin that registers its dialect's frontend additions after this editor opened
+  const [dialectRegistryVersion, setDialectRegistryVersion] = useState(0);
+  useEffect(() => subscribeJdbcDialects(() => setDialectRegistryVersion((version) => version + 1)), []);
+
+  const setupFor: SetupLookup = (dialectId) => dialects.find((dialect) => dialect.id === dialectId)?.connectionSetup;
 
   useEffect(() => {
     if (rows.length === 0) {
@@ -91,7 +113,7 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
 
   const { persistNow, persistDebounced } = useCollectionSettingsPersistence<Row>({
     persist: (nextRows) => {
-      setValue(nextRows.map((row) => serializeRow(row)));
+      setValue(nextRows.map((row) => serializeRow(row, setupFor(row.dialectId))));
     }
   });
 
@@ -152,7 +174,7 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
     syncRows([...rows, clone], clone.id);
   };
 
-  const rowErrors = useMemo(() => buildRowErrors(rows), [rows]);
+  const rowErrors = useMemo(() => buildRowErrors(rows, setupFor), [rows, dialects, dialectRegistryVersion]);
 
   const testConnection = async (row: Row): Promise<void> => {
     const testConnectionId = `${row.connectionId}${TEST_CONNECTION_SUFFIX}`;
@@ -168,7 +190,7 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
         payload: {
           connectionId: testConnectionId,
           title: row.title,
-          connection: serializeRow(row)
+          connection: serializeRow(row, setupFor(row.dialectId))
         }
       });
 
@@ -195,7 +217,7 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
       items={rows.map((row) => ({
         id: row.id,
         label: row.title.trim() || "Untitled connection",
-        subtitle: buildSubtitle(row),
+        subtitle: buildSubtitle(row, setupFor(row.dialectId)),
         invalid: Boolean(rowErrors[row.id])
       }))}
       selectedId={selectedRowId}
@@ -297,16 +319,17 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
                 ...(patch.properties !== undefined ? { properties: patch.properties } : {}),
                 ...(patch.password !== undefined ? { password: patch.password } : {})
               });
-            }, updateRow)}
+            }, updateRow, setupFor(row.dialectId), dialectsState)}
 
-            <label className="jdbc-settings-enabled">
+            <label className="jdbc-settings-enabled" title="Only enabled connections are listed in the database tree and the connection selector">
               <input
                 type="checkbox"
                 checked={row.enabled}
                 disabled={readonly}
                 onChange={(event) => updateRow(row.id, { enabled: event.target.checked })}
               />
-              <span>{row.enabled ? "Enabled" : "Disabled"}</span>
+              {/* A fixed label: the checkbox shows the state */}
+              <span>Enabled</span>
             </label>
 
             <div className="jdbc-settings-cell">
@@ -339,7 +362,19 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
   );
 }
 
-function renderDialectForm(row: Row, readonly: boolean, onChange: (patch: { properties?: Record<string, unknown>; password?: import("@queryeer/api/security/Security").SecretRefValue }) => void, updateRowLocal: (id: string, patch: Partial<Row>) => void): JSX.Element {
+/**
+ * A dialect's form: its own component when its frontend registered one, else the form rendered from its backend
+ * fields, else the generic JDBC URL form. A connection described by properties never gets the URL form, which would
+ * turn it into a URL connection: it waits for its dialect's fields instead.
+ */
+function renderDialectForm(
+  row: Row,
+  readonly: boolean,
+  onChange: (patch: { properties?: Record<string, unknown>; password?: SecretRefValue }) => void,
+  updateRowLocal: (id: string, patch: Partial<Row>) => void,
+  setup: JdbcConnectionSetupDefinition | undefined,
+  dialectsState: "loading" | "loaded" | "failed"
+): JSX.Element {
   const dialect = getJdbcDialect(row.dialectId);
   if (dialect?.ConnectionForm) {
     const FormComponent = dialect.ConnectionForm;
@@ -351,6 +386,29 @@ function renderDialectForm(row: Row, readonly: boolean, onChange: (patch: { prop
         readonly={readonly}
         onChange={onChange}
       />
+    );
+  }
+  if (setup) {
+    return (
+      <JdbcConnectionFieldsForm
+        connectionId={row.id}
+        setup={setup}
+        properties={row.properties ?? {}}
+        password={row.password}
+        readonly={readonly}
+        onChange={onChange}
+      />
+    );
+  }
+  if (usesProperties(row, setup)) {
+    return (
+      <div className="jdbc-settings-cell">
+        <span className="jdbc-settings-help">
+          {dialectsState === "loading"
+            ? "Loading the connection form…"
+            : "This database type's connection form is not available. Is its plugin installed and enabled?"}
+        </span>
+      </div>
     );
   }
 
@@ -397,22 +455,33 @@ function renderDialectForm(row: Row, readonly: boolean, onChange: (patch: { prop
   );
 }
 
-function buildSubtitle(row: Row): string {
+/**
+ * Whether a connection is described by properties (a dialect's own or field-rendered form) rather than a JDBC URL.
+ * A connection that already has properties keeps them while the backend's dialect list is still loading.
+ */
+function usesProperties(row: Row, setup: JdbcConnectionSetupDefinition | undefined): boolean {
+  // The generic dialect is always a JDBC URL
+  if (row.dialectId === GENERIC_DIALECT_ID) {
+    return false;
+  }
+  return Boolean(getJdbcDialect(row.dialectId)?.ConnectionForm) || setup !== undefined || (row.properties !== undefined && !row.url);
+}
+
+const GENERIC_DIALECT_ID = "jdbc";
+
+function buildSubtitle(row: Row, setup: JdbcConnectionSetupDefinition | undefined): string {
+  const properties = row.properties ?? {};
   const dialect = getJdbcDialect(row.dialectId);
-  if (dialect?.ConnectionForm && row.properties) {
-    const filePath = String(row.properties.filePath ?? "").trim();
-    if (filePath) return filePath;
-    const host = String(row.properties.host ?? "").trim();
-    const port = String(row.properties.port ?? "").trim();
-    const database = String(row.properties.database ?? "").trim();
-    if (!host) return "Host required";
-    const base = port ? `${host}:${port}` : host;
-    return database ? `${base}/${database}` : base;
+  if (dialect?.subtitle) {
+    return dialect.subtitle(properties);
+  }
+  if (setup) {
+    return fieldsSubtitle(setup, properties);
   }
   return row.url || "URL required";
 }
 
-function serializeRow(row: Row): unknown {
+function serializeRow(row: Row, setup: JdbcConnectionSetupDefinition | undefined): unknown {
   const base = {
     connectionId: row.connectionId,
     title: row.title || undefined,
@@ -421,11 +490,12 @@ function serializeRow(row: Row): unknown {
     enabled: row.enabled,
     color: row.color || undefined
   };
-  const dialect = getJdbcDialect(row.dialectId);
-  if (dialect?.ConnectionForm) {
+  if (usesProperties(row, setup)) {
+    const properties = row.properties ?? {};
     return {
       ...base,
-      properties: row.properties ?? {}
+      // Store the defaults the form showed, so the backend dialect builds the URL the user saw
+      properties: setup && !getJdbcDialect(row.dialectId)?.ConnectionForm ? withFieldDefaults(setup, properties) : properties
     };
   }
   return {
@@ -452,36 +522,26 @@ function toRows(definitions: JdbcConnectionDefinition[]): Row[] {
     color: definition.color
   }));
 }
-function buildRowErrors(rows: Row[]): Record<string, { url?: string; host?: string; database?: string }> {
-  const errors: Record<string, { url?: string; host?: string; database?: string }> = {};
+/** Problems per row id: the dialect's own `validate`, else its backend's required fields, else a missing JDBC URL. */
+function buildRowErrors(rows: Row[], setupFor: SetupLookup): Record<string, string[]> {
+  const errors: Record<string, string[]> = {};
   for (const row of rows) {
-    const rowError: { url?: string; host?: string; database?: string } = {};
-
+    const properties = row.properties ?? {};
+    const setup = setupFor(row.dialectId);
     const dialect = getJdbcDialect(row.dialectId);
-    if (dialect?.ConnectionForm) {
-      if (row.properties && "filePath" in row.properties) {
-        const filePath = String(row.properties.filePath ?? "").trim();
-        if (!filePath) {
-          rowError.host = "Database file is required";
-        }
-      } else {
-        const host = String(row.properties?.host ?? "").trim();
-        if (!host) {
-          rowError.host = "Host is required";
-        }
-        if (row.properties && "database" in row.properties) {
-          const database = String(row.properties.database ?? "").trim();
-          if (!database) {
-            rowError.database = "Database is required";
-          }
-        }
-      }
-    } else if (!row.url.trim()) {
-      rowError.url = "JDBC URL is required";
+    let problems: string[];
+    if (dialect?.validate) {
+      problems = dialect.validate(properties);
+    } else if (setup) {
+      problems = validateFields(setup, properties);
+    } else if (usesProperties(row, setup)) {
+      // Properties whose dialect the backend has not described yet
+      problems = [];
+    } else {
+      problems = row.url.trim() ? [] : ["JDBC URL is required"];
     }
-
-    if (rowError.url || rowError.host || rowError.database) {
-      errors[row.id] = rowError;
+    if (problems.length > 0) {
+      errors[row.id] = problems;
     }
   }
   return errors;

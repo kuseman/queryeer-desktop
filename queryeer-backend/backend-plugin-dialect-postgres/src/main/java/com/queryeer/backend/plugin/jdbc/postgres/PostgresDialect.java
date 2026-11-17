@@ -29,6 +29,7 @@ import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryPlanExecutor;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaTarget;
+import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionSetupDefinition;
 
 public final class PostgresDialect implements JdbcDialect
 {
@@ -126,6 +127,12 @@ public final class PostgresDialect implements JdbcDialect
     // @formatter:on
 
     private final PostgresQueryExecutor queryExecutor = new PostgresQueryExecutor();
+
+    @Override
+    public Optional<JdbcConnectionSetupDefinition> connectionSetup()
+    {
+        return Optional.of(PostgresConnectionSetup.build());
+    }
 
     @Override
     public JdbcDialectMetadata metadata()

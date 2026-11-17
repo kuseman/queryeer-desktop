@@ -15,6 +15,7 @@ import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryExecutor;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryPlanExecutor;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcDeepSchemaResolver;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
+import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionSetupDefinition;
 
 public interface JdbcDialect
 {
@@ -23,6 +24,15 @@ public interface JdbcDialect
     JdbcDialectMetadata metadata();
 
     JdbcQueryExecutor queryExecutor();
+
+    /**
+     * The fields of this dialect's connection form. Queryeer renders the form from them, stores their values in the connection's properties (a {@code SECRET} field in its password), and derives
+     * defaults, required-field validation and the connection's subtitle from them. Use the same field ids that {@link #buildUrl(Map)} reads. Empty: the generic JDBC URL, username and password form.
+     */
+    default Optional<JdbcConnectionSetupDefinition> connectionSetup()
+    {
+        return Optional.empty();
+    }
 
     default Optional<JdbcQueryPlanExecutor> queryPlanExecutor()
     {

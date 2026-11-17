@@ -1,6 +1,5 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
 import { fileUriToPath } from "@queryeer/api/files/Resolvers";
-import { registerJdbcDialect } from "../core.queryengine.jdbc/jdbc-dialect-registry";
 import { SqliteConnectionForm } from "./SqliteConnectionForm";
 import { SqliteDatabaseWelcomeEditor } from "./SqliteDatabaseWelcomeEditor";
 
@@ -29,9 +28,11 @@ export const coreQueryEngineJdbcSqlitePlugin: Plugin = {
       downloadPageUrl: "https://github.com/xerial/sqlite-jdbc/releases"
     });
 
-    registerJdbcDialect({
+    context.jdbcDialects.registerDialect({
       dialectId: SQLITE_DIALECT_ID,
-      ConnectionForm: SqliteConnectionForm
+      ConnectionForm: SqliteConnectionForm,
+      subtitle: (properties) => String(properties.filePath ?? "").trim() || "Database file required",
+      validate: (properties) => (String(properties.filePath ?? "").trim() ? [] : ["Database file is required"])
     });
 
     context.files.registerMimeResolver((_uri, hint) => {

@@ -1,7 +1,6 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
 import { getQueryViewStateStore } from "../core.queryengine/QueryViewStateStore";
 import { getCoreSettingsService } from "../core.settings/service";
-import { registerJdbcDialect } from "../core.queryengine.jdbc/jdbc-dialect-registry";
 import { registerWhenExpressionTemplates } from "../core.commands/when-expression-template-registry";
 import { registerSymbolActionTemplate } from "../core.queryengine/symbol-action-template-registry";
 import { registerTreeActionTemplate } from "../core.queryengine.jdbc/tree-action-template-registry";
@@ -67,11 +66,13 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
 
     registerSqlServerExpressionFunctions();
 
-    // Register connection form for the JDBC settings editor
-    registerJdbcDialect({
+    // A hand-written form (several authentication types share fields, some options are Windows-only), so its own subtitle and validation
+    context.jdbcDialects.registerDialect({
       dialectId: SQLSERVER_DIALECT_ID,
       supportsQueryPlan: true,
-      ConnectionForm: SqlServerConnectionForm
+      ConnectionForm: SqlServerConnectionForm,
+      subtitle: sqlServerSubtitle,
+      validate: validateSqlServer
     });
 
     registerWhenExpressionTemplates([
@@ -212,3 +213,27 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
     });
   }
 };
+
+/** `host[:port][/database]`, as stored: the connections list showed it this way before dialects described their own. */
+export function sqlServerSubtitle(properties: Record<string, unknown>): string {
+  const host = String(properties.host ?? "").trim();
+  if (!host) {
+    return "Host required";
+  }
+  const port = String(properties.port ?? "").trim();
+  const database = String(properties.database ?? "").trim();
+  const base = port ? `${host}:${port}` : host;
+  return database ? `${base}/${database}` : base;
+}
+
+/** A host is required; a database only once the field was touched and left empty. */
+export function validateSqlServer(properties: Record<string, unknown>): string[] {
+  const problems: string[] = [];
+  if (!String(properties.host ?? "").trim()) {
+    problems.push("Host is required");
+  }
+  if ("database" in properties && !String(properties.database ?? "").trim()) {
+    problems.push("Database is required");
+  }
+  return problems;
+}
