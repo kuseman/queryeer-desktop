@@ -65,7 +65,19 @@ final class NativeLibraryPreloader
     {
         try
         {
-            Class<?> loaderClass = Class.forName(library.loaderClass(), true, nativeLibraryClassLoader);
+            Class<?> loaderClass;
+            if (!usesRunnerLoader(library))
+            {
+                loaderClass = Class.forName(library.loaderClass(), true, nativeLibraryClassLoader);
+            }
+            else if (nativeLibraryClassLoader instanceof SharedClassLoader shared)
+            {
+                loaderClass = shared.nativeLibraryLoader();
+            }
+            else
+            {
+                throw new PluginDiscoveryException("No loader class for native library " + path.toAbsolutePath() + ": the runner's own loader needs the shared class loader");
+            }
             loaderClass.getMethod("load", String.class)
                     .invoke(null, path.toAbsolutePath()
                             .toString());
@@ -79,6 +91,20 @@ final class NativeLibraryPreloader
             }
             throw new PluginDiscoveryException("Failed to preload native library through shared classloader: " + path.toAbsolutePath(), e);
         }
+    }
+
+    /** The JDBC foundation's loader class, which manifests written before 0.20 name. */
+    static final String LEGACY_LOADER_CLASS = "com.queryeer.backend.queryengine.jdbc.runtime.SharedNativeLibraryLoader";
+
+    /**
+     * Whether the runner's own loader serves this library: when the manifest names no loader class, or names the one that lived in the JDBC foundation before the foundation left the shared layer.
+     */
+    static boolean usesRunnerLoader(PluginManifest.NativeLibrary library)
+    {
+        return library.loaderClass() == null
+                || library.loaderClass()
+                        .isBlank()
+                || LEGACY_LOADER_CLASS.equals(library.loaderClass());
     }
 
     List<Path> findMatches(Path appDir, PluginManifest.NativeLibrary library)

@@ -1,6 +1,7 @@
 package com.queryeer.backend.queryengine.sql.parser;
 
 import org.treesitter.TSNode;
+import org.treesitter.TSParser;
 import org.treesitter.TSPoint;
 import org.treesitter.TSQuery;
 import org.treesitter.TSQueryCapture;
@@ -36,12 +37,33 @@ public final class SqlContextDetector
     {
     }
 
-    public static SqlParseContext detectContext(TSTree tree, int line, int column)
+    /**
+     * The context at the cursor in a SQL text, parsed here. This is the entry point for other plugins: the parser's API carries no tree-sitter types, so tree-sitter stays inside the JDBC engine.
+     *
+     * @param line cursor line (1-indexed)
+     * @param column cursor column (1-indexed)
+     * @return {@link SqlParseContext#OTHER} for a blank text
+     */
+    public static SqlParseContext detectContext(String text, int line, int column)
     {
-        return detectContext(tree, null, line, column);
+        if (text == null
+                || text.isBlank())
+        {
+            return SqlParseContext.OTHER;
+        }
+        try (TSParser parser = new TSParser())
+        {
+            parser.setLanguage(new TreeSitterSql());
+            return detectContextInTree(parser.parseString(null, text), text, line, column);
+        }
     }
 
-    public static SqlParseContext detectContext(TSTree tree, String text, int line, int column)
+    static SqlParseContext detectContextInTree(TSTree tree, int line, int column)
+    {
+        return detectContextInTree(tree, null, line, column);
+    }
+
+    static SqlParseContext detectContextInTree(TSTree tree, String text, int line, int column)
     {
         TSPoint pt = new TSPoint(line - 1, column - 1);
 

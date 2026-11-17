@@ -41,13 +41,12 @@ The runner aggregates these contributions before plugin activation and applies t
 
 Builtin shared-runtime modules are real backend plugins with tiny no-op entrypoints so they appear in normal plugin logs and runtime status. Their manifests live under `plugins/builtin` and use the same dev classpath mechanism as query engine plugins.
 
-Current builtin runtime/plugin ids:
+Current builtin plugins that contribute to the shared runtime:
 
-- `queryengine.runtime.jdbc-foundation`
-- `queryengine.runtime.sql-parser`
-- `queryengine.jdbc`
-- `queryengine.jdbc.dialect.sqlserver`
-- `queryengine.payloadbuilder`
+- `queryengine.runtime.payloadbuilder-foundation` (the payloadbuilder API, `se.kuseman.payloadbuilder.api.`)
+- `queryengine.jdbc.dialect.postgres`, `.sqlite`, `.sqlserver` (their drivers' packages, parent-first; SQL Server also its auth DLL)
+
+**Class sharing between plugins is not a shared-runtime concern any more** (since 0.20). The JDBC foundation and the SQL parser used to be shared-runtime plugins (`queryengine.runtime.jdbc-foundation`, `queryengine.runtime.sql-parser`) whose packages every plugin saw. They are now bundled in `queryengine.jdbc`, which exports them (`backend.exports`), and only plugins that declare a dependency on `queryengine.jdbc` see them. See `DEVELOPMENT-PLUGIN.md` §3.3.1. The shared layer is kept for what is process-wide by nature: JDBC drivers (`libShared`, installed by the desktop's driver service) and native libraries.
 
 ### 1) New runtime contribution model
 
@@ -148,7 +147,8 @@ The dialect plugins do not package these drivers. Electron owns managed download
 ## Migration Status
 
 - SQL Server-specific parent-first/native rules now live in `plugins/builtin/queryengine.jdbc.dialect.sqlserver/plugin.json`.
-- JDBC foundation and SQL parser shared class identity rules now live in their runtime plugin manifests.
+- The JDBC foundation and the SQL parser are exported by `queryengine.jdbc` instead of sitting in the shared layer (0.20). Tree-sitter, which the parser uses, is bundled but not exported: the parser's API takes SQL text.
+- Native libraries are preloaded through the runner's own `SharedNativeLibraryLoader`, which `SharedClassLoader` defines itself, so the libraries stay bound to the shared loader where the drivers live. `nativeLibraries[].loaderClass` is optional; the former `com.queryeer.backend.queryengine.jdbc.runtime.SharedNativeLibraryLoader` maps to the runner's loader.
 - `PluginClassLoaderFactory` keeps only base JVM/API/contract parent-first rules in code.
 
 ## Acceptance Criteria

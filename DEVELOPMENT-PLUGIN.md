@@ -165,6 +165,50 @@ Plugins are activated in dependency order using a topological sort (Kahn's algor
 
 **Skipped plugins.** The backend skips, with a reason shown in the runtime status, a plugin whose dependency is missing (`Missing dependency: <id>`), out of range (`Needs <id> <range>, but <version> is installed`) or itself skipped (`Dependency <id> was skipped`), and one whose required capability is only provided by skipped plugins. These checks are backend-only; the frontend resolves a plugin's dependencies from the `manifest` in its TypeScript plugin object.
 
+### 3.3.1 Sharing Classes Between Backend Plugins
+
+Each backend plugin has its own class loader. A plugin offers classes to others by exporting packages, and a plugin sees them only through a declared dependency:
+
+```json
+"backend": {
+  "entrypointClass": "com.example.api.ApiPlugin",
+  "exports": ["com.example.api."]
+}
+```
+
+A plugin's class loader looks for a class in this order:
+
+1. The JVM and Queryeer's API (`java.`, `com.queryeer.backend.api.`, `com.queryeer.backend.contract.`, …), from the parent.
+2. Packages exported by a **direct** dependency, from that dependency's own jars. There is one copy of each exported class, so a service registered with `context.services()` by the exporter is found by its dependents. An export is not passed on: a plugin that needs another plugin's exports depends on it directly.
+3. The plugin's own jars (`lib/`).
+4. The shared parent: `libShared`, where Queryeer's driver service installs JDBC drivers.
+
+Rules:
+
+- **Compile against an exported API with `provided` scope and do not bundle it.** A bundled copy is ignored for the exported packages, but it wastes space and hides a missing dependency.
+- **Declare the dependency.** Without it, the exported classes are not visible, and the error names the plugin to depend on: `com.example.api.Api: plugin com.example.api exports it, but my.plugin does not declare a dependency on com.example.api`.
+- **Exports are package prefixes** of at least two parts ending in `.`, outside the JVM's and Queryeer's API packages. A plugin can only serve classes from its own jars.
+- **Keep third-party types out of an exported API** where you can: a dependent that needs them must get them from the exporter too, which means exporting the library as well.
+- **Mark an API library's implementation dependencies `<optional>true</optional>`** in its own POM. Maven has no "internal" scope; an optional dependency is the closest: dependents do not inherit it, so they cannot compile against its types by accident, while the library itself compiles and tests with it. The plugin that bundles the library declares those dependencies itself. Queryeer's SQL parser does this with tree-sitter:
+
+  ```xml
+  <!-- backend-lib-queryengine-sql-parser: tree-sitter is its implementation, not part of its API -->
+  <dependency>
+      <groupId>io.github.bonede</groupId>
+      <artifactId>tree-sitter</artifactId>
+      <version>${tree-sitter.version}</version>
+      <optional>true</optional>
+  </dependency>
+  ```
+
+  So a dialect that depends on `backend-lib-queryengine-sql-parser` with `provided` scope gets only the parser's own classes on its compile classpath; `queryengine.jdbc` bundles tree-sitter. A dialect whose tests run the parser adds tree-sitter with `test` scope.
+
+The built-in JDBC engine (`queryengine.jdbc`) exports the JDBC foundation (`com.queryeer.backend.queryengine.jdbc.`) and the SQL parser (`com.queryeer.backend.queryengine.sql.parser.`). The parser's API takes SQL text, not parse trees: tree-sitter, which it uses inside, is not exported. A JDBC dialect depends on `queryengine.jdbc`:
+
+```json
+"dependencies": [{ "id": "queryengine.jdbc", "version": "^0.20.0" }]
+```
+
 ### 3.4 Activation
 
 Each plugin's `activate(context)` method is called in dependency order. The `PluginContext` provides all registries (commands, layout, files, etc.). Plugins register their contributions during activation.

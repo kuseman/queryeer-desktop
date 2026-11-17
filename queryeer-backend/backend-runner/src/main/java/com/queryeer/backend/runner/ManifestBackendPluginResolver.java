@@ -28,6 +28,8 @@ final class ManifestBackendPluginResolver implements BackendPluginResolver
         }
 
         URLClassLoader classLoader = classLoaderFactory.createClassLoader(source, manifest);
-        return Optional.of(new DiscoveredPlugin(manifest, new PluginManifestBackedPlugin(manifest, pluginFactory.instantiate(manifest, classLoader, source, hostServices)), source, true, classLoader));
+        // Created at activation, after every kept plugin has published its exports (see PluginManifestBackedPlugin)
+        return Optional
+                .of(new DiscoveredPlugin(manifest, new PluginManifestBackedPlugin(manifest, () -> pluginFactory.instantiate(manifest, classLoader, source, hostServices)), source, true, classLoader));
     }
 }

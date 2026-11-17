@@ -43,7 +43,7 @@ public final class SqlHoverSupport
             tree = resolveTree(parseSessions, engineId, fileId, text);
             if (tree != null)
             {
-                context = SqlContextDetector.detectContext(tree, text, cursor.line(), cursor.column());
+                context = SqlContextDetector.detectContextInTree(tree, text, cursor.line(), cursor.column());
             }
         }
 

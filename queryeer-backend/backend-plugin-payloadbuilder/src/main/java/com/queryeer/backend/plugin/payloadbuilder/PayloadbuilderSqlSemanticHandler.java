@@ -7,10 +7,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.treesitter.TSParser;
-import org.treesitter.TSTree;
-import org.treesitter.TreeSitterSql;
-
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
 import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
@@ -76,18 +72,14 @@ final class PayloadbuilderSqlSemanticHandler
             return null;
         }
 
-        TSTree tree = resolveTree(params.text());
-        SqlParseContext context = SqlParseContext.OTHER;
-        if (tree != null)
-        {
-            context = SqlContextDetector.detectContext(tree, params.text(), params.cursor()
-                    .line(),
-                    params.cursor()
-                            .column());
-        }
-        Map<String, String> aliases = tree != null
+        // Text-based parser API: tree-sitter stays inside the JDBC engine
+        SqlParseContext context = SqlContextDetector.detectContext(params.text(), params.cursor()
+                .line(),
+                params.cursor()
+                        .column());
+        Map<String, String> aliases = !isBlank(params.text())
                 && context != SqlParseContext.OTHER
-                        ? SqlCompletionSupport.extractAliases(tree, params.text(), params.cursor()
+                        ? SqlCompletionSupport.extractAliases(params.text(), params.cursor()
                                 .line(),
                                 params.cursor()
                                         .column())
@@ -513,19 +505,6 @@ final class PayloadbuilderSqlSemanticHandler
             result.put("attributes", symbol.attributes());
         }
         return result;
-    }
-
-    private static TSTree resolveTree(String text)
-    {
-        if (isBlank(text))
-        {
-            return null;
-        }
-        try (TSParser parser = new TSParser())
-        {
-            parser.setLanguage(new TreeSitterSql());
-            return parser.parseString(null, text);
-        }
     }
 
     private static void putIfNotBlank(Map<String, Object> target, String key, String value)
