@@ -20,7 +20,7 @@ const GITHUB_DOWNLOAD_HOSTS = new Set(["github.com", "objects.githubusercontent.
 const MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024;
 const MANAGED_PREFIX = "000-queryeer-managed-";
 const INVENTORY_VERSION = 2;
-const INSTALL_NOT_CONFIRMED = "Database driver installation cancelled";
+const NOT_APPROVED = "Approve this database driver before installing it";
 
 type GitHubReleaseMetadata = {
   tag_name?: unknown;
@@ -97,8 +97,6 @@ type InventoryDocument = {
   approved?: RegisteredJdbcManagedDriverContribution[];
 };
 
-/** Asks the user to confirm the first install of a plugin's driver. Resolves to false when they decline. */
-export type JdbcDriverInstallConfirmation = (contribution: RegisteredJdbcManagedDriverContribution) => Promise<boolean>;
 
 type ActiveArtifactCandidate = {
   contribution: RegisteredJdbcManagedDriverContribution;
@@ -183,7 +181,6 @@ export class JdbcDriverArtifactService {
   private readonly arch: string;
   private readonly moveArtifact: typeof rename;
   private readonly trashArtifact: (path: string) => Promise<void>;
-  private readonly confirmInstall: JdbcDriverInstallConfirmation;
   private mutationQueue: Promise<void> = Promise.resolve();
 
   public constructor(options: {
@@ -196,8 +193,6 @@ export class JdbcDriverArtifactService {
     arch?: string;
     moveArtifact?: typeof rename;
     trashArtifact?: (path: string) => Promise<void>;
-    /** Without it, a plugin driver that is not yet approved cannot be installed. */
-    confirmInstall?: JdbcDriverInstallConfirmation;
   }) {
     this.libSharedDir = join(options.appDir, "libShared");
     this.libNativeDir = join(options.appDir, "libNative");
@@ -210,7 +205,6 @@ export class JdbcDriverArtifactService {
     this.arch = normalizeArch(options.arch ?? process.arch);
     this.moveArtifact = options.moveArtifact ?? rename;
     this.trashArtifact = options.trashArtifact ?? ((path) => rm(path));
-    this.confirmInstall = options.confirmInstall ?? (async () => false);
   }
 
   /**
@@ -269,15 +263,25 @@ export class JdbcDriverArtifactService {
     return undefined;
   }
 
-  private async ensureApproved(contribution: RegisteredJdbcManagedDriverContribution): Promise<boolean> {
-    if (this.isApproved(contribution)) return true;
-    if (!await this.confirmInstall(contribution)) return false;
-    this.inventory.approved = [
-      ...(this.inventory.approved ?? []).filter((approved) => !sameOwner(approved, contribution)),
-      contribution
-    ];
-    await this.writeInventory();
-    return true;
+  /**
+   * Records that the user approved core installing this plugin driver, as it is declared now. The renderer asks the
+   * user first (`core.dialog`); install and update refuse a driver without an approval. Built-in drivers need none.
+   */
+  public approve(contributionValue: unknown): Promise<JdbcDriverOperationResult> {
+    return this.enqueueMutation(async () => {
+      const contribution = canonicalizeContribution(validateContribution(contributionValue));
+      const status = (await this.list([contribution]))[0];
+      const conflict = this.managementConflict(contribution);
+      if (conflict) return rejected(status, conflict);
+      if (!this.isApproved(contribution)) {
+        this.inventory.approved = [
+          ...(this.inventory.approved ?? []).filter((approved) => !sameOwner(approved, contribution)),
+          contribution
+        ];
+        await this.writeInventory();
+      }
+      return { accepted: true, status: (await this.list([contribution]))[0] };
+    });
   }
 
   public async initialize(): Promise<void> {
@@ -1075,7 +1079,7 @@ export class JdbcDriverArtifactService {
     if (operation === "update" && !entry.managedFile) {
       return rejected(status, "No managed driver is installed");
     }
-    if (!await this.ensureApproved(contribution)) return rejected(status, INSTALL_NOT_CONFIRMED);
+    if (!this.isApproved(contribution)) return rejected(status, NOT_APPROVED);
 
     const token = `${companion?.id ?? contribution.artifactId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const extension = companion?.expectedFileExtension ?? ".jar";
@@ -1131,7 +1135,7 @@ export class JdbcDriverArtifactService {
     if (members.some((entry) => entry.pending)) return rejected(initialStatus, "A JDBC driver package operation is already pending");
     const anyManaged = members.some((entry) => Boolean(entry.managedFile));
     if (operation === "update" && !anyManaged) return rejected(initialStatus, "No managed JDBC driver package is installed");
-    if (!await this.ensureApproved(contribution)) return rejected(initialStatus, INSTALL_NOT_CONFIRMED);
+    if (!this.isApproved(contribution)) return rejected(initialStatus, NOT_APPROVED);
 
     const bundleId = `${contribution.dialectId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const stagedFiles: string[] = [];

@@ -140,36 +140,40 @@ describe("JdbcDriverArtifactService", () => {
     expect(readdirSync(settingsDir).some((name) => name.endsWith(".tmp"))).toBe(false);
   });
 
-  it("installs nothing for a plugin driver the user declines or that has no confirmation", async () => {
+  it("installs nothing for a plugin driver the user has not approved", async () => {
     const fetchMock = vi.fn() as unknown as typeof fetch;
-    const confirmInstall = vi.fn(async () => false);
-    const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: fetchMock, confirmInstall });
+    const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: fetchMock });
     await service.initialize();
 
     expect((await service.list([mariadb]))[0]).toMatchObject({ managementAvailable: true, approvalRequired: true });
-    const result = await service.install(mariadb);
+    expect(await service.install(mariadb)).toMatchObject({ accepted: false, reason: "Approve this database driver before installing it" });
+    expect((await service.update(mariadb)).accepted).toBe(false);
 
-    expect(result).toMatchObject({ accepted: false, reason: "Database driver installation cancelled" });
-    expect(confirmInstall).toHaveBeenCalledWith(mariadb);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(service.managedDriverClassNames()).not.toContain(mariadb.driverClassName);
-
-    const unconfirmed = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: fetchMock });
-    await unconfirmed.initialize();
-    expect((await unconfirmed.install(mariadb)).accepted).toBe(false);
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("asks once before a plugin driver's first install and manages it like a built-in one", async () => {
-    const jar = await driverJar(mariadb.driverClassName, "3.5.6");
-    const confirmInstall = vi.fn(async () => true);
-    const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: mavenFetch(["3.5.6"], jar), confirmInstall });
+  it("needs no approval for a built-in driver", async () => {
+    const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: vi.fn() as unknown as typeof fetch });
     await service.initialize();
 
+    expect((await service.list([postgres]))[0].approvalRequired).toBeUndefined();
+    expect((await service.approve(postgres)).accepted).toBe(true);
+    // Nothing to record: the inventory is not even written
+    expect(existsSync(defaultJdbcDriverInventoryPath(settingsDir))).toBe(false);
+  });
+
+  it("manages an approved plugin driver like a built-in one", async () => {
+    const jar = await driverJar(mariadb.driverClassName, "3.5.6");
+    const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: mavenFetch(["3.5.6"], jar) });
+    await service.initialize();
+
+    const approval = await service.approve(mariadb);
+    expect(approval.accepted).toBe(true);
+    expect(approval.status.approvalRequired).toBeUndefined();
     expect((await service.install(mariadb)).accepted).toBe(true);
     await service.applyPending();
 
-    expect(confirmInstall).toHaveBeenCalledTimes(1);
     expect(readdirSync(join(appDir, "libShared"))).toContain("000-queryeer-managed-mariadb-java-client-3.5.6.jar");
     expect((await service.list([mariadb]))[0]).toMatchObject({ source: "managed", installedVersion: "3.5.6" });
     expect((await service.list([mariadb]))[0].approvalRequired).toBeUndefined();
@@ -183,7 +187,8 @@ describe("JdbcDriverArtifactService", () => {
     // A manual copy of an approved driver is retained at startup, as for built-in drivers.
     const manual = join(appDir, "libShared", "mariadb-java-client-3.4.1.jar");
     writeFileSync(manual, await driverJar(mariadb.driverClassName, "3.4.1"));
-    const restarted = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: mavenFetch(["3.5.6"], jar), confirmInstall });
+    // The approval survives a restart: the approved driver is still managed and installs without a new approval.
+    const restarted = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: mavenFetch(["3.5.6"], jar) });
     await restarted.initialize();
     expect(existsSync(manual)).toBe(false);
     expect(restarted.managedDriverClassNames()).toContain(mariadb.driverClassName);
@@ -192,14 +197,13 @@ describe("JdbcDriverArtifactService", () => {
     await restarted.applyPending();
     expect(readdirSync(join(appDir, "libShared")).filter((name) => name.startsWith("000-"))).toEqual([]);
     expect((await restarted.install(mariadb)).accepted).toBe(true);
-    expect(confirmInstall).toHaveBeenCalledTimes(1);
   });
 
-  it("asks again when a plugin changes what its driver downloads", async () => {
+  it("needs a new approval when a plugin changes what its driver downloads", async () => {
     const jar = await driverJar(mariadb.driverClassName, "3.5.6");
-    const confirmInstall = vi.fn(async () => true);
-    const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: mavenFetch(["3.5.6"], jar), confirmInstall });
+    const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: mavenFetch(["3.5.6"], jar) });
     await service.initialize();
+    await service.approve(mariadb);
     await service.install(mariadb);
     await service.applyPending();
 
@@ -207,11 +211,11 @@ describe("JdbcDriverArtifactService", () => {
     expect((await service.list([renamed]))[0].approvalRequired).toBeUndefined();
     const changed = { ...mariadb, compatibleVersionRegex: "^3\\." };
     expect((await service.list([changed]))[0].approvalRequired).toBe(true);
-
-    confirmInstall.mockResolvedValueOnce(false);
     expect((await service.update(changed)).accepted).toBe(false);
-    expect(confirmInstall).toHaveBeenCalledTimes(2);
     expect(service.managedDriverClassNames()).toContain(mariadb.driverClassName);
+
+    expect((await service.approve(changed)).accepted).toBe(true);
+    expect((await service.list([mariadb]))[0].approvalRequired).toBe(true);
   });
 
   it("names, recognises and replaces a plugin's native companion by its archive entry", async () => {
@@ -265,10 +269,10 @@ describe("JdbcDriverArtifactService", () => {
       settingsDir,
       fetch: fetchMock,
       platform: "win32",
-      arch: "x64",
-      confirmInstall: async () => true
+      arch: "x64"
     });
     await service.initialize();
+    expect((await service.approve(external)).accepted).toBe(true);
     const manual = join(appDir, "libNative", "example_native-1.9.0_x64.dll");
     writeFileSync(manual, Buffer.from([0x4d, 0x5a]));
     const unrelated = join(appDir, "libNative", "other.dll");
@@ -314,8 +318,7 @@ describe("JdbcDriverArtifactService", () => {
 
   it("refuses a plugin driver that would clash with one core already manages", async () => {
     const fetchMock = vi.fn() as unknown as typeof fetch;
-    const confirmInstall = vi.fn(async () => true);
-    const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: fetchMock, confirmInstall, platform: "win32", arch: "x64" });
+    const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: fetchMock, platform: "win32", arch: "x64" });
     await service.initialize();
     const sharedClass = { ...postgres, ownerPluginId: "example.redshift", dialectId: "redshift", displayName: "Redshift via pgJDBC" };
     const spoofed = { ...postgres, groupId: "com.example.evil" };
@@ -338,6 +341,9 @@ describe("JdbcDriverArtifactService", () => {
       expect(status).toMatchObject({ managementAvailable: false });
       expect(status.warning).toContain(reason);
       expect(status.approvalRequired).toBeUndefined();
+      const approval = await service.approve(contribution);
+      expect(approval.accepted).toBe(false);
+      expect(approval.reason).toContain(reason);
       const result = await service.install(contribution);
       expect(result.accepted).toBe(false);
       expect(result.reason).toContain(reason);
@@ -345,9 +351,10 @@ describe("JdbcDriverArtifactService", () => {
     }
     await service.check([spoofed, sharedClass]);
 
-    expect(confirmInstall).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(JSON.parse(readFileSync(defaultJdbcDriverInventoryPath(settingsDir), "utf8")).drivers).toEqual([]);
+    const inventory = JSON.parse(readFileSync(defaultJdbcDriverInventoryPath(settingsDir), "utf8"));
+    expect(inventory.drivers).toEqual([]);
+    expect(inventory.approved).toBeUndefined();
   });
 
   it("uses the main-owned compatibility policy for trusted contributions", async () => {

@@ -1,11 +1,16 @@
-import type { MessageBoxOptions, MessageBoxReturnValue } from "electron";
-import type { RegisteredJdbcManagedDriverContribution } from "@queryeer/api/queryengine/JdbcDriverExtension.js";
+import type { RegisteredJdbcManagedDriverContribution } from "@queryeer/api/queryengine/JdbcDriverExtension";
+
+export type JdbcDriverApprovalText = {
+  title: string;
+  message: string;
+  detail: string;
+};
 
 /**
- * The dialog shown before core first installs a plugin's JDBC driver. It names everything core is about to fetch and
- * who asked for it, so the user can judge the download before any code reaches the shared class loader.
+ * The text of the dialog shown before core first installs a plugin's JDBC driver. It names everything core is about
+ * to fetch and who asked for it, so the user can judge the download before any code reaches the shared class loader.
  */
-export function describeJdbcDriverInstall(contribution: RegisteredJdbcManagedDriverContribution): MessageBoxOptions {
+export function describeJdbcDriverApproval(contribution: RegisteredJdbcManagedDriverContribution): JdbcDriverApprovalText {
   const lines = [
     `Plugin: ${contribution.ownerPluginId}`,
     `Driver: ${contribution.displayName} (${contribution.driverClassName})`,
@@ -21,25 +26,12 @@ export function describeJdbcDriverInstall(contribution: RegisteredJdbcManagedDri
   lines.push(
     "",
     "Queryeer checks the download's checksum and that it contains the driver class. The driver then runs inside the "
-      + "Java backend with the same rights as Queryeer.",
+      + "Java backend with the same rights as Queryeer. It becomes active after the Java backend restarts.",
     "You are asked once per plugin, and again if the plugin changes what it downloads."
   );
   return {
-    type: "warning",
     title: "Install database driver",
     message: `Allow the plugin ${contribution.ownerPluginId} to install ${contribution.displayName}?`,
-    detail: lines.join("\n"),
-    buttons: ["Install", "Cancel"],
-    defaultId: 1,
-    cancelId: 1,
-    noLink: true
+    detail: lines.join("\n")
   };
-}
-
-export async function confirmJdbcDriverInstall(
-  contribution: RegisteredJdbcManagedDriverContribution,
-  showMessageBox: (options: MessageBoxOptions) => Promise<MessageBoxReturnValue>
-): Promise<boolean> {
-  const result = await showMessageBox(describeJdbcDriverInstall(contribution));
-  return result.response === 0;
 }

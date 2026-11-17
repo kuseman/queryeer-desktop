@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, webContents, nativeImage, shell, screen, type Rectangle } from "electron";
+import { app, BrowserWindow, webContents, nativeImage, shell, screen, type Rectangle } from "electron";
 import { join } from "node:path";
 import { readFile, writeFile, readdir, stat, mkdir } from "node:fs/promises";
 import { memoryUsage, versions } from "node:process";
@@ -35,7 +35,6 @@ import { defaultPluginsDirPath } from "./plugins/plugin-paths.js";
 import { defaultPluginsLockfilePath, PluginInventoryService } from "./plugins/plugin-inventory-service.js";
 import { defaultWindowStatePath, type WindowStateSnapshot, WindowStateStore } from "./window/window-state-store.js";
 import { JdbcDriverArtifactService } from "./jdbc-drivers/jdbc-driver-artifact-service.js";
-import { confirmJdbcDriverInstall } from "./jdbc-drivers/jdbc-driver-install-confirmation.js";
 
 const isDev = !app.isPackaged;
 const queryeerReleasesUrl = "https://api.github.com/repos/kuseman/queryeer-desktop/releases";
@@ -501,10 +500,7 @@ app.whenReady().then(async () => {
   const driverService = new JdbcDriverArtifactService({
     appDir: appDataDir,
     settingsDir: settingsDirPath,
-    trashArtifact: (path) => shell.trashItem(path),
-    confirmInstall: (contribution) => confirmJdbcDriverInstall(contribution, (options) => mainWindow
-      ? dialog.showMessageBox(mainWindow, options)
-      : dialog.showMessageBox(options))
+    trashArtifact: (path) => shell.trashItem(path)
   });
   await driverService.initialize();
   jdbcDriverArtifactService = driverService;
@@ -513,6 +509,9 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("jdbc-drivers:check", async (_event, contributions: unknown) => {
     return driverService.check(contributions);
+  });
+  ipcMain.handle("jdbc-drivers:approve", async (_event, contribution: unknown) => {
+    return driverService.approve(contribution);
   });
   ipcMain.handle("jdbc-drivers:install", async (_event, contribution: unknown, artifactId?: unknown) => {
     return driverService.install(contribution, artifactId);

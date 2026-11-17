@@ -58,6 +58,7 @@ function options(overrides: Partial<JdbcDriverManagementOptions> = {}): JdbcDriv
     shell: {
       listJdbcDrivers: vi.fn(async () => [missing]),
       checkJdbcDrivers: vi.fn(async () => [missing]),
+      approveJdbcDriver: vi.fn(async () => ({ accepted: true, status: missing })),
       installJdbcDriver: vi.fn(async () => ({ accepted: true, status: missing })),
       updateJdbcDriver: vi.fn(async () => ({ accepted: true, status: missing })),
       removeJdbcDriver: vi.fn(async () => ({ accepted: true, status: missing })),
@@ -301,19 +302,36 @@ describe("JdbcDriverManagementService", () => {
     expect(setup.shell.installJdbcDriver).not.toHaveBeenCalled();
   });
 
-  it("leaves the confirmation of an unapproved plugin driver to the main process", async () => {
+  it("asks for approval of an unapproved plugin driver, records it, then installs", async () => {
     const setup = options({ updateChecksEnabled: () => false });
     vi.mocked(setup.shell.listJdbcDrivers).mockResolvedValue([status({ approvalRequired: true })]);
     await service.initialize(setup);
 
-    await service.install("sqlite");
-    expect(setup.confirmOperation).not.toHaveBeenCalled();
-    expect(setup.shell.installJdbcDriver).toHaveBeenCalledWith(sqlite);
+    expect((await service.install("sqlite")).accepted).toBe(true);
+    expect(setup.confirmOperation).toHaveBeenCalledTimes(1);
+    expect(setup.confirmOperation).toHaveBeenCalledWith("approve", sqlite, expect.anything());
+    expect(setup.shell.approveJdbcDriver).toHaveBeenCalledWith(sqlite);
+    expect(vi.mocked(setup.shell.approveJdbcDriver).mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(setup.shell.installJdbcDriver).mock.invocationCallOrder[0]);
 
     vi.mocked(setup.shell.listJdbcDrivers).mockResolvedValue([status({ approvalRequired: true, source: "managed" })]);
     await service.refresh();
     await service.remove("sqlite");
-    expect(setup.confirmOperation).toHaveBeenCalledWith("remove", sqlite, expect.anything());
+    expect(setup.confirmOperation).toHaveBeenLastCalledWith("remove", sqlite, expect.anything());
+  });
+
+  it("installs nothing when the approval is declined or refused", async () => {
+    const setup = options({ updateChecksEnabled: () => false, confirmOperation: vi.fn(async () => false) });
+    vi.mocked(setup.shell.listJdbcDrivers).mockResolvedValue([status({ approvalRequired: true })]);
+    await service.initialize(setup);
+
+    expect(await service.install("sqlite")).toMatchObject({ accepted: false, reason: "Database driver operation cancelled" });
+    expect(setup.shell.approveJdbcDriver).not.toHaveBeenCalled();
+
+    vi.mocked(setup.confirmOperation).mockResolvedValue(true);
+    vi.mocked(setup.shell.approveJdbcDriver).mockResolvedValue({ accepted: false, reason: "already managed", status: status() });
+    expect(await service.install("sqlite")).toMatchObject({ accepted: false, reason: "already managed" });
+    expect(setup.shell.installJdbcDriver).not.toHaveBeenCalled();
   });
 
   it("targets and names a companion artifact independently", async () => {
