@@ -807,6 +807,42 @@ JDBC dialect frontend plugins can register driver metadata through `jdbcDrivers.
 
 The primary artifact uses Maven Central coordinates. Contributions may add typed, platform-constrained native companion archive declarations. Set `versionLockedToDriver: true` when an applicable companion must share the primary driver's lifecycle and derived release version; the UI keeps separate status rows but exposes one package action. Automatic downloads are currently allowlisted to Queryeer's builtin PostgreSQL, SQL Server, and SQLite contributions, and the main process replaces trusted metadata with canonical descriptors. For those trusted providers, duplicate runtime files are moved to recoverable provider-specific `disabled` folders before Java starts; retained version sets are exposed through `JdbcDriverStatus.disabledSets` and can be restored through the common settings UI. External contributions and companions remain visible but are manual-only. See [`documentation/JDBC_DRIVER_MANAGEMENT.md`](./documentation/JDBC_DRIVER_MANAGEMENT.md).
 
+### 7.12.1 JDBC Dialects
+
+A JDBC dialect is mostly backend: a `JdbcDialect` registered with the JDBC engine's `JdbcRuntimeService` (§3.3.1), which lists it in JDBC settings and builds its URL.
+
+**Connection form from the backend.** Override `JdbcDialect.connectionSetup()` to return the form's fields (`JdbcConnectionSetupDefinition`). The JDBC settings editor renders the form from them, so a dialect needs no frontend code for it:
+
+```java
+@Override
+public Optional<JdbcConnectionSetupDefinition> connectionSetup()
+{
+    return Optional.of(new JdbcConnectionSetupDefinition(List.of(
+            new JdbcConnectionFieldDefinition("host", "Host", JdbcConnectionFieldType.TEXT, true, null, List.of(), null, null),
+            new JdbcConnectionFieldDefinition("port", "Port", JdbcConnectionFieldType.NUMBER, false, null, List.of(), 3306, null),
+            new JdbcConnectionFieldDefinition("username", "Username", JdbcConnectionFieldType.TEXT, true, null, List.of(), null, null),
+            new JdbcConnectionFieldDefinition("password", "Password", JdbcConnectionFieldType.SECRET, false, null, List.of(), null, null))));
+}
+```
+
+- Field ids are the keys of the connection's properties, which `buildUrl(properties)` and `openSessionConnection` read (`username`, `password`).
+- Types: `TEXT`, `NUMBER`, `SECRET` (stored as the connection's password in the security vault, not in its properties), `BOOLEAN`, `SELECT` (with options), `FOLDER_PATH` and `FILE_PATH` (with a browse button that picks a folder or a file).
+- A field's default is shown, and saved with the connection when the form is rendered from the fields. `visibleWhen` shows a field only when other fields have the given values.
+- Derived from the fields: a required, visible, non-secret field that is empty marks the connection invalid; the connection's subtitle is `host:port/database` when there is a `host` field, else the first required field's value.
+- Without `connectionSetup()`, the dialect gets the generic JDBC URL, username and password form.
+
+**Frontend additions** (`context.jdbcDialects.registerDialect`, returns a `Disposable`), only for what the fields cannot describe:
+
+| Field | Description |
+|-------|-------------|
+| `dialectId` | The backend dialect's id |
+| `ConnectionForm` | A hand-written form replacing the one rendered from the fields (`JdbcDialectConnectionFormProps`); provide `subtitle` and `validate` with it |
+| `subtitle(properties)` | The connection's line in the connections list |
+| `validate(properties)` | Problems; any problem marks the connection invalid |
+| `supportsQueryPlan` | The backend dialect implements `queryPlanExecutor()` |
+
+Of the built-in dialects, PostgreSQL uses the fields only; SQLite (file picker) and SQL Server (authentication-dependent fields) have hand-written forms.
+
 ### 7.13 Dialog
 
 | Method | Type | Description |

@@ -31,6 +31,7 @@ import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaTarget;
 import com.queryeer.backend.queryengine.jdbc.schema.NodeType;
+import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionSetupDefinition;
 
 public final class SqlServerDialect implements JdbcDialect
 {
@@ -233,6 +234,12 @@ public final class SqlServerDialect implements JdbcDialect
             """;
 
     private final SqlServerQueryExecutor queryExecutor = new SqlServerQueryExecutor();
+
+    @Override
+    public Optional<JdbcConnectionSetupDefinition> connectionSetup()
+    {
+        return Optional.of(SqlServerConnectionSetup.build());
+    }
 
     @Override
     public JdbcDialectMetadata metadata()

@@ -58,7 +58,7 @@ final class SqlServerConnectionSetup
                 new JdbcConnectionFieldDefinition("hostNameInCertificate", "Host Name In Certificate", JdbcConnectionFieldType.TEXT, false, "Expected host name in the TLS certificate, overrides SNI",
                         List.of(), null, null),
 
-                new JdbcConnectionFieldDefinition("krb5ConfigFile", "Kerberos Config File (krb5.conf)", JdbcConnectionFieldType.FOLDER_PATH, false,
+                new JdbcConnectionFieldDefinition("krb5ConfigFile", "Kerberos Config File (krb5.conf)", JdbcConnectionFieldType.FILE_PATH, false,
                         "Path to the krb5.conf / krb5.ini file for Java Kerberos authentication", List.of(), null, javaKerberosOnly),
 
                 new JdbcConnectionFieldDefinition("jaasConfigEntry", "JAAS Config Entry Name", JdbcConnectionFieldType.TEXT, false,

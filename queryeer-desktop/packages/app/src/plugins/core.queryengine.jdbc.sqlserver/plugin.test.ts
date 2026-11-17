@@ -4,7 +4,7 @@ import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import { getExpressionRuntime } from "../core.expressions/runtime";
 
 const mocks = vi.hoisted(() => ({
-  registerJdbcDialectMock: vi.fn(),
+  registerDialectMock: vi.fn(() => ({ dispose: vi.fn() })),
   registerWhenExpressionTemplatesMock: vi.fn(),
   registerSymbolActionTemplateMock: vi.fn(),
   registerExecutionContextProviderMock: vi.fn(),
@@ -21,10 +21,6 @@ const mocks = vi.hoisted(() => ({
   registerAdvancedValidatorMock: vi.fn(),
   registerAdvancedRendererMock: vi.fn(),
   registerDriverMock: vi.fn()
-}));
-
-vi.mock("../core.queryengine.jdbc/jdbc-dialect-registry", () => ({
-  registerJdbcDialect: mocks.registerJdbcDialectMock
 }));
 
 vi.mock("../core.commands/when-expression-template-registry", () => ({
@@ -141,6 +137,7 @@ function createContext(): PluginContext {
       registerConfirmDialog: vi.fn()
     },
     jdbcDrivers: { registerDriver: mocks.registerDriverMock },
+    jdbcDialects: { registerDialect: mocks.registerDialectMock },
     queryEngines: {
       registerExecutionContextProvider: mocks.registerExecutionContextProviderMock
     }
@@ -157,11 +154,22 @@ describe("coreQueryEngineJdbcSqlServerPlugin", () => {
     const context = createContext();
     coreQueryEngineJdbcSqlServerPlugin.activate(context);
 
-    expect(mocks.registerJdbcDialectMock).toHaveBeenCalledWith({
+    expect(mocks.registerDialectMock).toHaveBeenCalledWith({
       dialectId: "sqlserver",
       supportsQueryPlan: true,
-      ConnectionForm: expect.any(Function)
+      ConnectionForm: expect.any(Function),
+      subtitle: expect.any(Function),
+      validate: expect.any(Function)
     });
+  });
+
+  it("keeps the connection list's subtitle and validation for its hand-written form", async () => {
+    const { sqlServerSubtitle, validateSqlServer } = await import("./plugin");
+    expect(sqlServerSubtitle({ host: "db", database: "shop" })).toBe("db/shop");
+    expect(sqlServerSubtitle({ host: "db", port: 1434 })).toBe("db:1434");
+    expect(validateSqlServer({ host: "db" })).toEqual([]);
+    expect(validateSqlServer({ host: "db", database: "" })).toEqual(["Database is required"]);
+    expect(validateSqlServer({})).toEqual(["Host is required"]);
   });
 
   it("registers the managed SQL Server jre11 JDBC driver", () => {

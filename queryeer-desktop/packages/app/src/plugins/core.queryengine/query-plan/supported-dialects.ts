@@ -20,6 +20,15 @@ export function registerJdbcQueryPlanDialectSupport(dialectId: string): void {
   }
 }
 
+export function unregisterJdbcQueryPlanDialectSupport(dialectId: string): void {
+  if (!jdbcQueryPlanDialects.delete(dialectId.trim())) {
+    return;
+  }
+  for (const listener of listeners) {
+    listener();
+  }
+}
+
 export function subscribeJdbcQueryPlanDialectSupport(listener: () => void): () => void {
   listeners.add(listener);
   return () => {

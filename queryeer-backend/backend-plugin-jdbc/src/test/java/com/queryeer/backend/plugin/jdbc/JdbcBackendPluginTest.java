@@ -1,7 +1,5 @@
 package com.queryeer.backend.plugin.jdbc;
 
-import static org.mockito.Mockito.mock;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -53,6 +51,62 @@ class JdbcBackendPluginTest
                 .stream()
                 .map(f -> f.id())
                 .toList());
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeConnectionDialectsIncludesEachDialectsFormFields()
+    {
+        JdbcBackendPlugin plugin = new JdbcBackendPlugin();
+        RecordingQueryEngineRegistry engines = new RecordingQueryEngineRegistry();
+        TestPluginContext context = new TestPluginContext(engines, new RecordingFileSessionHandlerRegistry(), defaultConnectionsConfigService());
+        plugin.activate(context, null);
+        JdbcConnectionSetupDefinition setup = new JdbcConnectionSetupDefinition(List.of(new com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldDefinition("host", "Host",
+                com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionFieldType.TEXT, true, null, List.of(), null, null)));
+        context.services()
+                .get(com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService.class)
+                .dialectRegistry()
+                .register(new com.queryeer.backend.queryengine.jdbc.JdbcDialect()
+                {
+                    @Override
+                    public com.queryeer.backend.queryengine.jdbc.JdbcDialectMetadata metadata()
+                    {
+                        return new com.queryeer.backend.queryengine.jdbc.JdbcDialectMetadata("test", "Test DB", 1234, "jdbc:test://<host>", "test.Driver");
+                    }
+
+                    @Override
+                    public com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryExecutor queryExecutor()
+                    {
+                        return null;
+                    }
+
+                    @Override
+                    public java.util.Optional<JdbcConnectionSetupDefinition> connectionSetup()
+                    {
+                        return java.util.Optional.of(setup);
+                    }
+
+                    @Override
+                    public String buildUrl(Map<String, Object> properties)
+                    {
+                        return "jdbc:test://" + properties.get("host");
+                    }
+                });
+
+        List<Map<String, Object>> dialects = (List<Map<String, Object>>) engines.provider.invoke(null, "jdbc.connection.dialects", null);
+
+        Map<String, Object> test = dialects.stream()
+                .filter(d -> "test".equals(d.get("id")))
+                .findFirst()
+                .orElseThrow();
+        Assertions.assertEquals("Test DB", test.get("displayName"));
+        Assertions.assertSame(setup, test.get("connectionSetup"));
+        // A dialect without fields gets the generic URL form
+        Map<String, Object> generic = dialects.stream()
+                .filter(d -> "jdbc".equals(d.get("id")))
+                .findFirst()
+                .orElseThrow();
+        Assertions.assertFalse(generic.containsKey("connectionSetup"));
     }
 
     @SuppressWarnings("unchecked")
@@ -1288,10 +1342,25 @@ class JdbcBackendPluginTest
             return payloadMapper;
         }
 
+        private final Map<Class<?>, Object> serviceMap = new java.util.HashMap<>();
+
         @Override
         public PluginServiceRegistry services()
         {
-            return mock(PluginServiceRegistry.class);
+            return new PluginServiceRegistry()
+            {
+                @Override
+                public <T> void register(Class<T> serviceType, T service)
+                {
+                    serviceMap.put(serviceType, service);
+                }
+
+                @Override
+                public <T> T get(Class<T> serviceType)
+                {
+                    return serviceType.cast(serviceMap.get(serviceType));
+                }
+            };
         }
 
         @Override

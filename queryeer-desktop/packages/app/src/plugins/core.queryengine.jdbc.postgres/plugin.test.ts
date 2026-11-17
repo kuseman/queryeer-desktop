@@ -1,12 +1,7 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import type { PluginContext } from "@queryeer/api/plugin/Plugin";
 import { coreQueryEngineJdbcPostgresPlugin } from "./plugin";
-import { registerJdbcDialect } from "../core.queryengine.jdbc/jdbc-dialect-registry";
 import { registerSymbolActionTemplate } from "../core.queryengine/symbol-action-template-registry";
-
-vi.mock("../core.queryengine.jdbc/jdbc-dialect-registry", () => ({
-  registerJdbcDialect: vi.fn()
-}));
 
 vi.mock("../core.commands/when-expression-template-registry", () => ({
   registerWhenExpressionTemplates: vi.fn()
@@ -29,6 +24,7 @@ function createContext(): PluginContext
     files: { getFile: vi.fn() },
     settings: { registerSettings: vi.fn() },
     jdbcDrivers: { registerDriver: vi.fn() },
+    jdbcDialects: { registerDialect: vi.fn(() => ({ dispose: vi.fn() })) },
     queryEngines: { registerExecutionContextProvider: vi.fn(() => ({ dispose: vi.fn() })) }
   } as unknown as PluginContext;
 }
@@ -47,12 +43,11 @@ describe("coreQueryEngineJdbcPostgresPlugin", () => {
     const context = createContext();
     coreQueryEngineJdbcPostgresPlugin.activate(context);
 
-    expect(registerJdbcDialect).toHaveBeenCalledWith(
-      expect.objectContaining({
-        dialectId: "postgres",
-        supportsQueryPlan: true
-      })
-    );
+    // No hand-written form: it is rendered from the backend dialect's fields
+    expect(context.jdbcDialects.registerDialect).toHaveBeenCalledWith({
+      dialectId: "postgres",
+      supportsQueryPlan: true
+    });
     expect(context.queryEngines.registerExecutionContextProvider).toHaveBeenCalledWith(
       "jdbc",
       expect.any(Function)

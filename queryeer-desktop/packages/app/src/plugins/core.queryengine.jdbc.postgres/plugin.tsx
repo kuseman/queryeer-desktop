@@ -1,10 +1,8 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
 import { getQueryViewStateStore } from "../core.queryengine/QueryViewStateStore";
-import { registerJdbcDialect } from "../core.queryengine.jdbc/jdbc-dialect-registry";
 import { registerWhenExpressionTemplates } from "../core.commands/when-expression-template-registry";
 import { registerSymbolActionTemplate } from "../core.queryengine/symbol-action-template-registry";
 import { registerTreeActionTemplate } from "../core.queryengine.jdbc/tree-action-template-registry";
-import { PostgresConnectionForm } from "./PostgresConnectionForm";
 
 const POSTGRES_DIALECT_ID = "postgres";
 const POSTGRES_FILE_DIALECT_WHEN = `activeFile.metadata.core.queryengine.jdbc?.dialectId == '${POSTGRES_DIALECT_ID}'`;
@@ -31,10 +29,10 @@ export const coreQueryEngineJdbcPostgresPlugin: Plugin = {
       downloadPageUrl: "https://jdbc.postgresql.org/download/"
     });
 
-    registerJdbcDialect({
+    // The connection form is rendered from the backend dialect's fields (PostgresConnectionSetup)
+    context.jdbcDialects.registerDialect({
       dialectId: POSTGRES_DIALECT_ID,
-      supportsQueryPlan: true,
-      ConnectionForm: PostgresConnectionForm
+      supportsQueryPlan: true
     });
 
     registerWhenExpressionTemplates([

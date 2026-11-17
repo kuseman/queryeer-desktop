@@ -1,11 +1,6 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import type { PluginContext } from "@queryeer/api/plugin/Plugin";
 import { coreQueryEngineJdbcSqlitePlugin } from "./plugin";
-import { registerJdbcDialect } from "../core.queryengine.jdbc/jdbc-dialect-registry";
-
-vi.mock("../core.queryengine.jdbc/jdbc-dialect-registry", () => ({
-  registerJdbcDialect: vi.fn()
-}));
 
 function createContext(): PluginContext
 {
@@ -25,7 +20,8 @@ function createContext(): PluginContext
       closeFile: vi.fn(),
       createUntitledFile: vi.fn()
     },
-    jdbcDrivers: { registerDriver: vi.fn() }
+    jdbcDrivers: { registerDriver: vi.fn() },
+    jdbcDialects: { registerDialect: vi.fn(() => ({ dispose: vi.fn() })) }
   } as unknown as PluginContext;
 }
 
@@ -40,13 +36,19 @@ describe("coreQueryEngineJdbcSqlitePlugin", () => {
   });
 
   it("registers JDBC dialect on activation", () => {
-    coreQueryEngineJdbcSqlitePlugin.activate(createContext());
+    const context = createContext();
+    coreQueryEngineJdbcSqlitePlugin.activate(context);
 
-    expect(registerJdbcDialect).toHaveBeenCalledWith(
+    expect(context.jdbcDialects.registerDialect).toHaveBeenCalledWith(
       expect.objectContaining({
-        dialectId: "sqlite"
+        dialectId: "sqlite",
+        ConnectionForm: expect.any(Function)
       })
     );
+    // Its own subtitle and validation, since its form is hand-written
+    const contribution = vi.mocked(context.jdbcDialects.registerDialect).mock.calls[0][0];
+    expect(contribution.subtitle?.({ filePath: "/data/app.db" })).toBe("/data/app.db");
+    expect(contribution.validate?.({})).toEqual(["Database file is required"]);
   });
 
   it("registers the managed SQLite JDBC driver", () => {
