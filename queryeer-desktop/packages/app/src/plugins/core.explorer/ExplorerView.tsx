@@ -1,3 +1,4 @@
+import { disposeOnCleanup } from "../../core/plugin-runtime/disposables";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import { filesAreStructurallyIdentical } from "../../renderer/shell/file-entity-utils";
@@ -168,7 +169,7 @@ export function ExplorerView({ context, filesRegistry, store, readDir }: Explore
         }
       }
     });
-    return unsubscribe;
+    return disposeOnCleanup(unsubscribe);
   }, [filesRegistry, store]);
 
   useEffect(() => {
@@ -201,7 +202,7 @@ export function ExplorerView({ context, filesRegistry, store, readDir }: Explore
         setForceUpdate((n) => n + 1);
       }
     });
-    return unsubscribe;
+    return disposeOnCleanup(unsubscribe);
   }, [context.fileMediator, workspaceOrder]);
 
   const loadChildren = useCallback(

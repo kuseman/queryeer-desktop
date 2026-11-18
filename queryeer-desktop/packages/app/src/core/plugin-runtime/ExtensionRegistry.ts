@@ -64,6 +64,7 @@ import type { ContextValues } from "../../plugins/core.commands/context-values";
 import { getExpressionRuntime } from "../../plugins/core.expressions/runtime";
 import { CommandBus } from "./CommandBus";
 import { FileRegistry } from "./FileRegistry";
+import { pushDisposable, setDisposable, toDisposable } from "./disposables";
 
 let outlineRegistryInstance: OutlineRegistry | undefined;
 let editorRegistryInstance: EditorRegistryHost | undefined;
@@ -159,13 +160,7 @@ class EditorRegistryHostImpl implements EditorRegistryHost {
   }
 
   onActiveEditorChanged(callback: (editor: EditorHandle | null) => void): Disposable {
-    this.listeners.push(callback);
-    return {
-      dispose: () => {
-        const idx = this.listeners.indexOf(callback);
-        if (idx !== -1) this.listeners.splice(idx, 1);
-      }
-    };
+    return pushDisposable(this.listeners, callback);
   }
 
   registerContentRepository(repo: EditorContentRepository): () => void {
@@ -216,18 +211,12 @@ class AssistantRegistryImpl implements AssistantRegistry {
   private readonly contextContributions = new Map<string, AssistantContextContribution>();
   private readonly toolContributions = new Map<string, AssistantToolContribution>();
 
-  registerContextContribution(contribution: AssistantContextContribution): () => void {
-    this.contextContributions.set(contribution.id, contribution);
-    return () => {
-      this.contextContributions.delete(contribution.id);
-    };
+  registerContextContribution(contribution: AssistantContextContribution): Disposable {
+    return setDisposable(this.contextContributions, contribution.id, contribution);
   }
 
-  registerToolContribution(contribution: AssistantToolContribution): () => void {
-    this.toolContributions.set(contribution.id, contribution);
-    return () => {
-      this.toolContributions.delete(contribution.id);
-    };
+  registerToolContribution(contribution: AssistantToolContribution): Disposable {
+    return setDisposable(this.toolContributions, contribution.id, contribution);
   }
 
   async collectContext(request: AssistantContextRequest): Promise<AssistantContextItem[]> {
@@ -332,8 +321,12 @@ export class ExtensionRegistry {
   public createCommandRegistry(): CommandRegistry {
     return {
       registerCommand: (command) => {
-        this.commands.set(command.id, command);
-        this.commandBus.register(command.id, command.handler, command.enablement);
+        const registration = setDisposable(this.commands, command.id, command);
+        const unregister = this.commandBus.register(command.id, command.handler, command.enablement);
+        return toDisposable(() => {
+          registration.dispose();
+          unregister();
+        });
       },
       executeCommand: async (commandId) => {
         return this.commandBus.execute(commandId);
@@ -350,9 +343,7 @@ export class ExtensionRegistry {
 
   public createFileSystemRegistry(): FileSystemRegistry {
     return {
-      registerFileSystem: (filesystem) => {
-        this.filesystems.set(filesystem.id, filesystem);
-      }
+      registerFileSystem: (filesystem) => setDisposable(this.filesystems, filesystem.id, filesystem)
     };
   }
 
@@ -362,18 +353,14 @@ export class ExtensionRegistry {
 
   public createMenuRegistry(): MenuRegistry {
     return {
-      registerMenuItem: (contribution) => {
-        this.menuItems.set(contribution.id, contribution);
-      },
+      registerMenuItem: (contribution) => setDisposable(this.menuItems, contribution.id, contribution),
       rebuildMenu: async () => {
         await this.rebuildMenu();
         for (const callback of this.menuRebuildCallbacks) {
           await callback();
         }
       },
-      onRebuild: (fn) => {
-        this.menuRebuildCallbacks.push(fn);
-      }
+      onRebuild: (fn) => pushDisposable(this.menuRebuildCallbacks, fn)
     };
   }
 
@@ -434,44 +421,27 @@ export class ExtensionRegistry {
             );
           }
         }
-        this.keybindings.set(contribution.id, contribution);
+        return setDisposable(this.keybindings, contribution.id, contribution);
       }
     };
   }
 
   public subscribeToFiles(subscriber: (files: FileEntity[]) => void): () => void {
-    return this.fileRegistry.createFilesRegistry().subscribe(subscriber);
+    const subscription = this.fileRegistry.createFilesRegistry().subscribe(subscriber);
+    return () => subscription.dispose();
   }
 
   public createLayoutRegistry(): LayoutRegistry {
     return {
-      registerToolbarAction: (contribution) => {
-        this.layoutToolbarActions.set(contribution.id, contribution);
-      },
-      registerStatusItem: (contribution) => {
-        this.layoutStatusItems.set(contribution.id, contribution);
-      },
-      registerView: (contribution) => {
-        this.layoutViews.set(contribution.id, contribution);
-      },
-      registerEditor: (contribution) => {
-        this.layoutEditors.set(contribution.id, contribution);
-      },
-      registerWelcome: (contribution) => {
-        this.layoutWelcomes.set(contribution.id, contribution);
-      },
-      registerTabContextMenu: (contribution) => {
-        this.tabContextMenus.set(contribution.id, contribution);
-      },
-      registerTabHeaderStyle: (contribution) => {
-        this.tabHeaderStyles.set(contribution.id, contribution);
-      },
-      registerTabTitle: (contribution) => {
-        this.tabTitles.set(contribution.id, contribution);
-      },
-      registerPanel: (contribution) => {
-        this.layoutPanels.set(contribution.id, contribution);
-      },
+      registerToolbarAction: (contribution) => setDisposable(this.layoutToolbarActions, contribution.id, contribution),
+      registerStatusItem: (contribution) => setDisposable(this.layoutStatusItems, contribution.id, contribution),
+      registerView: (contribution) => setDisposable(this.layoutViews, contribution.id, contribution),
+      registerEditor: (contribution) => setDisposable(this.layoutEditors, contribution.id, contribution),
+      registerWelcome: (contribution) => setDisposable(this.layoutWelcomes, contribution.id, contribution),
+      registerTabContextMenu: (contribution) => setDisposable(this.tabContextMenus, contribution.id, contribution),
+      registerTabHeaderStyle: (contribution) => setDisposable(this.tabHeaderStyles, contribution.id, contribution),
+      registerTabTitle: (contribution) => setDisposable(this.tabTitles, contribution.id, contribution),
+      registerPanel: (contribution) => setDisposable(this.layoutPanels, contribution.id, contribution),
       setShellDefaults: (defaults) => {
         this.shellDefaults = {
           ...this.shellDefaults,
@@ -487,9 +457,7 @@ export class ExtensionRegistry {
 
   public createQuickCommandRegistry(): QuickCommandRegistry {
     return {
-      registerProvider: (provider) => {
-        this.quickCommandProviders.push(provider);
-      }
+      registerProvider: (provider) => pushDisposable(this.quickCommandProviders, provider)
     };
   }
 
@@ -516,13 +484,13 @@ export class ExtensionRegistry {
             `Outline provider for '${registration.mimeType}' already registered; overwriting.`
           );
         }
-        providers.set(registration.mimeType, registration);
+        return setDisposable(providers, registration.mimeType, registration);
       },
 
       registerSupplementaryOutlineProvider: (registration) => {
         const list = supplementary.get(registration.mimeType) ?? [];
-        list.push(registration);
         supplementary.set(registration.mimeType, list);
+        return pushDisposable(list, registration);
       },
 
       hasProvider: (mimeType: string) => providers.has(mimeType),
@@ -596,6 +564,12 @@ export class ExtensionRegistry {
         } else {
           this.contextMenuProviders.push(provider);
         }
+        return toDisposable(() => {
+          const index = this.contextMenuProviders.indexOf(provider);
+          if (index !== -1) {
+            this.contextMenuProviders.splice(index, 1);
+          }
+        });
       },
       unregisterProvider: (id: string) => {
         const idx = this.contextMenuProviders.findIndex((p) => p.id === id);
@@ -662,9 +636,8 @@ export class ExtensionRegistry {
 
   public createTooltipRegistry() {
     return {
-      registerTooltipSection: (contribution: TooltipSectionContribution) => {
-        this.tooltipSections.set(contribution.id, contribution);
-      },
+      registerTooltipSection: (contribution: TooltipSectionContribution) =>
+        setDisposable(this.tooltipSections, contribution.id, contribution),
       listTooltipSections: () => {
         return [...this.tooltipSections.values()];
       }
@@ -674,6 +647,7 @@ export class ExtensionRegistry {
   public createSettingsRegistry(): SettingsContributionRegistry {
     return {
       registerSettings: (contribution) => {
+        const ids = new Set<string>();
         for (const setting of contribution.settings) {
           if (setting.moduleId !== contribution.moduleId) {
             throw new Error(
@@ -685,22 +659,26 @@ export class ExtensionRegistry {
               `Setting id '${setting.id}' must start with '${contribution.moduleId}.'`
             );
           }
-          if (this.settingsDefinitions.has(setting.id)) {
+          if (this.settingsDefinitions.has(setting.id) || ids.has(setting.id)) {
             throw new Error(`Duplicate setting id '${setting.id}'`);
           }
           if (setting.type === "enum" && (!setting.options || setting.options.length === 0)) {
             throw new Error(`Setting '${setting.id}' is enum but has no options`);
           }
-          this.settingsDefinitions.set(setting.id, setting);
+          ids.add(setting.id);
         }
-        this.settingsContributions.set(contribution.moduleId, contribution);
+        // Validated first, so a contribution that throws leaves nothing behind
+        const definitions = contribution.settings.map((setting) => setDisposable(this.settingsDefinitions, setting.id, setting));
+        const registration = setDisposable(this.settingsContributions, contribution.moduleId, contribution);
+        return toDisposable(() => {
+          registration.dispose();
+          for (const definition of definitions) {
+            definition.dispose();
+          }
+        });
       },
-      registerAdvancedRenderer: (renderer) => {
-        this.advancedSettingsRenderers.set(renderer.id, renderer);
-      },
-      registerAdvancedValidator: (validator) => {
-        this.advancedSettingsValidators.set(validator.id, validator);
-      },
+      registerAdvancedRenderer: (renderer) => setDisposable(this.advancedSettingsRenderers, renderer.id, renderer),
+      registerAdvancedValidator: (validator) => setDisposable(this.advancedSettingsValidators, validator.id, validator),
       listSettingsContributions: () => [...this.settingsContributions.values()],
       listSettingsDefinitions: () => [...this.settingsDefinitions.values()],
       getAdvancedRenderer: (id) => this.advancedSettingsRenderers.get(id),

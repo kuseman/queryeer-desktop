@@ -23,6 +23,8 @@ import {
 } from "@queryeer/api/files/Resolvers";
 import type { LayoutEditorContribution } from "@queryeer/api/extensions/LayoutExtension";
 import { getQueryEngineMimeOwner, normalizeEngineBinding } from "./QueryEngineMimeRegistry";
+import { pushDisposable, setDisposable, toDisposable } from "./disposables";
+import type { Disposable } from "@queryeer/api/editor/EditorApi";
 
 let fileIdCounter = 0;
 
@@ -91,12 +93,8 @@ export class FileRegistry {
       listFiles: () => this.list(),
       updateFile: (fileId, update) => this.updateFile(fileId, update),
       subscribe: (subscriber) => this.subscribe(subscriber),
-      registerMimeResolver: (resolver) => {
-        this.mimeResolvers.push(resolver);
-      },
-      registerEditorResolver: (resolver) => {
-        this.editorResolvers.push(resolver);
-      },
+      registerMimeResolver: (resolver) => pushDisposable(this.mimeResolvers, resolver),
+      registerEditorResolver: (resolver) => pushDisposable(this.editorResolvers, resolver),
       classifyUri: (uri, hint) => this.classifyUri(uri, hint),
       resolveEditor: (file, context) => this.resolveEditor(file, context),
       getEditorState: (fileId, editorKey) => this.getEditorState(fileId, editorKey),
@@ -167,33 +165,28 @@ export class FileRegistry {
       listAllMimeTypes: () => {
         return [...this.mimeCapabilities.keys()];
       },
-      registerLabel: (mimeType, label) => {
-        this.mimeLabels.set(mimeType, label);
-      },
+      registerLabel: (mimeType, label) => setDisposable(this.mimeLabels, mimeType, label),
       getLabel: (mimeType) => {
         return this.mimeLabels.get(mimeType);
       },
       registerPreferredExtension: (mimeType, extension) => {
         const normalized = normalizeExtension(extension);
         if (!normalized) {
-          return;
+          return toDisposable(() => {});
         }
-        this.preferredExtensionsByMimeType.set(mimeType, normalized);
+        return setDisposable(this.preferredExtensionsByMimeType, mimeType, normalized);
       },
       getPreferredExtension: (mimeType) => {
         return this.preferredExtensionsByMimeType.get(mimeType);
       },
-      registerPreferredNewFileMimeType: (mimeType, order = 0) => {
-        this.preferredNewFileMimeTypes.set(mimeType, order);
-      },
+      registerPreferredNewFileMimeType: (mimeType, order = 0) =>
+        setDisposable(this.preferredNewFileMimeTypes, mimeType, order),
       listPreferredNewFileMimeTypes: () => {
         return [...this.preferredNewFileMimeTypes.entries()]
           .sort((a, b) => a[1] - b[1])
           .map((entry) => entry[0]);
       },
-      registerContentCategory: (mimeType, category) => {
-        this.mimeContentCategories.set(mimeType, category);
-      },
+      registerContentCategory: (mimeType, category) => setDisposable(this.mimeContentCategories, mimeType, category),
       getContentCategory: (mimeType) => {
         return this.mimeContentCategories.get(mimeType);
       }
@@ -202,9 +195,8 @@ export class FileRegistry {
 
   private createMimeIconRegistry() {
     return {
-      registerMimeIcon: (contribution: MimeIconContribution) => {
-        this.mimeIcons.set(contribution.mimeType, contribution);
-      },
+      registerMimeIcon: (contribution: MimeIconContribution) =>
+        setDisposable(this.mimeIcons, contribution.mimeType, contribution),
       getMimeIcon: (mimeType: string) => {
         const contribution = this.mimeIcons.get(mimeType);
         return contribution?.icon;
@@ -446,12 +438,14 @@ export class FileRegistry {
     return next;
   }
 
-  private subscribe(subscriber: FilesSubscriber): () => void {
-    this.subscribers.add(subscriber);
+  private subscribe(subscriber: FilesSubscriber): Disposable {
+    // A wrapper, so the same function subscribed twice is two subscriptions
+    const entry: FilesSubscriber = (files) => subscriber(files);
+    this.subscribers.add(entry);
     subscriber(this.list());
-    return () => {
-      this.subscribers.delete(subscriber);
-    };
+    return toDisposable(() => {
+      this.subscribers.delete(entry);
+    });
   }
 
   private findByUri(uri: string): FileEntity | undefined {

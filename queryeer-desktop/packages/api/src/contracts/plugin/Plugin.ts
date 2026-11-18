@@ -1,3 +1,4 @@
+import type { Disposable } from "../editor/EditorApi.js";
 import type { FileMediator } from "../files/FileMediator.js";
 import type { FilesRegistry } from "../files/FilesRegistry.js";
 import type { FileStateRegistry } from "../files/FileStateRegistry.js";
@@ -42,7 +43,17 @@ export type Plugin = {
 
 export type DialogRegistry = DialogExtension;
 
+/** The activating plugin's identity; for an external plugin, from its `plugin.json`. */
+export type PluginIdentity = {
+  readonly id: string;
+  readonly name: string;
+  readonly version: string;
+  readonly description?: string;
+};
+
 export type PluginContext = {
+  /** This plugin's identity, e.g. for a settings `moduleId` or `activeFile.metadata.<id>` keys, so it isn't hard-coded. */
+  plugin: PluginIdentity;
   commands: CommandRegistry;
   filesystems: FileSystemRegistry;
   files: FilesRegistry;
@@ -98,7 +109,7 @@ export type CommandRegistry = {
     category?: string;
     enablement?: string;
     handler: () => void | Promise<void>;
-  }) => void;
+  }) => Disposable;
   executeCommand: (commandId: string) => Promise<CommandExecutionResult>;
   canExecuteCommand: (commandId: string) => boolean;
 };
@@ -108,5 +119,5 @@ export type FileSystemRegistry = {
     id: string;
     title: string;
     schemes: string[];
-  }) => void;
+  }) => Disposable;
 };

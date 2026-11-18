@@ -135,6 +135,15 @@ describe("about-service", () => {
   });
 
   describe("registerChangelog", () => {
+    it("removes the entry on dispose, unless a later registration replaced it", () => {
+      const first = registerChangelog({ pluginId: "pb", pluginName: "Old", version: "1.0.0", changelog: "old" });
+      const second = registerChangelog({ pluginId: "pb", pluginName: "New", version: "2.0.0", changelog: "new" });
+      first.dispose();
+      expect(getChangelogEntries().map((entry) => entry.version)).toEqual(["2.0.0"]);
+      second.dispose();
+      expect(hasChangelog("pb")).toBe(false);
+    });
+
     it("adds a new changelog entry", () => {
       registerChangelog({ pluginId: "pb", pluginName: "PayloadBuilder", version: "1.0.0", changelog: "# PB" });
       expect(hasChangelog("pb")).toBe(true);

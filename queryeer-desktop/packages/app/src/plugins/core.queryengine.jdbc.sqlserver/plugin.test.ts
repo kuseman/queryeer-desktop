@@ -74,7 +74,7 @@ function createContext(): PluginContext {
       },
       getFile: mocks.getFileMock,
       listFiles: vi.fn(() => [...filesById.values()]),
-      subscribe: vi.fn(() => () => {}),
+      subscribe: vi.fn(() => ({ dispose: vi.fn() })),
       getFileByUri: vi.fn(),
       updateFile: vi.fn(),
       mimeIcons: { registerMimeIcon: vi.fn() },
@@ -94,7 +94,7 @@ function createContext(): PluginContext {
     fileMediator: {
       getActiveFileId: vi.fn(() => null),
       setActiveFileId: vi.fn(),
-      onActiveFileChanged: vi.fn(() => () => {}),
+      onActiveFileChanged: vi.fn(() => ({ dispose: vi.fn() })),
       openFile: vi.fn(),
       createUntitledFile: vi.fn(),
       onWillOpenFile: vi.fn(() => () => {})

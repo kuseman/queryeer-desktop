@@ -1,3 +1,4 @@
+import { disposeOnCleanup } from "../../../core/plugin-runtime/disposables";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
@@ -44,13 +45,13 @@ function AssistantChatViewComponent({ context }: Props): JSX.Element {
   const sendingRef = useRef(false);
   const sessionApprovedToolIdsRef = useRef(new Set<string>());
 
-  useEffect(() => context.fileMediator.onActiveFileChanged((fileId) => {
+  useEffect(() => disposeOnCleanup(context.fileMediator.onActiveFileChanged((fileId) => {
     setActiveFileId(fileId);
     setError(null);
     setContextItems([]);
     setSelectedContextIds(new Set());
     setVersion((previous) => previous + 1);
-  }), [context.fileMediator]);
+  })), [context.fileMediator]);
 
   useEffect(() => {
     const service = getCoreSettingsService();

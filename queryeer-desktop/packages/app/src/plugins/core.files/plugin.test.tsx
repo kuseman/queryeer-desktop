@@ -45,9 +45,11 @@ function createHarness(): Harness {
   }));
 
   const context: PluginContext = {
+    plugin: { id: "test.plugin", name: "Test plugin", version: "0.0.0" },
     commands: {
       registerCommand: vi.fn((command) => {
         commands.set(command.id, command.handler);
+        return { dispose: vi.fn() };
       }),
       executeCommand: vi.fn(async () => ({ commandId: "noop", executed: true })),
       canExecuteCommand: vi.fn(() => true)
@@ -94,7 +96,7 @@ function createHarness(): Harness {
       getFile: vi.fn((fileId: string) => filesById.get(fileId)),
       listFiles: vi.fn(() => [...filesById.values()]),
       updateFile: vi.fn(),
-      subscribe: vi.fn(() => () => {}),
+      subscribe: vi.fn(() => ({ dispose: vi.fn() })),
       registerMimeResolver: vi.fn(),
       registerEditorResolver: vi.fn(),
       classifyUri: vi.fn(() => "application/sql"),
@@ -112,7 +114,7 @@ function createHarness(): Harness {
       saveFile: vi.fn(),
       setActiveFileId: vi.fn(),
       getActiveFileId: vi.fn(() => "active-file"),
-      onActiveFileChanged: vi.fn(() => () => {}),
+      onActiveFileChanged: vi.fn(() => ({ dispose: vi.fn() })),
       setContextFileId: vi.fn(),
       getContextFileId: vi.fn(() => null),
       bindEngine: vi.fn(),
@@ -127,6 +129,7 @@ function createHarness(): Harness {
     layout: {
       registerToolbarAction: vi.fn((contribution) => {
         toolbarActions.push(contribution as Record<string, unknown>);
+        return { dispose: vi.fn() };
       }),
       registerStatusItem: vi.fn(),
       registerView: vi.fn(),
@@ -141,6 +144,7 @@ function createHarness(): Harness {
     menu: {
       registerMenuItem: vi.fn((item) => {
         menuItems.push(item as Record<string, unknown>);
+        return { dispose: vi.fn() };
       }),
       rebuildMenu: vi.fn(async () => {}),
       onRebuild: vi.fn()
@@ -165,14 +169,14 @@ function createHarness(): Harness {
       getAdvancedValidator: vi.fn(),
       getValue: vi.fn(),
       getAllValues: vi.fn(() => ({})),
-      subscribe: vi.fn(() => () => {}),
+      subscribe: vi.fn(() => ({ dispose: vi.fn() })),
       open: vi.fn()
     },
     quickcommand: { registerProvider: vi.fn() },
     contextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
     tableOutputContextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
     jdbcTreeContextMenu: { registerContribution: vi.fn(), unregisterContribution: vi.fn(), getItemsForNode: vi.fn() },
-    jdbcDrivers: { registerDriver: vi.fn(), listDrivers: vi.fn(() => []), getDriver: vi.fn(), subscribe: vi.fn(() => () => {}) },
+    jdbcDrivers: { registerDriver: vi.fn(), listDrivers: vi.fn(() => []), getDriver: vi.fn(), subscribe: vi.fn(() => ({ dispose: vi.fn() })) },
     jdbcDialects: { registerDialect: vi.fn(() => ({ dispose: vi.fn() })) },
     jdbcTreeActions: { registerTemplate: vi.fn(() => ({ dispose: vi.fn() })) },
     symbolActions: { registerTemplate: vi.fn(() => ({ dispose: vi.fn() })) },
@@ -217,8 +221,8 @@ function createHarness(): Harness {
 
 function createAssistantRegistryMock() {
   return {
-    registerContextContribution: vi.fn(() => () => {}),
-    registerToolContribution: vi.fn(() => () => {}),
+    registerContextContribution: vi.fn(() => ({ dispose: vi.fn() })),
+    registerToolContribution: vi.fn(() => ({ dispose: vi.fn() })),
     collectContext: vi.fn(async () => []),
     listTools: vi.fn(() => []),
     invokeTool: vi.fn(async () => ({ ok: false }))
@@ -235,7 +239,7 @@ function createNotificationMock() {
     dismissToast: vi.fn(),
     clear: vi.fn(),
     clearAll: vi.fn(),
-    subscribe: vi.fn(() => () => {})
+    subscribe: vi.fn(() => ({ dispose: vi.fn() }))
   };
 }
 

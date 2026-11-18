@@ -59,9 +59,11 @@ function makeRegistry(): SettingsContributionRegistry {
     registerSettings: vi.fn(),
     registerAdvancedRenderer: vi.fn((renderer) => {
       renderers.set(renderer.id, renderer);
+      return { dispose: vi.fn() };
     }),
     registerAdvancedValidator: vi.fn((validator) => {
       validators.set(validator.id, validator);
+      return { dispose: vi.fn() };
     }),
     listSettingsContributions: () => contributions,
     listSettingsDefinitions: () => contributions.flatMap((contribution) => contribution.settings),

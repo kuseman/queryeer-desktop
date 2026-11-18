@@ -1,3 +1,4 @@
+import type { Disposable } from "../editor/EditorApi.js";
 import type { FileEntity } from "../files/FileEntity.js";
 
 export type TooltipSeverity = "info" | "warning" | "error";
@@ -15,6 +16,6 @@ export type TooltipSectionContribution = {
 };
 
 export type TooltipRegistry = {
-  registerTooltipSection: (contribution: TooltipSectionContribution) => void;
+  registerTooltipSection: (contribution: TooltipSectionContribution) => Disposable;
   listTooltipSections?: () => TooltipSectionContribution[];
 };

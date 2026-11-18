@@ -1,3 +1,4 @@
+import type { Disposable } from "../editor/EditorApi.js";
 export type MenuItemContribution = {
   id: string;
   label?: string;
@@ -18,7 +19,7 @@ export type MenuItemContribution = {
 };
 
 export type MenuRegistry = {
-  registerMenuItem: (contribution: MenuItemContribution) => void;
+  registerMenuItem: (contribution: MenuItemContribution) => Disposable;
   rebuildMenu: () => Promise<void>;
-  onRebuild: (fn: () => Promise<void>) => void;
+  onRebuild: (fn: () => Promise<void>) => Disposable;
 };

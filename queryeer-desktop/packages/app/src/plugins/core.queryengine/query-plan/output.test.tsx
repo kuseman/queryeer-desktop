@@ -41,8 +41,8 @@ const baseOutputContext: OutputContext = {
 function makePluginContext(): PluginContext {
   return {
     assistant: {
-      registerContextContribution: vi.fn(() => () => {}),
-      registerToolContribution: vi.fn(() => () => {}),
+      registerContextContribution: vi.fn(() => ({ dispose: vi.fn() })),
+      registerToolContribution: vi.fn(() => ({ dispose: vi.fn() })),
       collectContext: vi.fn(async () => []),
       listTools: vi.fn(() => []),
       invokeTool: vi.fn(async () => ({ ok: false }))

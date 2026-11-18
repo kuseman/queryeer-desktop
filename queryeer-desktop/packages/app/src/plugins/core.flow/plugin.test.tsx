@@ -42,14 +42,14 @@ function createNotificationMock() {
     dismissToast: vi.fn(),
     clear: vi.fn(),
     clearAll: vi.fn(),
-    subscribe: vi.fn(() => () => {})
+    subscribe: vi.fn(() => ({ dispose: vi.fn() }))
   };
 }
 
 function createAssistantRegistryMock() {
   return {
-    registerContextContribution: vi.fn(() => () => {}),
-    registerToolContribution: vi.fn(() => () => {}),
+    registerContextContribution: vi.fn(() => ({ dispose: vi.fn() })),
+    registerToolContribution: vi.fn(() => ({ dispose: vi.fn() })),
     collectContext: vi.fn(async () => []),
     listTools: vi.fn(() => []),
     invokeTool: vi.fn(async () => ({ ok: false }))
@@ -102,7 +102,7 @@ function createContext(): PluginContext {
       getFile: vi.fn(),
       listFiles: vi.fn(() => []),
       updateFile: vi.fn(),
-      subscribe: vi.fn(() => () => {}),
+      subscribe: vi.fn(() => ({ dispose: vi.fn() })),
       registerMimeResolver: vi.fn(),
       registerEditorResolver: vi.fn(),
       classifyUri: vi.fn(() => "text/plain"),
@@ -121,7 +121,7 @@ function createContext(): PluginContext {
       saveFile: vi.fn(),
       setActiveFileId: vi.fn(),
       getActiveFileId: vi.fn(() => file.fileId),
-      onActiveFileChanged: vi.fn(() => () => {}),
+      onActiveFileChanged: vi.fn(() => ({ dispose: vi.fn() })),
       setContextFileId: vi.fn(),
       getContextFileId: vi.fn(() => null),
       bindEngine: vi.fn(),

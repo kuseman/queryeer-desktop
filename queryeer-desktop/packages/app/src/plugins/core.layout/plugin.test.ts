@@ -28,10 +28,12 @@ function createContext(file?: FileEntity) {
   const closeActiveValuePreview = vi.fn(() => false);
 
   const context = {
+    plugin: { id: "test.plugin", name: "Test plugin", version: "0.0.0" },
     commands: {
       registerCommand: (command: RegisteredCommand) => {
         registeredCommands.set(command.id, command);
         commands.set(command.id, command.handler);
+        return { dispose: vi.fn() };
       },
       executeCommand: vi.fn(async () => ({ commandId: "x", executed: true })),
       canExecuteCommand: vi.fn(() => true)
@@ -61,7 +63,7 @@ function createContext(file?: FileEntity) {
       getFile: vi.fn(() => file),
       listFiles: vi.fn(() => (file ? [file] : [])),
       updateFile: vi.fn(),
-      subscribe: vi.fn(() => () => {}),
+      subscribe: vi.fn(() => ({ dispose: vi.fn() })),
       registerMimeResolver: vi.fn(),
       registerEditorResolver: vi.fn(),
       classifyUri: vi.fn(() => "text/plain"),
@@ -85,7 +87,7 @@ function createContext(file?: FileEntity) {
       reloadFile: vi.fn(),
       acceptExternalChange: vi.fn(),
       discardExternalChange: vi.fn(),
-      onActiveFileChanged: vi.fn(() => () => {})
+      onActiveFileChanged: vi.fn(() => ({ dispose: vi.fn() }))
     },
     fileWatcher: {
       watch: vi.fn(),
@@ -124,14 +126,14 @@ function createContext(file?: FileEntity) {
       getAdvancedValidator: vi.fn(),
       getValue: vi.fn(),
       getAllValues: vi.fn(() => ({})),
-      subscribe: vi.fn(() => () => {}),
+      subscribe: vi.fn(() => ({ dispose: vi.fn() })),
       open: vi.fn()
     },
     quickcommand: { registerProvider: vi.fn() },
     contextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
     tableOutputContextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
     jdbcTreeContextMenu: { registerContribution: vi.fn(), unregisterContribution: vi.fn(), getItemsForNode: vi.fn() },
-    jdbcDrivers: { registerDriver: vi.fn(), listDrivers: vi.fn(() => []), getDriver: vi.fn(), subscribe: vi.fn(() => () => {}) },
+    jdbcDrivers: { registerDriver: vi.fn(), listDrivers: vi.fn(() => []), getDriver: vi.fn(), subscribe: vi.fn(() => ({ dispose: vi.fn() })) },
     jdbcDialects: { registerDialect: vi.fn(() => ({ dispose: vi.fn() })) },
     jdbcTreeActions: { registerTemplate: vi.fn(() => ({ dispose: vi.fn() })) },
     symbolActions: { registerTemplate: vi.fn(() => ({ dispose: vi.fn() })) },
@@ -163,7 +165,7 @@ function createContext(file?: FileEntity) {
       dismissToast: vi.fn(),
       clear: vi.fn(),
       clearAll: vi.fn(),
-      subscribe: vi.fn(() => () => {})
+      subscribe: vi.fn(() => ({ dispose: vi.fn() }))
     },
     queryEngines: { registerEngine: vi.fn(), invoke: vi.fn(), registerExecutionContextProvider: vi.fn(), onQueryEvent: vi.fn(), registerEditorHeaderItem: vi.fn(), registerEditorStatusItem: vi.fn(), execute: vi.fn() },
     editorLanguages: {
@@ -171,8 +173,8 @@ function createContext(file?: FileEntity) {
       registerLanguage: vi.fn(() => ({ dispose: vi.fn() }))
     },
     assistant: {
-      registerContextContribution: vi.fn(() => () => {}),
-      registerToolContribution: vi.fn(() => () => {}),
+      registerContextContribution: vi.fn(() => ({ dispose: vi.fn() })),
+      registerToolContribution: vi.fn(() => ({ dispose: vi.fn() })),
       collectContext: vi.fn(async () => []),
       listTools: vi.fn(() => []),
       invokeTool: vi.fn(async () => ({ ok: false }))

@@ -11,6 +11,25 @@ const postgresDriver: JdbcManagedDriverContribution = {
 };
 
 describe("JdbcDriverRegistryHost", () => {
+  it("removes a disposed driver and notifies, unless a later registration replaced it", () => {
+    const host = new JdbcDriverRegistryHost();
+    const subscriber = vi.fn();
+    host.subscribe(subscriber);
+    const registry = host.createRegistry("plugin.postgres");
+
+    const first = registry.registerDriver(postgresDriver);
+    const second = registry.registerDriver({ ...postgresDriver, displayName: "Replaced" });
+    first.dispose();
+    expect(host.getDriver("postgres")?.displayName).toBe("Replaced");
+
+    second.dispose();
+    second.dispose();
+    expect(host.listDrivers()).toEqual([]);
+    // Two registrations and one removal
+    expect(subscriber).toHaveBeenCalledTimes(3);
+    expect(subscriber).toHaveBeenLastCalledWith([]);
+  });
+
   it("stores typed contributions with the registry owner", () => {
     const host = new JdbcDriverRegistryHost();
 
@@ -56,10 +75,10 @@ describe("JdbcDriverRegistryHost", () => {
   it("notifies subscribers and supports unsubscribe", () => {
     const host = new JdbcDriverRegistryHost();
     const subscriber = vi.fn();
-    const unsubscribe = host.subscribe(subscriber);
+    const subscription = host.subscribe(subscriber);
 
     host.createRegistry("plugin.postgres").registerDriver(postgresDriver);
-    unsubscribe();
+    subscription.dispose();
     host.createRegistry("plugin.sqlite").registerDriver({
       ...postgresDriver,
       dialectId: "sqlite",

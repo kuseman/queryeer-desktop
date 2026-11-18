@@ -1,3 +1,4 @@
+import type { Disposable } from "../editor/EditorApi.js";
 import type { FileEntity } from "../files/FileEntity.js";
 
 export type QuickCommandItemTitlePart = {
@@ -33,5 +34,5 @@ export type QuickCommandProvider = {
 };
 
 export type QuickCommandRegistry = {
-  registerProvider: (provider: QuickCommandProvider) => void;
+  registerProvider: (provider: QuickCommandProvider) => Disposable;
 };

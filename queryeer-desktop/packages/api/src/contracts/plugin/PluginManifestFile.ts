@@ -12,6 +12,7 @@ export function toPluginManifestFile(
     id: external.id,
     name: external.name,
     version: external.version,
+    ...(external.description !== undefined ? { description: external.description } : {}),
     kind: "feature",
     modulePath: external.modulePath
   };

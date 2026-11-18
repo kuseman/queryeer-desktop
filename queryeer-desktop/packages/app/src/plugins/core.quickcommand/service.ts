@@ -1,3 +1,4 @@
+import { pushDisposable } from "../../core/plugin-runtime/disposables";
 import type {
   QuickCommandContext,
   QuickCommandItem,
@@ -190,8 +191,6 @@ export function getQuickCommandService(): QuickCommandService | null {
 
 export function createQuickCommandRegistry(providers: QuickCommandProvider[]): QuickCommandRegistry {
   return {
-    registerProvider: (provider) => {
-      providers.push(provider);
-    }
+    registerProvider: (provider) => pushDisposable(providers, provider)
   };
 }

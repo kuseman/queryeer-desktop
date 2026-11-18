@@ -202,8 +202,8 @@ const mockEditorRegistryHost: EditorRegistryHost = {
 };
 
 const mockOutlineRegistry: OutlineRegistry = {
-  registerOutlineProvider: () => {},
-  registerSupplementaryOutlineProvider: () => {},
+  registerOutlineProvider: () => ({ dispose: () => {} }),
+  registerSupplementaryOutlineProvider: () => ({ dispose: () => {} }),
   hasProvider: () => false,
   getProvider: () => undefined,
   getSymbols: async () => []
@@ -310,7 +310,7 @@ const filesRegistry = {
         queryFilesById.set(fileId, next);
         return next;
       },
-      subscribe: vi.fn(() => () => {}),
+      subscribe: vi.fn(() => ({ dispose: vi.fn() })),
       registerMimeResolver: vi.fn(),
       registerEditorResolver: vi.fn(),
       classifyUri: vi.fn(),

@@ -1,3 +1,4 @@
+import { disposeOnCleanup } from "../../core/plugin-runtime/disposables";
 import { useEffect, useState } from "react";
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../core.settings/service";
 import { getNotificationService } from "./notification-service";
@@ -10,7 +11,7 @@ export function NotificationHost(): JSX.Element | null {
   const service = getNotificationService();
   const [version, setVersion] = useState(0);
 
-  useEffect(() => service.subscribe(() => setVersion((current) => current + 1)), [service]);
+  useEffect(() => disposeOnCleanup(service.subscribe(() => setVersion((current) => current + 1))), [service]);
 
   useEffect(() => {
     let unsubscribeSettings: (() => void) | undefined;

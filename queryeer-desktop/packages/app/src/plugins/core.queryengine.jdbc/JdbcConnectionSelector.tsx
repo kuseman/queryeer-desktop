@@ -1,3 +1,4 @@
+import { disposeOnCleanup } from "../../core/plugin-runtime/disposables";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FileMediator } from "@queryeer/api/files/FileMediator";
 import type { FilesRegistry } from "@queryeer/api/files/FilesRegistry";
@@ -125,7 +126,7 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
 
   // Re-sync with file entity when it changes externally
   useEffect(() => {
-    return filesRegistry.subscribe((files) => {
+    return disposeOnCleanup(filesRegistry.subscribe((files) => {
       const updated = files.find((f) => f.fileId === fileId);
       if (updated?.mimeType === "application/sql") {
         const nextConnectionId = resolveEnabledConnectionId(
@@ -135,7 +136,7 @@ export function JdbcConnectionSelector({ fileId, fileMediator, filesRegistry }: 
         setConnectionId(nextConnectionId);
         setSelectedDatabase(resolveSelectedDatabase(filesRegistry, fileId, nextConnectionId));
       }
-    });
+    }));
   }, [filesRegistry, fileId]);
 
   // Auto-recover: reload databases when backend becomes healthy

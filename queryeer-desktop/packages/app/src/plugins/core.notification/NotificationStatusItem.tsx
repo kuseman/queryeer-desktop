@@ -1,3 +1,4 @@
+import { disposeOnCleanup } from "../../core/plugin-runtime/disposables";
 import { memo, useEffect, useRef, useState } from "react";
 import type { NotificationRecord } from "@queryeer/api/extensions/NotificationExtension";
 import { getNotificationService } from "./notification-service";
@@ -12,13 +13,13 @@ function NotificationStatusItemComponent(): JSX.Element {
   openRef.current = open;
 
   useEffect(() => {
-    return service.subscribe(() => {
+    return disposeOnCleanup(service.subscribe(() => {
       const nextUnread = service.unreadCount();
       setUnread((current) => (current === nextUnread ? current : nextUnread));
       if (openRef.current) {
         setOpenVersion((current) => current + 1);
       }
-    });
+    }));
   }, [service]);
 
   useEffect(() => {

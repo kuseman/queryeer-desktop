@@ -1,3 +1,4 @@
+import type { Disposable } from "../editor/EditorApi.js";
 export type PluginChangelogEntry = {
   pluginId: string;
   pluginName: string;
@@ -6,5 +7,5 @@ export type PluginChangelogEntry = {
 };
 
 export type AboutExtension = {
-  registerChangelog: (entry: PluginChangelogEntry) => void;
+  registerChangelog: (entry: PluginChangelogEntry) => Disposable;
 };

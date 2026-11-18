@@ -1,3 +1,4 @@
+import type { Disposable } from "../editor/EditorApi.js";
 import type { SecretRefValue } from "../security/Security.js";
 import type { FileEntity } from "../files/FileEntity.js";
 
@@ -102,8 +103,8 @@ export type AssistantToolContribution = {
 };
 
 export type AssistantRegistry = {
-  registerContextContribution: (contribution: AssistantContextContribution) => () => void;
-  registerToolContribution: (contribution: AssistantToolContribution) => () => void;
+  registerContextContribution: (contribution: AssistantContextContribution) => Disposable;
+  registerToolContribution: (contribution: AssistantToolContribution) => Disposable;
   collectContext: (request: AssistantContextRequest) => Promise<AssistantContextItem[]>;
   listTools: (request: AssistantContextRequest) => AssistantToolContribution[];
   invokeTool: (invocation: AssistantToolInvocation) => Promise<AssistantToolResult>;

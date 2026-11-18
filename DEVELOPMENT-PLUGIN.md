@@ -64,7 +64,7 @@ Frontend plugins depend on the [`@queryeer/api`](https://www.npmjs.com/package/@
 Use `^` plus the host's minor version (`^0.<minor>.0` for Queryeer 0.<minor>.x), both here and in the manifest's `frontend.apiVersion`. For 0.x versions npm's `^` stays within that minor version. The snippets in this guide and the example plugins are updated to the new version as part of each release.
 
 The API package exports types for:
-- Plugin core: `Plugin`, `PluginContext`, `PluginManifest`, `PluginModule`
+- Plugin core: `Plugin`, `PluginContext`, `PluginManifest`, `PluginModule`, and for external plugins `ExternalPlugin`, `ExternalPluginModule`, `ExternalPluginManifest`
 - All extension points: editors, layouts, menus, commands, keybindings, tooltips, settings, context menus, outline providers, quick commands, etc.
 - All files, query engine, and workspace contracts
 - Backend protocol types (envelope, gateway, methods)
@@ -250,14 +250,14 @@ my-frontend-plugin/
 
 ### 4.4 `module.ts`
 
-Every frontend plugin **must** export a named `const pluginModule: PluginModule`:
+Every frontend plugin **must** export a named `const pluginModule: ExternalPluginModule`:
 
 ```typescript
-import type { PluginModule } from "@queryeer/api/plugin/PluginModule";
+import type { ExternalPluginModule } from "@queryeer/api/plugin/PluginModule";
 import { myPlugin } from "./plugin";
 import "./my-styles.css";
 
-export const pluginModule: PluginModule = {
+export const pluginModule: ExternalPluginModule = {
   manifest: myPlugin.manifest,
   plugin: myPlugin
 };
@@ -266,15 +266,11 @@ export const pluginModule: PluginModule = {
 ### 4.5 `plugin.tsx` — The Plugin Implementation
 
 ```typescript
-import type { Plugin } from "@queryeer/api/plugin/Plugin";
+import type { ExternalPlugin } from "@queryeer/api/plugin/PluginModule";
 
-export const myPlugin: Plugin = {
+export const myPlugin: ExternalPlugin = {
   manifest: {
-    id: "my.frontend.plugin",
-    name: "My Frontend Plugin",
-    version: "0.1.0",
-    kind: "feature",
-    description: "My awesome frontend-only plugin"
+    kind: "feature"
   },
   activate: (context) => {
     // Register contributions using context.* registries
@@ -283,7 +279,18 @@ export const myPlugin: Plugin = {
 };
 ```
 
-The `manifest` inside the plugin object uses the programmatic `PluginManifest` type (id, name, version, kind, dependencies, providesCapabilities, requiredCapabilities). The `kind` field distinguishes `"core"` (system-level) from `"feature"` (extension-level). External plugins should use `"feature"`.
+The `manifest` inside the plugin object is an `ExternalPluginManifest`: `kind`, and the frontend `dependencies`, `providesCapabilities` and `requiredCapabilities`. The `kind` field distinguishes `"core"` (system-level) from `"feature"` (extension-level). External plugins should use `"feature"`.
+
+The plugin's identity, `id`, `name`, `version` and `description`, is declared once, in `plugin.json`, and the host fills it into the manifest before activating the plugin. `ExternalPluginManifest` has no such fields. A plugin built for 0.19 still sets them in its frontend manifest; it loads, the values are ignored, and the console warns about any that differ from `plugin.json`. That includes the id: a plugin whose frontend id differs is now loaded under `plugin.json`'s id, so code in it that hard-codes the other id (metadata keys, `when` expressions) no longer matches. The frontend `dependencies` are frontend plugin ids such as `core.queryengine.jdbc`, not the backend ids with versions in `plugin.json`, so they stay here.
+
+When the plugin needs its own id, for example as a settings `moduleId` or in `activeFile.metadata.<id>` keys, read it from `context.plugin` (`id`, `name`, `version`, `description`) in `activate` instead of hard-coding it again:
+
+```typescript
+activate: (context) => {
+  const settingId = `${context.plugin.id}.connections`;
+  // ...
+}
+```
 
 ### 4.6 Building
 
@@ -600,6 +607,27 @@ Frontend plugins can use `context.editors.getActiveEditor()`, query engines, fil
 
 All contribution points are accessed through the `PluginContext` object passed to `activate()`.
 
+**Every `register*`, `subscribe` and `on*` method returns a `Disposable`** (since 0.20.0; before, most returned nothing, and the `subscribe` methods, `fileMediator.onActiveFileChanged` and the assistant's `register*Contribution` returned an unsubscribe function). **This breaks plugins built against 0.19 that call that function**: rebuild them against 0.20 and call `dispose()` instead. Keep the `Disposable`s and dispose them in `deactivate`:
+
+```ts
+import type { Disposable } from "@queryeer/api/editor/EditorApi";
+
+const disposables: Disposable[] = [];
+
+activate(context) {
+  disposables.push(
+    context.commands.registerCommand({ id: "my.plugin.run", title: "Run", handler: run }),
+    context.settings.subscribe(onSettingsChanged)
+  );
+}
+
+deactivate() {
+  for (const disposable of disposables.splice(0)) disposable.dispose();
+}
+```
+
+Disposing removes the registration, unless a later registration with the same id replaced it; then the later one stays. A listener stops being called. Disposing twice does nothing. Plugins are only deactivated when the app quits, so the UI isn't required to update when a contribution is removed: a view or toolbar button can stay visible until the next start.
+
 ### 7.1 Layout
 
 | Method | Type | Description |
@@ -621,7 +649,7 @@ All contribution points are accessed through the `PluginContext` object passed t
 |--------|------|-------------|
 | `editors.getActiveEditor()` | `EditorHandle \| null` | Get active editor handle |
 | `editors.onActiveEditorChanged(cb)` | `Disposable` | Subscribe to editor changes |
-| `editorLanguages.registerMimeType(mime, languageId)` | `Disposable` | Map a MIME type to a Monaco language; dispose it during plugin deactivation |
+| `editorLanguages.registerMimeType(mime, languageId)` | `Disposable` | Map a MIME type to a Monaco language |
 | `editorLanguages.registerLanguage(definition)` | `Disposable` | Register a new Monaco language (Monarch tokenizer + optional brackets/comments/auto-closing configuration, no validation); map a MIME type to it with `registerMimeType` |
 
 A plugin whose files don't fit an existing Monaco language (for example MongoDB shell syntax,
@@ -691,7 +719,7 @@ Both only help the user write expressions; they don't change how one evaluates. 
 | Method | Type | Description |
 |--------|------|-------------|
 | `contextMenu.registerProvider(p)` | `ContextMenuProvider` | Editor context menu |
-| `tableOutputContextMenu.registerProvider(p)` | `TableOutputContextMenuProvider` | Table result context menu; returns a `Disposable` |
+| `tableOutputContextMenu.registerProvider(p)` | `TableOutputContextMenuProvider` | Table result context menu |
 | `jdbcTreeContextMenu.registerContribution(c)` | `JdbcTreeContextMenuContribution` | JDBC tree context menu |
 
 A table result provider's `getItems(context)` receives the selection (`selection`, `cellValuesByRow`), the result set's `columns` and `resultSetIndex`, and the grid's `fileId` plus the file's bound `engineId` when it has one. Act on `context.fileId` rather than the active file: with split editors, or when focus is elsewhere, the active file can be a different one. Filter on `context.engineId` to add items only for your engine's results. Provider and item `when` expressions see the same values as `tableSelection.fileId` and `tableSelection.engineId` (e.g. `when: "tableSelection.engineId == 'mongodb'"`); `activeFile.*` in a table menu `when` refers to the active file, not the grid's.
@@ -711,7 +739,7 @@ A table result provider's `getItems(context)` receives the selection (`selection
 | `settings.registerAdvancedValidator(v)` | `AdvancedValidator` | Settings validation |
 | `settings.getValue<T>(id)` | `T \| undefined` | Read the current effective value without resolving secrets; returns `undefined` until the settings service is ready |
 | `settings.getAllValues()` | `Readonly<Record<string, unknown>>` | Snapshot all effective values |
-| `settings.subscribe(cb)` | `() => void` | Subscribe to effective-value changes; call the returned function during deactivation |
+| `settings.subscribe(cb)` | `Disposable` | Subscribe to effective-value changes |
 | `settings.open(id?)` | `void` | Open Settings, optionally selecting a specific setting ID |
 
 Use `context.components.PasswordFieldInput` in advanced settings renderers for credentials. The component stores plaintext through the host vault and reports only a `SecretRefValue` to the plugin.
@@ -781,7 +809,7 @@ context.queryEngines.execute({ fileId: file.fileId, text });
 
 A MIME type claimed through `queryEngines.registerEngine` is owned by that engine. `fileMediator.bindEngine` rejects attempts to bind a file with that MIME type to another engine; MIME types not claimed by an engine remain freely bindable.
 
-Execution-context providers and query-event listeners are filtered by the supplied engine ID, so a contribution only observes and decorates that engine's executions. Providers may return `engineState`, query `options`, or both. Returned `options` replace the existing options object, so spread `context.options` when returning options to preserve values such as `maxRows` and `timeoutMs`. The provider also decorates `queryEngines.invoke` calls that include a `fileId` and object payload without an explicit `engineState`. `queryEngines.invoke` resolves directly to the backend provider's result value; only raw protocol consumers see that value nested in the response envelope. It uses the host's backend-health checks and vault-unlock retry. Registration methods return `Disposable`; plugins should dispose registrations during deactivation if they manage a shorter lifecycle. External plugins are loaded once at startup and are not hot-reloaded.
+Execution-context providers and query-event listeners are filtered by the supplied engine ID, so a contribution only observes and decorates that engine's executions. Providers may return `engineState`, query `options`, or both. Returned `options` replace the existing options object, so spread `context.options` when returning options to preserve values such as `maxRows` and `timeoutMs`. The provider also decorates `queryEngines.invoke` calls that include a `fileId` and object payload without an explicit `engineState`. `queryEngines.invoke` resolves to exactly what the backend provider's `QueryEngineProvider.invoke(fileId, action, payload)` returns, serialized as JSON (`undefined` when it returns `null`). The promise rejects with an `Error` when the provider throws (with its message) or when the backend isn't running. When a secret is needed and the vault is locked, it asks the user to unlock it and retries; with `{ silent: true }` it doesn't ask, and rejects unless the vault can be unlocked without asking. Tests or tools that talk the stdio protocol directly see the same value one level deeper: the `queryengine.invoke` response is `{ "result": { "result": <value> } }`. External plugins are loaded once at startup and are not hot-reloaded.
 
 ### 7.9 Quick Commands (Command Palette)
 

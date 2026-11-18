@@ -1,3 +1,4 @@
+import { disposeOnCleanup } from "../../core/plugin-runtime/disposables";
 import { useEffect, useState } from "react";
 import type { PluginContext } from "@queryeer/api/plugin/Plugin";
 import { JDBC_NAV_DB_KEY, type JdbcSelectedDatabase } from "./jdbc-navigation-types";
@@ -36,7 +37,7 @@ export function JdbcNavigationView({ context }: Props) {
   );
 
   useEffect(() => {
-    return context.fileMediator.onActiveFileChanged((fileId) => setActiveFileId(fileId));
+    return disposeOnCleanup(context.fileMediator.onActiveFileChanged((fileId) => setActiveFileId(fileId)));
   }, [context.fileMediator]);
 
   const store = getJdbcNavigationStore();

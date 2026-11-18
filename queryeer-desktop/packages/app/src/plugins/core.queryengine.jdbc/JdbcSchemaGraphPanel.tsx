@@ -1,3 +1,4 @@
+import { disposeOnCleanup } from "../../core/plugin-runtime/disposables";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { PluginContext } from "@queryeer/api/plugin/Plugin";
 import { filesAreStructurallyIdentical } from "../../renderer/shell/file-entity-utils";
@@ -16,13 +17,13 @@ export function JdbcSchemaGraphPanel({ context }: { context: PluginContext }): R
   });
 
   useEffect(() => {
-    return context.fileMediator.onActiveFileChanged((id) => setActiveFileId(id));
+    return disposeOnCleanup(context.fileMediator.onActiveFileChanged((id) => setActiveFileId(id)));
   }, [context.fileMediator]);
 
   useEffect(() => {
-    return context.files.subscribe((next) => {
+    return disposeOnCleanup(context.files.subscribe((next) => {
       setFiles((previous) => filesAreStructurallyIdentical(previous, next) ? previous : next);
-    });
+    }));
   }, [context.files]);
 
   const activeFile = useMemo(() => {

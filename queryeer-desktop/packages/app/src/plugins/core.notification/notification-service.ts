@@ -1,3 +1,5 @@
+import type { Disposable } from "@queryeer/api/editor/EditorApi";
+import { toDisposable } from "../../core/plugin-runtime/disposables";
 import type {
   NotificationRecord,
   NotificationRequest,
@@ -78,11 +80,13 @@ export class InMemoryNotificationService implements NotificationService {
     this.emitChanged();
   }
 
-  public subscribe(listener: () => void): () => void {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
+  public subscribe(listener: () => void): Disposable {
+    // A wrapper, so the same function subscribed twice is two subscriptions
+    const entry = () => listener();
+    this.listeners.add(entry);
+    return toDisposable(() => {
+      this.listeners.delete(entry);
+    });
   }
 
   private emitChanged(): void {

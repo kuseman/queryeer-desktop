@@ -1,3 +1,4 @@
+import { disposeOnCleanup } from "../../../core/plugin-runtime/disposables";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import type { Disposable } from "./types";
 import type { FilesRegistry } from "@queryeer/api/files/FilesRegistry";
@@ -287,9 +288,10 @@ export class TextEditorRegistry {
     this.filesRegistryUnsubscribe?.();
     this.filesRegistry = registry;
     this.viewStateStore.setFilesRegistry(registry);
-    this.filesRegistryUnsubscribe = registry.subscribe?.(() => {
+    const subscription = registry.subscribe?.(() => {
       this.publishAllEditorInstanceContexts();
-    }) ?? null;
+    });
+    this.filesRegistryUnsubscribe = subscription ? disposeOnCleanup(subscription) : null;
   }
 
   onEditorReady(api: TextEditorApi, editorInstanceId?: string): void {

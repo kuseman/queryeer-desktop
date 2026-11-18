@@ -69,6 +69,7 @@ describe("discoverExternalFrontendPlugins", () => {
       id: "folder.plugin",
       name: "Folder Plugin",
       version: "1.0.0",
+      description: "Folder description",
       frontend: { entryModule: "frontend/module.mjs" }
     });
 
@@ -77,6 +78,9 @@ describe("discoverExternalFrontendPlugins", () => {
     expect(discovered).toHaveLength(1);
     expect(discovered[0]).toMatchObject({
       id: "folder.plugin",
+      name: "Folder Plugin",
+      version: "1.0.0",
+      description: "Folder description",
       sourcePath: pluginDir,
       modulePath: resolve(pluginDir, "frontend/module.mjs")
     });
@@ -97,6 +101,8 @@ describe("discoverExternalFrontendPlugins", () => {
 
     expect(discovered).toHaveLength(1);
     expect(discovered[0]?.sourcePath).toBe(zipPath);
+    // plugin.json has no description here
+    expect(discovered[0]).not.toHaveProperty("description");
     expect(discovered[0]?.modulePath.replace(/\\/g, "/").endsWith("frontend/module.mjs")).toBe(true);
     const moduleContent = readFileSync(discovered[0].modulePath, "utf8");
     expect(moduleContent).toContain("pluginModule");

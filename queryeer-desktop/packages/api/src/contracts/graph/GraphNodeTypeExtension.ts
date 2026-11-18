@@ -1,3 +1,4 @@
+import type { Disposable } from "../editor/EditorApi.js";
 import type { ComponentType } from "react";
 import type { GraphLayoutDirection, GraphVertex } from "./GraphDocument.js";
 
@@ -20,7 +21,7 @@ export type GraphNodeTypeContribution = {
 };
 
 export type GraphNodeTypeRegistry = {
-  registerNodeType(contribution: GraphNodeTypeContribution): void;
+  registerNodeType(contribution: GraphNodeTypeContribution): Disposable;
   unregisterNodeType(kind: string): void;
   getComponent(kind: string): GraphNodeTypeComponent | undefined;
   getAll(): ReadonlyMap<string, GraphNodeTypeComponent>;

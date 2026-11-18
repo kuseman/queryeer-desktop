@@ -27,6 +27,7 @@ import { createSymbolActionRegistry } from "../../plugins/core.queryengine/symbo
 import { createWhenExpressionRegistry } from "../../plugins/core.commands/when-expression-variable-registry";
 import { getGraphNodeTypeRegistry } from "../../plugins/core.graph/graph-node-type-registry";
 import { registerChangelog } from "../../plugins/core.about/about-service.js";
+import { toDisposable } from "./disposables";
 import { getNotificationService } from "../../plugins/core.notification/notification-service";
 import { createPayloadbuilderCatalogRegistry } from "../../plugins/core.queryengine.payloadbuilder/catalog-contributions";
 import { JdbcDriverRegistryHost } from "../../renderer/plugins/jdbc-driver-registry";
@@ -138,7 +139,7 @@ export class PluginHost {
     };
 
     const settingsContributions = this.extensionRegistry.createSettingsRegistry();
-    const sharedContext: Omit<PluginContext, "jdbcDrivers"> = {
+    const sharedContext: Omit<PluginContext, "jdbcDrivers" | "plugin"> = {
       commands: this.extensionRegistry.createCommandRegistry(),
       filesystems: this.extensionRegistry.createFileSystemRegistry(),
       files: this.extensionRegistry.createFilesRegistry(),
@@ -153,12 +154,16 @@ export class PluginHost {
       settings: {
         ...settingsContributions,
         registerSettings: (contribution) => {
-          settingsContributions.registerSettings(contribution);
+          const registration = settingsContributions.registerSettings(contribution);
           refreshCoreSettingsRegistry();
+          return toDisposable(() => {
+            registration.dispose();
+            refreshCoreSettingsRegistry();
+          });
         },
         getValue: getEffectiveSetting,
         getAllValues: getAllEffectiveSettings,
-        subscribe: subscribeEffectiveSettings,
+        subscribe: (listener) => toDisposable(subscribeEffectiveSettings(listener)),
         open: openCoreSettings
       },
       quickcommand: this.extensionRegistry.createQuickCommandRegistry(),
@@ -192,6 +197,12 @@ export class PluginHost {
     for (const plugin of orderedPlugins) {
       const context: PluginContext = {
         ...sharedContext,
+        plugin: Object.freeze({
+          id: plugin.manifest.id,
+          name: plugin.manifest.name,
+          version: plugin.manifest.version,
+          ...(plugin.manifest.description !== undefined ? { description: plugin.manifest.description } : {})
+        }),
         jdbcDrivers: this.jdbcDriverRegistry.createRegistry(plugin.manifest.id)
       };
       await plugin.activate(context);
@@ -259,7 +270,8 @@ export class PluginHost {
   }
 
   public subscribeToJdbcDrivers(subscriber: JdbcDriverSubscriber): () => void {
-    return this.jdbcDriverRegistry.subscribe(subscriber);
+    const subscription = this.jdbcDriverRegistry.subscribe(subscriber);
+    return () => subscription.dispose();
   }
 
   public subscribeToFiles(subscriber: (files: FileEntity[]) => void): () => void {

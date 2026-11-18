@@ -82,7 +82,7 @@ function makeFilesRegistry(file: FileEntity, editorState: Record<string, unknown
     }),
     subscribe: vi.fn((sub) => {
       subscribers.add(sub);
-      return () => subscribers.delete(sub);
+      return { dispose: () => subscribers.delete(sub) };
     }),
     registerMimeResolver: vi.fn(),
     registerEditorResolver: vi.fn(),
@@ -107,7 +107,7 @@ function makeFileMediator(file: FileEntity): FileMediator {
     saveFile: vi.fn(),
     setActiveFileId: vi.fn(),
     getActiveFileId: vi.fn(() => file.fileId),
-    onActiveFileChanged: vi.fn(() => () => {}),
+    onActiveFileChanged: vi.fn(() => ({ dispose: vi.fn() })),
     setContextFileId: vi.fn(),
     getContextFileId: vi.fn(),
     reloadFile: vi.fn(),
