@@ -19,7 +19,6 @@ import { registerShortcuts } from "./shortcuts";
 import { setFilesRegistry } from "../core.commands/files-registry-accessor";
 import { setupSqlCompletionLanguage } from "./sql-completion-language";
 import { setupSqlHoverLanguage } from "./sql-hover-language";
-import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";
 import { createSymbolActionProvider } from "./symbol-action-provider";
 import { getSymbolActionRegistry, } from "./symbol-action-registry";
 import { SYMBOL_ACTIONS_SETTING_ID } from "./symbol-action-types";
@@ -561,7 +560,7 @@ export const coreQueryEnginePlugin: Plugin = {
     registerShortcuts(context);
 
     // Symbol Actions: when-expression variables for context variable autocomplete
-    registerWhenExpressionVariables([
+    context.whenExpressions.registerVariables([
       { name: "activeEditorGroupHasRunningQuery", type: "boolean", description: "True when the active editor group has a running query" },
       { name: "activeEditorGroupHasQuerySchedule", type: "boolean", description: "True when the active editor group has recurring query execution configured" },
       { name: "symbol.kind", type: "string", description: "Kind of symbol at cursor position (e.g. 'table', 'view', 'function', 'column')" },

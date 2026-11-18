@@ -16,7 +16,6 @@ import { getJdbcNavigationStore } from "./jdbc-navigation-store";
 import { JdbcNavigationView } from "./JdbcNavigationView";
 import { JDBC_NAV_DB_KEY, type JdbcSelectedDatabase, type JdbcTreeNode } from "./jdbc-navigation-types";
 import { writeJdbcContextMetadata, initJdbcFileBinding } from "./jdbc-metadata";
-import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";
 import { getQuickCommandService } from "../core.quickcommand/service";
 import { createJdbcDatabaseQuickCommandProvider } from "./jdbc-database-quick-command";
 import { JdbcPanel } from "./JdbcPanel";
@@ -103,7 +102,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
     providesCapabilities: ["query.engine.jdbc"]
   },
   activate: (context) => {
-    registerWhenExpressionVariables([
+    context.whenExpressions.registerVariables([
       { name: "activeFile.metadata.core.queryengine.jdbc.database", type: "string", description: "Selected JDBC database name" },
       { name: "activeFile.metadata.core.queryengine.jdbc.connectionTitle", type: "string", description: "Human-readable title of the active JDBC connection" },
       { name: "activeFile.metadata.core.queryengine.jdbc.dialectId", type: "string", description: "SQL dialect of the active JDBC connection (e.g. 'sqlserver', 'postgresql')" },
@@ -552,7 +551,7 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
     });
 
     // Tree Actions: when-expression variables for context variable autocomplete
-    registerWhenExpressionVariables([
+    context.whenExpressions.registerVariables([
       { name: "node.kind", type: "string", description: "Kind of tree node (e.g. 'procedure', 'table', 'view', 'column', 'database')" },
       { name: "node.name", type: "string", description: "Name of the tree node (e.g. 'sp_help')" },
       { name: "node.fullName", type: "string", description: "Fully qualified name of the tree node (e.g. 'dbo.sp_help')" },

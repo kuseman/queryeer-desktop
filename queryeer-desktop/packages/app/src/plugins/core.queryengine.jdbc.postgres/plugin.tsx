@@ -1,8 +1,5 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
 import { getQueryViewStateStore } from "../core.queryengine/QueryViewStateStore";
-import { registerWhenExpressionTemplates } from "../core.commands/when-expression-template-registry";
-import { registerSymbolActionTemplate } from "../core.queryengine/symbol-action-template-registry";
-import { registerTreeActionTemplate } from "../core.queryengine.jdbc/tree-action-template-registry";
 
 const POSTGRES_DIALECT_ID = "postgres";
 const POSTGRES_FILE_DIALECT_WHEN = `activeFile.metadata.core.queryengine.jdbc?.dialectId == '${POSTGRES_DIALECT_ID}'`;
@@ -35,7 +32,7 @@ export const coreQueryEngineJdbcPostgresPlugin: Plugin = {
       supportsQueryPlan: true
     });
 
-    registerWhenExpressionTemplates([
+    context.whenExpressions.registerTemplates([
       {
         name: "PostgreSQL Database",
         description: "Match SQL files using PostgreSQL against a specific selected database",
@@ -43,7 +40,7 @@ export const coreQueryEngineJdbcPostgresPlugin: Plugin = {
       }
     ]);
 
-    registerSymbolActionTemplate({
+    context.symbolActions.registerTemplate({
       id: "core.queryengine.jdbc.symbolAction.postgresDescribe",
       title: "PostgreSQL Describe",
       description: "Describe a table or view in PostgreSQL",
@@ -55,7 +52,7 @@ export const coreQueryEngineJdbcPostgresPlugin: Plugin = {
       }
     });
 
-    registerTreeActionTemplate({
+    context.jdbcTreeActions.registerTemplate({
       id: "core.queryengine.jdbc.treeAction.postgres.selectTop100",
       title: "PostgreSQL: Select Top 100 Rows",
       description: "Select top 100 rows from a table or view",

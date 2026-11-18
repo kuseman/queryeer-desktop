@@ -23,14 +23,6 @@ const mocks = vi.hoisted(() => ({
   registerDriverMock: vi.fn()
 }));
 
-vi.mock("../core.commands/when-expression-template-registry", () => ({
-  registerWhenExpressionTemplates: mocks.registerWhenExpressionTemplatesMock
-}));
-
-vi.mock("../core.queryengine/symbol-action-template-registry", () => ({
-  registerSymbolActionTemplate: mocks.registerSymbolActionTemplateMock
-}));
-
 vi.mock("../core.queryengine/QueryEngineService", () => ({
   getQueryEngineService: () => ({ requestExecute: mocks.requestExecuteMock })
 }));
@@ -138,6 +130,12 @@ function createContext(): PluginContext {
     },
     jdbcDrivers: { registerDriver: mocks.registerDriverMock },
     jdbcDialects: { registerDialect: mocks.registerDialectMock },
+    jdbcTreeActions: { registerTemplate: vi.fn(() => ({ dispose: vi.fn() })) },
+    symbolActions: { registerTemplate: mocks.registerSymbolActionTemplateMock },
+    whenExpressions: {
+      registerTemplates: mocks.registerWhenExpressionTemplatesMock,
+      registerVariables: vi.fn(() => ({ dispose: vi.fn() }))
+    },
     queryEngines: {
       registerExecutionContextProvider: mocks.registerExecutionContextProviderMock
     }

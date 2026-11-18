@@ -220,6 +220,12 @@ function createContext(): PluginContext {
     jdbcTreeContextMenu: { registerContribution: vi.fn(), unregisterContribution: vi.fn(), getItemsForNode: vi.fn() },
     jdbcDrivers: { registerDriver: vi.fn(), listDrivers: vi.fn(() => []), getDriver: vi.fn(), subscribe: vi.fn(() => () => {}) },
     jdbcDialects: { registerDialect: vi.fn(() => ({ dispose: vi.fn() })) },
+    jdbcTreeActions: { registerTemplate: vi.fn(() => ({ dispose: vi.fn() })) },
+    symbolActions: { registerTemplate: vi.fn(() => ({ dispose: vi.fn() })) },
+    whenExpressions: {
+      registerTemplates: vi.fn(() => ({ dispose: vi.fn() })),
+      registerVariables: vi.fn(() => ({ dispose: vi.fn() }))
+    },
     graphNodeTypes: { registerNodeType: vi.fn(), unregisterNodeType: vi.fn(), getComponent: vi.fn(), getAll: vi.fn(() => new Map()) },
     outline: {
       registerOutlineProvider: vi.fn(),

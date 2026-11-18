@@ -681,6 +681,10 @@ doesn't highlight as expected.
 | `commands.registerCommand(cmd)` | `CommandHandler` | Register a command |
 | `commands.executeCommand(id)` | `Promise<CommandExecutionResult>` | Execute a command |
 | `keybindings.registerKeybinding(kb)` | `KeybindingContribution` | Register a keybinding |
+| `whenExpressions.registerVariables(vars)` | `Disposable` | Context variables offered by when-expression autocompletion in settings, typically your `activeFile.metadata.<plugin id>.*` keys (`CtxVar`: `name`, `type`, `description`). Listed once per name, with the first registration's description |
+| `whenExpressions.registerTemplates(templates)` | `Disposable` | Ready-made expressions offered in the when-expression editor (`WhenExpressionTemplate`: `name`, `when`, `description?`). Listed once per name and expression |
+
+Both only help the user write expressions; they don't change how one evaluates. Disposing releases that call's registrations; an entry another plugin registered too stays listed until that plugin's registration is disposed as well.
 
 ### 7.5 Context Menus
 
@@ -842,6 +846,34 @@ public Optional<JdbcConnectionSetupDefinition> connectionSetup()
 | `supportsQueryPlan` | The backend dialect implements `queryPlanExecutor()` |
 
 Of the built-in dialects, PostgreSQL uses the fields only; SQLite (file picker) and SQL Server (authentication-dependent fields) have hand-written forms.
+
+### 7.12.2 Action templates
+
+Users define their own query actions in settings: **Tree Actions** run on a node in the SQL Databases tree, **Symbol Actions** on a symbol under the cursor in the editor. A plugin offers ready-made ones as templates; the user creates an action from a template, and nothing runs until they do.
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `jdbcTreeActions.registerTemplate(template)` | `Disposable` | `TreeActionTemplateContribution`: `id`, `title`, `description?`, `order?`, `action` (`label`, `when`, `query`, `mode`: `"execute"` or `"render"`, `outputTarget`: `"output"`, `"clipboard"`, `"newQuery"` or `"newQueryAndExecute"`, `outputId?`, `order?`) |
+| `symbolActions.registerTemplate(template)` | `Disposable` | `SymbolActionTemplateContribution`: `id`, `title`, `description?`, `order?`, `action` (`label`, `when`, `query`, `order?`; `outputId?` can be set but symbol actions don't use it yet) |
+
+A later template with the same `id` replaces an earlier one, and disposing a replaced registration does nothing. `${…}` in a query is replaced with the expression's value. What the expressions can read:
+
+- **Tree action:** `when` and `query` see the command context (§7.4, so `activeFile` too) plus the clicked node as `node`: `kind`, `name`, `fullName`, `nodeType`, `connectionId`, `dialectId` and `attributes` (e.g. `node.attributes.catalog`, the node's database).
+- **Symbol action:** `when` sees the command context plus `symbol`: `kind`, `name`, `fullName`, `detail` and `attributes`. The `query` sees **only** `symbol`, not `activeFile`. The query runs in the file, so it can use the file's current database through SQL (e.g. MySQL's `DATABASE()`).
+
+```ts
+context.jdbcTreeActions.registerTemplate({
+  id: "com.example.jdbc.treeAction.selectTop100",
+  title: "Example: Select Top 100 Rows",
+  action: {
+    label: "Select Top 100 Rows",
+    when: "node.dialectId == 'example' && (node.kind == 'table' || node.kind == 'view')",
+    query: "select * from ${node.fullName} limit 100",
+    mode: "execute",
+    outputTarget: "output"
+  }
+});
+```
 
 ### 7.13 Dialog
 

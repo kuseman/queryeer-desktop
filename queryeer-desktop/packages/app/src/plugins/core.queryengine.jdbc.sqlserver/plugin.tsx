@@ -1,9 +1,6 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
 import { getQueryViewStateStore } from "../core.queryengine/QueryViewStateStore";
 import { getCoreSettingsService } from "../core.settings/service";
-import { registerWhenExpressionTemplates } from "../core.commands/when-expression-template-registry";
-import { registerSymbolActionTemplate } from "../core.queryengine/symbol-action-template-registry";
-import { registerTreeActionTemplate } from "../core.queryengine.jdbc/tree-action-template-registry";
 import { getExpressionRuntime } from "../core.expressions/runtime";
 import { SqlServerConnectionForm } from "./SqlServerConnectionForm";
 
@@ -75,7 +72,7 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
       validate: validateSqlServer
     });
 
-    registerWhenExpressionTemplates([
+    context.whenExpressions.registerTemplates([
       {
         name: "SQLServer Database",
         description: "Match SQL files using SQL Server against a specific selected database",
@@ -83,7 +80,7 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
       }
     ]);
 
-    registerSymbolActionTemplate({
+    context.symbolActions.registerTemplate({
       id: "core.queryengine.jdbc.symbolAction.sqlserverDescribe",
       title: "SQLServer Describe",
       description: "Describe a table or view in SQL Server",
@@ -95,7 +92,7 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
       }
     });
 
-    registerTreeActionTemplate({
+    context.jdbcTreeActions.registerTemplate({
       id: "core.queryengine.jdbc.treeAction.sqlserver.spHelptext",
       title: "SQL Server: Procedure Definition to Text",
       description: "Run sp_helptext and show results in text output",
@@ -110,7 +107,7 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
       }
     });
 
-    registerTreeActionTemplate({
+    context.jdbcTreeActions.registerTemplate({
       id: "core.queryengine.jdbc.treeAction.sqlserver.spHelptextNewQuery",
       title: "SQL Server: Procedure Definition to New Query",
       description: "Run sp_helptext and open results in a new query file",
@@ -124,7 +121,7 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
       }
     });
 
-    registerTreeActionTemplate({
+    context.jdbcTreeActions.registerTemplate({
       id: "core.queryengine.jdbc.treeAction.sqlserver.spHelp",
       title: "SQL Server: Object Help",
       description: "Run sp_help on database objects",
@@ -138,7 +135,7 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
       }
     });
 
-    registerTreeActionTemplate({
+    context.jdbcTreeActions.registerTemplate({
       id: "core.queryengine.jdbc.treeAction.sqlserver.selectTop100",
       title: "SQL Server: Select Top 100 Rows",
       description: "Select top 100 rows from a table or view",
