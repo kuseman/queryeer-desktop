@@ -62,7 +62,10 @@ export type JdbcDialectContribution = {
   subtitle?: (properties: Record<string, unknown>) => string;
   /** Problems with a connection's properties; any problem marks it invalid. Default: the backend's required fields that are empty. */
   validate?: (properties: Record<string, unknown>) => string[];
-  /** The dialect's backend supports estimated and actual query plans (`JdbcDialect.queryPlanExecutor()`). */
+  /**
+   * The dialect's backend supports estimated and actual query plans (`JdbcDialect.queryPlanExecutor()`). Turns on
+   * Estimated Plan and the Actual Plan toggle for its files; core sends the intent `plan.estimated` or `plan.actual`.
+   */
   supportsQueryPlan?: boolean;
 };
 

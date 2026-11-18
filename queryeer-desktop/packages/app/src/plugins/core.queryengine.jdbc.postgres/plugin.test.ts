@@ -41,10 +41,8 @@ describe("coreQueryEngineJdbcPostgresPlugin", () => {
       dialectId: "postgres",
       supportsQueryPlan: true
     });
-    expect(context.queryEngines.registerExecutionContextProvider).toHaveBeenCalledWith(
-      "jdbc",
-      expect.any(Function)
-    );
+    // The Actual Plan toggle is core.queryengine.jdbc's, from `supportsQueryPlan`
+    expect(context.queryEngines.registerExecutionContextProvider).not.toHaveBeenCalled();
   });
 
   it("registers the managed PostgreSQL JDBC driver", () => {

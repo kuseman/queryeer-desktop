@@ -11,9 +11,6 @@ const mocks = vi.hoisted(() => ({
   getCoreSettingsValueMock: vi.fn(),
   refreshSchemaFromRegistryMock: vi.fn(),
   syncRegistryModulesMock: vi.fn(),
-  readViewStateMock: vi.fn(() => ({})),
-  setIncludeActualPlanMock: vi.fn(),
-  requestExecuteMock: vi.fn(),
   getFileMock: vi.fn(),
   registerCommandMock: vi.fn(),
   registerToolbarActionMock: vi.fn(),
@@ -21,17 +18,6 @@ const mocks = vi.hoisted(() => ({
   registerAdvancedValidatorMock: vi.fn(),
   registerAdvancedRendererMock: vi.fn(),
   registerDriverMock: vi.fn()
-}));
-
-vi.mock("../core.queryengine/QueryEngineService", () => ({
-  getQueryEngineService: () => ({ requestExecute: mocks.requestExecuteMock })
-}));
-
-vi.mock("../core.queryengine/QueryViewStateStore", () => ({
-  getQueryViewStateStore: () => ({
-    read: mocks.readViewStateMock,
-    setIncludeActualPlan: mocks.setIncludeActualPlanMock
-  })
 }));
 
 vi.mock("../core.settings/service", () => ({
@@ -145,7 +131,6 @@ function createContext(): PluginContext {
 describe("coreQueryEngineJdbcSqlServerPlugin", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.readViewStateMock.mockReturnValue({});
   });
 
   it("registers the connection form for sqlserver dialect", () => {
@@ -297,52 +282,48 @@ describe("coreQueryEngineJdbcSqlServerPlugin", () => {
       expect(result).toBeUndefined();
     });
 
-    it("adds actual plan options when includeActualPlan is true", () => {
+    it("adds the plan XML option and leaves the intent to core.queryengine.jdbc", () => {
       const context = createContext();
       mocks.getFileMock.mockReturnValue({
         fileId: "file-1",
         metadata: { "core.queryengine.jdbc.dialectId": "sqlserver" }
       });
-      mocks.readViewStateMock.mockReturnValue({ includeActualPlan: true });
-      mocks.getCoreSettingsValueMock.mockReturnValue("suppress");
+      mocks.getCoreSettingsValueMock.mockReturnValue("include");
       coreQueryEngineJdbcSqlServerPlugin.activate(context);
 
       const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]![1];
-      const result = provider({ engineId: "jdbc", fileId: "file-1" });
-      expect(result).toMatchObject({
+      expect(provider({ engineId: "jdbc", fileId: "file-1" })).toEqual({
+        options: { dialectOptions: { sqlserverPlanXmlOutput: "include" } }
+      });
+      // What core.queryengine.jdbc's Actual Plan provider (or Estimated Plan) set before is kept
+      const requestedArtifacts = [{ capability: "plan", kind: "graph" }];
+      const planned = provider({
+        engineId: "jdbc",
+        fileId: "file-1",
+        options: { intent: "plan.actual", requestedArtifacts, dialectOptions: { other: 1 } }
+      });
+      expect(planned).toEqual({
         options: {
           intent: "plan.actual",
-          dialectOptions: { sqlserverPlanXmlOutput: "suppress" }
+          requestedArtifacts,
+          dialectOptions: { other: 1, sqlserverPlanXmlOutput: "include" }
         }
       });
     });
 
-    it("does not override existing intent when includeActualPlan is true", () => {
+    it("suppresses the plan XML unless the setting says include", () => {
       const context = createContext();
       mocks.getFileMock.mockReturnValue({
         fileId: "file-1",
         metadata: { "core.queryengine.jdbc.dialectId": "sqlserver" }
       });
-      mocks.readViewStateMock.mockReturnValue({ includeActualPlan: true });
+      mocks.getCoreSettingsValueMock.mockReturnValue(undefined);
       coreQueryEngineJdbcSqlServerPlugin.activate(context);
 
       const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]![1];
-      const result = provider({ engineId: "jdbc", fileId: "file-1", options: { intent: "plan.estimated" } });
-      expect(result?.options?.intent).toBe("plan.estimated");
-    });
-
-    it("does not add actual plan when includeActualPlan is false", () => {
-      const context = createContext();
-      mocks.getFileMock.mockReturnValue({
-        fileId: "file-1",
-        metadata: { "core.queryengine.jdbc.dialectId": "sqlserver" }
+      expect(provider({ engineId: "jdbc", fileId: "file-1" })).toEqual({
+        options: { dialectOptions: { sqlserverPlanXmlOutput: "suppress" } }
       });
-      mocks.readViewStateMock.mockReturnValue({ includeActualPlan: false });
-      coreQueryEngineJdbcSqlServerPlugin.activate(context);
-
-      const provider = mocks.registerExecutionContextProviderMock.mock.calls[0]![1];
-      const result = provider({ engineId: "jdbc", fileId: "file-1" });
-      expect(result?.options?.intent).toBeUndefined();
     });
   });
 });

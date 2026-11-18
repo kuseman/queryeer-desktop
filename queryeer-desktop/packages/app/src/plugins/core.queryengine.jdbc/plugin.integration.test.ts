@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginContext } from "@queryeer/api/plugin/Plugin";
-import { registerJdbcQueryPlanDialectSupport } from "../core.queryengine/query-plan/supported-dialects";
+import {
+  registerJdbcQueryPlanDialectSupport,
+  unregisterJdbcQueryPlanDialectSupport
+} from "../core.queryengine/query-plan/supported-dialects";
 import {
   clearFlowNodeTypeContributionsForTests,
   getFlowNodeTypeContribution
@@ -1098,6 +1101,50 @@ describe("core.queryengine.jdbc plugin integration", () => {
     await handler();
 
     expect(mocks.setIncludeActualPlanMock).toHaveBeenCalledWith("file-2", "core.queryengine:group-2", true);
+  });
+
+  it("Actual Plan asks for the actual plan for any dialect that supports query plans, external ones included", () => {
+    const context = createContext();
+    const file = context.files.getFile("file-1")!;
+    coreQueryEngineJdbcPlugin.activate(context);
+    type Provider = (params: {
+      engineId: string;
+      text: string;
+      fileId?: string;
+      targetOutputSessionId?: string;
+      options?: Record<string, unknown>;
+    }) => { options?: Record<string, unknown> } | undefined;
+    const providers = mocks.registerExecutionContextProviderMock.mock.calls
+      .filter((call: unknown[]) => call[0] === "jdbc")
+      .map((call: unknown[]) => call[1] as Provider);
+    // Every "jdbc" provider's options, merged: only the Actual Plan provider sets them for this file
+    const run = (options?: Record<string, unknown>) => {
+      const patches = providers
+        .map((provider) => provider({ engineId: "jdbc", text: "select 1", fileId: "file-1", targetOutputSessionId: "session-1", options })?.options)
+        .filter((patch) => patch !== undefined);
+      return patches.length === 0 ? undefined : Object.assign({}, ...patches);
+    };
+
+    file.metadata = { "core.queryengine.jdbc.dialectId": "external-plan-dialect" };
+    mocks.readViewStateMock.mockReturnValue({ includeActualPlan: true });
+    expect(run()).toBeUndefined();
+
+    registerJdbcQueryPlanDialectSupport("external-plan-dialect");
+    try {
+      expect(run({ dialectOptions: { a: 1 } })).toEqual({
+        dialectOptions: { a: 1 },
+        intent: "plan.actual",
+        requestedArtifacts: [{ capability: "plan", kind: "graph" }]
+      });
+      expect(mocks.readViewStateMock).toHaveBeenLastCalledWith("file-1", "session-1");
+
+      // Another intent (Estimated Plan) wins, and the toggle off changes nothing
+      expect(run({ intent: "plan.estimated" })).toBeUndefined();
+      mocks.readViewStateMock.mockReturnValue({ includeActualPlan: false });
+      expect(run()).toBeUndefined();
+    } finally {
+      unregisterJdbcQueryPlanDialectSupport("external-plan-dialect");
+    }
   });
 
   it("applies connection color to tab header style for JDBC files", () => {

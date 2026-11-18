@@ -1,5 +1,4 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
-import { getQueryViewStateStore } from "../core.queryengine/QueryViewStateStore";
 
 const POSTGRES_DIALECT_ID = "postgres";
 const POSTGRES_FILE_DIALECT_WHEN = `activeFile.metadata.core.queryengine.jdbc?.dialectId == '${POSTGRES_DIALECT_ID}'`;
@@ -65,29 +64,6 @@ export const coreQueryEngineJdbcPostgresPlugin: Plugin = {
         outputTarget: "output"
       }
     });
-
-    // Execution context provider: intercepts normal execute when Actual Plan toggle is on
-    context.queryEngines.registerExecutionContextProvider("jdbc", (params) => {
-      if (!params.fileId) {
-        return undefined;
-      }
-
-      const file = context.files.getFile(params.fileId);
-      const isPostgres = file?.metadata?.["core.queryengine.jdbc.dialectId"] === POSTGRES_DIALECT_ID;
-      if (!isPostgres) {
-        return undefined;
-      }
-
-      const viewState = getQueryViewStateStore().read(params.fileId, params.targetOutputSessionId ?? params.fileId);
-      const includeActualPlan = viewState.includeActualPlan === true && !params.options?.intent;
-
-      return {
-        options: {
-          ...params.options,
-          intent: includeActualPlan ? "plan.actual" : params.options?.intent,
-          requestedArtifacts: params.options?.requestedArtifacts ?? (includeActualPlan ? [{ capability: "plan", kind: "graph" }] : undefined)
-        }
-      };
-    });
+    // The Actual Plan toggle is handled by core.queryengine.jdbc for every dialect with `supportsQueryPlan`
   }
 };
