@@ -843,7 +843,7 @@ public Optional<JdbcConnectionSetupDefinition> connectionSetup()
 | `ConnectionForm` | A hand-written form replacing the one rendered from the fields (`JdbcDialectConnectionFormProps`); provide `subtitle` and `validate` with it |
 | `subtitle(properties)` | The connection's line in the connections list |
 | `validate(properties)` | Problems; any problem marks the connection invalid |
-| `supportsQueryPlan` | The backend dialect implements `queryPlanExecutor()` |
+| `supportsQueryPlan` | The backend dialect implements `queryPlanExecutor()`. Turns on Estimated Plan and the Actual Plan toggle for the dialect's files; core then runs the query with the intent `plan.estimated` or `plan.actual` and asks for a plan graph (`{ capability: "plan", kind: "graph" }`), and the backend routes it to `queryPlanExecutor()` |
 
 Of the built-in dialects, PostgreSQL uses the fields only; SQLite (file picker) and SQL Server (authentication-dependent fields) have hand-written forms.
 

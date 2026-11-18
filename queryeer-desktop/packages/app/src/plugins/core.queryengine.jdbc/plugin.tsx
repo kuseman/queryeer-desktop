@@ -28,7 +28,10 @@ import { createTreeActionProvider } from "./tree-action-provider";
 import { onCoreSettingsServiceInitialized } from "../core.settings/service";
 import { getEditorRegistryHost } from "../../core/plugin-runtime/ExtensionRegistry";
 import { createJdbcAssistantTools, loadDeepSnapshot } from "./jdbc-assistant-tools";
-import { subscribeJdbcQueryPlanDialectSupport } from "../core.queryengine/query-plan/supported-dialects";
+import {
+  subscribeJdbcQueryPlanDialectSupport,
+  supportsQueryPlanForJdbcDialect
+} from "../core.queryengine/query-plan/supported-dialects";
 import { registerJdbcFlowNodeContribution } from "./flow-node-contribution";
 import { buildSchemaGraph } from "./jdbc-schema-graph-builder";
 import { SchemaTableNode } from "./SchemaTableNode";
@@ -499,6 +502,29 @@ export const coreQueryEngineJdbcPlugin: Plugin = {
       }
 
       return { engineState };
+    });
+
+    // "Actual Plan" toggle: a normal run asks for the actual plan, for every dialect registered with
+    // `supportsQueryPlan`. The dialect's backend handles the intent (`JdbcDialect.queryPlanExecutor()`).
+    context.queryEngines.registerExecutionContextProvider("jdbc", (params) => {
+      if (!params.fileId || params.options?.intent) {
+        return undefined;
+      }
+      const file = context.files.getFile(params.fileId);
+      if (!supportsQueryPlanForJdbcDialect(file?.metadata?.["core.queryengine.jdbc.dialectId"])) {
+        return undefined;
+      }
+      const viewState = getQueryViewStateStore().read(params.fileId, params.targetOutputSessionId ?? params.fileId);
+      if (viewState.includeActualPlan !== true) {
+        return undefined;
+      }
+      return {
+        options: {
+          ...params.options,
+          intent: "plan.actual",
+          requestedArtifacts: params.options?.requestedArtifacts ?? QUERY_PLAN_ARTIFACT_REQUEST
+        }
+      };
     });
 
     context.queryEngines.onQueryEvent("jdbc", (event, executeContext) => {

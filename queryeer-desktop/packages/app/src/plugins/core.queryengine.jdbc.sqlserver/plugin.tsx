@@ -1,5 +1,4 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
-import { getQueryViewStateStore } from "../core.queryengine/QueryViewStateStore";
 import { getCoreSettingsService } from "../core.settings/service";
 import { getExpressionRuntime } from "../core.expressions/runtime";
 import { SqlServerConnectionForm } from "./SqlServerConnectionForm";
@@ -178,7 +177,8 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
       void settingsService.syncRegistryModules();
     }
 
-    // Execution context provider: adds SQL Server plan options to queries
+    // Execution context provider: adds SQL Server's plan XML option to queries. The Actual Plan toggle itself is
+    // handled by core.queryengine.jdbc for every dialect with `supportsQueryPlan`.
     context.queryEngines.registerExecutionContextProvider("jdbc", (params) => {
       if (!params.fileId) {
         return undefined;
@@ -190,8 +190,6 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
         return undefined;
       }
 
-      const viewState = getQueryViewStateStore().read(params.fileId, params.targetOutputSessionId ?? params.fileId);
-      const includeActualPlan = viewState.includeActualPlan === true && !params.options?.intent;
       const rawXmlMode = getCoreSettingsService()?.getValue(SQLSERVER_PLAN_OUTPUT_SETTING_ID) === "include"
         ? "include"
         : "suppress";
@@ -199,8 +197,6 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
       return {
         options: {
           ...params.options,
-          intent: includeActualPlan ? "plan.actual" : params.options?.intent,
-          requestedArtifacts: params.options?.requestedArtifacts ?? (includeActualPlan ? [{ capability: "plan", kind: "graph" }] : undefined),
           dialectOptions: {
             ...(params.options?.dialectOptions ?? {}),
             sqlserverPlanXmlOutput: rawXmlMode
