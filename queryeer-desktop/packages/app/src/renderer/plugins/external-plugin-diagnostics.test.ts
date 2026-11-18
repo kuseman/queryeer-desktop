@@ -1,9 +1,10 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import type { PluginManifestFile } from "@queryeer/api/plugin/PluginManifestFile";
-import { discoverPluginModules } from "../../plugins/discovery";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { toPluginManifestFile, type PluginManifestFile } from "@queryeer/api/plugin/PluginManifestFile";
+import type { ExternalPluginManifest } from "@queryeer/api/plugin/PluginManifest";
+import { discoverPluginModules, resolveExternalManifest } from "../../plugins/discovery";
 
 const tempRoots: string[] = [];
 
@@ -85,5 +86,71 @@ describe("discoverPluginModules external diagnostics", () => {
         })
       ])
     );
+  });
+
+  describe("identity from plugin.json (F11)", () => {
+    const fromPluginJson = {
+      ...externalManifest("external.plugin", "/plugins/external/index.js"),
+      version: "2.3.4",
+      description: "From plugin.json"
+    };
+
+    it("takes id, name, version and description from plugin.json", () => {
+      expect(resolveExternalManifest(fromPluginJson, { kind: "feature", dependencies: ["core.layout"] })).toEqual({
+        id: "external.plugin",
+        name: "external.plugin",
+        version: "2.3.4",
+        description: "From plugin.json",
+        kind: "feature",
+        dependencies: ["core.layout"]
+      });
+    });
+
+    it("ignores identity a plugin built for 0.19 still sets, and warns when it differs", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      // A 0.19 build: the frontend manifest repeats the identity, with another name and description
+      const built019 = {
+        id: "external.plugin",
+        name: "Longer Name",
+        version: "2.3.4",
+        description: "From the module",
+        kind: "feature"
+      } as ExternalPluginManifest;
+
+      expect(resolveExternalManifest(fromPluginJson, built019)).toEqual({
+        id: "external.plugin",
+        name: "external.plugin",
+        version: "2.3.4",
+        description: "From plugin.json",
+        kind: "feature"
+      });
+      expect(warn).toHaveBeenCalledWith(
+        "[plugins] external.plugin: ignoring name, description in the frontend manifest; plugin.json declares them"
+      );
+      warn.mockRestore();
+    });
+
+    it("doesn't warn when repeated identity matches plugin.json", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const matching = { id: "external.plugin", name: "external.plugin", version: "2.3.4", kind: "feature" } as ExternalPluginManifest;
+      resolveExternalManifest(fromPluginJson, matching);
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it("toPluginManifestFile carries plugin.json's description", () => {
+      const base = { id: "a", name: "A", version: "1.0.0", modulePath: "/a.js", sourcePath: "/a" };
+      expect(toPluginManifestFile({ ...base, description: "Text" }).description).toBe("Text");
+      expect(toPluginManifestFile(base)).not.toHaveProperty("description");
+    });
+
+    it("leaves description out when plugin.json has none", () => {
+      const { description: _ignored, ...withoutDescription } = fromPluginJson;
+      expect(resolveExternalManifest(withoutDescription, { kind: "feature" })).not.toHaveProperty("description");
+    });
+
+    it("refuses a module without a manifest", () => {
+      expect(() => resolveExternalManifest(fromPluginJson, undefined)).toThrow("has no manifest");
+    });
   });
 });

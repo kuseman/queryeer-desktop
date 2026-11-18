@@ -15,11 +15,15 @@ export class CommandBus {
 
   public constructor(private readonly getContextValues?: () => ContextValues) {}
 
-  public register(commandId: string, handler: CommandHandler, enablement?: string): void {
-    this.commands.set(commandId, {
-      handler,
-      enablement
-    });
+  /** Returns a function that removes the command, unless a later registration replaced it. */
+  public register(commandId: string, handler: CommandHandler, enablement?: string): () => void {
+    const entry: CommandEntry = { handler, enablement };
+    this.commands.set(commandId, entry);
+    return () => {
+      if (this.commands.get(commandId) === entry) {
+        this.commands.delete(commandId);
+      }
+    };
   }
 
   public listCommandIds(): string[] {

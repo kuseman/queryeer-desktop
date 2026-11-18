@@ -1,3 +1,5 @@
+import type { Disposable } from "@queryeer/api/editor/EditorApi";
+import { setDisposable, toDisposable } from "../../core/plugin-runtime/disposables";
 import type { GraphNodeTypeComponent, GraphNodeTypeContribution, GraphNodeTypeRegistry } from "@queryeer/api/graph/GraphNodeTypeExtension";
 
 let sharedRegistry: GraphNodeTypeRegistry | null = null;
@@ -17,11 +19,14 @@ function createNodeTypeRegistry(): GraphNodeTypeRegistry {
   const entries = new Map<string, GraphNodeTypeComponent>();
 
   return {
-    registerNodeType(contribution: GraphNodeTypeContribution): void {
+    registerNodeType(contribution: GraphNodeTypeContribution): Disposable {
       const kinds = typeof contribution.kind === "string" ? [contribution.kind] : contribution.kind;
-      for (const kind of kinds) {
-        entries.set(kind, contribution.component);
-      }
+      const registrations = kinds.map((kind) => setDisposable(entries, kind, contribution.component));
+      return toDisposable(() => {
+        for (const registration of registrations) {
+          registration.dispose();
+        }
+      });
     },
 
     unregisterNodeType(kind: string): void {

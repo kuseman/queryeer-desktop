@@ -65,6 +65,7 @@ import {
 import { createEditorInstanceId } from "./editor-instance-id";
 import { applyEditorGroupSizePreview, getEditorGroupElements } from "./editor-split-resize";
 import { shouldFocusEditorGroupOnPointerDown } from "./editor-group-pointer-focus";
+import { disposeOnCleanup } from "../../core/plugin-runtime/disposables";
 import "./shell-app.css";
 
 const OPEN_NEW_FILES_LAST_SETTING_ID = "core.files.openNewFilesLast";
@@ -637,7 +638,7 @@ export function ShellApp({
   }, [activeFileId, fileMediator, workspaceService]);
 
   useEffect(() => {
-    return fileMediator.onActiveFileChanged((fileId) => {
+    return disposeOnCleanup(fileMediator.onActiveFileChanged((fileId) => {
       if (!fileId) {
         return;
       }
@@ -651,7 +652,7 @@ export function ShellApp({
         }
         return openFileInActiveGroup(previous, fileId);
       });
-    });
+    }));
   }, [fileMediator]);
 
   useEffect(() => {
@@ -692,7 +693,7 @@ export function ShellApp({
   }, [activeGroup.id, editorWorkbench, files, visibleZones, primarySidebarWidth, secondarySidebarWidth, panelStates, panelHeights, panelHeight, workspaceService]);
 
   useEffect(() => {
-    return filesRegistry.subscribe((next) => {
+    return disposeOnCleanup(filesRegistry.subscribe((next) => {
       if (filesAreStructurallyIdentical(filesRef.current, next)) {
         return;
       }
@@ -714,7 +715,7 @@ export function ShellApp({
         );
         return resolution.state;
       });
-    });
+    }));
   }, [filesRegistry, workspaceService]);
 
   const beginResize = (target: "primary" | "secondary") => {

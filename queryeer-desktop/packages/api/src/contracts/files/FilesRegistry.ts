@@ -34,18 +34,18 @@ export type MimeCapabilityRegistry = {
   hasCapability: (mimeType: string, capability: MimeCapability) => boolean;
   listMimeTypesByCapability: (capability: MimeCapability) => string[];
   listAllMimeTypes: () => string[];
-  registerLabel?: (mimeType: string, label: string) => void;
+  registerLabel?: (mimeType: string, label: string) => Disposable;
   getLabel?: (mimeType: string) => string | undefined;
-  registerPreferredExtension?: (mimeType: string, extension: string) => void;
+  registerPreferredExtension?: (mimeType: string, extension: string) => Disposable;
   getPreferredExtension?: (mimeType: string) => string | undefined;
-  registerPreferredNewFileMimeType?: (mimeType: string, order?: number) => void;
+  registerPreferredNewFileMimeType?: (mimeType: string, order?: number) => Disposable;
   listPreferredNewFileMimeTypes?: () => string[];
-  registerContentCategory: (mimeType: string, category: ContentCategory) => void;
+  registerContentCategory: (mimeType: string, category: ContentCategory) => Disposable;
   getContentCategory: (mimeType: string) => ContentCategory | undefined;
 };
 
 export type MimeIconRegistry = {
-  registerMimeIcon: (contribution: MimeIconContribution) => void;
+  registerMimeIcon: (contribution: MimeIconContribution) => Disposable;
   getMimeIcon: (mimeType: string) => ((props: MimeIconProps) => JSX.Element) | undefined;
   listMimeIcons: () => MimeIconContribution[];
 };
@@ -58,9 +58,9 @@ export type FilesRegistry = {
   getFile: (fileId: string) => FileEntity | undefined;
   listFiles: () => FileEntity[];
   updateFile: (fileId: string, update: FileEntityUpdate) => FileEntity | undefined;
-  subscribe: (subscriber: FilesSubscriber) => () => void;
-  registerMimeResolver: (resolver: MimeResolver) => void;
-  registerEditorResolver: (resolver: EditorResolver) => void;
+  subscribe: (subscriber: FilesSubscriber) => Disposable;
+  registerMimeResolver: (resolver: MimeResolver) => Disposable;
+  registerEditorResolver: (resolver: EditorResolver) => Disposable;
   classifyUri: (uri: string, hint?: MimeHint) => string;
   resolveEditor: (file: FileEntity, context?: Partial<EditorResolutionContext>) => string | undefined;
   getEditorState: (fileId: string, editorKey: string) => unknown;

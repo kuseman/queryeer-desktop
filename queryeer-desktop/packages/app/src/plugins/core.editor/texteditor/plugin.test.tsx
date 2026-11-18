@@ -78,7 +78,7 @@ function createHarness(): Harness {
     getFile: vi.fn((fileId: string) => filesById.get(fileId)),
     listFiles: vi.fn(() => [...filesById.values()]),
     updateFile: vi.fn(),
-    subscribe: vi.fn(() => () => {}),
+    subscribe: vi.fn(() => ({ dispose: vi.fn() })),
     registerMimeResolver: vi.fn(),
     registerEditorResolver: vi.fn(),
     classifyUri: vi.fn(() => "text/plain"),
@@ -106,7 +106,7 @@ function createHarness(): Harness {
       saveFile: vi.fn(),
       setActiveFileId: vi.fn(),
       getActiveFileId: vi.fn(() => null),
-      onActiveFileChanged: vi.fn(() => () => {}),
+      onActiveFileChanged: vi.fn(() => ({ dispose: vi.fn() })),
       setContextFileId: vi.fn(),
       getContextFileId: vi.fn(() => null),
       bindEngine: vi.fn(),
@@ -183,11 +183,11 @@ function createHarness(): Harness {
       dismissToast: vi.fn(),
       clear: vi.fn(),
       clearAll: vi.fn(),
-      subscribe: vi.fn(() => () => {})
+      subscribe: vi.fn(() => ({ dispose: vi.fn() }))
     },
     assistant: {
-      registerContextContribution: vi.fn(() => () => {}),
-      registerToolContribution: vi.fn(() => () => {}),
+      registerContextContribution: vi.fn(() => ({ dispose: vi.fn() })),
+      registerToolContribution: vi.fn(() => ({ dispose: vi.fn() })),
       collectContext: vi.fn(async () => []),
       listTools: vi.fn(() => []),
       invokeTool: vi.fn(async () => ({ ok: false }))

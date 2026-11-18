@@ -12,13 +12,15 @@ describe("PluginHost JDBC driver contexts", () => {
     });
     const createPlugin = (id: string, dialectId: string): Plugin => ({
       manifest: { id, name: id, version: "1.0.0", kind: "core" },
-      activate: (context) => context.jdbcDrivers.registerDriver({
-        dialectId,
-        displayName: dialectId,
-        groupId: "example",
-        artifactId: dialectId,
-        driverClassName: `example.${dialectId}.Driver`
-      })
+      activate: (context) => {
+        context.jdbcDrivers.registerDriver({
+          dialectId,
+          displayName: dialectId,
+          groupId: "example",
+          artifactId: dialectId,
+          driverClassName: `example.${dialectId}.Driver`
+        });
+      }
     });
     host.register(createPlugin("plugin.one", "one"));
     host.register(createPlugin("plugin.two", "two"));
@@ -29,6 +31,32 @@ describe("PluginHost JDBC driver contexts", () => {
       { dialectId: "one", ownerPluginId: "plugin.one" },
       { dialectId: "two", ownerPluginId: "plugin.two" }
     ]);
+  });
+
+  it("gives each plugin its own identity as context.plugin", async () => {
+    const host = new PluginHost({
+      fileWatcher: {
+        watch: async () => ({ subscriptionId: "test", unsubscribe: async () => {} }),
+        mutePath: async () => {}
+      }
+    });
+    const seen: PluginContext["plugin"][] = [];
+    const createPlugin = (id: string, version: string): Plugin => ({
+      manifest: { id, name: `Name of ${id}`, version, kind: "feature" },
+      activate: (context) => {
+        seen.push(context.plugin);
+      }
+    });
+    host.register(createPlugin("plugin.one", "1.0.0"));
+    host.register({ ...createPlugin("plugin.two", "2.0.0"), manifest: { id: "plugin.two", name: "Name of plugin.two", version: "2.0.0", kind: "feature", description: "Two" } });
+
+    await host.start();
+
+    expect(seen).toEqual([
+      { id: "plugin.one", name: "Name of plugin.one", version: "1.0.0" },
+      { id: "plugin.two", name: "Name of plugin.two", version: "2.0.0", description: "Two" }
+    ]);
+    expect(Object.isFrozen(seen[0])).toBe(true);
   });
 
   it("provides external-engine host services to activating plugins", async () => {

@@ -382,9 +382,9 @@ describe("FileMediator.onActiveFileChanged", () => {
   it("unsubscribe stops future notifications", () => {
     const { mediator } = setupHarness();
     const listener = vi.fn();
-    const unsub = mediator.onActiveFileChanged(listener);
+    const subscription = mediator.onActiveFileChanged(listener);
 
-    unsub();
+    subscription.dispose();
     mediator.setActiveFileId("file-a");
 
     expect(listener).not.toHaveBeenCalled();

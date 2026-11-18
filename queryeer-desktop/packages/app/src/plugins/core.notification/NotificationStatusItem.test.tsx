@@ -19,8 +19,10 @@ const notificationHarness = vi.hoisted(() => {
     }),
     subscribe: vi.fn((listener: () => void) => {
       listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
+      return {
+        dispose: () => {
+          listeners.delete(listener);
+        }
       };
     }),
     emit: () => {

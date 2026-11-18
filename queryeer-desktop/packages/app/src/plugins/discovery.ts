@@ -1,4 +1,5 @@
-import type { PluginModule } from "@queryeer/api/plugin/PluginModule";
+import type { ExternalPluginModule, PluginModule } from "@queryeer/api/plugin/PluginModule";
+import type { ExternalPluginManifest, PluginManifest } from "@queryeer/api/plugin/PluginManifest";
 import type { PluginManifestFile } from "@queryeer/api/plugin/PluginManifestFile";
 import { validatePluginManifestFiles } from "./manifest-validation";
 
@@ -38,13 +39,9 @@ export async function discoverPluginModules(
     }
     try {
       const loaded = await createExternalLoader(manifest.modulePath)();
-      if (loaded.pluginModule.manifest.id !== manifest.id) {
-        throw new Error(
-          `Plugin id mismatch for '${manifest.modulePath}', expected '${manifest.id}'`
-        );
-      }
-      loaded.pluginModule.plugin.manifest = loaded.pluginModule.manifest;
-      modules.push(loaded.pluginModule);
+      const resolved = resolveExternalManifest(manifest, loaded.pluginModule.manifest);
+      const plugin = Object.assign(loaded.pluginModule.plugin, { manifest: resolved });
+      modules.push({ manifest: resolved, plugin });
     } catch (error) {
       loadErrors.push({
         pluginId: manifest.id,
@@ -84,12 +81,44 @@ function mergeManifests(
   return { manifests, loadErrors };
 }
 
-function createExternalLoader(modulePath: string): () => Promise<{ pluginModule: PluginModule }> {
+const IDENTITY_FIELDS = ["id", "name", "version", "description"] as const;
+
+/**
+ * The frontend manifest with the identity from `plugin.json`, the only place it is declared. A plugin built for 0.19
+ * still sets these fields in its frontend manifest; they are ignored, with a warning when they differ.
+ */
+export function resolveExternalManifest(
+  fromPluginJson: PluginManifestFile,
+  fromModule: ExternalPluginManifest | undefined
+): PluginManifest {
+  if (!fromModule || typeof fromModule !== "object") {
+    throw new Error(`Plugin ${fromPluginJson.id}: the frontend module's pluginModule has no manifest`);
+  }
+  const { id, name, version, description, ...rest } = fromModule as ExternalPluginManifest & Partial<PluginManifest>;
+  const declared = { id, name, version, description };
+  const ignored = IDENTITY_FIELDS.filter(
+    (field) => declared[field] !== undefined && declared[field] !== fromPluginJson[field]
+  );
+  if (ignored.length > 0) {
+    console.warn(
+      `[plugins] ${fromPluginJson.id}: ignoring ${ignored.join(", ")} in the frontend manifest; plugin.json declares them`
+    );
+  }
+  return {
+    ...rest,
+    id: fromPluginJson.id,
+    name: fromPluginJson.name,
+    version: fromPluginJson.version,
+    ...(fromPluginJson.description !== undefined ? { description: fromPluginJson.description } : {})
+  };
+}
+
+function createExternalLoader(modulePath: string): () => Promise<{ pluginModule: ExternalPluginModule }> {
   return async () => {
     const normalizedPath = modulePath.replace(/\\/g, "/");
     const moduleUrl = resolveExternalModuleUrl(normalizedPath);
     const loaded = (await import(/* @vite-ignore */ moduleUrl)) as {
-      pluginModule?: PluginModule;
+      pluginModule?: ExternalPluginModule;
     };
 
     if (!loaded.pluginModule) {

@@ -1,3 +1,5 @@
+import type { Disposable } from "@queryeer/api/editor/EditorApi";
+import { setDisposable } from "../../core/plugin-runtime/disposables";
 import type { JdbcTreeNode } from "./jdbc-navigation-types";
 import type { JdbcTreeContextMenuContribution, JdbcTreeContextMenuRegistry } from "./jdbc-tree-context-menu-types";
 
@@ -18,8 +20,8 @@ function createJdbcTreeContextMenuRegistry(): JdbcTreeContextMenuRegistry {
   const contributions = new Map<string, JdbcTreeContextMenuContribution>();
 
   return {
-    registerContribution(contribution: JdbcTreeContextMenuContribution): void {
-      contributions.set(contribution.id, contribution);
+    registerContribution(contribution: JdbcTreeContextMenuContribution): Disposable {
+      return setDisposable(contributions, contribution.id, contribution);
     },
 
     unregisterContribution(id: string): void {

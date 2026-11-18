@@ -1,3 +1,4 @@
+import type { Disposable } from "../editor/EditorApi.js";
 import type { EngineBinding, FileEntity, ViewStateBag } from "./FileEntity.js";
 import type { MimeHint } from "./Resolvers.js";
 import type { FileOpenIntent } from "./FilesRegistry.js";
@@ -38,7 +39,7 @@ export type FileMediator = {
   saveFile: (fileId: string, opts?: FileSaveOptions) => Promise<void>;
   setActiveFileId: (fileId: string | null) => void;
   getActiveFileId: () => string | null;
-  onActiveFileChanged: (listener: (fileId: string | null) => void) => () => void;
+  onActiveFileChanged: (listener: (fileId: string | null) => void) => Disposable;
   setContextFileId: (fileId: string | null) => void;
   getContextFileId: () => string | null;
   bindEngine: (

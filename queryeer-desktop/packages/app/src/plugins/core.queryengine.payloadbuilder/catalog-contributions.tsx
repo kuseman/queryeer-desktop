@@ -1,3 +1,5 @@
+import type { Disposable } from "@queryeer/api/editor/EditorApi";
+import { setDisposable } from "../../core/plugin-runtime/disposables";
 import type {
   PayloadbuilderCatalogContribution,
   PayloadbuilderCatalogPanelProps,
@@ -10,10 +12,16 @@ export type { PayloadbuilderCatalogContribution, PayloadbuilderCatalogPanelProps
 const contributionsByCatalogId = new Map<string, PayloadbuilderCatalogContribution>();
 const listeners = new Set<() => void>();
 
+/** Adds or replaces the catalog's contribution. Disposing removes it, unless a later registration replaced it. */
 export function registerPayloadbuilderCatalogContribution(
   contribution: PayloadbuilderCatalogContribution
-): void {
-  contributionsByCatalogId.set(contribution.catalogId, contribution);
+): Disposable {
+  const registration = setDisposable(contributionsByCatalogId, contribution.catalogId, contribution, notifyListeners);
+  notifyListeners();
+  return registration;
+}
+
+function notifyListeners(): void {
   for (const listener of listeners) {
     listener();
   }

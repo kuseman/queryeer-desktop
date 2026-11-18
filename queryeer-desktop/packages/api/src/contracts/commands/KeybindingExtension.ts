@@ -1,3 +1,4 @@
+import type { Disposable } from "../editor/EditorApi.js";
 export type KeybindingScope = "global" | "editor" | "terminal" | "explorer";
 
 export type KeybindingContribution = {
@@ -10,5 +11,5 @@ export type KeybindingContribution = {
 };
 
 export type KeybindingRegistry = {
-  registerKeybinding: (contribution: KeybindingContribution) => void;
+  registerKeybinding: (contribution: KeybindingContribution) => Disposable;
 };

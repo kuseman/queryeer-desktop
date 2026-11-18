@@ -3,6 +3,7 @@ import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import type { FilesRegistry } from "@queryeer/api/files/FilesRegistry";
 import { pathToFileUri } from "@queryeer/api/files/Resolvers";
 import { getQueryEngineMimeOwner } from "./QueryEngineMimeRegistry";
+import { pushDisposable } from "./disposables";
 
 export type FileBackendSync = {
   openFile?: (file: FileEntity, initialText?: string) => void | Promise<void>;
@@ -323,11 +324,7 @@ export function createFileMediator(options: FileMediatorOptions): FileMediator {
     },
 
     onActiveFileChanged(listener) {
-      activeFileListeners.push(listener);
-      return () => {
-        const idx = activeFileListeners.indexOf(listener);
-        if (idx !== -1) activeFileListeners.splice(idx, 1);
-      };
+      return pushDisposable(activeFileListeners, listener);
     },
 
     setContextFileId(fileId) {

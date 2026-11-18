@@ -1,3 +1,4 @@
+import type { Disposable } from "../editor/EditorApi.js";
 import type { ReactNode } from "react";
 import type { SecretRefValue } from "../security/Security.js";
 
@@ -74,9 +75,9 @@ export type AdvancedSettingsValidator = {
 };
 
 export type SettingsContributionRegistry = {
-  registerSettings: (contribution: SettingsContribution) => void;
-  registerAdvancedRenderer: (renderer: AdvancedSettingsRenderer) => void;
-  registerAdvancedValidator: (validator: AdvancedSettingsValidator) => void;
+  registerSettings: (contribution: SettingsContribution) => Disposable;
+  registerAdvancedRenderer: (renderer: AdvancedSettingsRenderer) => Disposable;
+  registerAdvancedValidator: (validator: AdvancedSettingsValidator) => Disposable;
   listSettingsContributions: () => SettingsContribution[];
   listSettingsDefinitions: () => SettingDefinition[];
   getAdvancedRenderer: (id: string) => AdvancedSettingsRenderer | undefined;
@@ -86,7 +87,7 @@ export type SettingsContributionRegistry = {
 export type SettingsRegistry = SettingsContributionRegistry & {
   getValue: <T = unknown>(settingId: string) => T | undefined;
   getAllValues: () => Readonly<Record<string, unknown>>;
-  subscribe: (listener: () => void) => () => void;
+  subscribe: (listener: () => void) => Disposable;
   open: (settingId?: string) => void;
 };
 

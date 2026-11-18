@@ -1,3 +1,4 @@
+import type { Disposable } from "../editor/EditorApi.js";
 import type { ReactNode } from "react";
 import type { ContentCategory, FileOpenIntent, MimeCapability } from "../files/FilesRegistry.js";
 import type { FileEntity } from "../files/FileEntity.js";
@@ -234,14 +235,14 @@ export type LayoutShellDefaults = {
 };
 
 export type LayoutRegistry = {
-  registerToolbarAction: (contribution: LayoutToolbarContribution) => void;
-  registerStatusItem: (contribution: LayoutStatusItemContribution) => void;
-  registerView: (contribution: LayoutViewContribution) => void;
-  registerEditor: (contribution: LayoutEditorContribution) => void;
-  registerWelcome: (contribution: LayoutWelcomeContribution) => void;
-  registerTabContextMenu: (contribution: TabContextMenuContribution) => void;
-  registerTabHeaderStyle: (contribution: TabHeaderStyleContribution) => void;
-  registerTabTitle: (contribution: TabTitleContribution) => void;
-  registerPanel: (contribution: LayoutPanelContribution) => void;
+  registerToolbarAction: (contribution: LayoutToolbarContribution) => Disposable;
+  registerStatusItem: (contribution: LayoutStatusItemContribution) => Disposable;
+  registerView: (contribution: LayoutViewContribution) => Disposable;
+  registerEditor: (contribution: LayoutEditorContribution) => Disposable;
+  registerWelcome: (contribution: LayoutWelcomeContribution) => Disposable;
+  registerTabContextMenu: (contribution: TabContextMenuContribution) => Disposable;
+  registerTabHeaderStyle: (contribution: TabHeaderStyleContribution) => Disposable;
+  registerTabTitle: (contribution: TabTitleContribution) => Disposable;
+  registerPanel: (contribution: LayoutPanelContribution) => Disposable;
   setShellDefaults: (defaults: LayoutShellDefaults) => void;
 };

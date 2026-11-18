@@ -75,7 +75,7 @@ describe("JdbcNavigationView", () => {
         getActiveFileId: () => activeFileId,
         onActiveFileChanged: (listener: (fileId: string | null) => void) => {
           activeFileListener = listener;
-          return () => {};
+          return { dispose: () => {} };
         },
         bindEngine
       }

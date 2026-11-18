@@ -10,6 +10,7 @@ type PluginManifestV1 = {
   id?: string;
   name?: string;
   version?: string;
+  description?: string;
   frontend?: {
     entryModule?: string;
   };
@@ -88,6 +89,7 @@ function loadFromFolder(folderPath: string): ExternalFrontendPluginManifest | nu
     id: parsed.id,
     name: parsed.name,
     version: parsed.version,
+    ...(typeof parsed.description === "string" ? { description: parsed.description } : {}),
     modulePath,
     sourcePath: folderPath
   };
@@ -126,6 +128,7 @@ async function loadFromZip(zipPath: string): Promise<ExternalFrontendPluginManif
     id: parsed.id,
     name: parsed.name,
     version: parsed.version,
+    ...(typeof parsed.description === "string" ? { description: parsed.description } : {}),
     modulePath,
     sourcePath: zipPath
   };
@@ -158,7 +161,7 @@ async function extractZipArchive(archive: JSZip, targetRoot: string): Promise<vo
   }
 }
 
-function isValidManifest(parsed: PluginManifestV1): parsed is Required<Pick<PluginManifestV1, "schemaVersion" | "id" | "name" | "version" | "frontend">> {
+function isValidManifest(parsed: PluginManifestV1): parsed is PluginManifestV1 & Required<Pick<PluginManifestV1, "schemaVersion" | "id" | "name" | "version" | "frontend">> {
   return (
     parsed.schemaVersion === 1 &&
     typeof parsed.id === "string" &&

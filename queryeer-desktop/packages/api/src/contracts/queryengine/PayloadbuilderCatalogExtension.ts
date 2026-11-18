@@ -1,3 +1,4 @@
+import type { Disposable } from "../editor/EditorApi.js";
 import type { ReactNode } from "react";
 
 export type PayloadbuilderCatalogPanelProps = {
@@ -34,5 +35,5 @@ export type PayloadbuilderCatalogContribution = {
 };
 
 export type PayloadbuilderCatalogRegistry = {
-  registerContribution(contribution: PayloadbuilderCatalogContribution): void;
+  registerContribution(contribution: PayloadbuilderCatalogContribution): Disposable;
 };

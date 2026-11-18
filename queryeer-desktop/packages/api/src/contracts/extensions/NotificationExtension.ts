@@ -1,3 +1,4 @@
+import type { Disposable } from "../editor/EditorApi.js";
 export type NotificationSeverity = "info" | "success" | "warning" | "error";
 
 export type NotificationAction = {
@@ -30,5 +31,5 @@ export type NotificationService = {
   dismissToast: (notificationId: string) => void;
   clear: (notificationId: string) => void;
   clearAll: () => void;
-  subscribe: (listener: () => void) => () => void;
+  subscribe: (listener: () => void) => Disposable;
 };

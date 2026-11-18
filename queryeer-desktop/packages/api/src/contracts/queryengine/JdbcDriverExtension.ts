@@ -1,3 +1,4 @@
+import type { Disposable } from "../editor/EditorApi.js";
 export type JdbcManagedDriverContribution = {
   dialectId: string;
   displayName: string;
@@ -113,8 +114,8 @@ export type JdbcDriverBackendRestartResult = {
 export type JdbcDriverSubscriber = (drivers: readonly RegisteredJdbcManagedDriverContribution[]) => void;
 
 export type JdbcDriverRegistry = {
-  registerDriver: (contribution: JdbcManagedDriverContribution) => void;
+  registerDriver: (contribution: JdbcManagedDriverContribution) => Disposable;
   listDrivers: () => readonly RegisteredJdbcManagedDriverContribution[];
   getDriver: (dialectId: string) => RegisteredJdbcManagedDriverContribution | undefined;
-  subscribe: (subscriber: JdbcDriverSubscriber) => () => void;
+  subscribe: (subscriber: JdbcDriverSubscriber) => Disposable;
 };

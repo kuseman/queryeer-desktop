@@ -1,4 +1,6 @@
 import type { PluginChangelogEntry } from "@queryeer/api/extensions/AboutExtension.js";
+import type { Disposable } from "@queryeer/api/editor/EditorApi";
+import { toDisposable } from "../../core/plugin-runtime/disposables";
 
 type Listener = () => void;
 
@@ -80,16 +82,26 @@ export function setAppMetadata(metadata: {
   emitChanged();
 }
 
-export function registerChangelog(entry: PluginChangelogEntry): void {
+/** Adds or replaces the plugin's changelog. Disposing removes it, unless a later registration replaced it. */
+export function registerChangelog(entry: PluginChangelogEntry): Disposable {
+  // A copy per registration, so the same entry registered twice is two registrations
+  const stored = { ...entry };
   const existingIndex = state.backendChangelogs.findIndex((e) => e.pluginId === entry.pluginId);
   const updated = [...state.backendChangelogs];
   if (existingIndex >= 0) {
-    updated[existingIndex] = entry;
+    updated[existingIndex] = stored;
   } else {
-    updated.push(entry);
+    updated.push(stored);
   }
   state = { ...state, backendChangelogs: updated };
   emitChanged();
+  return toDisposable(() => {
+    if (!state.backendChangelogs.includes(stored)) {
+      return;
+    }
+    state = { ...state, backendChangelogs: state.backendChangelogs.filter((e) => e !== stored) };
+    emitChanged();
+  });
 }
 
 export function getChangelogEntries(): PluginChangelogEntry[] {

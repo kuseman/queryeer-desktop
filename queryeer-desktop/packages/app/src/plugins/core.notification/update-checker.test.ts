@@ -19,7 +19,7 @@ function createNotifications(): NotificationService {
     dismissToast: vi.fn(),
     clear: vi.fn(),
     clearAll: vi.fn(),
-    subscribe: vi.fn(() => () => {})
+    subscribe: vi.fn(() => ({ dispose: vi.fn() }))
   };
 }
 

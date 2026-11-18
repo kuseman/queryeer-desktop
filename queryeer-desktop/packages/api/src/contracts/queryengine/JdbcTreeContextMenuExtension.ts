@@ -1,3 +1,4 @@
+import type { Disposable } from "../editor/EditorApi.js";
 export type JdbcTreeContextMenuContribution<TNode = unknown> = {
   id: string;
   label: string;
@@ -8,7 +9,7 @@ export type JdbcTreeContextMenuContribution<TNode = unknown> = {
 };
 
 export type JdbcTreeContextMenuRegistry<TNode = unknown> = {
-  registerContribution(contribution: JdbcTreeContextMenuContribution<TNode>): void;
+  registerContribution(contribution: JdbcTreeContextMenuContribution<TNode>): Disposable;
   unregisterContribution(id: string): void;
   getItemsForNode(node: TNode): Array<{
     id: string;

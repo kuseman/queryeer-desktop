@@ -114,6 +114,7 @@ function createContext(fileOrFiles: FileEntity | FileEntity[]): PluginContext {
   const filesById = new Map<string, FileEntity>(files.map((file) => [file.fileId, file]));
 
   return {
+    plugin: { id: "test.plugin", name: "Test plugin", version: "0.0.0" },
     commands: {
       registerCommand: vi.fn(),
       executeCommand: vi.fn(async () => ({ commandId: "noop", executed: true })),
@@ -152,7 +153,7 @@ function createContext(fileOrFiles: FileEntity | FileEntity[]): PluginContext {
         filesById.set(fileId, next);
         return next;
       }),
-      subscribe: vi.fn(() => () => {}),
+      subscribe: vi.fn(() => ({ dispose: vi.fn() })),
       registerMimeResolver: vi.fn(),
       registerEditorResolver: vi.fn(),
       classifyUri: vi.fn(() => "application/sql"),
@@ -176,7 +177,7 @@ function createContext(fileOrFiles: FileEntity | FileEntity[]): PluginContext {
       reloadFile: vi.fn(),
       acceptExternalChange: vi.fn(),
       discardExternalChange: vi.fn(),
-      onActiveFileChanged: vi.fn(() => () => {})
+      onActiveFileChanged: vi.fn(() => ({ dispose: vi.fn() }))
     },
     fileWatcher: {
       watch: vi.fn(),
@@ -219,14 +220,14 @@ function createContext(fileOrFiles: FileEntity | FileEntity[]): PluginContext {
       getAdvancedValidator: vi.fn(),
       getValue: vi.fn(),
       getAllValues: vi.fn(() => ({})),
-      subscribe: vi.fn(() => () => {}),
+      subscribe: vi.fn(() => ({ dispose: vi.fn() })),
       open: vi.fn()
     },
     quickcommand: { registerProvider: vi.fn() },
     contextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
     tableOutputContextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },
     jdbcTreeContextMenu: { registerContribution: vi.fn(), unregisterContribution: vi.fn(), getItemsForNode: vi.fn() },
-    jdbcDrivers: { registerDriver: vi.fn(), listDrivers: vi.fn(() => []), getDriver: vi.fn(), subscribe: vi.fn(() => () => {}) },
+    jdbcDrivers: { registerDriver: vi.fn(), listDrivers: vi.fn(() => []), getDriver: vi.fn(), subscribe: vi.fn(() => ({ dispose: vi.fn() })) },
     jdbcDialects: { registerDialect: vi.fn(() => ({ dispose: vi.fn() })) },
     jdbcTreeActions: { registerTemplate: vi.fn(() => ({ dispose: vi.fn() })) },
     symbolActions: { registerTemplate: vi.fn(() => ({ dispose: vi.fn() })) },
@@ -262,8 +263,8 @@ function createContext(fileOrFiles: FileEntity | FileEntity[]): PluginContext {
 
 function createAssistantRegistryMock() {
   return {
-    registerContextContribution: vi.fn(() => () => {}),
-    registerToolContribution: vi.fn(() => () => {}),
+    registerContextContribution: vi.fn(() => ({ dispose: vi.fn() })),
+    registerToolContribution: vi.fn(() => ({ dispose: vi.fn() })),
     collectContext: vi.fn(async () => []),
     listTools: vi.fn(() => []),
     invokeTool: vi.fn(async () => ({ ok: false }))
@@ -280,7 +281,7 @@ function createNotificationMock() {
     dismissToast: vi.fn(),
     clear: vi.fn(),
     clearAll: vi.fn(),
-    subscribe: vi.fn(() => () => {})
+    subscribe: vi.fn(() => ({ dispose: vi.fn() }))
   };
 }
 

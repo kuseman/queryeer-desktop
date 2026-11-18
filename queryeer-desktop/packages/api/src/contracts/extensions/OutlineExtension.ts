@@ -1,3 +1,4 @@
+import type { Disposable } from "../editor/EditorApi.js";
 import type { TextRange } from "../editor/EditorApi.js";
 
 export type SymbolKind =
@@ -49,8 +50,8 @@ export type OutlineProviderRegistration = {
 };
 
 export type OutlineRegistry = {
-  registerOutlineProvider: (registration: OutlineProviderRegistration) => void;
-  registerSupplementaryOutlineProvider: (registration: OutlineProviderRegistration) => void;
+  registerOutlineProvider: (registration: OutlineProviderRegistration) => Disposable;
+  registerSupplementaryOutlineProvider: (registration: OutlineProviderRegistration) => Disposable;
   hasProvider: (mimeType: string) => boolean;
   getProvider: (mimeType: string) => OutlineProvider | undefined;
   getSymbols: (mimeType: string, content: string) => Promise<OutlineSymbol[]>;

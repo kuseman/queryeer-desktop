@@ -10,6 +10,7 @@ export type NativeQueryEngineContribution = {
 };
 
 export type NativeQueryEngineInvokeOptions = {
+  /** Don't ask the user to unlock a locked vault; reject instead, unless it can be unlocked without asking. */
   silent?: boolean;
 };
 
@@ -49,6 +50,10 @@ export type NativeQueryExecuteRequest = {
 
 export type NativeQueryEngineRegistry = {
   registerEngine: (contribution: NativeQueryEngineContribution) => Disposable;
+  /**
+   * Calls the backend engine's `QueryEngineProvider.invoke(fileId, action, payload)` and resolves to what it returns
+   * (`undefined` for `null`). Rejects if the provider throws (with its message) or the backend isn't running.
+   */
   invoke: <TResult = unknown>(
     params: EngineInvokeParams,
     options?: NativeQueryEngineInvokeOptions

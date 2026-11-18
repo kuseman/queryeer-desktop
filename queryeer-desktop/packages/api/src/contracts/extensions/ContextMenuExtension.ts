@@ -1,3 +1,4 @@
+import type { Disposable } from "../editor/EditorApi.js";
 import type { Position, TextRange } from "../editor/EditorApi.js";
 
 /** Context provided to a ContextMenuProvider when the editor context menu is about to open. */
@@ -24,6 +25,6 @@ export type ContextMenuProvider = {
 
 /** Registry for context menu providers, exposed on PluginContext. */
 export type ContextMenuRegistry = {
-  registerProvider(provider: ContextMenuProvider): void;
+  registerProvider(provider: ContextMenuProvider): Disposable;
   unregisterProvider(id: string): void;
 };

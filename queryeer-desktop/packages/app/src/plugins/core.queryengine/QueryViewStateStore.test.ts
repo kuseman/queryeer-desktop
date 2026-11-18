@@ -36,7 +36,7 @@ function createFilesRegistry(): FilesRegistry {
     listFiles: () => [...filesById.values()],
     openFile: vi.fn(),
     closeFile: vi.fn(),
-    subscribe: vi.fn(() => () => {}),
+    subscribe: vi.fn(() => ({ dispose: vi.fn() })),
     registerMimeResolver: vi.fn(),
     registerEditorResolver: vi.fn(),
     classifyUri: vi.fn(),
