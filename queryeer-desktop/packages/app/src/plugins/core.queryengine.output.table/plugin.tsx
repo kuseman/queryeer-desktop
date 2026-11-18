@@ -32,7 +32,6 @@ import type {
 } from "@queryeer/api/queryengine/TableOutputContextMenuExtension";
 import { ContextMenuSurface } from "../../renderer/components/ContextMenuSurface";
 import { getExpressionRuntime } from "../core.expressions/runtime";
-import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";
 import { TABLE_ACTIONS_SETTING_ID } from "./table-action-types";
 import type { TableAction } from "./table-action-types";
 import { getTableActionRegistry } from "./table-action-registry";
@@ -1198,7 +1197,7 @@ export const coreQueryEngineOutputTablePlugin: Plugin = {
     context.tableOutputContextMenu.registerProvider(createTableActionProvider(context));
 
     // Register when-expression variables for autocomplete in table action editors
-    registerWhenExpressionVariables([
+    context.whenExpressions.registerVariables([
       { name: "tableSelection.columns", type: "string", description: "Array<{name, type}> — Columns of the current table selection" },
       { name: "tableSelection.columnNames", type: "string", description: "string[] — Column names of the current table selection" },
       { name: "tableSelection.fileId", type: "string", description: "File whose results the grid shows (use instead of activeFile, which can differ with split editors)" },

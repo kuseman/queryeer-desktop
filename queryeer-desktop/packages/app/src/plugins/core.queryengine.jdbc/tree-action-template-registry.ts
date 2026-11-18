@@ -1,15 +1,28 @@
-import type { TreeActionTemplateContribution } from "@queryeer/api/settings/TreeActionTemplateContribution.js";
+import type { Disposable } from "@queryeer/api/editor/EditorApi";
+import type {
+  JdbcTreeActionRegistry,
+  TreeActionTemplateContribution
+} from "@queryeer/api/settings/TreeActionTemplateContribution.js";
 
 export type { TreeActionTemplateContribution };
 
 const templatesById = new Map<string, TreeActionTemplateContribution>();
 const listeners = new Set<() => void>();
 
-export function registerTreeActionTemplate(contribution: TreeActionTemplateContribution): void {
+/**
+ * Adds a template, replacing one with the same id. Disposing removes it unless a later registration replaced it.
+ * Plugins reach this through `context.jdbcTreeActions.registerTemplate`.
+ */
+export function registerTreeActionTemplate(contribution: TreeActionTemplateContribution): Disposable {
   templatesById.set(contribution.id, contribution);
-  for (const listener of listeners) {
-    listener();
-  }
+  notify();
+  return {
+    dispose: () => {
+      if (templatesById.get(contribution.id) !== contribution) return;
+      templatesById.delete(contribution.id);
+      notify();
+    }
+  };
 }
 
 export function listTreeActionTemplates(): TreeActionTemplateContribution[] {
@@ -27,4 +40,15 @@ export function subscribeTreeActionTemplates(listener: () => void): () => void {
   return () => {
     listeners.delete(listener);
   };
+}
+
+/** The `context.jdbcTreeActions` every plugin gets. */
+export function createJdbcTreeActionRegistry(): JdbcTreeActionRegistry {
+  return { registerTemplate: registerTreeActionTemplate };
+}
+
+function notify(): void {
+  for (const listener of listeners) {
+    listener();
+  }
 }

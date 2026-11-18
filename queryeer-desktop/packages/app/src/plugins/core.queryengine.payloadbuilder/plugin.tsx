@@ -1,9 +1,6 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
 import type { FilesRegistry } from "@queryeer/api/files/FilesRegistry";
 import type { PayloadbuilderEngineState } from "@queryeer/api/backend/Types";
-import { registerWhenExpressionVariables } from "../core.commands/when-expression-variable-registry";
-import { registerWhenExpressionTemplates } from "../core.commands/when-expression-template-registry";
-import { registerSymbolActionTemplate } from "../core.queryengine/symbol-action-template-registry";
 import { registerTableActionTemplate } from "../core.queryengine.output.table/table-action-template-registry";
 import { getCoreSettingsService, onCoreSettingsServiceInitialized } from "../core.settings/service";
 import { CatalogInstancesSettingsEditor } from "./CatalogInstancesSettingsEditor";
@@ -40,13 +37,13 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
     providesCapabilities: ["query.engine.payloadbuilder"]
   },
   activate: (context) => {
-    registerWhenExpressionVariables([
+    context.whenExpressions.registerVariables([
       { name: "activeFile.metadata.core.queryengine.payloadbuilder.enabledCatalogs", type: "string", description: "Comma-separated enabled PayloadBuilder catalog aliases (e.g. 'es1,oss2')" },
       { name: "activeFile.metadata.core.queryengine.payloadbuilder.selectedEnvironment", type: "string", description: "Title of the selected PayloadBuilder environment (e.g. 'Production')" },
       { name: "activeFile.metadata.core.queryengine.payloadbuilder.defaultCatalogAlias", type: "string", description: "Default PayloadBuilder catalog alias for the file" },
     ]);
 
-    registerWhenExpressionTemplates([
+    context.whenExpressions.registerTemplates([
       {
         name: "Payloadbuilder",
         description: "Match Payloadbuilder files where Elasticsearch is default",
@@ -54,7 +51,7 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
       }
     ]);
 
-    registerSymbolActionTemplate({
+    context.symbolActions.registerTemplate({
       id: "core.queryengine.payloadbuilder.symbolAction.describe",
       title: "Payloadbuilder Top 500",
       description: "Top 500 row for a table",

@@ -1,19 +1,6 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import type { PluginContext } from "@queryeer/api/plugin/Plugin";
 import { coreQueryEngineJdbcPostgresPlugin } from "./plugin";
-import { registerSymbolActionTemplate } from "../core.queryengine/symbol-action-template-registry";
-
-vi.mock("../core.commands/when-expression-template-registry", () => ({
-  registerWhenExpressionTemplates: vi.fn()
-}));
-
-vi.mock("../core.queryengine/symbol-action-template-registry", () => ({
-  registerSymbolActionTemplate: vi.fn()
-}));
-
-vi.mock("../core.queryengine.jdbc/tree-action-template-registry", () => ({
-  registerTreeActionTemplate: vi.fn()
-}));
 
 function createContext(): PluginContext
 {
@@ -25,6 +12,12 @@ function createContext(): PluginContext
     settings: { registerSettings: vi.fn() },
     jdbcDrivers: { registerDriver: vi.fn() },
     jdbcDialects: { registerDialect: vi.fn(() => ({ dispose: vi.fn() })) },
+    jdbcTreeActions: { registerTemplate: vi.fn(() => ({ dispose: vi.fn() })) },
+    symbolActions: { registerTemplate: vi.fn(() => ({ dispose: vi.fn() })) },
+    whenExpressions: {
+      registerTemplates: vi.fn(() => ({ dispose: vi.fn() })),
+      registerVariables: vi.fn(() => ({ dispose: vi.fn() }))
+    },
     queryEngines: { registerExecutionContextProvider: vi.fn(() => ({ dispose: vi.fn() })) }
   } as unknown as PluginContext;
 }
@@ -75,7 +68,7 @@ describe("coreQueryEngineJdbcPostgresPlugin", () => {
     coreQueryEngineJdbcPostgresPlugin.activate(context);
 
     expect(context.commands.registerCommand).not.toHaveBeenCalled();
-    expect(registerSymbolActionTemplate).toHaveBeenCalledWith(expect.objectContaining({
+    expect(context.symbolActions.registerTemplate).toHaveBeenCalledWith(expect.objectContaining({
       id: "core.queryengine.jdbc.symbolAction.postgresDescribe",
       action: expect.objectContaining({
         query: expect.stringContaining("symbol.attributes.name")

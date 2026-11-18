@@ -25,6 +25,9 @@ import type { JdbcDriverRegistry } from "../queryengine/JdbcDriverExtension.js";
 import type { JdbcDialectRegistry } from "../queryengine/JdbcDialectExtension.js";
 import type { NativeQueryEngineRegistry } from "../queryengine/NativeQueryEngineExtension.js";
 import type { EditorLanguageRegistry } from "../editor/EditorLanguageExtension.js";
+import type { WhenExpressionRegistry } from "../commands/WhenExpressionTypes.js";
+import type { SymbolActionRegistry } from "../queryengine/SymbolActionTemplateContribution.js";
+import type { JdbcTreeActionRegistry } from "../settings/TreeActionTemplateContribution.js";
 import type {
   CollectionSettingsListEditorProps,
   PasswordFieldInputProps,
@@ -61,6 +64,12 @@ export type PluginContext = {
   jdbcDrivers: JdbcDriverRegistry;
   /** Frontend additions for JDBC dialects: a custom connection form, its subtitle and validation, query plan support. */
   jdbcDialects: JdbcDialectRegistry;
+  /** Templates for the user's JDBC tree actions (Settings → Tree Actions). */
+  jdbcTreeActions: JdbcTreeActionRegistry;
+  /** Templates for the user's symbol actions (Settings → Symbol Actions). */
+  symbolActions: SymbolActionRegistry;
+  /** Autocompletion variables and ready-made expressions for when-expressions in settings. */
+  whenExpressions: WhenExpressionRegistry;
   graphNodeTypes: GraphNodeTypeRegistry;
   about: AboutExtension;
   notifications: NotificationService;

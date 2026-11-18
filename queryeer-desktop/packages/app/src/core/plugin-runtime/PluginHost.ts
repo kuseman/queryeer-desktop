@@ -22,6 +22,9 @@ import {
 import { getFileStateRegistry } from "./FileStateRegistryImpl";
 import { getJdbcTreeContextMenuRegistry } from "../../plugins/core.queryengine.jdbc/jdbc-tree-context-menu-registry";
 import { createJdbcDialectRegistry } from "../../plugins/core.queryengine.jdbc/jdbc-dialect-registry";
+import { createJdbcTreeActionRegistry } from "../../plugins/core.queryengine.jdbc/tree-action-template-registry";
+import { createSymbolActionRegistry } from "../../plugins/core.queryengine/symbol-action-template-registry";
+import { createWhenExpressionRegistry } from "../../plugins/core.commands/when-expression-variable-registry";
 import { getGraphNodeTypeRegistry } from "../../plugins/core.graph/graph-node-type-registry";
 import { registerChangelog } from "../../plugins/core.about/about-service.js";
 import { getNotificationService } from "../../plugins/core.notification/notification-service";
@@ -165,6 +168,9 @@ export class PluginHost {
       tableOutputContextMenu: this.extensionRegistry.createTableOutputContextMenuRegistry(),
       jdbcTreeContextMenu: getJdbcTreeContextMenuRegistry(),
       jdbcDialects: createJdbcDialectRegistry(),
+      jdbcTreeActions: createJdbcTreeActionRegistry(),
+      symbolActions: createSymbolActionRegistry(),
+      whenExpressions: createWhenExpressionRegistry(),
       graphNodeTypes: getGraphNodeTypeRegistry(),
       about: { registerChangelog },
       notifications: getNotificationService(),

@@ -63,5 +63,9 @@ describe("PluginHost JDBC driver contexts", () => {
     expect(context?.components.PasswordFieldInput).toBeTypeOf("function");
     expect(context?.components.CollectionSettingsListEditor).toBeTypeOf("function");
     expect(context?.components.useCollectionSettingsPersistence).toBeTypeOf("function");
+    expect(context?.jdbcTreeActions.registerTemplate).toBeTypeOf("function");
+    expect(context?.symbolActions.registerTemplate).toBeTypeOf("function");
+    expect(context?.whenExpressions.registerTemplates).toBeTypeOf("function");
+    expect(context?.whenExpressions.registerVariables).toBeTypeOf("function");
   });
 });
