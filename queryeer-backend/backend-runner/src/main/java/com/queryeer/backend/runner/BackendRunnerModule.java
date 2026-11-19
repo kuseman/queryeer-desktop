@@ -178,6 +178,7 @@ public final class BackendRunnerModule
         putIfPresent(values, "queryeer.plugins.safeMode", System.getProperty("queryeer.plugins.safeMode"));
         putIfPresent(values, "queryeer.plugins.disabledIds", System.getProperty("queryeer.plugins.disabledIds"));
         putIfPresent(values, "queryeer.jdbc.driverClasses", System.getProperty("queryeer.jdbc.driverClasses"));
+        putIfPresent(values, "queryeer.plugins.devDirs", System.getProperty("queryeer.plugins.devDirs"));
         return Map.copyOf(values);
     }
 
@@ -229,16 +230,91 @@ public final class BackendRunnerModule
                     .warn(withCorrelation("Backend version unknown; built-in plugins keep their manifest versions, so dependency version ranges on them may not match", null));
         }
         List<DiscoveredPlugin> builtin = new BuiltinPluginDiscovery(discoveryService, builtinsDir, backendVersion).discover();
-        if (safeMode
-                || isBlank(pluginsDir))
+        if (safeMode)
         {
             return builtin;
         }
 
-        List<DiscoveredPlugin> external = discoveryService.discoverFromPath(pluginsDir)
-                .backendPlugins();
+        List<DiscoveredPlugin> external = isBlank(pluginsDir) ? List.of()
+                : discoveryService.discoverFromPath(pluginsDir)
+                        .backendPlugins();
         external = filterDisabledExternalPlugins(external, disabledPluginIds);
+
+        List<Path> devDirs = parseDevPluginDirs(services.config()
+                .get("queryeer.plugins.devDirs"));
+        if (!devDirs.isEmpty())
+        {
+            Set<String> builtinIds = builtin.stream()
+                    .map(plugin -> plugin.manifest()
+                            .id())
+                    .collect(Collectors.toSet());
+            PluginManifestLoader manifestLoader = new PluginManifestLoader();
+            Set<String> replacedIds = new HashSet<>();
+            List<DiscoveredPlugin> development = new ArrayList<>();
+            for (Path devDir : devDirs)
+            {
+                // One broken folder (e.g. a half-written build) must not stop the backend
+                try
+                {
+                    String pluginId = manifestLoader.load(devDir)
+                            .id();
+                    if (builtinIds.contains(pluginId))
+                    {
+                        services.logger()
+                                .error(withCorrelation("Developer plugin folder " + devDir + " skipped: " + pluginId + " is a built-in plugin", null), null);
+                        continue;
+                    }
+                    if (!replacedIds.add(pluginId))
+                    {
+                        continue;
+                    }
+                    // Replaces the installed plugin by its plugin.json id, also when this folder has no backend or its
+                    // backend fails to load: the frontend does the same, so the two halves never come from different builds
+                    development.addAll(discoveryService.discoverFromSources(List.of(devDir))
+                            .backendPlugins());
+                }
+                catch (RuntimeException e)
+                {
+                    services.logger()
+                            .error(withCorrelation("Developer plugin folder " + devDir + " skipped", null), e);
+                }
+            }
+            services.logger()
+                    .info(withCorrelation("Developer plugin folders: " + devDirs.size() + ", backend plugins: " + development.size(), null));
+            external = preferDevelopmentPlugins(development, replacedIds, external);
+        }
         return mergeDiscoveredPlugins(builtin, external);
+    }
+
+    /** The developer plugin folders (copies the main process made of them), separated like the platform's path list. */
+    static List<Path> parseDevPluginDirs(String value)
+    {
+        if (isBlank(value))
+        {
+            return List.of();
+        }
+        List<Path> dirs = new ArrayList<>();
+        for (String item : value.split(java.io.File.pathSeparator))
+        {
+            if (!item.isBlank())
+            {
+                dirs.add(Path.of(item.trim()));
+            }
+        }
+        return dirs;
+    }
+
+    /**
+     * Developer folders replace the installed plugins with their ids ({@code replacedIds}, from their plugin.json); they load even when the installed one is disabled.
+     */
+    static List<DiscoveredPlugin> preferDevelopmentPlugins(List<DiscoveredPlugin> development, Set<String> replacedIds, List<DiscoveredPlugin> installed)
+    {
+        List<DiscoveredPlugin> result = new ArrayList<>(development);
+        installed.stream()
+                .filter(plugin -> !replacedIds.contains(plugin.manifest()
+                        .id()))
+                .forEach(result::add);
+        return result;
     }
 
     static Set<String> parseDisabledPluginIds(String value)

@@ -954,6 +954,7 @@ The following directories are allowed by default:
 - `queryeer-desktop/` (project root)
 - `plugins/` (built-in plugins)
 - Queryeer's default per-user managed plugins directory
+- each folder in `QUERYEER_DEV_PLUGINS` (§8.4), and its real path when it is a link
 
 If you move the per-user plugins directory outside Queryeer's default app-data location, dev-mode dynamic imports are not supported until a managed plugin serving protocol is added.
 
@@ -1023,7 +1024,35 @@ See §10.7 for render sites that are **not** yet guarded.
 
 The bootstrap process collects `loadErrors` for any plugins that fail to load. These are surfaced in the application UI when diagnostics are enabled.
 
-### 8.4 Testing Patterns
+### 8.4 The development loop: developer plugin folders and Restart Backend and Reload
+
+Since 0.20.0, Queryeer loads plugins in place from your build output, and restarts its backend without quitting.
+
+**Developer plugin folders.** Set `QUERYEER_DEV_PLUGINS` to plugin folders before starting Queryeer (or `npm run dev` in core). Separate them like `PATH`: `;` on Windows, `:` elsewhere. Each folder is one plugin, laid out like an installed one: `plugin.json`, `lib/*.jar`, the frontend bundle.
+
+```powershell
+$env:QUERYEER_DEV_PLUGINS = "C:\src\my-plugins\plugins\mysql\dist\com.queryeer.mysql-0.1.0"
+& "C:\Program Files\Queryeer\Queryeer.exe"
+```
+
+- They aren't installed and aren't in the lockfile. They are always enabled, and they replace an installed plugin with the same `plugin.json` id, so you can keep the released version installed. The whole installed plugin is replaced, frontend and backend, even when the folder has only one of the two.
+- A folder isn't loaded, on either side, when its id starts with `core.` or `queryengine.` (built-in plugins can't be replaced), when an earlier folder has the same id, or when `plugin.json` names a frontend module that doesn't exist yet. **Tools → Plugins** lists the folders under "Developer plugin folders", with the reason for each one that isn't loaded.
+- If a folder's backend fails to load (for example a half-written build), the backend logs why and starts without it; the installed plugin with that id stays replaced.
+- Safe mode (`--safe-mode`) skips them, like other external plugins.
+- The frontend is imported from the folder itself. The backend loads a copy that Queryeer makes on every backend start, under `dev-plugin-copies` in Queryeer's app-data folder. The JVM keeps the jars it loaded open, and on Windows that locks them; because it loads copies, your build can overwrite the folder while Queryeer runs. Linked files are copied as files.
+
+**Restart Backend and Reload** (command `core.backend.restartAndReload`; Tools → Dev → Restart Backend and Reload, the command palette, or the status bar item shown while developer plugin folders are set) stops the backend, applies pending JDBC driver changes, copies the developer folders again, starts the backend, and then reloads the window. Plugin discovery runs again on both sides, so a plugin's frontend and backend come from the same build. It is refused while queries run, with a notification saying so.
+
+In dev mode (`npm run dev` in core), Vite watches the modules it serves, so rebuilding a frontend can reload the window by itself before you restart the backend. Run **Restart Backend and Reload** after a rebuild that touched the backend.
+
+| Change | How to pick it up |
+|---|---|
+| Frontend only | Rebuild, then **Reload Window** |
+| Backend, or both | Rebuild, then **Restart Backend and Reload** |
+| `plugin.json` | **Restart Backend and Reload** |
+| The list of folders in `QUERYEER_DEV_PLUGINS` | Restart Queryeer |
+
+### 8.5 Testing Patterns
 
 **Frontend unit test (Vitest):**
 
@@ -1191,7 +1220,7 @@ The Plugin Manager shows installed external plugin metadata and supports local Z
 
 ### 10.5 Hot-Reload
 
-External plugins are loaded once at startup. There is no watch mechanism to detect newly added or updated plugins at runtime.
+External plugins are loaded when the window loads (frontend) and when the backend starts (backend). Nothing watches their files: after a rebuild, run **Reload Window** or **Restart Backend and Reload** (§8.4).
 
 ### 10.6 Security
 

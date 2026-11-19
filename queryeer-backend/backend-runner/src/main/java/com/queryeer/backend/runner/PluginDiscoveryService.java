@@ -27,7 +27,12 @@ final class PluginDiscoveryService
     DiscoveryResult discoverFromPath(String pathValue)
     {
         Path pluginsDirectory = Paths.get(pathValue);
-        List<Path> sources = sourceExplorer.discoverPluginSources(pluginsDirectory);
+        return discoverFromSources(sourceExplorer.discoverPluginSources(pluginsDirectory));
+    }
+
+    /** Plugins from the given plugin folders or zips, each one plugin (developer plugin folders). */
+    DiscoveryResult discoverFromSources(List<Path> sources)
+    {
         List<DiscoveredPlugin> backendPlugins = new ArrayList<>();
         List<FrontendPluginResolver.ResolvedFrontendPlugin> frontendPlugins = new ArrayList<>();
         Set<String> seenPluginIds = new HashSet<>();

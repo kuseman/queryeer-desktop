@@ -1,4 +1,5 @@
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
+import { RESTART_BACKEND_COMMAND_ID, registerRestartBackendStatusItem, restartBackendAndReload } from "./restart-backend";
 
 export const coreMenuPlugin: Plugin = {
   manifest: {
@@ -89,6 +90,13 @@ export const coreMenuPlugin: Plugin = {
       }
     });
     context.commands.registerCommand({
+      id: RESTART_BACKEND_COMMAND_ID,
+      title: "Restart Backend and Reload",
+      handler: async () => {
+        await restartBackendAndReload(window.appShell, context.notifications);
+      }
+    });
+    context.commands.registerCommand({
       id: "core.commands.forceReloadWindow",
       title: "Force Reload Window",
       handler: async () => {
@@ -140,6 +148,14 @@ export const coreMenuPlugin: Plugin = {
       commandId: "core.commands.forceReloadWindow",
       role: "forceReload",
     });
+    context.menu.registerMenuItem({
+      id: "core.menu.tools.dev.restartBackendAndReload",
+      label: "Restart Backend and Reload",
+      order: 18,
+      parentId: "core.menu.tools.dev",
+      commandId: RESTART_BACKEND_COMMAND_ID
+    });
+    registerRestartBackendStatusItem(context.layout, window.appShell.hasDevelopmentPlugins === true);
     context.menu.registerMenuItem({
       id: "core.menu.view.appearance",
       label: "Appearance",

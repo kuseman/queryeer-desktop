@@ -64,6 +64,22 @@ export async function discoverExternalFrontendPlugins(root: string): Promise<Ext
   return manifests;
 }
 
+/** The frontend of each plugin folder that has one (developer plugin folders, D1). Unreadable folders are skipped. */
+export function discoverFrontendPluginFolders(folders: string[]): ExternalFrontendPluginManifest[] {
+  const manifests: ExternalFrontendPluginManifest[] = [];
+  for (const folder of folders) {
+    try {
+      const manifest = loadFromFolder(folder);
+      if (manifest && existsSync(manifest.modulePath) && !manifests.some((existing) => existing.id === manifest.id)) {
+        manifests.push(manifest);
+      }
+    } catch {
+      // ignore invalid plugin folders; the plugin list shows why
+    }
+  }
+  return manifests;
+}
+
 function loadFromFolder(folderPath: string): ExternalFrontendPluginManifest | null {
   const manifestPath = join(folderPath, MANIFEST_FILE);
   if (!existsSync(manifestPath)) {

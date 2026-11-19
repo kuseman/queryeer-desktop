@@ -110,6 +110,16 @@
   overflow-wrap: anywhere;
 }
 
+.plugin-manager-section-title {
+  margin: 8px 0 0;
+  color: var(--text-0);
+}
+
+.plugin-manager-section-help {
+  margin: 0;
+  color: var(--text-1);
+}
+
 .plugin-manager-empty {
   border: 1px dashed var(--border);
   border-radius: 10px;

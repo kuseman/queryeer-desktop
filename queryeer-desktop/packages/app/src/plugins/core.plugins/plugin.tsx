@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ManagedPluginInventory, ManagedPluginInventoryEntry } from "@queryeer/api/plugin/PluginInventory";
+import type { DevelopmentPluginEntry, ManagedPluginInventory, ManagedPluginInventoryEntry } from "@queryeer/api/plugin/PluginInventory";
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
 
 export const PLUGIN_MANAGER_EDITOR_ID = "core.plugins.editor";
@@ -167,6 +167,7 @@ export function PluginManagerEditor() {
   const inventory = state.inventory;
   const plugins = inventory?.plugins ?? [];
   const restartRequired = plugins.some((plugin) => plugin.restartRequired);
+  const developmentPlugins = inventory?.developmentPlugins ?? [];
 
   return (
     <section className="plugin-manager-editor">
@@ -210,6 +211,22 @@ export function PluginManagerEditor() {
           <code>{inventory?.lockfilePath ?? "loading"}</code>
         </div>
       </div>
+
+      {developmentPlugins.length > 0 && (
+        <>
+          <h3 className="plugin-manager-section-title">Developer plugin folders</h3>
+          <p className="plugin-manager-section-help">
+            Listed in <code>QUERYEER_DEV_PLUGINS</code> and loaded in place. They replace installed plugins with the same id.
+            After a rebuild, run <strong>Restart Backend and Reload</strong> (Tools → Dev, or the status bar) to load the new build.
+          </p>
+          <div className="plugin-manager-list">
+            {developmentPlugins.map((plugin) => (
+              <DevelopmentPluginCard key={plugin.sourcePath} plugin={plugin} />
+            ))}
+          </div>
+          <h3 className="plugin-manager-section-title">Installed plugins</h3>
+        </>
+      )}
 
       {state.loading && !inventory ? (
         <div className="plugin-manager-empty">Loading plugin inventory...</div>
@@ -311,6 +328,37 @@ function PluginInventoryCard({
   );
 }
 
+function DevelopmentPluginCard({ plugin }: { plugin: DevelopmentPluginEntry }) {
+  return (
+    <article className={`plugin-manager-card plugin-manager-card-${plugin.error ? "invalid" : "available"}`}>
+      <div className="plugin-manager-card-main">
+        <div>
+          <h3>{plugin.name}</h3>
+          <p className="plugin-manager-plugin-id">{plugin.id}</p>
+        </div>
+        <div className="plugin-manager-badges" aria-label="Plugin status">
+          <span className="plugin-manager-badge-enabled">Development</span>
+        </div>
+      </div>
+      <dl className="plugin-manager-details">
+        <div>
+          <dt>Version</dt>
+          <dd>{plugin.version}</dd>
+        </div>
+        <div>
+          <dt>Runtime</dt>
+          <dd>{runtimeTargets(plugin)}</dd>
+        </div>
+        <div>
+          <dt>Folder</dt>
+          <dd>{plugin.sourcePath}</dd>
+        </div>
+      </dl>
+      {plugin.error && <p className="plugin-manager-error-text">{plugin.error}</p>}
+    </article>
+  );
+}
+
 function statusLabel(plugin: ManagedPluginInventoryEntry): string {
   if (plugin.uninstallPending) {
     return "Uninstall queued";
@@ -324,7 +372,7 @@ function statusLabel(plugin: ManagedPluginInventoryEntry): string {
   return "Invalid";
 }
 
-function runtimeTargets(plugin: ManagedPluginInventoryEntry): string {
+function runtimeTargets(plugin: Pick<ManagedPluginInventoryEntry, "hasFrontend" | "hasBackend">): string {
   if (plugin.hasFrontend && plugin.hasBackend) {
     return "Frontend and backend";
   }

@@ -67,6 +67,14 @@ export interface ShellApi {
   restoreJdbcDriver: (contribution: RegisteredJdbcManagedDriverContribution, disabledSetId: string) => Promise<JdbcDriverOperationResult>;
   discardJdbcDriverRetainedSet: (contribution: RegisteredJdbcManagedDriverContribution, disabledSetId: string) => Promise<JdbcDriverOperationResult>;
   restartBackendForJdbcDrivers: () => Promise<JdbcDriverBackendRestartResult>;
+  /**
+   * Restarts the backend: plugin discovery runs again, developer plugin folders are copied again, and pending JDBC
+   * driver changes are applied. Refused while queries run. Plugins use the command `core.backend.restartAndReload`, which also
+   * reloads the window so both halves of a plugin are the same build.
+   */
+  restartBackend: () => Promise<JdbcDriverBackendRestartResult>;
+  /** True when developer plugin folders (`QUERYEER_DEV_PLUGINS`) are set and the app isn't in safe mode. */
+  hasDevelopmentPlugins: boolean;
   executeBackendQuery: (params: {
     queryExecutionId: string;
     engineId: string;

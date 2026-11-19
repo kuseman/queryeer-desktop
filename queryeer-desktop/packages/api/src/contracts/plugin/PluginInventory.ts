@@ -28,6 +28,23 @@ export type ManagedPluginInventory = {
   lockfilePath: string;
   safeMode: boolean;
   plugins: ManagedPluginInventoryEntry[];
+  /** Developer plugin folders, when `QUERYEER_DEV_PLUGINS` lists any. */
+  developmentPlugins?: DevelopmentPluginEntry[];
+};
+
+/**
+ * A plugin loaded in place from a developer folder listed in the `QUERYEER_DEV_PLUGINS` environment variable. Not
+ * installed and not in the lockfile: always enabled, and it replaces an installed plugin with the same id.
+ */
+export type DevelopmentPluginEntry = {
+  id: string;
+  name: string;
+  version: string;
+  sourcePath: string;
+  hasFrontend: boolean;
+  hasBackend: boolean;
+  /** Why the folder can't be loaded. */
+  error?: string;
 };
 
 export type ManagedPluginSetEnabledResult = {
