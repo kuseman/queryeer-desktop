@@ -103,10 +103,18 @@ export class BackendStatusStore {
   }
 
   public setRuntimeStatus(runtimeStatus: RuntimeStatusResult): void {
+    const previous = this.status.runtimeStatus;
     this.status = {
       ...this.status,
       runtimeStatus
     };
+    // Fetched on every ping: notify only when the backend run or its plugin statuses change
+    if (
+      previous?.startedAt !== runtimeStatus.startedAt ||
+      JSON.stringify(previous?.pluginStatuses) !== JSON.stringify(runtimeStatus.pluginStatuses)
+    ) {
+      this.onChange?.(this.status);
+    }
   }
 
   public setJavaDebugPort(port: number): void {
