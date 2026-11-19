@@ -4,11 +4,11 @@
   "name": "JDBC Query Engine",
   "version": "${project.version}",
   "description": "JDBC query execution and connection runtime.",
-  "dependencies": [],
+  "dependencies": ["queryengine.sql.parser"],
   "providesCapabilities": ["queryengine.execute", "queryengine.jdbc.connection"],
   "requiredCapabilities": [],
   "backend": {
     "entrypointClass": "com.queryeer.backend.plugin.jdbc.JdbcBackendPlugin",
-    "exports": ["com.queryeer.backend.queryengine.jdbc.", "com.queryeer.backend.queryengine.sql.parser."]
+    "exports": ["com.queryeer.backend.queryengine.jdbc."]
   }
 }

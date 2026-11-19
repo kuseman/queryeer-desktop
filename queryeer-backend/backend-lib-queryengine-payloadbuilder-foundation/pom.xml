@@ -11,11 +11,7 @@
     </parent>
     <artifactId>backend-lib-queryengine-payloadbuilder-foundation</artifactId>
     <name>Queryeer Backend Payloadbuilder Foundation</name>
-    <description>Payloadbuilder query engine foundation library for Queryeer plugins</description>
-
-    <properties>
-        <queryeer.plugin.id>queryengine.runtime.payloadbuilder-foundation</queryeer.plugin.id>
-    </properties>
+    <description>Payloadbuilder catalog API for Queryeer plugins. queryengine.payloadbuilder bundles and exports it; catalog plugins compile against it with provided scope.</description>
 
     <dependencies>
         <dependency>
@@ -29,45 +25,4 @@
             <artifactId>payloadbuilder-api</artifactId>
         </dependency>
     </dependencies>
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-dependency-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>write-queryeer-plugin-deps</id>
-                        <phase>generate-resources</phase>
-                        <goals>
-                            <goal>build-classpath</goal>
-                        </goals>
-                        <configuration>
-                            <includeScope>runtime</includeScope>
-                            <outputFile>${project.build.directory}/queryeer-plugin-deps.txt</outputFile>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <configuration>
-                    <descriptors>
-                        <descriptor>${project.parent.basedir}/src/assembly/backend-plugin.xml</descriptor>
-                    </descriptors>
-                    <finalName>${queryeer.plugin.id}</finalName>
-                    <appendAssemblyId>false</appendAssemblyId>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>assemble-queryeer-plugin</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>single</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
 </project>

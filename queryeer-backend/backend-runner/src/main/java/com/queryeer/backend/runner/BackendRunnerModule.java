@@ -53,7 +53,6 @@ public final class BackendRunnerModule
         List<PluginRuntimeContributionCollector.ManifestSource> builtinManifests = loadBuiltinManifests(builtinsDir);
         PluginRuntimeContributionCollector.PluginRuntimeContributions runtimeContributions = new PluginRuntimeContributionCollector().collect(builtinManifests);
         List<URL> sharedLibUrls = new ArrayList<>(SharedLibraryLoader.collect(config.get("queryeer.app.dir"), SharedLibraryLoader.parseDriverClasses(config.get("queryeer.jdbc.driverClasses"))));
-        sharedLibUrls.addAll(runtimeContributions.sharedClasspath());
 
         SharedClassLoader sharedLoader = new SharedClassLoader(sharedLibUrls, appClassLoader);
         PluginClassLoaderFactory classLoaderFactory = new PluginClassLoaderFactory(sharedLoader, runtimeContributions.parentFirstPrefixes());

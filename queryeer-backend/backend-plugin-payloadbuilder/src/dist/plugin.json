@@ -4,10 +4,11 @@
   "name": "Payloadbuilder Query Engine",
   "version": "${project.version}",
   "description": "Payloadbuilder query execution runtime.",
-  "dependencies": ["queryengine.jdbc"],
+  "dependencies": ["queryengine.jdbc", "queryengine.sql.parser"],
   "providesCapabilities": ["queryengine.execute", "queryengine.invoke", "queryengine.payloadbuilder.catalog"],
   "requiredCapabilities": [],
   "backend": {
-    "entrypointClass": "com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderBackendPlugin"
+    "entrypointClass": "com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderBackendPlugin",
+    "exports": ["com.queryeer.backend.queryengine.payloadbuilder.", "se.kuseman.payloadbuilder.api."]
   }
 }
