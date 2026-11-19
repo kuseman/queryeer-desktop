@@ -552,6 +552,9 @@ public final class BackendRunnerModule
 
         services.logger()
                 .info(withCorrelation("Runtime startup summary: activated=" + activated + ", skipped=" + skipped + ", failed=" + failed, null));
+        runtime.warnings()
+                .forEach((pluginId, warning) -> services.logger()
+                        .warn(withCorrelation(pluginId + ": " + warning, pluginId)));
 
         for (DiscoveredPlugin discovered : discoveredPlugins)
         {

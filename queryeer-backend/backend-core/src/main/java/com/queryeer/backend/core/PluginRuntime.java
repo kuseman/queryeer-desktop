@@ -14,6 +14,7 @@ public final class PluginRuntime
     private final List<BackendPlugin> plugins = new ArrayList<>();
     private final List<BackendPlugin> activated = new ArrayList<>();
     private final Map<String, PluginRuntimeStatus> statusByPluginId = new LinkedHashMap<>();
+    private Map<String, String> warnings = Map.of();
 
     public void register(BackendPlugin plugin)
     {
@@ -32,6 +33,7 @@ public final class PluginRuntime
     public void activateAll(BackendPluginContext context) throws Exception
     {
         PluginValidationPlan plan = PluginValidation.planActivation(plugins);
+        warnings = Map.copyOf(plan.warnings());
 
         for (Map.Entry<String, PluginRuntimeState> entry : plan.preActivationStates()
                 .entrySet())
@@ -49,11 +51,18 @@ public final class PluginRuntime
             {
                 plugin.activate(context, plugin.descriptor());
                 activated.add(plugin);
-                statusByPluginId.put(pluginId, new PluginRuntimeStatus(pluginId, PluginRuntimeState.ACTIVATED, "Activated"));
+                String warning = warnings.get(pluginId);
+                statusByPluginId.put(pluginId, new PluginRuntimeStatus(pluginId, PluginRuntimeState.ACTIVATED, warning == null ? "Activated"
+                        : "Activated. " + warning));
             }
             catch (Throwable t)
             {
-                statusByPluginId.put(pluginId, new PluginRuntimeStatus(pluginId, PluginRuntimeState.FAILED, t.getMessage()));
+                // A plugin loaded despite a version mismatch most likely failed because of it
+                String warning = warnings.get(pluginId);
+                String message = t.getMessage() != null ? t.getMessage()
+                        : t.toString();
+                statusByPluginId.put(pluginId, new PluginRuntimeStatus(pluginId, PluginRuntimeState.FAILED, warning == null ? message
+                        : message + ". " + warning));
             }
         }
     }
@@ -82,6 +91,12 @@ public final class PluginRuntime
     public List<PluginRuntimeStatus> statuses()
     {
         return Collections.unmodifiableList(new ArrayList<>(statusByPluginId.values()));
+    }
+
+    /** Problems found before activation that didn't stop a plugin, by plugin id (see {@link PluginValidationPlan#warnings()}). */
+    public Map<String, String> warnings()
+    {
+        return warnings;
     }
 
     public List<String> activatedPluginIds()

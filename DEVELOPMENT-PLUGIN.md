@@ -161,6 +161,7 @@ Plugins are activated in dependency order using a topological sort (Kahn's algor
 
 - Supported: `1.2.3`, `=`, `>`, `>=`, `<`, `<=`, `^`, `~`, wildcards (`1.x`, `*`), partial versions (`1.2`), hyphen ranges (`1.2.3 - 2.0.0`), comparators joined by spaces (and) and `||` (or).
 - **Built-in plugins report the Queryeer backend version**, not the `version` in their manifest, so a range on a built-in such as `queryengine.jdbc` targets a Queryeer release. A development build (`0.20.0-SNAPSHOT`) counts as the release it becomes.
+- **A development build doesn't enforce ranges.** When the dependency's version is a development build (it ends with `-SNAPSHOT`) and the range doesn't match, the plugin still loads, with a warning in the log and in its runtime status. Built-in plugins report `-SNAPSHOT` only when Queryeer runs from source, so a plugin built for the last release keeps loading while core works toward the next one, and the warning names the ranges to update. A released Queryeer enforces ranges on built-in plugins. The same applies to an external plugin installed as a `-SNAPSHOT` build: plugins that depend on it load with a warning. Only the range is relaxed: a missing dependency still skips the plugin.
 - Other prereleases follow npm: `1.2.0-beta.1` satisfies a range only when the range names a prerelease of `1.2.0`.
 - A plain ID accepts any version. An invalid range rejects the manifest.
 

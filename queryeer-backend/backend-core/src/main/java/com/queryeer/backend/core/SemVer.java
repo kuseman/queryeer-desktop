@@ -444,6 +444,21 @@ public final class SemVer
         return part(part, part);
     }
 
+    /**
+     * Whether the version is a development build: it ends with Maven's {@code -SNAPSHOT} (any case, build metadata ignored), which a released Queryeer never reports for itself. Doesn't check that the
+     * rest is a valid version.
+     */
+    public static boolean isDevelopmentBuild(String version)
+    {
+        if (version == null)
+        {
+            return false;
+        }
+        String withoutBuild = version.strip()
+                .split("\\+", 2)[0];
+        return withoutBuild.regionMatches(true, withoutBuild.length() - SNAPSHOT.length() - 1, "-" + SNAPSHOT, 0, SNAPSHOT.length() + 1);
+    }
+
     /** Maven's {@code -SNAPSHOT} development marker counts as the release it becomes, in versions and in ranges alike. */
     private static List<String> withoutSnapshot(List<String> prerelease)
     {

@@ -46,6 +46,7 @@ public final class PluginValidation
         }
 
         Map<String, String> skipReasons = new LinkedHashMap<>();
+        Map<String, String> warnings = new LinkedHashMap<>();
         Map<String, PluginRuntimeState> preStates = new LinkedHashMap<>();
 
         // Skipping a plugin can leave its dependents without a dependency or a capability, so repeat until nothing changes
@@ -67,7 +68,7 @@ public final class PluginValidation
                 {
                     continue;
                 }
-                String reason = dependencyProblem(descriptor, descriptorById, skipReasons);
+                String reason = dependencyProblem(descriptor, descriptorById, skipReasons, warnings);
                 if (reason == null)
                 {
                     reason = missingRequiredCapability(descriptor, providedCapabilities);
@@ -110,12 +111,19 @@ public final class PluginValidation
                     : PluginRuntimeState.LOADED);
         }
 
-        return new PluginValidationPlan(sorted, skipReasons, preStates);
+        warnings.keySet()
+                .removeAll(skipReasons.keySet());
+        return new PluginValidationPlan(sorted, skipReasons, preStates, warnings);
     }
 
-    /** Why a plugin's dependencies are not satisfied, or null when they are. */
-    private static String dependencyProblem(PluginDescriptor descriptor, Map<String, PluginDescriptor> descriptorById, Map<String, String> skipReasons)
+    /**
+     * Why a plugin's dependencies are not satisfied, or null when they are. A version range is not enforced against a development build ({@code -SNAPSHOT}), which only runs from source: the plugin
+     * loads, with a warning, so plugins built for the last release keep working while core moves to the next one.
+     */
+    private static String dependencyProblem(PluginDescriptor descriptor, Map<String, PluginDescriptor> descriptorById, Map<String, String> skipReasons, Map<String, String> warnings)
     {
+        // One entry per mismatching dependency, written once per call: the validation loop calls this on every pass
+        List<String> notEnforced = new ArrayList<>();
         for (String dependency : descriptor.dependencies())
         {
             PluginDescriptor target = descriptorById.get(dependency);
@@ -131,7 +139,11 @@ public final class PluginValidation
                 {
                     if (!SemVer.satisfies(target.version(), range))
                     {
-                        return "Needs " + dependency + " " + range + ", but " + target.version() + " is installed";
+                        if (!SemVer.isDevelopmentBuild(target.version()))
+                        {
+                            return "Needs " + dependency + " " + range + ", but " + target.version() + " is installed";
+                        }
+                        notEnforced.add("Needs " + dependency + " " + range + ", but " + target.version() + " is a development build; the range isn't enforced");
                     }
                 }
                 catch (IllegalArgumentException e)
@@ -143,6 +155,10 @@ public final class PluginValidation
             {
                 return "Dependency " + dependency + " was skipped";
             }
+        }
+        if (!notEnforced.isEmpty())
+        {
+            warnings.put(descriptor.id(), String.join(". ", notEnforced));
         }
         return null;
     }
