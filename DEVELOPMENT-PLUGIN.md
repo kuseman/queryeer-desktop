@@ -57,7 +57,7 @@ Frontend plugins depend on the [`@queryeer/api`](https://www.npmjs.com/package/@
 ```json
 {
   "devDependencies": {
-    "@queryeer/api": "^0.19.0"
+    "@queryeer/api": "^0.20.0"
   }
 }
 ```
@@ -96,7 +96,7 @@ Every plugin **must** have a `plugin.json` file at its root. The schema is versi
   "frontend": {
     "entryModule": "./module.js",
     "moduleFormat": "esm",
-    "apiVersion": "^0.19.0"
+    "apiVersion": "^0.20.0"
   },
   "packaging": {
     "layout": {
@@ -308,7 +308,7 @@ The `package.json` should include esbuild and a build script:
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@queryeer/api": "^0.19.0",
+    "@queryeer/api": "^0.20.0",
     "@types/react": "^18.3.0",
     "esbuild": "^0.23.0",
     "react": "^18.3.1",
@@ -1150,10 +1150,10 @@ List `react`, `react-dom`, and `@queryeer/api` as **`peerDependencies`** — the
   "peerDependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "@queryeer/api": "^0.19.0"
+    "@queryeer/api": "^0.20.0"
   },
   "devDependencies": {
-    "@queryeer/api": "^0.19.0",
+    "@queryeer/api": "^0.20.0",
     "esbuild": "^0.23.0",
     "react": "^18.3.1",
     "typescript": "^5.5.0"
