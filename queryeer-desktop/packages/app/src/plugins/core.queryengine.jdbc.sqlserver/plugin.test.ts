@@ -133,26 +133,14 @@ describe("coreQueryEngineJdbcSqlServerPlugin", () => {
     vi.clearAllMocks();
   });
 
-  it("registers the connection form for sqlserver dialect", () => {
+  it("registers the sqlserver dialect with query plans and the form from its backend fields", () => {
     const context = createContext();
     coreQueryEngineJdbcSqlServerPlugin.activate(context);
 
     expect(mocks.registerDialectMock).toHaveBeenCalledWith({
       dialectId: "sqlserver",
-      supportsQueryPlan: true,
-      ConnectionForm: expect.any(Function),
-      subtitle: expect.any(Function),
-      validate: expect.any(Function)
+      supportsQueryPlan: true
     });
-  });
-
-  it("keeps the connection list's subtitle and validation for its hand-written form", async () => {
-    const { sqlServerSubtitle, validateSqlServer } = await import("./plugin");
-    expect(sqlServerSubtitle({ host: "db", database: "shop" })).toBe("db/shop");
-    expect(sqlServerSubtitle({ host: "db", port: 1434 })).toBe("db:1434");
-    expect(validateSqlServer({ host: "db" })).toEqual([]);
-    expect(validateSqlServer({ host: "db", database: "" })).toEqual(["Database is required"]);
-    expect(validateSqlServer({})).toEqual(["Host is required"]);
   });
 
   it("registers the managed SQL Server jre11 JDBC driver", () => {

@@ -859,7 +859,9 @@ public Optional<JdbcConnectionSetupDefinition> connectionSetup()
 
 - Field ids are the keys of the connection's properties, which `buildUrl(properties)` and `openSessionConnection` read (`username`, `password`).
 - Types: `TEXT`, `NUMBER`, `SECRET` (stored as the connection's password in the security vault, not in its properties), `BOOLEAN`, `SELECT` (with options), `FOLDER_PATH` and `FILE_PATH` (with a browse button that picks a folder or a file).
-- A field's default is shown, and saved with the connection when the form is rendered from the fields. `visibleWhen` shows a field only when other fields have the given values.
+- A field's default is shown, and saved with the connection when the form is rendered from the fields.
+- `visibleWhen` shows a field only when every field it names has one of the listed values; a field's default counts when it has no value. For example, a username for two of four authentication types: `Map.of("authType", List.of("SQL_SERVER_AUTH", "WINDOWS_NTLM_AUTH"))`.
+- The backend runs on the user's machine, so `connectionSetup()` can leave out what doesn't apply to its platform, such as a Windows-only option. A stored value that is no longer offered still shows in its `SELECT`.
 - Derived from the fields: a required, visible, non-secret field that is empty marks the connection invalid; the connection's subtitle is `host:port/database` when there is a `host` field, else the first required field's value.
 - Without `connectionSetup()`, the dialect gets the generic JDBC URL, username and password form.
 
@@ -873,7 +875,7 @@ public Optional<JdbcConnectionSetupDefinition> connectionSetup()
 | `validate(properties)` | Problems; any problem marks the connection invalid |
 | `supportsQueryPlan` | The backend dialect implements `queryPlanExecutor()`. Turns on Estimated Plan and the Actual Plan toggle for the dialect's files; core then runs the query with the intent `plan.estimated` or `plan.actual` and asks for a plan graph (`{ capability: "plan", kind: "graph" }`), and the backend routes it to `queryPlanExecutor()` |
 
-Of the built-in dialects, PostgreSQL uses the fields only; SQLite (file picker) and SQL Server (authentication-dependent fields) have hand-written forms.
+Of the built-in dialects, PostgreSQL and SQL Server use the fields only (SQL Server's in `SqlServerConnectionSetup`, with `visibleWhen` and a Windows-only option); SQLite (file picker) has a hand-written form.
 
 ### 7.12.2 Action templates
 

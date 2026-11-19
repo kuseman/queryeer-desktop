@@ -35,9 +35,7 @@ export function parseConnectionSetup(value: unknown): JdbcConnectionSetupDefinit
         .filter((option): option is { value: unknown; label: unknown } => typeof option === "object" && option !== null)
         .map((option) => ({ value: String(option.value), label: String(option.label ?? option.value) }))
       : undefined;
-    const visibleWhen = typeof candidate.visibleWhen === "object" && candidate.visibleWhen !== null && !Array.isArray(candidate.visibleWhen)
-      ? Object.fromEntries(Object.entries(candidate.visibleWhen).map(([key, value]) => [key, String(value)]))
-      : undefined;
+    const visibleWhen = parseVisibleWhen(candidate.visibleWhen);
     valid.push({
       id: candidate.id,
       label: candidate.label,
@@ -54,21 +52,33 @@ export function parseConnectionSetup(value: unknown): JdbcConnectionSetupDefinit
 
 const FIELD_TYPES = new Set<string>(["TEXT", "NUMBER", "SECRET", "BOOLEAN", "SELECT", "FOLDER_PATH", "FILE_PATH"]);
 
+/** `{ fieldId: [values] }`; a single value is accepted as a one-element list. Undefined when malformed or empty. */
+function parseVisibleWhen(value: unknown): Record<string, string[]> | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const entries = Object.entries(value).map(([key, accepted]): [string, string[]] => [
+    key,
+    (Array.isArray(accepted) ? accepted : [accepted]).filter((item) => item !== undefined && item !== null).map(String)
+  ]);
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
 /** The value a field shows: the stored property, or the field's default. */
 export function fieldValue(field: JdbcConnectionFieldDefinition, properties: Record<string, unknown>): unknown {
   const value = properties[field.id];
   return value === undefined || value === null ? field.defaultValue ?? undefined : value;
 }
 
-/** Whether a field is shown: every field named in its `visibleWhen` has the given value. */
+/** Whether a field is shown: every field named in its `visibleWhen` has one of the listed values. */
 export function isFieldVisible(field: JdbcConnectionFieldDefinition, setup: JdbcConnectionSetupDefinition, properties: Record<string, unknown>): boolean {
   if (!field.visibleWhen) {
     return true;
   }
-  return Object.entries(field.visibleWhen).every(([otherId, expected]) => {
+  return Object.entries(field.visibleWhen).every(([otherId, accepted]) => {
     const other = setup.fields.find((candidate) => candidate.id === otherId);
     const actual = other ? fieldValue(other, properties) : properties[otherId];
-    return String(actual ?? "") === expected;
+    return accepted.includes(String(actual ?? ""));
   });
 }
 
@@ -195,7 +205,11 @@ export function JdbcConnectionFieldsForm({ connectionId, setup, properties, pass
                 disabled={readonly}
                 onChange={(event) => update(field.id, event.target.value)}
               >
-                {value === undefined ? <option value="" /> : null}
+                {value === undefined || value === "" ? <option value="" /> : null}
+                {/* A stored value that is not offered here (e.g. a Windows-only option on another platform) stays visible instead of silently showing the first option */}
+                {value !== undefined && value !== "" && !(field.options ?? []).some((option) => option.value === String(value)) ? (
+                  <option value={String(value)}>{String(value)}</option>
+                ) : null}
                 {(field.options ?? []).map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
