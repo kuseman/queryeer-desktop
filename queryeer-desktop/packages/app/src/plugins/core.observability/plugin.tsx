@@ -6,9 +6,12 @@ import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
 import { getRegisteredQueryExecutableEngines } from "../core.queryengine/engine-registration";
 import { getRuntimeData } from "./runtime-data";
 import { MemoryIndicator } from "./MemoryIndicator";
+import { watchBackendPluginProblems } from "./plugin-status-notifications";
 
 export const OBSERVABILITY_MIME_TYPE = "application/x-observability";
 export const OBSERVABILITY_URI = "observability://system";
+
+let stopWatchingPluginProblems: (() => void) | undefined;
 
 export const coreObservabilityPlugin: Plugin = {
   manifest: {
@@ -59,8 +62,33 @@ export const coreObservabilityPlugin: Plugin = {
 
     context.files.capabilities.registerCapabilities(OBSERVABILITY_MIME_TYPE, ["viewable"]);
     context.files.capabilities.registerContentCategory(OBSERVABILITY_MIME_TYPE, "binary");
+
+    const appShell = typeof window !== "undefined" ? window.appShell : undefined;
+    if (appShell?.getBackendStatus && appShell.onBackendStatusChanged) {
+      stopWatchingPluginProblems = watchBackendPluginProblems({
+        getStatus: () => appShell.getBackendStatus(),
+        onStatusChanged: (listener) => appShell.onBackendStatusChanged(listener),
+        notify: (notification) => context.notifications.notify(notification),
+        openObservability: () => {
+          context.commands.executeCommand("core.observability.open").catch(() => undefined);
+        },
+        storage: safeSessionStorage()
+      });
+    }
+  },
+  deactivate: () => {
+    stopWatchingPluginProblems?.();
+    stopWatchingPluginProblems = undefined;
   }
 };
+
+function safeSessionStorage(): Storage | undefined {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return undefined;
+  }
+}
 
 function BackendStatusIndicator() {
   const [status, setStatus] = useState<BackendGatewayStatus | null>(null);

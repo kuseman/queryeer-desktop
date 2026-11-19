@@ -74,4 +74,20 @@ describe("BackendStatusStore", () => {
     expect(status.jvmMemory).toBeDefined();
     expect(status.jvmMemory!.heapUsedBytes).toBe(536870912);
   });
+
+  it("notifies when the backend run or its plugin statuses change, not on every refresh", () => {
+    const store = new BackendStatusStore();
+    const onChange = vi.fn();
+    store.setOnChange(onChange);
+    const run1 = { startedAt: "run-1", activatedPluginIds: [], pluginStatuses: [{ pluginId: "a", state: "activated" as const }] };
+
+    store.setRuntimeStatus(run1);
+    store.setRuntimeStatus({ ...run1, pluginStatuses: [{ pluginId: "a", state: "activated" as const }] });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].runtimeStatus.startedAt).toBe("run-1");
+
+    store.setRuntimeStatus({ ...run1, pluginStatuses: [{ pluginId: "a", state: "failed" as const, reason: "boom" }] });
+    store.setRuntimeStatus({ ...run1, startedAt: "run-2" });
+    expect(onChange).toHaveBeenCalledTimes(3);
+  });
 });
