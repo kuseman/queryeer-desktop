@@ -1,9 +1,11 @@
 import { defineConfig } from "electron-vite";
 import react from "@vitejs/plugin-react";
+import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Plugin } from "vite";
 import { injectImportMapAndCspHash } from "./src/main/plugins/production-importmap.js";
+import { DEV_PLUGINS_ENV, parseDevPluginFolders } from "./src/main/plugins/dev-plugin-folders.js";
 
 const apiDir = resolve(__dirname, "..", "api");
 const apiAlias = [
@@ -15,8 +17,19 @@ const fsAllow = [
   resolve(__dirname),
   resolve(__dirname, "..", ".."),
   resolve(__dirname, "..", "..", "..", "plugins"),
-  resolveDefaultManagedPluginsDir()
+  resolveDefaultManagedPluginsDir(),
+  // Developer plugin folders (D1): their frontend modules are served through /@fs/ in place. Vite checks the real
+  // path, so a folder that is a link is allowed by its target too.
+  ...parseDevPluginFolders(process.env[DEV_PLUGINS_ENV]).flatMap((folder) => [folder, realPathOrSelf(folder)])
 ];
+
+function realPathOrSelf(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
 
 function resolveDefaultManagedPluginsDir(): string {
   if (process.platform === "win32") {

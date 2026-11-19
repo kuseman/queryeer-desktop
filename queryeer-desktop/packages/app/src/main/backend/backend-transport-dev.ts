@@ -19,6 +19,8 @@ type BackendLaunchContext = {
   getDisabledPluginIds?: () => string[];
   /** Driver classes core manages; the runner loads one jar per class from libShared. */
   getJdbcDriverClassNames?: () => string[];
+  /** Developer plugin folders (copies of them) to load next to the managed plugins; called once per start. */
+  getDevPluginDirs?: () => string[];
 };
 
 export class DevBackendTransport extends StdioBackendTransportBase {
@@ -82,12 +84,14 @@ export class DevBackendTransport extends StdioBackendTransportBase {
     const pluginsDisabledArg = disabledPluginIds.length > 0 ? `-Dqueryeer.plugins.disabledIds=${disabledPluginIds.join(",")}` : null;
     const jdbcDriverClassNames = this.launchContext?.getJdbcDriverClassNames?.() ?? [];
     const jdbcDriverClassesArg = jdbcDriverClassNames.length > 0 ? `-Dqueryeer.jdbc.driverClasses=${jdbcDriverClassNames.join(",")}` : null;
+    const devPluginDirs = this.launchContext?.pluginsSafeMode ? [] : this.launchContext?.getDevPluginDirs?.() ?? [];
+    const devPluginDirsArg = devPluginDirs.length > 0 ? `-Dqueryeer.plugins.devDirs=${devPluginDirs.join(delimiter)}` : null;
     const backendJvmArgs = await resolveBackendJvmArgs(settingsDirPath);
     const classpath = this.resolveRunnerClasspath(repoRoot);
     const args = [
       "--enable-native-access=ALL-UNNAMED",
       ...backendJvmArgs,
-      ...[debugArgs, libNativeArg, appDirArg, settingsDirArg, pluginsDirArg, pluginsSafeModeArg, pluginsDisabledArg, jdbcDriverClassesArg].filter((arg): arg is string => Boolean(arg)),
+      ...[debugArgs, libNativeArg, appDirArg, settingsDirArg, pluginsDirArg, pluginsSafeModeArg, pluginsDisabledArg, jdbcDriverClassesArg, devPluginDirsArg].filter((arg): arg is string => Boolean(arg)),
       "-cp",
       classpath,
       "com.queryeer.backend.runner.BackendRunnerApp"

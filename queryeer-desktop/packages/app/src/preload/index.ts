@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import { DEV_PLUGINS_WINDOW_ARG } from "../shared/dev-plugins.js";
 import type {
   BackendGatewayStatus,
   FileChangeNotification,
@@ -118,6 +119,8 @@ type AppShellApi = {
   restoreJdbcDriver: (contribution: RegisteredJdbcManagedDriverContribution, disabledSetId: string) => Promise<JdbcDriverOperationResult>;
   discardJdbcDriverRetainedSet: (contribution: RegisteredJdbcManagedDriverContribution, disabledSetId: string) => Promise<JdbcDriverOperationResult>;
   restartBackendForJdbcDrivers: () => Promise<JdbcDriverBackendRestartResult>;
+  restartBackend: () => Promise<JdbcDriverBackendRestartResult>;
+  hasDevelopmentPlugins: boolean;
   executeBackendQuery: (params: QueryExecuteParams) => Promise<QueryExecuteResult>;
   cancelBackendQuery: (params: QueryCancelParams) => Promise<QueryCancelResult>;
   readBackendLargeValue: (params: QueryLargeValueReadParams) => Promise<QueryLargeValueReadResult>;
@@ -323,6 +326,10 @@ const appShellApi: AppShellApi = {
   restartBackendForJdbcDrivers: async () => {
     return ipcRenderer.invoke("jdbc-drivers:restart-backend");
   },
+  restartBackend: async () => {
+    return ipcRenderer.invoke("backend:restart");
+  },
+  hasDevelopmentPlugins: process.argv.includes(DEV_PLUGINS_WINDOW_ARG),
   executeBackendQuery: async (params) => {
     return ipcRenderer.invoke("backend:execute-query", params);
   },

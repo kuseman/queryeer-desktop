@@ -13,6 +13,8 @@ type BackendLaunchContext = {
   getDisabledPluginIds?: () => string[];
   /** Driver classes core manages; the runner loads one jar per class from libShared. */
   getJdbcDriverClassNames?: () => string[];
+  /** Developer plugin folders (copies of them) to load next to the managed plugins; called once per start. */
+  getDevPluginDirs?: () => string[];
 };
 
 export type ProdBackendLaunchPaths = {
@@ -93,6 +95,10 @@ export class ProdBackendTransport extends StdioBackendTransportBase {
     const jdbcDriverClassNames = this.launchContext?.getJdbcDriverClassNames?.() ?? [];
     if (jdbcDriverClassNames.length > 0) {
       jvmArgs.push(`-Dqueryeer.jdbc.driverClasses=${jdbcDriverClassNames.join(",")}`);
+    }
+    const devPluginDirs = this.launchContext?.pluginsSafeMode ? [] : this.launchContext?.getDevPluginDirs?.() ?? [];
+    if (devPluginDirs.length > 0) {
+      jvmArgs.push(`-Dqueryeer.plugins.devDirs=${devPluginDirs.join(delimiter)}`);
     }
     jvmArgs.push(...await resolveBackendJvmArgs(settingsDirPath));
     jvmArgs.push(

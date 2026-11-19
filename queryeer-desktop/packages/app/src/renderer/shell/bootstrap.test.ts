@@ -152,7 +152,9 @@ describe("bootstrapShell diagnostics wiring", () => {
       removeJdbcDriver: async () => { throw new Error("Not implemented in this test"); },
       restoreJdbcDriver: async () => { throw new Error("Not implemented in this test"); },
       discardJdbcDriverRetainedSet: async () => { throw new Error("Not implemented in this test"); },
-      restartBackendForJdbcDrivers: async () => ({ accepted: true })
+      restartBackendForJdbcDrivers: async () => ({ accepted: true }),
+      restartBackend: async () => ({ accepted: true }),
+      hasDevelopmentPlugins: false
     };
 
     (discoverPluginModules as MockedDiscovery).mockResolvedValue({

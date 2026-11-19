@@ -10,10 +10,18 @@ import { DevBackendTransport } from "./backend/backend-transport-dev.js";
 import { ProdBackendTransport } from "./backend/backend-transport-prod.js";
 import type { BackendTransportFactory } from "./backend/backend-transport.js";
 import { chokidarWatcherFactory } from "./file-watcher/chokidar-watcher-factory.js";
+import { DEV_PLUGINS_WINDOW_ARG } from "../shared/dev-plugins.js";
 import { FileWatcherMainService } from "./file-watcher/file-watcher-service.js";
 import { DialogMainService } from "./dialog/dialog-service.js";
 import { MenuService } from "./menu/menu-service.js";
-import { discoverExternalFrontendPlugins } from "./plugins/frontend-plugin-discovery.js";
+import { discoverExternalFrontendPlugins, discoverFrontendPluginFolders } from "./plugins/frontend-plugin-discovery.js";
+import {
+  DEV_PLUGINS_ENV,
+  DevPluginShadowCopier,
+  describeDevPluginFolders,
+  loadableDevPlugins,
+  parseDevPluginFolders
+} from "./plugins/dev-plugin-folders.js";
 import {
   defaultKeybindingsFilePath,
   KeybindingsStore
@@ -46,6 +54,13 @@ function isPluginSafeMode(): boolean {
   return process.argv.includes("--safe-mode");
 }
 
+/** Developer plugin folders (D1), loaded in place next to the managed plugins; none in safe mode. */
+const devPluginFolders = isPluginSafeMode() ? [] : parseDevPluginFolders(process.env[DEV_PLUGINS_ENV]);
+const devPluginShadowCopier = new DevPluginShadowCopier(
+  () => loadableDevPlugins(devPluginFolders).map((plugin) => plugin.sourcePath),
+  { root: join(app.getPath("userData"), "dev-plugin-copies"), log: (message) => console.warn(message) }
+);
+
 function createBackendFactory(): BackendTransportFactory {
   const appDir = app.getPath("userData");
   const settingsDirPath = defaultSettingsDirPath(appDir);
@@ -61,7 +76,8 @@ function createBackendFactory(): BackendTransportFactory {
           pluginsDirPath,
           pluginsSafeMode,
           getDisabledPluginIds: () => pluginInventoryService?.getDisabledPluginIds() ?? [],
-          getJdbcDriverClassNames: () => jdbcDriverArtifactService?.managedDriverClassNames() ?? []
+          getJdbcDriverClassNames: () => jdbcDriverArtifactService?.managedDriverClassNames() ?? [],
+          getDevPluginDirs: () => devPluginShadowCopier.prepare()
         })
     };
   }
@@ -75,7 +91,8 @@ function createBackendFactory(): BackendTransportFactory {
         pluginsDirPath,
         pluginsSafeMode,
         getDisabledPluginIds: () => pluginInventoryService?.getDisabledPluginIds() ?? [],
-        getJdbcDriverClassNames: () => jdbcDriverArtifactService?.managedDriverClassNames() ?? []
+        getJdbcDriverClassNames: () => jdbcDriverArtifactService?.managedDriverClassNames() ?? [],
+        getDevPluginDirs: () => devPluginShadowCopier.prepare()
       })
   };
 }
@@ -194,7 +211,8 @@ function createMainWindow(restoredState: WindowStateSnapshot | null = null): voi
       preload: join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
+      additionalArguments: devPluginFolders.length > 0 ? [DEV_PLUGINS_WINDOW_ARG] : []
     }
   });
 
@@ -315,8 +333,9 @@ app.whenReady().then(async () => {
     const window = BrowserWindow.getFocusedWindow();
     window?.webContents.selectAll();
   });
-  ipcMain.handle("window:reload", () => {
-    const window = BrowserWindow.getFocusedWindow();
+  ipcMain.handle("window:reload", (event) => {
+    // The window that asked, also when it isn't focused (Restart Backend and Reload reloads after a restart that takes seconds)
+    const window = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow();
     if (window) {
       window.reload();
     }
@@ -479,7 +498,10 @@ app.whenReady().then(async () => {
     isSafeMode: isPluginSafeMode
   });
   await pluginInventoryService.initialize();
-  ipcMain.handle("plugins:get-inventory", async () => pluginInventoryService!.getInventory());
+  ipcMain.handle("plugins:get-inventory", async () => ({
+    ...(await pluginInventoryService!.getInventory()),
+    developmentPlugins: describeDevPluginFolders(devPluginFolders)
+  }));
   ipcMain.handle("plugins:set-enabled", async (_event, params: { pluginId: string; enabled: boolean }) => {
     return pluginInventoryService!.setEnabled(params.pluginId, params.enabled);
   });
@@ -495,7 +517,14 @@ app.whenReady().then(async () => {
     }
     const inventory = await pluginInventoryService!.getInventory();
     const enabledPluginIds = new Set(inventory.plugins.filter((plugin) => plugin.enabled).map((plugin) => plugin.id));
-    return (await discoverExternalFrontendPlugins(pluginsDirPath)).filter((plugin) => enabledPluginIds.has(plugin.id));
+    // A developer folder replaces an installed plugin with the same id, both halves, even when it has only one of them;
+    // the backend does the same from the same plugin.json ids. It is always enabled.
+    const loadable = loadableDevPlugins(devPluginFolders);
+    const development = discoverFrontendPluginFolders(loadable.map((plugin) => plugin.sourcePath));
+    const developmentIds = new Set(loadable.map((plugin) => plugin.id));
+    const managed = (await discoverExternalFrontendPlugins(pluginsDirPath))
+      .filter((plugin) => enabledPluginIds.has(plugin.id) && !developmentIds.has(plugin.id));
+    return [...development, ...managed];
   });
   const driverService = new JdbcDriverArtifactService({
     appDir: appDataDir,
@@ -529,6 +558,10 @@ app.whenReady().then(async () => {
     return driverService.discardRetainedSet(contribution, disabledSetId);
   });
   ipcMain.handle("jdbc-drivers:restart-backend", async () => {
+    return backendGateway.restart(() => driverService.applyPending());
+  });
+  // The public restart (D2): also applies pending driver changes, and re-copies developer plugin folders on start
+  ipcMain.handle("backend:restart", async () => {
     return backendGateway.restart(() => driverService.applyPending());
   });
   ipcMain.handle("file:read", async (_event, { uri }: { uri: string }) => {

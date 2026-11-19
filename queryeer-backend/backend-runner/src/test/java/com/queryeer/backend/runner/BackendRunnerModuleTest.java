@@ -3,6 +3,7 @@ package com.queryeer.backend.runner;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -113,6 +114,38 @@ class BackendRunnerModuleTest
                 .map(plugin -> plugin.manifest()
                         .id())
                 .toList());
+    }
+
+    @Test
+    void developerPluginFolderReplacesAnInstalledPluginWithTheSameId()
+    {
+        DiscoveredPlugin development = discovered("external.one", Path.of("dev", "external-one"));
+        DiscoveredPlugin installedSame = discovered("external.one", Path.of("plugins", "external-one"));
+        DiscoveredPlugin installedOther = discovered("external.two", Path.of("plugins", "external-two"));
+
+        List<DiscoveredPlugin> result = BackendRunnerModule.preferDevelopmentPlugins(List.of(development), Set.of("external.one"), List.of(installedSame, installedOther));
+
+        Assertions.assertEquals(List.of(Path.of("dev", "external-one"), Path.of("plugins", "external-two")), result.stream()
+                .map(DiscoveredPlugin::source)
+                .toList());
+    }
+
+    @Test
+    void developerFolderWithoutABackendStillReplacesTheInstalledBackend()
+    {
+        // A frontend-only developer folder: the installed backend must not load next to the developer frontend
+        DiscoveredPlugin installed = discovered("external.one", Path.of("plugins", "external-one"));
+
+        Assertions.assertEquals(List.of(), BackendRunnerModule.preferDevelopmentPlugins(List.of(), Set.of("external.one"), List.of(installed)));
+    }
+
+    @Test
+    void parsesDeveloperPluginFoldersSeparatedLikeThePlatformPath()
+    {
+        String value = String.join(java.io.File.pathSeparator, "first", " ", "second ");
+
+        Assertions.assertEquals(List.of(Path.of("first"), Path.of("second")), BackendRunnerModule.parseDevPluginDirs(value));
+        Assertions.assertEquals(List.of(), BackendRunnerModule.parseDevPluginDirs(null));
     }
 
     private DiscoveredPlugin discovered(String pluginId, Path source)
