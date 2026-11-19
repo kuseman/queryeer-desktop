@@ -26,8 +26,16 @@ final class BuiltinPluginDiscovery
 
     List<DiscoveredPlugin> discover()
     {
-        List<DiscoveredPlugin> plugins = discoveryService.discoverFromPath(builtinsDir.toString())
-                .backendPlugins();
+        PluginDiscoveryService.DiscoveryResult result = discoveryService.discoverFromPath(builtinsDir.toString());
+        // A built-in plugin that can't be loaded is a broken installation, not a plugin to skip
+        if (!result.failures()
+                .isEmpty())
+        {
+            PluginDiscoveryService.DiscoveryFailure failure = result.failures()
+                    .get(0);
+            throw new PluginDiscoveryException("Built-in plugin " + failure.pluginId() + " could not be loaded: " + failure.reason());
+        }
+        List<DiscoveredPlugin> plugins = result.backendPlugins();
         if (plugins.isEmpty())
         {
             throw new PluginDiscoveryException("No builtin backend plugins discovered from: " + builtinsDir);

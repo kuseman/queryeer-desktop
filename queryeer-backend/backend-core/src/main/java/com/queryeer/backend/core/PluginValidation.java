@@ -78,7 +78,31 @@ public final class PluginValidation
                     changed = true;
                 }
             }
+            if (changed)
+            {
+                continue;
+            }
+
+            // A plugin in a dependency cycle, or depending on one, can't be ordered: it is skipped, the others still run.
+            // Its capabilities are then gone too, so the checks above run again.
+            Set<String> ordered = new LinkedHashSet<>();
+            for (BackendPlugin plugin : topologicalSort(pluginById, descriptorById, skipReasons.keySet()))
+            {
+                ordered.add(plugin.descriptor()
+                        .id());
+            }
+            for (String id : descriptorById.keySet())
+            {
+                if (!skipReasons.containsKey(id)
+                        && !ordered.contains(id))
+                {
+                    skipReasons.put(id, "Dependency cycle: " + id + " depends on itself, directly or through other plugins, or on a plugin that does");
+                    changed = true;
+                }
+            }
         }
+
+        List<BackendPlugin> sorted = topologicalSort(pluginById, descriptorById, skipReasons.keySet());
 
         for (String id : descriptorById.keySet())
         {
@@ -86,7 +110,6 @@ public final class PluginValidation
                     : PluginRuntimeState.LOADED);
         }
 
-        List<BackendPlugin> sorted = topologicalSort(pluginById, descriptorById, skipReasons.keySet());
         return new PluginValidationPlan(sorted, skipReasons, preStates);
     }
 
@@ -157,7 +180,8 @@ public final class PluginValidation
             {
                 continue;
             }
-            for (String dependency : descriptor.dependencies())
+            // Each dependency once: a repeated entry would count twice in indegree but be released once
+            for (String dependency : new LinkedHashSet<>(descriptor.dependencies()))
             {
                 if (!indegree.containsKey(dependency))
                 {
@@ -179,12 +203,10 @@ public final class PluginValidation
         }
 
         List<BackendPlugin> ordered = new ArrayList<>();
-        int visited = 0;
         while (!queue.isEmpty())
         {
             String current = queue.removeFirst();
             ordered.add(pluginById.get(current));
-            visited++;
 
             for (String dependent : dependents.get(current))
             {
@@ -197,11 +219,7 @@ public final class PluginValidation
             }
         }
 
-        if (visited != indegree.size())
-        {
-            throw new IllegalStateException("Plugin dependency cycle detected");
-        }
-
+        // Plugins left out are in a cycle or depend on one; planActivation skips them
         return ordered;
     }
 }

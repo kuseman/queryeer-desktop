@@ -53,4 +53,22 @@ class BuiltinPluginDiscoveryTest
                         .id())
                 .toList());
     }
+
+    @Test
+    void aBuiltinPluginThatCantBeLoadedStopsDiscovery() throws IOException
+    {
+        // Unlike an installed plugin, a broken built-in is a broken installation
+        Path builtinsDir = tempDir.resolve("plugins")
+                .resolve("builtin");
+        Path pluginDir = builtinsDir.resolve("queryengine.jdbc");
+        Files.createDirectories(pluginDir);
+        Files.writeString(pluginDir.resolve("plugin.json"), "{ not json", StandardCharsets.UTF_8);
+
+        PluginClassLoaderFactory classLoaderFactory = new PluginClassLoaderFactory(new SharedClassLoader(List.of(), getClass().getClassLoader()));
+        PluginDiscoveryService discoveryService = new PluginDiscoveryService(BackendPlatformServices.fileBased(Map.of(), new SecuritySession()), classLoaderFactory);
+
+        PluginDiscoveryException error = Assertions.assertThrows(PluginDiscoveryException.class, () -> new BuiltinPluginDiscovery(discoveryService, builtinsDir).discover());
+        Assertions.assertTrue(error.getMessage()
+                .contains("Built-in plugin queryengine.jdbc could not be loaded"));
+    }
 }

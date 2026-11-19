@@ -31,6 +31,40 @@ final class PluginManifestLoader
         return loadFromZip(source);
     }
 
+    /** The {@code id} of a manifest that {@link #load} refused, when its JSON can still be read; otherwise null. Names the plugin in what is reported about it. */
+    static String readIdLeniently(Path source)
+    {
+        try
+        {
+            if (Files.isDirectory(source))
+            {
+                try (InputStream input = Files.newInputStream(source.resolve(MANIFEST_FILE)))
+                {
+                    return textId(input);
+                }
+            }
+            try (FileSystem zipFs = FileSystems.newFileSystem(URI.create("jar:" + source.toUri()), Map.of()); InputStream input = Files.newInputStream(zipFs.getPath("/", MANIFEST_FILE)))
+            {
+                return textId(input);
+            }
+        }
+        catch (IOException | RuntimeException e)
+        {
+            return null;
+        }
+    }
+
+    private static String textId(InputStream input) throws IOException
+    {
+        var id = MapperUtils.MAPPER.readTree(input)
+                .get("id");
+        return id != null
+                && id.isTextual()
+                && !id.asText()
+                        .isBlank() ? id.asText()
+                                : null;
+    }
+
     private PluginManifest loadFromDirectory(Path source)
     {
         Path manifestPath = source.resolve(MANIFEST_FILE);

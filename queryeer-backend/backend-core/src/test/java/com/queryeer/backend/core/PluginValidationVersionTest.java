@@ -95,6 +95,39 @@ class PluginValidationVersionTest
                 .get("consumer"));
     }
 
+    @Test
+    void skipsPluginsInADependencyCycleAndActivatesTheOthers()
+    {
+        // An installed plugin's cycle must not stop the backend: self, a <-> b, and c depending on the cycle are skipped
+        PluginValidationPlan plan = PluginValidation.planActivation(List.of(plugin("jdbc", "0.20.0"), plugin("self", "1.0.0", Map.of("self", "")), plugin("a", "1.0.0", Map.of("b", "")),
+                plugin("b", "1.0.0", Map.of("a", "")), plugin("c", "1.0.0", Map.of("a", "")), plugin("dialect", "1.0.0", Map.of("jdbc", ""))));
+
+        assertEquals(List.of("jdbc", "dialect"), ids(plan));
+        for (String id : List.of("self", "a", "b", "c"))
+        {
+            assertEquals(PluginRuntimeState.SKIPPED, plan.preActivationStates()
+                    .get(id), id);
+            assertTrue(plan.skipReasons()
+                    .get(id)
+                    .startsWith("Dependency cycle"), id);
+        }
+    }
+
+    @Test
+    void aCapabilityFromAPluginInACycleIsNotProvided()
+    {
+        // a <-> b, a provides cap.x; c needs cap.x without depending on a
+        BackendPlugin a = new StubPlugin(new PluginDescriptor("a", "a", "1.0.0", List.of("b"), List.of("cap.x"), List.of()));
+        BackendPlugin b = new StubPlugin(new PluginDescriptor("b", "b", "1.0.0", List.of("a"), List.of(), List.of()));
+        BackendPlugin c = new StubPlugin(new PluginDescriptor("c", "c", "1.0.0", List.of(), List.of(), List.of("cap.x")));
+
+        PluginValidationPlan plan = PluginValidation.planActivation(List.of(c, a, b));
+
+        assertEquals("Missing required capability: cap.x", plan.skipReasons()
+                .get("c"));
+        assertEquals(List.of(), ids(plan));
+    }
+
     private static List<String> ids(PluginValidationPlan plan)
     {
         return plan.activationOrder()

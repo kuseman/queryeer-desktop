@@ -114,17 +114,25 @@ class PluginRuntimeArchitectureTest
     }
 
     @Test
-    void detectsDependencyCycle()
+    void skipsPluginsInADependencyCycleAndActivatesTheOthers() throws Exception
     {
+        // A cycle in an installed plugin must not stop the backend
         PluginRuntime runtime = new PluginRuntime();
         runtime.register(new RecordingPlugin("plugin.one", "engine.one", List.of("plugin.two"), List.of(), false));
         runtime.register(new RecordingPlugin("plugin.two", "engine.two", List.of("plugin.one"), List.of(), false));
+        runtime.register(new RecordingPlugin("plugin.ok", "engine.ok", List.of(), List.of(), false));
 
         BackendPlatformServices services = BackendPlatformServices.fileBased(Map.of(), new SecuritySession());
+        runtime.activateAll(services.pluginContext());
 
-        IllegalStateException error = Assertions.assertThrows(IllegalStateException.class, () -> runtime.activateAll(services.pluginContext()));
-        Assertions.assertTrue(error.getMessage()
-                .contains("cycle"));
+        for (String pluginId : List.of("plugin.one", "plugin.two"))
+        {
+            PluginRuntimeStatus status = findStatus(runtime.statuses(), pluginId);
+            Assertions.assertEquals(PluginRuntimeState.SKIPPED, status.state(), pluginId);
+            Assertions.assertTrue(status.reason()
+                    .contains("cycle"), pluginId);
+        }
+        Assertions.assertEquals(PluginRuntimeState.ACTIVATED, findStatus(runtime.statuses(), "plugin.ok").state());
     }
 
     private PluginRuntimeStatus findStatus(List<PluginRuntimeStatus> statuses, String pluginId)

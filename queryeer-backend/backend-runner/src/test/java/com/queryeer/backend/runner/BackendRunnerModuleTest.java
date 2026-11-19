@@ -1,6 +1,7 @@
 package com.queryeer.backend.runner;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -92,13 +93,18 @@ class BackendRunnerModuleTest
     }
 
     @Test
-    void mergeDiscoveredPluginsThrowsOnDuplicateIds()
+    void mergeDiscoveredPluginsSkipsAndReportsAnExternalPluginWithABuiltinId()
     {
         DiscoveredPlugin builtin = discovered("duplicate.plugin", null);
         DiscoveredPlugin external = discovered("duplicate.plugin", Path.of("plugins", "duplicate"));
+        List<PluginDiscoveryService.DiscoveryFailure> failures = new ArrayList<>();
 
-        PluginDiscoveryException error = Assertions.assertThrows(PluginDiscoveryException.class, () -> BackendRunnerModule.mergeDiscoveredPlugins(List.of(builtin), List.of(external)));
-        Assertions.assertTrue(error.getMessage()
+        List<DiscoveredPlugin> merged = BackendRunnerModule.mergeDiscoveredPlugins(List.of(builtin), List.of(external), failures);
+
+        Assertions.assertEquals(List.of(builtin), merged);
+        Assertions.assertEquals(1, failures.size());
+        Assertions.assertTrue(failures.get(0)
+                .reason()
                 .contains("Duplicate external plugin id conflicts"));
     }
 
@@ -108,7 +114,7 @@ class BackendRunnerModuleTest
         DiscoveredPlugin builtin = discovered("builtin.one", null);
         DiscoveredPlugin external = discovered("external.two", Path.of("plugins", "external-two"));
 
-        List<DiscoveredPlugin> merged = BackendRunnerModule.mergeDiscoveredPlugins(List.of(builtin), List.of(external));
+        List<DiscoveredPlugin> merged = BackendRunnerModule.mergeDiscoveredPlugins(List.of(builtin), List.of(external), new ArrayList<>());
 
         Assertions.assertEquals(List.of("builtin.one", "external.two"), merged.stream()
                 .map(plugin -> plugin.manifest()
