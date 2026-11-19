@@ -67,7 +67,9 @@ class DefaultJdbcConnectionsTest
         DefaultJdbcConnections connections = new DefaultJdbcConnections(configService, PAYLOAD_MAPPER, registry);
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> connections.resolve("bad"));
-        assertEquals("Unsupported database type: oracle", error.getMessage());
+        assertEquals("No JDBC dialect 'oracle' is registered. The plugin that provides it may not be installed, may be disabled, or may not have loaded; "
+                     + "if it didn't load, Observability (click the backend status in the status bar) shows why.",
+                error.getMessage());
     }
 
     @Test

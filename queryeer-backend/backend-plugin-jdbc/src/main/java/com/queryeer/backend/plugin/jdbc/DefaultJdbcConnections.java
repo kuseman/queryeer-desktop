@@ -98,11 +98,19 @@ public final class DefaultJdbcConnections implements JdbcConnections
         String dialectId = stored.dialectId != null ? stored.dialectId
                 : ENGINE_ID;
         JdbcDialect dialect = dialectRegistry.find(dialectId)
-                .orElseThrow(() -> new IllegalArgumentException("Unsupported database type: " + dialectId));
+                .orElseThrow(() -> new IllegalArgumentException(unknownDialectMessage(dialectId)));
         // Validate that the connection has a URL
         validateConnectionUrl(dialect, props, stored.connectionId());
 
         return new JdbcConnection(stored.connectionId(), stored.title(), dialect, props);
+    }
+
+    /** Names the likely causes: a dialect comes from a plugin, which may be missing, disabled or not loaded. */
+    static String unknownDialectMessage(String dialectId)
+    {
+        return "No JDBC dialect '" + dialectId
+               + "' is registered. The plugin that provides it may not be installed, may be disabled, or may not have loaded; "
+               + "if it didn't load, Observability (click the backend status in the status bar) shows why.";
     }
 
     /** Test payload is the same as the stored connection format. */
