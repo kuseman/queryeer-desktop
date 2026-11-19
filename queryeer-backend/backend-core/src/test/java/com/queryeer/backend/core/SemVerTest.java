@@ -112,6 +112,17 @@ class SemVerTest
     }
 
     @Test
+    void recognisesDevelopmentBuilds()
+    {
+        assertTrue(SemVer.isDevelopmentBuild("0.21.0-SNAPSHOT"));
+        assertTrue(SemVer.isDevelopmentBuild("0.21.0-snapshot+build.5"));
+        assertFalse(SemVer.isDevelopmentBuild("0.21.0"));
+        assertFalse(SemVer.isDevelopmentBuild("0.21.0-beta.1"));
+        assertFalse(SemVer.isDevelopmentBuild("SNAPSHOT"));
+        assertFalse(SemVer.isDevelopmentBuild(null));
+    }
+
+    @Test
     void comparesLongNumericPrereleases()
     {
         assertTrue(SemVer.parseVersion("1.0.0-99999999999999999999")

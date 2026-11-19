@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
@@ -42,6 +43,90 @@ class PluginValidationVersionTest
         assertEquals(PluginRuntimeState.SKIPPED, plan.preActivationStates()
                 .get("dialect"));
         assertEquals(List.of("jdbc"), ids(plan));
+    }
+
+    @Test
+    void doesNotEnforceTheRangeAgainstADevelopmentBuildOfAnotherVersion()
+    {
+        PluginValidationPlan plan = PluginValidation.planActivation(List.of(plugin("jdbc", "0.21.0-SNAPSHOT"), plugin("dialect", "1.0.0", Map.of("jdbc", "^0.20.0"))));
+
+        assertEquals(Map.of(), plan.skipReasons());
+        assertEquals(List.of("jdbc", "dialect"), ids(plan));
+        assertEquals(Map.of("dialect", "Needs jdbc ^0.20.0, but 0.21.0-SNAPSHOT is a development build; the range isn't enforced"), plan.warnings());
+    }
+
+    @Test
+    void anActivatedPluginsStatusCarriesTheWarning() throws Exception
+    {
+        PluginRuntime runtime = new PluginRuntime();
+        runtime.register(plugin("jdbc", "0.21.0-SNAPSHOT"));
+        runtime.register(plugin("dialect", "1.0.0", Map.of("jdbc", "^0.20.0")));
+
+        runtime.activateAll(BackendPlatformServices.fileBased(Map.of(), new com.queryeer.backend.core.security.SecuritySession())
+                .pluginContext());
+
+        PluginRuntimeStatus status = runtime.statuses()
+                .stream()
+                .filter(s -> s.pluginId()
+                        .equals("dialect"))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(PluginRuntimeState.ACTIVATED, status.state());
+        assertEquals("Activated. Needs jdbc ^0.20.0, but 0.21.0-SNAPSHOT is a development build; the range isn't enforced", status.reason());
+        assertEquals(Set.of("dialect"), runtime.warnings()
+                .keySet());
+    }
+
+    @Test
+    void namesEveryRangeThatIsNotEnforced()
+    {
+        PluginValidationPlan plan = PluginValidation
+                .planActivation(List.of(plugin("jdbc", "0.21.0-SNAPSHOT"), plugin("parser", "0.21.0-SNAPSHOT"), plugin("dialect", "1.0.0", ordered("jdbc", "^0.20.0", "parser", "^0.20.0"))));
+
+        assertEquals("Needs jdbc ^0.20.0, but 0.21.0-SNAPSHOT is a development build; the range isn't enforced. "
+                     + "Needs parser ^0.20.0, but 0.21.0-SNAPSHOT is a development build; the range isn't enforced",
+                plan.warnings()
+                        .get("dialect"));
+    }
+
+    @Test
+    void aPluginThatFailsAfterARelaxedCheckKeepsTheWarningInItsStatus() throws Exception
+    {
+        PluginRuntime runtime = new PluginRuntime();
+        runtime.register(plugin("jdbc", "0.21.0-SNAPSHOT"));
+        runtime.register(new FailingPlugin(new PluginDescriptor("dialect", "dialect", "1.0.0", List.of("jdbc"), List.of(), List.of(), Map.of("jdbc", "^0.20.0"))));
+
+        runtime.activateAll(BackendPlatformServices.fileBased(Map.of(), new com.queryeer.backend.core.security.SecuritySession())
+                .pluginContext());
+
+        PluginRuntimeStatus status = runtime.statuses()
+                .stream()
+                .filter(s -> s.pluginId()
+                        .equals("dialect"))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(PluginRuntimeState.FAILED, status.state());
+        assertEquals("java.lang.NoSuchMethodError. Needs jdbc ^0.20.0, but 0.21.0-SNAPSHOT is a development build; the range isn't enforced", status.reason());
+    }
+
+    @Test
+    void enforcesTheRangeAgainstARelease()
+    {
+        PluginValidationPlan plan = PluginValidation.planActivation(List.of(plugin("jdbc", "0.21.0"), plugin("dialect", "1.0.0", Map.of("jdbc", "^0.20.0"))));
+
+        assertEquals("Needs jdbc ^0.20.0, but 0.21.0 is installed", plan.skipReasons()
+                .get("dialect"));
+        assertEquals(Map.of(), plan.warnings());
+    }
+
+    @Test
+    void aDevelopmentBuildStillSkipsAPluginThatIsMissingADependency()
+    {
+        PluginValidationPlan plan = PluginValidation.planActivation(List.of(plugin("jdbc", "0.21.0-SNAPSHOT"), plugin("dialect", "1.0.0", ordered("jdbc", "^0.20.0", "other", "^1.0.0"))));
+
+        assertEquals("Missing dependency: other", plan.skipReasons()
+                .get("dialect"));
+        assertEquals(Map.of(), plan.warnings());
     }
 
     @Test
@@ -149,6 +234,26 @@ class PluginValidationVersionTest
         ranges.values()
                 .removeIf(String::isEmpty);
         return new StubPlugin(new PluginDescriptor(id, id, version, List.copyOf(dependencies.keySet()), List.of(), List.of(), ranges));
+    }
+
+    /** Dependencies in the given order, unlike {@code Map.of}. */
+    private static Map<String, String> ordered(String... idsAndRanges)
+    {
+        Map<String, String> result = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < idsAndRanges.length; i += 2)
+        {
+            result.put(idsAndRanges[i], idsAndRanges[i + 1]);
+        }
+        return result;
+    }
+
+    private record FailingPlugin(PluginDescriptor descriptor) implements BackendPlugin
+    {
+        @Override
+        public void activate(BackendPluginContext context, PluginDescriptor pluginDescriptor)
+        {
+            throw new NoSuchMethodError();
+        }
     }
 
     private record StubPlugin(PluginDescriptor descriptor) implements BackendPlugin

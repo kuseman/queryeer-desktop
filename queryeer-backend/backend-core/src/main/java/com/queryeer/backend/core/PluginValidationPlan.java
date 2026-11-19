@@ -5,6 +5,7 @@ import java.util.Map;
 
 import com.queryeer.backend.api.BackendPlugin;
 
-public record PluginValidationPlan(List<BackendPlugin> activationOrder, Map<String, String> skipReasons, Map<String, PluginRuntimeState> preActivationStates)
+/** {@code warnings} are problems that don't stop a plugin, by plugin id: a version range not enforced against a development build. */
+public record PluginValidationPlan(List<BackendPlugin> activationOrder, Map<String, String> skipReasons, Map<String, PluginRuntimeState> preActivationStates, Map<String, String> warnings)
 {
 }
