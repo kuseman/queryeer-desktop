@@ -7,9 +7,12 @@ const server: JdbcConnectionSetupDefinition = {
     { id: "host", label: "Host", type: "TEXT", required: true },
     { id: "port", label: "Port", type: "NUMBER", required: false, defaultValue: 3306 },
     { id: "database", label: "Database", type: "TEXT", required: false },
-    { id: "authType", label: "Authentication", type: "SELECT", required: true, defaultValue: "PASSWORD", options: [{ value: "PASSWORD", label: "Password" }, { value: "KERBEROS", label: "Kerberos" }] },
-    { id: "username", label: "Username", type: "TEXT", required: true, visibleWhen: { authType: "PASSWORD" } },
-    { id: "password", label: "Password", type: "SECRET", required: true, visibleWhen: { authType: "PASSWORD" } }
+    {
+      id: "authType", label: "Authentication", type: "SELECT", required: true, defaultValue: "PASSWORD",
+      options: [{ value: "PASSWORD", label: "Password" }, { value: "NTLM", label: "NTLM" }, { value: "KERBEROS", label: "Kerberos" }]
+    },
+    { id: "username", label: "Username", type: "TEXT", required: true, visibleWhen: { authType: ["PASSWORD", "NTLM"] } },
+    { id: "password", label: "Password", type: "SECRET", required: true, visibleWhen: { authType: ["PASSWORD", "NTLM"] } }
   ]
 };
 
@@ -31,6 +34,15 @@ describe("jdbc-connection-fields", () => {
     expect(parseConnectionSetup({ fields: [] })).toBeUndefined();
   });
 
+  it("reads visibleWhen as lists of values, and a single value as a list of one", () => {
+    const parsed = parseConnectionSetup({ fields: [
+      { id: "a", label: "A", type: "TEXT", visibleWhen: { authType: ["X", "Y"] } },
+      { id: "b", label: "B", type: "TEXT", visibleWhen: { authType: "X", port: 1433 } },
+      { id: "c", label: "C", type: "TEXT", visibleWhen: {} }
+    ] });
+    expect(parsed?.fields.map((field) => field.visibleWhen)).toEqual([{ authType: ["X", "Y"] }, { authType: ["X"], port: ["1433"] }, undefined]);
+  });
+
   it("requires visible required fields, never secrets", () => {
     expect(validateFields(server, {})).toEqual(["Host is required", "Username is required"]);
     expect(validateFields(server, { host: "db", username: "app" })).toEqual([]);
@@ -42,6 +54,13 @@ describe("jdbc-connection-fields", () => {
     const username = server.fields[4];
     expect(isFieldVisible(username, server, {})).toBe(true);
     expect(isFieldVisible(username, server, { authType: "KERBEROS" })).toBe(false);
+  });
+
+  it("shows a field for any of its visibleWhen values", () => {
+    const username = server.fields[4];
+    expect(isFieldVisible(username, server, { authType: "PASSWORD" })).toBe(true);
+    expect(isFieldVisible(username, server, { authType: "NTLM" })).toBe(true);
+    expect(validateFields(server, { host: "db", authType: "NTLM" })).toEqual(["Username is required"]);
   });
 
   it("stores the defaults the form showed, but no secret", () => {

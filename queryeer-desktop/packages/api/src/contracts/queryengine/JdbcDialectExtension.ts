@@ -29,8 +29,11 @@ export type JdbcConnectionFieldDefinition = {
   options?: JdbcConnectionFieldOption[] | null;
   /** Shown when the property is not set, and stored with the connection when it is saved. */
   defaultValue?: unknown;
-  /** The field is shown only when every other field named here has the given value. */
-  visibleWhen?: Record<string, string> | null;
+  /**
+   * The field is shown only when every other field named here has one of the listed values (a field's default counts
+   * when it has no value). Example: `{ authType: ["SQL_SERVER_AUTH", "WINDOWS_NTLM_AUTH"] }`.
+   */
+  visibleWhen?: Record<string, string[]> | null;
 };
 
 /** A dialect's connection form, as returned by the JDBC engine's `jdbc.connection.dialects` action. */
