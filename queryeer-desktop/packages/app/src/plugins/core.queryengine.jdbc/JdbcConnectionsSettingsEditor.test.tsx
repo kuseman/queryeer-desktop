@@ -2,8 +2,10 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const { invoke } = vi.hoisted(() => ({ invoke: vi.fn<() => Promise<unknown>>(async () => []) }));
+
 vi.mock("../core.queryengine/QueryEngineService", () => ({
-  getQueryEngineService: () => ({ invoke: vi.fn(async () => []) })
+  getQueryEngineService: () => ({ invoke })
 }));
 
 vi.mock("../core.security/service", () => ({
@@ -37,6 +39,7 @@ describe("JdbcConnectionsSettingsEditor", () => {
     });
     rootElement.remove();
     vi.unstubAllGlobals();
+    invoke.mockImplementation(async () => []);
   });
 
   it("does not share the password secretRef with a cloned connection", async () => {
@@ -83,5 +86,23 @@ describe("JdbcConnectionsSettingsEditor", () => {
     expect(latest[1]?.url).toBe("jdbc:test://prod");
     expect(latest[1]?.username).toBe("admin");
     expect(latest[1]?.password).toBeUndefined();
+  });
+
+  it("says the form couldn't be loaded, not that the plugin is missing, when the backend's dialect list is unusable", async () => {
+    invoke.mockImplementation(async () => null);
+
+    await act(async () => {
+      root.render(
+        <JdbcConnectionsSettingsEditor
+          readonly={false}
+          value={[{ connectionId: "conn-1", title: "Prod", dialectId: "sqlserver", properties: { host: "db" }, enabled: true }]}
+          setValue={vi.fn()}
+        />
+      );
+      await flush();
+    });
+
+    expect(rootElement.textContent).toContain("couldn't be loaded from the backend");
+    expect(rootElement.textContent).not.toContain("Loading the connection form");
   });
 });

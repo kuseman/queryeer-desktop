@@ -73,6 +73,7 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
       .invoke({ engineId: "jdbc", action: "jdbc.connection.dialects" })
       .then((result) => {
         if (!Array.isArray(result)) {
+          setDialectsState("failed");
           return;
         }
         const next = result
@@ -406,7 +407,9 @@ function renderDialectForm(
         <span className="jdbc-settings-help">
           {dialectsState === "loading"
             ? "Loading the connection form…"
-            : "This database type's connection form is not available. Is its plugin installed and enabled?"}
+            : dialectsState === "failed"
+              ? "The connection form couldn't be loaded from the backend. Check that the backend is running, then open the settings again."
+              : "This database type's connection form is not available. Is its plugin installed and enabled?"}
         </span>
       </div>
     );
