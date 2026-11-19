@@ -1,6 +1,5 @@
 package com.queryeer.backend.runner;
 
-import java.net.URL;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -12,7 +11,6 @@ final class PluginRuntimeContributionCollector
     PluginRuntimeContributions collect(List<ManifestSource> manifests)
     {
         Set<String> parentFirstPrefixes = new LinkedHashSet<>(PluginClassLoaderFactory.BASE_PARENT_FIRST_PREFIXES);
-        List<URL> sharedClasspath = new ArrayList<>();
         List<NativeLibraryPreloader.Request> nativeLibraries = new ArrayList<>();
 
         for (ManifestSource source : manifests)
@@ -32,12 +30,6 @@ final class PluginRuntimeContributionCollector
                 parentFirstPrefixes.addAll(shared.parentFirstPackagePrefixes());
             }
 
-            if (isSharedRuntimePlugin(manifest)
-                    && manifest.backend() != null)
-            {
-                sharedClasspath.addAll(PluginClassLoaderFactory.resolveClasspath(source.source(), manifest));
-            }
-
             if (shared.nativeLibraries() != null)
             {
                 for (PluginManifest.NativeLibrary nativeLibrary : shared.nativeLibraries())
@@ -47,20 +39,15 @@ final class PluginRuntimeContributionCollector
             }
         }
 
-        return new PluginRuntimeContributions(List.copyOf(parentFirstPrefixes), List.copyOf(sharedClasspath), List.copyOf(nativeLibraries));
-    }
-
-    private boolean isSharedRuntimePlugin(PluginManifest manifest)
-    {
-        return manifest.id()
-                .startsWith("queryengine.runtime.");
+        return new PluginRuntimeContributions(List.copyOf(parentFirstPrefixes), List.copyOf(nativeLibraries));
     }
 
     record ManifestSource(PluginManifest manifest, Path source)
     {
     }
 
-    record PluginRuntimeContributions(List<String> parentFirstPrefixes, List<URL> sharedClasspath, List<NativeLibraryPreloader.Request> nativeLibraries)
+    /** What built-in plugins contribute to the shared layer. Never a plugin's own classpath: plugins share classes through exports (0.21 removed the last plugin that did otherwise). */
+    record PluginRuntimeContributions(List<String> parentFirstPrefixes, List<NativeLibraryPreloader.Request> nativeLibraries)
     {
     }
 }

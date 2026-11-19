@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "queryengine.sql.parser",
+  "name": "SQL Parser",
+  "version": "0.1.0",
+  "description": "Tree-sitter based SQL parsing for query engine plugins.",
+  "dependencies": [],
+  "providesCapabilities": [],
+  "requiredCapabilities": [],
+  "backend": {
+    "entrypointClass": "com.queryeer.backend.plugin.sqlparser.SqlParserBackendPlugin",
+    "exports": ["com.queryeer.backend.queryengine.sql.parser."],
+    "classpath": {
+      "root": "../../../queryeer-backend/backend-lib-queryengine-sql-parser",
+      "include": ["target/classes", "@target/queryeer-plugin-deps.txt"]
+    }
+  }
+}

@@ -17,6 +17,7 @@ Queryeer is an extensible desktop application for data querying and exploration.
 9. [Distribution](#9-distribution)
 10. [Current Limitations & Known Gaps](#10-current-limitations--known-gaps)
 11. [Upgrading Plugins to 0.20.0](#11-upgrading-plugins-to-0200)
+12. [Upgrading Plugins to 0.21.0](#12-upgrading-plugins-to-0210)
 
 ---
 
@@ -230,13 +231,15 @@ Rules:
   </dependency>
   ```
 
-  So a dialect that depends on `backend-lib-queryengine-sql-parser` with `provided` scope gets only the parser's own classes on its compile classpath; `queryengine.jdbc` bundles tree-sitter. A dialect whose tests run the parser adds tree-sitter with `test` scope.
+  So a dialect that depends on `backend-lib-queryengine-sql-parser` with `provided` scope gets only the parser's own classes on its compile classpath; `queryengine.sql.parser` bundles tree-sitter. A dialect whose tests run the parser adds tree-sitter with `test` scope.
 
-The built-in JDBC engine (`queryengine.jdbc`) exports the JDBC foundation (`com.queryeer.backend.queryengine.jdbc.`) and the SQL parser (`com.queryeer.backend.queryengine.sql.parser.`). The parser's API takes SQL text, not parse trees: tree-sitter, which it uses inside, is not exported. A JDBC dialect depends on `queryengine.jdbc`:
+The built-in JDBC engine (`queryengine.jdbc`) exports the JDBC foundation (`com.queryeer.backend.queryengine.jdbc.`). The built-in `queryengine.sql.parser` exports the SQL parser (`com.queryeer.backend.queryengine.sql.parser.`); its API takes SQL text, not parse trees, and tree-sitter, which it uses inside, is not exported. A JDBC dialect depends on `queryengine.jdbc`, and also on `queryengine.sql.parser` if it uses the parser:
 
 ```json
-"dependencies": [{ "id": "queryengine.jdbc", "version": "^0.20.0" }]
+"dependencies": [{ "id": "queryengine.jdbc", "version": ">=0.21.0 <1.0.0" }, { "id": "queryengine.sql.parser", "version": ">=0.21.0 <1.0.0" }]
 ```
+
+In 0.20 `queryengine.jdbc` also exported the parser; since 0.21 it depends on `queryengine.sql.parser` like any other plugin, and exports are not passed on.
 
 ### 3.4 Activation
 
@@ -1233,6 +1236,8 @@ context.payloadbuilderCatalog.registerContribution({
 });
 ```
 
+On the backend, a catalog plugin implements `PayloadbuilderCatalogProviderContributor` and registers it with the `PayloadbuilderCatalogProviderRegistry` it gets from `context.services()`. It compiles against `backend-lib-queryengine-payloadbuilder-foundation` with `provided` scope, and declares `queryengine.payloadbuilder` in `plugin.json`, required or optional (§3.3). Since 0.21 `queryengine.payloadbuilder` exports that API and `se.kuseman.payloadbuilder.api.`; a plugin that doesn't declare the dependency doesn't see them.
+
 See the `payloadbuilder-catalog` example in [`plugins-examples/payloadbuilder-catalog/`](./plugins-examples/payloadbuilder-catalog/) for a complete working example.
 
 ### 10.2 Frontend Plugin SDK
@@ -1334,6 +1339,28 @@ A refused plugin is skipped, and the others still load. It is logged as an error
 A plugin's managed driver (`context.jdbcDrivers.registerDriver`, §7.12) is installed only after the user approves it. The host asks before the first install, and again when the plugin changes what it declares. A native companion's archive entry template must contain `{releaseVersion}`, and a driver class that another contribution already declares is refused.
 
 ---
+
+## 12. Upgrading Plugins to 0.21.0
+
+0.21.0 moves the payloadbuilder catalog API out of the shared layer, gives the SQL parser its own plugin, and adds optional dependencies. Frontend plugins are not affected.
+
+### 12.1 The SQL parser comes from `queryengine.sql.parser`
+
+The SQL parser (`com.queryeer.backend.queryengine.sql.parser.`) has its own built-in plugin, `queryengine.sql.parser`, which bundles it with tree-sitter and exports it (§3.3.1). `queryengine.jdbc` no longer exports it.
+
+- A backend plugin that uses parser classes declares `queryengine.sql.parser`, e.g. `{ "id": "queryengine.sql.parser", "version": ">=0.21.0 <1.0.0" }`. Exports are not passed on, so depending on `queryengine.jdbc` is no longer enough. Without the dependency, loading a parser class fails with an error that names the plugin to depend on.
+- A plugin that only uses the JDBC foundation needs no change.
+
+### 12.2 The payloadbuilder catalog API comes from `queryengine.payloadbuilder`
+
+The built-in plugin `queryengine.runtime.payloadbuilder-foundation` is gone, and with it `se.kuseman.payloadbuilder.api.` on the shared class path. `queryengine.payloadbuilder` bundles the foundation and exports `com.queryeer.backend.queryengine.payloadbuilder.` and `se.kuseman.payloadbuilder.api.`.
+
+- A catalog plugin declares `queryengine.payloadbuilder`, required or optional (§3.3, §10.1). A plugin that already declares it needs no change.
+- Keep compiling against `backend-lib-queryengine-payloadbuilder-foundation` with `provided` scope, and don't bundle `payloadbuilder-api`.
+
+### 12.3 Optional dependencies
+
+New: `{ "id": ..., "optional": true }` in `dependencies`, and `context.isDependencyActive(id)` to check one is in use (§3.3). `PluginDescriptor.dependencies()` now lists required dependencies only; optional ones are in `optionalDependencies()`. A plugin that calls `isDependencyActive` needs Queryeer 0.21 or later.
 
 ## Reference: Example Plugins
 

@@ -130,7 +130,7 @@ When scaffolding a new backend plugin, the following files/registrations are req
 2. **Dev manifest** `plugins/builtin/<pluginId>/plugin.json` — Points at `target/classes` + deps
 3. **Desktop plugin files** under `src/plugins/<pluginId>/` — `module.ts`, `plugin.tsx`, `ConnectionForm.tsx`
 4. **Parent `queryeer-backend/pom.xml`** — Add `<module>` to the modules list
-5. **`pom.xml` plugin id + central publish skip** — In the new module's pom, set `<queryeer.plugin.id>` so it ships as a builtin plugin, and `<skipPublishing>true</skipPublishing>` so the `central-publishing-maven-plugin` does not publish it to Maven Central (only foundation libraries intended for external plugin authors should omit the skip and be eligible for Central). The skip is per-module and is checked since 0.9.0 of the central plugin.
+5. **`pom.xml` plugin id + central publish skip** — In the new module's pom, set `<queryeer.plugin.id>` so it ships as a builtin plugin, and `<skipPublishing>true</skipPublishing>` so the `central-publishing-maven-plugin` does not publish it to Maven Central (only foundation libraries intended for external plugin authors should omit the skip and be eligible for Central). The skip is per-module and is checked since 0.9.0 of the central plugin. A module can be both: `backend-lib-queryengine-sql-parser` is a published library and the built-in plugin `queryengine.sql.parser`, so it sets `queryeer.plugin.id` but not `skipPublishing`.
 
 The jlink, dev-mode, and stage-release scripts plus the GitHub Actions publish job all derive their module sets from the parent pom, so no separate list updates are needed there.
 

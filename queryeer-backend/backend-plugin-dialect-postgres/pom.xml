@@ -42,7 +42,7 @@
             <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
-        <!-- The parser's tests in this module's flat test classpath need tree-sitter; at runtime it comes from queryengine.jdbc -->
+        <!-- The parser's tests in this module's flat test classpath need tree-sitter; at runtime it comes from queryengine.sql.parser -->
         <dependency>
             <groupId>io.github.bonede</groupId>
             <artifactId>tree-sitter</artifactId>

@@ -4,7 +4,7 @@
   "name": "PostgreSQL JDBC Dialect",
   "version": "0.1.0",
   "description": "PostgreSQL dialect runtime contribution.",
-  "dependencies": ["queryengine.jdbc"],
+  "dependencies": ["queryengine.jdbc", "queryengine.sql.parser"],
   "providesCapabilities": ["queryengine.jdbc.dialect.postgres"],
   "requiredCapabilities": ["queryengine.jdbc.connection"],
   "backend": {

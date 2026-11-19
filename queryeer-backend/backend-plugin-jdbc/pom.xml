@@ -31,27 +31,31 @@
             <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
-        <!-- Bundled and exported (backend.exports in plugin.json): dialects and other plugins that depend on queryengine.jdbc load these from this plugin -->
+        <!-- Bundled and exported (backend.exports in plugin.json): dialects and other plugins that depend on queryengine.jdbc load it from this plugin -->
         <dependency>
             <groupId>com.queryeer.backend</groupId>
             <artifactId>backend-lib-queryengine-jdbc-foundation</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- From queryengine.sql.parser at runtime (a dependency in plugin.json) -->
         <dependency>
             <groupId>com.queryeer.backend</groupId>
             <artifactId>backend-lib-queryengine-sql-parser</artifactId>
             <version>${project.version}</version>
+            <scope>provided</scope>
         </dependency>
-        <!-- The SQL parser's implementation (optional in the parser's POM): bundled here, not exported -->
+        <!-- The parser's tests in this module's flat test classpath need tree-sitter; at runtime it comes from queryengine.sql.parser -->
         <dependency>
             <groupId>io.github.bonede</groupId>
             <artifactId>tree-sitter</artifactId>
             <version>${tree-sitter.version}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>io.github.bonede</groupId>
             <artifactId>tree-sitter-sql</artifactId>
             <version>${tree-sitter-sql.version}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.h2database</groupId>
