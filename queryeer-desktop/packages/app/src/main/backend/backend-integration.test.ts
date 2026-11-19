@@ -75,7 +75,9 @@ describe("Backend E2E Integration", () => {
 
     expect(result).toEqual({
       result: expect.objectContaining({
-        actions: expect.arrayContaining(["engine.capabilities"])
+        actions: expect.arrayContaining(["engine.capabilities"]),
+        // "jdbc" is registered by queryengine.payloadbuilder.jdbc, the others by payloadbuilder itself
+        catalogIds: expect.arrayContaining(["jdbc", "filesystem"])
       })
     });
   }, 10_000);

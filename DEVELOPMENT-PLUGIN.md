@@ -508,8 +508,9 @@ public final class MyBackendPlugin implements BackendPlugin
     @Override
     public void activate(BackendPluginContext context, PluginDescriptor descriptor)
     {
-        // Access services, register capabilities
-        SomeService service = context.services().get(SomeService.class);
+        // A service another plugin registers. require() throws with what to check when it's missing (0.21+);
+        // get() returns null instead, for a service the plugin can do without
+        SomeService service = context.services().require(SomeService.class);
         context.logger().info("Activated my backend plugin");
     }
 
@@ -1342,7 +1343,7 @@ A plugin's managed driver (`context.jdbcDrivers.registerDriver`, §7.12) is inst
 
 ## 12. Upgrading Plugins to 0.21.0
 
-0.21.0 moves the payloadbuilder catalog API out of the shared layer, gives the SQL parser its own plugin, and adds optional dependencies. Frontend plugins are not affected.
+0.21.0 moves the payloadbuilder catalog API out of the shared layer, gives the SQL parser its own plugin, separates payloadbuilder from the JDBC engine, and adds optional dependencies. Frontend plugins are not affected.
 
 ### 12.1 The SQL parser comes from `queryengine.sql.parser`
 
@@ -1358,9 +1359,19 @@ The built-in plugin `queryengine.runtime.payloadbuilder-foundation` is gone, and
 - A catalog plugin declares `queryengine.payloadbuilder`, required or optional (§3.3, §10.1). A plugin that already declares it needs no change.
 - Keep compiling against `backend-lib-queryengine-payloadbuilder-foundation` with `provided` scope, and don't bundle `payloadbuilder-api`.
 
-### 12.3 Optional dependencies
+### 12.3 Payloadbuilder no longer depends on the JDBC engine
 
-New: `{ "id": ..., "optional": true }` in `dependencies`, and `context.isDependencyActive(id)` to check one is in use (§3.3). `PluginDescriptor.dependencies()` now lists required dependencies only; optional ones are in `optionalDependencies()`. A plugin that calls `isDependencyActive` needs Queryeer 0.21 or later.
+`queryengine.payloadbuilder` no longer depends on `queryengine.jdbc`. Its `jdbc` catalog moved to a built-in plugin of its own, `queryengine.payloadbuilder.jdbc`, which requires both and is skipped when either is missing.
+
+- A plugin that needs both engines declares both: depending on payloadbuilder no longer brings the JDBC engine, or orders it first.
+- A file that uses a catalog no loaded plugin provides now fails with "Catalog '…' (alias '…') is not available", instead of a generic unknown-alias error.
+- `PayloadbuilderCatalogProviderRegistry.registerContributor` now throws for a catalogId that is already registered (ignoring case), for example `jdbc`, instead of ignoring the second contributor. Register from `activate`.
+
+### 12.4 Optional dependencies and `require`
+
+New: `{ "id": ..., "optional": true }` in `dependencies`, and `context.isDependencyActive(id)` to check one is in use (§3.3). Also new: `context.services().require(type)`, which returns a service or throws with what to check, instead of `get` and a null check. `PluginDescriptor.dependencies()` now lists required dependencies only; optional ones are in `optionalDependencies()`. A plugin that calls `isDependencyActive` or `require` needs Queryeer 0.21 or later.
+
+`require` is a default method on `PluginServiceRegistry`. A test that mocks the registry with Mockito gets `null` from `require` with a plain mock; use `mock(PluginServiceRegistry.class, CALLS_REAL_METHODS)` and stub `get`, or stub `require` directly.
 
 ## Reference: Example Plugins
 

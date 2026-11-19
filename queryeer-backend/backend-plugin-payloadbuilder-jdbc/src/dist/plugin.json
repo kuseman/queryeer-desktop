@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "queryengine.payloadbuilder.jdbc",
+  "name": "Payloadbuilder JDBC Catalog",
+  "version": "${project.version}",
+  "description": "Payloadbuilder's jdbc catalog, over the JDBC engine's connections.",
+  "dependencies": ["queryengine.payloadbuilder", "queryengine.jdbc"],
+  "providesCapabilities": [],
+  "requiredCapabilities": [],
+  "backend": {
+    "entrypointClass": "com.queryeer.backend.plugin.payloadbuilder.jdbc.PayloadbuilderJdbcBackendPlugin"
+  }
+}

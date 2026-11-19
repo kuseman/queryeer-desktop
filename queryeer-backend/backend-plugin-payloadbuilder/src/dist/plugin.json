@@ -4,7 +4,7 @@
   "name": "Payloadbuilder Query Engine",
   "version": "${project.version}",
   "description": "Payloadbuilder query execution runtime.",
-  "dependencies": ["queryengine.jdbc", "queryengine.sql.parser"],
+  "dependencies": ["queryengine.sql.parser"],
   "providesCapabilities": ["queryengine.execute", "queryengine.invoke", "queryengine.payloadbuilder.catalog"],
   "requiredCapabilities": [],
   "backend": {

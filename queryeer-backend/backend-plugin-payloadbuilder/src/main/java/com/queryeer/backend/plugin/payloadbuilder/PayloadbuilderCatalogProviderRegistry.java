@@ -13,11 +13,8 @@ import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.plugin.payloadbuilder.elasticsearch.ElasticsearchCatalogProvider;
 import com.queryeer.backend.plugin.payloadbuilder.filesystem.FilesystemCatalogProvider;
 import com.queryeer.backend.plugin.payloadbuilder.http.HttpCatalogProvider;
-import com.queryeer.backend.plugin.payloadbuilder.jdbc.JdbcCatalogProvider;
 import com.queryeer.backend.plugin.payloadbuilder.kafka.KafkaCatalogProvider;
 import com.queryeer.backend.plugin.payloadbuilder.mongodb.MongoCatalogProvider;
-import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
-import com.queryeer.backend.queryengine.jdbc.JdbcSqlEditorServices;
 import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
@@ -46,12 +43,11 @@ final class PayloadbuilderCatalogProviderRegistry implements com.queryeer.backen
         this.providersByAction = byAction;
     }
 
-    /** Creates the default registry with built-in providers. */
-    static PayloadbuilderCatalogProviderRegistry defaults(ConfigService configService, PayloadMapper payloadMapper, JdbcRuntimeService jdbcRuntimeServices, JdbcSqlEditorServices jdbcSqlEditorServices)
+    /** Creates the default registry with the catalogs payloadbuilder holds itself. Others (jdbc, from queryengine.payloadbuilder.jdbc) are added with {@link #registerContributor}. */
+    static PayloadbuilderCatalogProviderRegistry defaults(ConfigService configService, PayloadMapper payloadMapper)
     {
-        List<PayloadbuilderCatalogProviderContributor> builtins = List.<PayloadbuilderCatalogProviderContributor>of(new JdbcCatalogProvider(jdbcRuntimeServices, jdbcSqlEditorServices),
-                new ElasticsearchCatalogProvider(configService, payloadMapper), new KafkaCatalogProvider(configService, payloadMapper), new MongoCatalogProvider(configService, payloadMapper),
-                new FilesystemCatalogProvider(), new HttpCatalogProvider());
+        List<PayloadbuilderCatalogProviderContributor> builtins = List.<PayloadbuilderCatalogProviderContributor>of(new ElasticsearchCatalogProvider(configService, payloadMapper),
+                new KafkaCatalogProvider(configService, payloadMapper), new MongoCatalogProvider(configService, payloadMapper), new FilesystemCatalogProvider(), new HttpCatalogProvider());
         return new PayloadbuilderCatalogProviderRegistry(builtins);
     }
 
@@ -63,10 +59,22 @@ final class PayloadbuilderCatalogProviderRegistry implements com.queryeer.backen
             return;
         }
         String catalogId = contributor.catalogId();
-        if (isBlank(catalogId)
-                || providersByCatalogId.containsKey(catalogId))
+        if (isBlank(catalogId))
         {
-            return;
+            throw new IllegalArgumentException("A payloadbuilder catalog contributor needs a catalogId: " + contributor.getClass()
+                    .getName());
+        }
+        // Lookups ignore case, so "JDBC" would shadow "jdbc"
+        if (providerByCatalogId(catalogId) != null)
+        {
+            throw new IllegalStateException("Payloadbuilder catalog '" + catalogId
+                                            + "' is already registered, by "
+                                            + providerByCatalogId(catalogId).getClass()
+                                                    .getName()
+                                            + "; "
+                                            + contributor.getClass()
+                                                    .getName()
+                                            + " can't register it again");
         }
         providersByCatalogId.put(catalogId, contributor);
         for (String action : contributor.actions())
