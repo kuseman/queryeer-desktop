@@ -1033,7 +1033,7 @@ Since 0.20.0, Queryeer loads plugins in place from your build output, and restar
 **Developer plugin folders.** Set `QUERYEER_DEV_PLUGINS` to plugin folders before starting Queryeer (or `npm run dev` in core). Separate them like `PATH`: `;` on Windows, `:` elsewhere. Each folder is one plugin, laid out like an installed one: `plugin.json`, `lib/*.jar`, the frontend bundle.
 
 ```powershell
-$env:QUERYEER_DEV_PLUGINS = "C:\src\my-plugins\plugins\mysql\dist\com.queryeer.mysql-0.1.0"
+$env:QUERYEER_DEV_PLUGINS = "C:\src\my-plugins\dist\com.queryeer.jdbc.mysql-0.1.0"
 & "C:\Program Files\Queryeer\Queryeer.exe"
 ```
 
