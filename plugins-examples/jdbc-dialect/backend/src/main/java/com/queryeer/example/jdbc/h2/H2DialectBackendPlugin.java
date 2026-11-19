@@ -11,12 +11,7 @@ public final class H2DialectBackendPlugin implements BackendPlugin
     public void activate(BackendPluginContext context, PluginDescriptor descriptor)
     {
         JdbcRuntimeService runtimeService = context.services()
-                .get(JdbcRuntimeService.class);
-        if (runtimeService == null)
-        {
-            throw new IllegalStateException(
-                    "JdbcRuntimeService is required before H2 dialect activation");
-        }
+                .require(JdbcRuntimeService.class);
         new H2DialectContributor().contribute(runtimeService.dialectRegistry());
         context.logger().info("Activated Example H2 JDBC dialect plugin");
     }

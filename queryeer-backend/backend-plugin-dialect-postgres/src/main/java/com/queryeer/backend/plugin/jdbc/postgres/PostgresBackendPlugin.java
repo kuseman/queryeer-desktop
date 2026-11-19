@@ -11,11 +11,7 @@ public final class PostgresBackendPlugin implements BackendPlugin
     public void activate(BackendPluginContext context, PluginDescriptor descriptor)
     {
         JdbcRuntimeService runtimeService = context.services()
-                .get(JdbcRuntimeService.class);
-        if (runtimeService == null)
-        {
-            throw new IllegalStateException("JdbcRuntimeService is required before PostgreSQL dialect activation");
-        }
+                .require(JdbcRuntimeService.class);
         new PostgresDialectContributor().contribute(runtimeService.dialectRegistry());
         context.logger()
                 .info("Activated PostgreSQL JDBC dialect plugin");
