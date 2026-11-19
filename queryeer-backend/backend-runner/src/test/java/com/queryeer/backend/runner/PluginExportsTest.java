@@ -122,6 +122,37 @@ class PluginExportsTest
     }
 
     @Test
+    void anOptionalDependencysExportsAreVisibleOnlyWhileItIsInUse() throws Exception
+    {
+        URLClassLoader exporter = load(exporterDir, manifest("test.api", List.of("com.example.api."), List.of()));
+        URLClassLoader optional = load(strangerDir, manifestWithOptional("test.optional", "test.api"));
+
+        // Until the activation plan says the dependency is in use, its exports stay hidden
+        ClassNotFoundException error = assertThrows(ClassNotFoundException.class, () -> optional.loadClass("com.example.api.Api"));
+        assertTrue(error.getMessage()
+                .contains("plugin test.api exports it, but it is an optional dependency of test.optional that isn't in use"), error.getMessage());
+
+        ((PluginClassLoaderFactory.ParentAwarePluginClassLoader) optional).useOptionalDependencies(java.util.Set.of("test.api"));
+
+        assertSame(exporter, optional.loadClass("com.example.api.Api")
+                .getClassLoader());
+    }
+
+    @Test
+    void readsOptionalFromADependencyEntry()
+    {
+        PluginManifest.Dependency optional = PluginManifest.Dependency.of(Map.of("id", "queryengine.payloadbuilder", "version", "^0.21.0", "optional", true));
+        PluginManifest.Dependency required = PluginManifest.Dependency.of(Map.of("id", "queryengine.jdbc"));
+        PluginManifest.Dependency invalid = PluginManifest.Dependency.of(Map.of("id", "x", "optional", "yes"));
+
+        assertTrue(optional.optional());
+        assertEquals("^0.21.0", optional.version());
+        assertEquals(null, optional.problem());
+        assertEquals(false, required.optional());
+        assertEquals("optional must be true or false", invalid.problem());
+    }
+
+    @Test
     void anExportedClassTheExporterLacksIsAnError()
     {
         load(exporterDir, manifest("test.api", List.of("com.example.api."), List.of()));
@@ -235,6 +266,12 @@ class PluginExportsTest
         return new PluginManifest(1, id, id, "1.0.0", new PluginManifest.BackendTarget("com.example.Plugin", null, null, exports), null, dependencies.stream()
                 .map(dependency -> new PluginManifest.Dependency(dependency, null))
                 .toList(), List.of(), List.of(), null, null, null);
+    }
+
+    private static PluginManifest manifestWithOptional(String id, String optionalDependency)
+    {
+        return new PluginManifest(1, id, id, "1.0.0", new PluginManifest.BackendTarget("com.example.Plugin", null, null, List.of()), null,
+                List.of(new PluginManifest.Dependency(optionalDependency, null, true)), List.of(), List.of(), null, null, null);
     }
 
     /** Compiles the sources into {@code <name>/} (as a plugin folder's root, which the class loader factory puts on the classpath). */

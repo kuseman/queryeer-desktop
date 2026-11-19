@@ -167,6 +167,33 @@ Plugins are activated in dependency order using a topological sort (Kahn's algor
 
 **Skipped plugins.** The backend skips, with a reason shown in the runtime status, a plugin whose dependency is missing (`Missing dependency: <id>`), out of range (`Needs <id> <range>, but <version> is installed`) or itself skipped (`Dependency <id> was skipped`), and one whose required capability is only provided by skipped plugins. These checks are backend-only; the frontend resolves a plugin's dependencies from the `manifest` in its TypeScript plugin object.
 
+**Optional dependencies.** A plugin that adds to another plugin when it is there, and works without it, marks the dependency optional:
+
+```json
+"dependencies": [
+  { "id": "queryengine.payloadbuilder", "version": ">=0.21.0 <1.0.0", "optional": true }
+]
+```
+
+- **In use** when the plugin is loaded, isn't skipped, and its version is in range: it activates first, and its exports and services are visible, as for a required dependency.
+- **Not in use** otherwise. The plugin still loads, but it doesn't see the dependency's exports. A dependency that is loaded but out of range is listed as a warning in the runtime status ("Optional dependency … not used"). As for required dependencies, a development build (`-SNAPSHOT`) doesn't enforce the range.
+- **Check before use.** Ask `context.isDependencyActive(id)` in `activate`, and keep every class that refers to the dependency's types in a class of its own, loaded only when it returns true. Otherwise loading that class fails, with an error that says the dependency isn't in use.
+
+```java
+@Override
+public void activate(BackendPluginContext context, PluginDescriptor descriptor)
+{
+    // ... the plugin's own features ...
+    if (context.isDependencyActive("queryengine.payloadbuilder"))
+    {
+        PayloadbuilderSupport.register(context); // the only class that imports payloadbuilder types
+    }
+}
+```
+
+- An optional dependency never skips a plugin, also not in a cycle. When an optional dependency would close a dependency cycle (or names the plugin itself), the plugins in that cycle don't use their optional dependencies on each other, with a warning ("Optional dependency … not used: it would close a dependency cycle"). A cycle of required dependencies skips its plugins, as before.
+- `isDependencyActive` needs Queryeer 0.21 or later: declare a range on a built-in plugin that excludes older versions.
+
 ### 3.3.1 Sharing Classes Between Backend Plugins
 
 Each backend plugin has its own class loader. A plugin offers classes to others by exporting packages, and a plugin sees them only through a declared dependency:
@@ -181,7 +208,7 @@ Each backend plugin has its own class loader. A plugin offers classes to others 
 A plugin's class loader looks for a class in this order:
 
 1. The JVM and Queryeer's API (`java.`, `com.queryeer.backend.api.`, `com.queryeer.backend.contract.`, …), from the parent.
-2. Packages exported by a **direct** dependency, from that dependency's own jars. There is one copy of each exported class, so a service registered with `context.services()` by the exporter is found by its dependents. An export is not passed on: a plugin that needs another plugin's exports depends on it directly.
+2. Packages exported by a **direct** dependency (a required one, or an optional one in use), from that dependency's own jars. There is one copy of each exported class, so a service registered with `context.services()` by the exporter is found by its dependents. An export is not passed on: a plugin that needs another plugin's exports depends on it directly.
 3. The plugin's own jars (`lib/`).
 4. The shared parent: `libShared`, where Queryeer's driver service installs JDBC drivers.
 

@@ -40,6 +40,19 @@ class PluginManifestDependenciesTest
     }
 
     @Test
+    void splitsRequiredAndOptionalDependenciesAndKeepsBothRanges() throws IOException
+    {
+        PluginManifest manifest = load("""
+                "dependencies": [{ "id": "queryengine.jdbc", "version": "^0.21.0" }, { "id": "queryengine.payloadbuilder", "version": "^0.21.0", "optional": true }]
+                """);
+
+        PluginDescriptor descriptor = new PluginManifestBackedPlugin(manifest, (com.queryeer.backend.api.BackendPlugin) null).descriptor();
+        assertEquals(List.of("queryengine.jdbc"), descriptor.dependencies());
+        assertEquals(List.of("queryengine.payloadbuilder"), descriptor.optionalDependencies());
+        assertEquals(Map.of("queryengine.jdbc", "^0.21.0", "queryengine.payloadbuilder", "^0.21.0"), descriptor.dependencyVersions());
+    }
+
+    @Test
     void readsAManifestWithoutDependencies() throws IOException
     {
         PluginManifest manifest = load("");

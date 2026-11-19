@@ -11,11 +11,31 @@ record PluginManifest(int schemaVersion, String id, String name, String version,
         List<String> requiredCapabilities, String description, Packaging packaging, RuntimeTarget runtime)
 {
 
-    /** The dependency ids. */
+    /** The ids of all dependencies, required and optional. */
     List<String> dependenciesOrEmpty()
     {
         return dependencies == null ? List.of()
                 : dependencies.stream()
+                        .map(Dependency::id)
+                        .toList();
+    }
+
+    /** The ids of the dependencies the plugin can't load without. */
+    List<String> requiredDependencyIds()
+    {
+        return dependencies == null ? List.of()
+                : dependencies.stream()
+                        .filter(dependency -> !dependency.optional())
+                        .map(Dependency::id)
+                        .toList();
+    }
+
+    /** The ids of the dependencies the plugin uses when they are loaded, and loads without. */
+    List<String> optionalDependencyIds()
+    {
+        return dependencies == null ? List.of()
+                : dependencies.stream()
+                        .filter(Dependency::optional)
                         .map(Dependency::id)
                         .toList();
     }
@@ -44,19 +64,25 @@ record PluginManifest(int schemaVersion, String id, String name, String version,
     }
 
     /**
-     * A dependency: a plugin id, written as a plain string, or {@code { "id": ..., "version": ... }} with a SemVer range in npm syntax (e.g. {@code ^0.20.0}).
+     * A dependency: a plugin id, written as a plain string, or {@code { "id": ..., "version": ..., "optional": ... }} with a SemVer range in npm syntax (e.g. {@code ^0.20.0}). An optional dependency
+     * is used when it is loaded and its version is in range; otherwise the plugin loads without it.
      *
      * @param problem why the entry is malformed (an unknown key such as a misspelt {@code version}, or a value that is not a string), or null; manifest validation rejects it. The shared mapper
      * ignores unknown properties, so a typo would otherwise silently drop the version check.
      */
-    record Dependency(String id, String version, String problem)
+    record Dependency(String id, String version, boolean optional, String problem)
     {
 
-        private static final Set<String> KEYS = Set.of("id", "version");
+        private static final Set<String> KEYS = Set.of("id", "version", "optional");
 
         Dependency(String id, String version)
         {
-            this(id, version, null);
+            this(id, version, false, null);
+        }
+
+        Dependency(String id, String version, boolean optional)
+        {
+            this(id, version, optional, null);
         }
 
         @JsonCreator(
@@ -77,19 +103,22 @@ record PluginManifest(int schemaVersion, String id, String name, String version,
                         .toList();
                 Object id = map.get("id");
                 Object version = map.get("version");
-                String problem = !unknown.isEmpty() ? "unknown key(s) " + unknown + ", expected id and version"
+                Object optional = map.get("optional");
+                String problem = !unknown.isEmpty() ? "unknown key(s) " + unknown + ", expected id, version and optional"
                         : (id != null
                                 && !(id instanceof String))
                                 || (version != null
                                         && !(version instanceof String)) ? "id and version must be strings"
-                                                : null;
+                                                : optional != null
+                                                        && !(optional instanceof Boolean) ? "optional must be true or false"
+                                                                : null;
                 return new Dependency(id instanceof String text ? text
                         : null,
                         version instanceof String text ? text
                                 : null,
-                        problem);
+                        Boolean.TRUE.equals(optional), problem);
             }
-            return new Dependency(null, null, "expected a plugin id or { id, version }, got " + value);
+            return new Dependency(null, null, false, "expected a plugin id or { id, version, optional }, got " + value);
         }
     }
 

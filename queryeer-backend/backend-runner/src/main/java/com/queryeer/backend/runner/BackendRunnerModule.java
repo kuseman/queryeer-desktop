@@ -29,6 +29,8 @@ import com.queryeer.backend.core.BackendPlatformServices;
 import com.queryeer.backend.core.MapperUtils;
 import com.queryeer.backend.core.PluginRuntime;
 import com.queryeer.backend.core.PluginRuntimeStatus;
+import com.queryeer.backend.core.PluginValidation;
+import com.queryeer.backend.core.PluginValidationPlan;
 import com.queryeer.backend.core.security.SecuritySession;
 import com.queryeer.backend.transport.stdio.StdioTransportModule;
 
@@ -84,7 +86,10 @@ public final class BackendRunnerModule
 
         try
         {
-            runtime.activateAll(services.pluginContext());
+            // Plan first: each plugin sees the exports of the optional dependencies it uses before any of its classes load
+            PluginValidationPlan plan = PluginValidation.planActivation(runtime.plugins());
+            classLoaderFactory.useOptionalDependencies(discoveredPlugins, plan.activeOptionalDependencies());
+            runtime.activateAll(services.pluginContext(), plan);
             logRuntimeSummary(services, runtime, discoveredPlugins);
         }
         catch (Exception e)

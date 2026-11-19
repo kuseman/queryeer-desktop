@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 final class PluginClassLoaderFactory
@@ -41,8 +42,8 @@ final class PluginClassLoaderFactory
         List<String> exported = manifest.backend() == null ? List.of()
                 : manifest.backend()
                         .exportsOrEmpty();
-        return new ParentAwarePluginClassLoader(resolveClasspath(source, manifest).toArray(URL[]::new), sharedLoader, parentFirstPrefixes, manifest.id(), exported, manifest.dependenciesOrEmpty(),
-                exports);
+        return new ParentAwarePluginClassLoader(resolveClasspath(source, manifest).toArray(URL[]::new), sharedLoader, parentFirstPrefixes, manifest.id(), exported, manifest.requiredDependencyIds(),
+                manifest.optionalDependencyIds(), exports);
     }
 
     /**
@@ -57,6 +58,21 @@ final class PluginClassLoaderFactory
             {
                 exports.register(plugin.manifest()
                         .id(), loader);
+            }
+        }
+    }
+
+    /**
+     * Sets which optional dependencies each plugin uses, from the activation plan: a plugin sees an optional dependency's exports only when it uses it. Called before activation, when no plugin class
+     * has been loaded yet.
+     */
+    void useOptionalDependencies(List<DiscoveredPlugin> plugins, Map<String, Set<String>> activeOptionalDependencies)
+    {
+        for (DiscoveredPlugin plugin : plugins)
+        {
+            if (plugin.classLoaderResource() instanceof ParentAwarePluginClassLoader loader)
+            {
+                loader.useOptionalDependencies(activeOptionalDependencies.getOrDefault(loader.pluginId, Set.of()));
             }
         }
     }
@@ -291,7 +307,10 @@ final class PluginClassLoaderFactory
         private final String pluginId;
         private final List<String> exportedPrefixes;
         private final List<String> dependencies;
+        private final List<String> optionalDependencies;
         private final ExportRegistry registry;
+        /** The optional dependencies in use; none until the activation plan says (see {@link #useOptionalDependencies(Set)}). */
+        private volatile Set<String> activeOptionalDependencies = Set.of();
 
         ParentAwarePluginClassLoader(URL[] urls, ClassLoader parent, List<String> parentFirstPrefixes)
         {
@@ -301,12 +320,25 @@ final class PluginClassLoaderFactory
         ParentAwarePluginClassLoader(URL[] urls, ClassLoader parent, List<String> parentFirstPrefixes, String pluginId, List<String> exportedPrefixes, List<String> dependencies,
                 ExportRegistry registry)
         {
+            this(urls, parent, parentFirstPrefixes, pluginId, exportedPrefixes, dependencies, List.of(), registry);
+        }
+
+        ParentAwarePluginClassLoader(URL[] urls, ClassLoader parent, List<String> parentFirstPrefixes, String pluginId, List<String> exportedPrefixes, List<String> dependencies,
+                List<String> optionalDependencies, ExportRegistry registry)
+        {
             super(urls, parent);
             this.parentFirstPrefixes = List.copyOf(parentFirstPrefixes);
             this.pluginId = pluginId;
             this.exportedPrefixes = List.copyOf(exportedPrefixes);
             this.dependencies = List.copyOf(dependencies);
+            this.optionalDependencies = List.copyOf(optionalDependencies);
             this.registry = registry;
+        }
+
+        /** The optional dependencies whose exports this plugin sees: those the activation plan says it uses. */
+        void useOptionalDependencies(Set<String> active)
+        {
+            activeOptionalDependencies = Set.copyOf(active);
         }
 
         boolean exports(String className)
@@ -361,15 +393,14 @@ final class PluginClassLoaderFactory
                 return super.loadClass(name, false);
             }
 
-            for (String dependency : dependencies)
+            Class<?> exported = loadFromDependencies(dependencies, name);
+            if (exported == null)
             {
-                ParentAwarePluginClassLoader exporter = registry.get(dependency);
-                if (exporter != null
-                        && exporter != this
-                        && exporter.exports(name))
-                {
-                    return exporter.loadExported(name, pluginId);
-                }
+                exported = loadFromDependencies(activeOptionalDependencies, name);
+            }
+            if (exported != null)
+            {
+                return exported;
             }
 
             try
@@ -388,12 +419,40 @@ final class PluginClassLoaderFactory
             catch (ClassNotFoundException e)
             {
                 String exporter = registry.exporterOf(name, pluginId);
+                if (exporter != null
+                        && optionalDependencies.contains(exporter))
+                {
+                    throw new ClassNotFoundException(name + ": plugin "
+                                                     + exporter
+                                                     + " exports it, but it is an optional dependency of "
+                                                     + pluginId
+                                                     + " that isn't in use; check context.isDependencyActive(\""
+                                                     + exporter
+                                                     + "\") before using its classes",
+                            e);
+                }
                 if (exporter != null)
                 {
                     throw new ClassNotFoundException(name + ": plugin " + exporter + " exports it, but " + pluginId + " does not declare a dependency on " + exporter, e);
                 }
                 throw e;
             }
+        }
+
+        /** The class from the dependency among {@code candidates} that exports its package, or null when none does. */
+        private Class<?> loadFromDependencies(Iterable<String> candidates, String name) throws ClassNotFoundException
+        {
+            for (String dependency : candidates)
+            {
+                ParentAwarePluginClassLoader exporter = registry.get(dependency);
+                if (exporter != null
+                        && exporter != this
+                        && exporter.exports(name))
+                {
+                    return exporter.loadExported(name, pluginId);
+                }
+            }
+            return null;
         }
 
         private boolean isParentFirst(String name)
