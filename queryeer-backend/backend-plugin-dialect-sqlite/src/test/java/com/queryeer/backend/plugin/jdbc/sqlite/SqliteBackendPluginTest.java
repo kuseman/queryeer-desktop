@@ -3,6 +3,7 @@ package com.queryeer.backend.plugin.jdbc.sqlite;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -25,7 +26,7 @@ class SqliteBackendPluginTest
         JdbcRuntimeService runtimeService = mock(JdbcRuntimeService.class);
         when(runtimeService.dialectRegistry()).thenReturn(registry);
 
-        PluginServiceRegistry services = mock(PluginServiceRegistry.class);
+        PluginServiceRegistry services = mock(PluginServiceRegistry.class, CALLS_REAL_METHODS); // require() is a default method over get()
         when(services.get(JdbcRuntimeService.class)).thenReturn(runtimeService);
 
         LoggerService logger = mock(LoggerService.class);
@@ -46,7 +47,7 @@ class SqliteBackendPluginTest
     @Test
     void activateThrowsWhenJdbcRuntimeServiceIsMissing()
     {
-        PluginServiceRegistry services = mock(PluginServiceRegistry.class);
+        PluginServiceRegistry services = mock(PluginServiceRegistry.class, CALLS_REAL_METHODS); // require() is a default method over get()
         when(services.get(JdbcRuntimeService.class)).thenReturn(null);
 
         BackendPluginContext context = mock(BackendPluginContext.class);

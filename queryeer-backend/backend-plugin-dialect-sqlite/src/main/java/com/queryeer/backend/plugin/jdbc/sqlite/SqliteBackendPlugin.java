@@ -11,11 +11,7 @@ public final class SqliteBackendPlugin implements BackendPlugin
     public void activate(BackendPluginContext context, PluginDescriptor descriptor)
     {
         JdbcRuntimeService runtimeService = context.services()
-                .get(JdbcRuntimeService.class);
-        if (runtimeService == null)
-        {
-            throw new IllegalStateException("JdbcRuntimeService is required before SQLite dialect activation");
-        }
+                .require(JdbcRuntimeService.class);
         new SqliteDialectContributor().contribute(runtimeService.dialectRegistry());
         context.logger()
                 .info("Activated SQLite JDBC dialect plugin");

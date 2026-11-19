@@ -11,11 +11,7 @@ public final class SqlServerBackendPlugin implements BackendPlugin
     public void activate(BackendPluginContext context, PluginDescriptor descriptor)
     {
         JdbcRuntimeService runtimeService = context.services()
-                .get(JdbcRuntimeService.class);
-        if (runtimeService == null)
-        {
-            throw new IllegalStateException("JdbcRuntimeService is required before SQL Server dialect activation");
-        }
+                .require(JdbcRuntimeService.class);
         new SqlServerDialectContributor().contribute(runtimeService.dialectRegistry());
         context.logger()
                 .info("Activated SQL Server JDBC dialect plugin");

@@ -11,7 +11,7 @@ public final class FakeCatalogBackendPlugin implements BackendPlugin
     public void activate(BackendPluginContext context, PluginDescriptor descriptor)
     {
         context.services()
-                .get(PayloadbuilderCatalogProviderRegistry.class)
+                .require(PayloadbuilderCatalogProviderRegistry.class)
                 .registerContributor(new FakeCatalogContributor());
         context.logger()
                 .info("Activated fake payloadbuilder catalog example plugin");
