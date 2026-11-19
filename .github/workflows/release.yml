@@ -259,8 +259,28 @@ jobs:
         id: central-release
         run: python3 .github/scripts/check_maven_central_release.py "$QUERYEER_RELEASE_VERSION"
 
-      - name: Refuse blind Maven Central re-upload
+      # A re-run only risks a duplicate deployment when an earlier attempt actually reached the upload
+      # step. Attempts that failed before it (e.g. in backend-verify) never touched Central.
+      - name: Check earlier attempts for a Maven upload
+        id: earlier-upload
         if: github.event_name == 'push' && github.run_attempt != 1 && steps.central-release.outputs.state == 'missing'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          UPLOADS=0
+          for attempt in $(seq 1 $((GITHUB_RUN_ATTEMPT - 1))); do
+            COUNT=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${attempt}/jobs?per_page=100" | jq '[.[].jobs[] | select(.name == "Publish Maven Central") | .steps[]? | select(.name == "Publish backend artifacts to Maven Central" and .conclusion != "skipped")] | length')
+            echo "Attempt $attempt: $COUNT Maven upload step(s) started."
+            UPLOADS=$((UPLOADS + COUNT))
+          done
+          if [ "$UPLOADS" -ne 0 ]; then
+            echo "uploaded=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "uploaded=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Refuse blind Maven Central re-upload
+        if: github.event_name == 'push' && github.run_attempt != 1 && steps.central-release.outputs.state == 'missing' && steps.earlier-upload.outputs.uploaded != 'false'
         run: |
           echo "The release is not public yet, but a previous workflow attempt may still be processing it."
           echo "Use the Recover Maven Release workflow with the original Central deployment ID instead of re-uploading blindly."
@@ -273,7 +293,7 @@ jobs:
           GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
 
       - name: Publish backend artifacts to Maven Central
-        if: github.event_name == 'push' && github.run_attempt == 1 && steps.central-release.outputs.published != 'true'
+        if: github.event_name == 'push' && (github.run_attempt == 1 || steps.earlier-upload.outputs.uploaded == 'false') && steps.central-release.outputs.published != 'true'
         shell: bash
         run: |
           set +e

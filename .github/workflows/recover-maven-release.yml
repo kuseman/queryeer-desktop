@@ -1,5 +1,5 @@
 name: Recover Maven Release
-run-name: Recover Maven ${{ inputs.release_version }} from ${{ inputs.deployment_id }}
+run-name: Recover Maven ${{ inputs.release_version }} from ${{ inputs.deployment_id || 'no deployment' }}
 
 on:
   workflow_dispatch:
@@ -9,8 +9,9 @@ on:
         required: true
         type: string
       deployment_id:
-        description: Central deployment ID from the original release run
-        required: true
+        description: Central deployment ID from the original release run (leave empty if the release run never reached the Maven upload)
+        required: false
+        default: ""
         type: string
 
 concurrency:
@@ -51,8 +52,35 @@ jobs:
           QUERYEER_REPOSITORY_ROOT: release-source
         run: python3 .github/scripts/check_maven_central_release.py "$RELEASE_VERSION"
 
+      - name: Confirm no release run uploaded to Central
+        if: steps.central-release.outputs.state == 'missing' && inputs.deployment_id == ''
+        id: no-deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          TAG="v$RELEASE_VERSION"
+          RUNS=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/workflows/release.yml/runs?branch=${TAG}&event=push&per_page=100" | jq -r --arg tag "$TAG" '.[].workflow_runs[] | select(.head_branch == $tag) | "\(.id) \(.run_attempt)"')
+          if [ -z "$RUNS" ]; then
+            echo "No release runs found for $TAG."
+          fi
+          UPLOADS=0
+          while read -r RUN_ID RUN_ATTEMPTS; do
+            [ -z "$RUN_ID" ] && continue
+            for attempt in $(seq 1 "$RUN_ATTEMPTS"); do
+              COUNT=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/attempts/${attempt}/jobs?per_page=100" | jq '[.[].jobs[] | select(.name == "Publish Maven Central") | .steps[]? | select(.name == "Publish backend artifacts to Maven Central" and .conclusion != "skipped")] | length')
+              echo "Release run $RUN_ID attempt $attempt: $COUNT Maven upload step(s) started."
+              UPLOADS=$((UPLOADS + COUNT))
+            done
+          done <<< "$RUNS"
+          if [ "$UPLOADS" -ne 0 ]; then
+            echo "A release run for $TAG reached the Maven upload step. Rerun this workflow with that run's Central deployment ID."
+            exit 1
+          fi
+          echo "reupload=true" >> "$GITHUB_OUTPUT"
+
       - name: Inspect original Central deployment
-        if: steps.central-release.outputs.state == 'missing'
+        if: steps.central-release.outputs.state == 'missing' && inputs.deployment_id != ''
         id: deployment
         env:
           DEPLOYMENT_ID: ${{ inputs.deployment_id }}
@@ -99,7 +127,7 @@ jobs:
           exit 1
 
       - name: Recheck Maven Central before re-upload
-        if: steps.deployment.outputs.reupload == 'true'
+        if: (steps.deployment.outputs.reupload == 'true' || steps.no-deployment.outputs.reupload == 'true')
         id: central-recheck
         env:
           RELEASE_VERSION: ${{ inputs.release_version }}
@@ -107,7 +135,7 @@ jobs:
         run: python3 .github/scripts/check_maven_central_release.py "$RELEASE_VERSION"
 
       - name: Refuse repeated re-upload
-        if: steps.deployment.outputs.reupload == 'true' && steps.central-recheck.outputs.state == 'missing'
+        if: (steps.deployment.outputs.reupload == 'true' || steps.no-deployment.outputs.reupload == 'true') && steps.central-recheck.outputs.state == 'missing'
         env:
           GH_TOKEN: ${{ github.token }}
           DEPLOYMENT_ID: ${{ inputs.deployment_id }}
@@ -117,7 +145,7 @@ jobs:
             echo "This recovery run already attempted a replacement upload. Use the replacement Central deployment ID for further recovery."
             exit 1
           fi
-          RUN_TITLE="Recover Maven $RELEASE_VERSION from $DEPLOYMENT_ID"
+          RUN_TITLE="Recover Maven $RELEASE_VERSION from ${DEPLOYMENT_ID:-no deployment}"
           PREVIOUS_UPLOADS=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/workflows/recover-maven-release.yml/runs?event=workflow_dispatch&per_page=100" | jq --arg title "$RUN_TITLE" --argjson run_number "$GITHUB_RUN_NUMBER" '[.[].workflow_runs[] | select(.run_number < $run_number and .display_title == $title and .conclusion == "success")] | length')
           if [ "$PREVIOUS_UPLOADS" -ne 0 ]; then
             echo "A recovery using Central deployment $DEPLOYMENT_ID already succeeded. Use its replacement deployment ID instead of uploading again."
@@ -125,7 +153,7 @@ jobs:
           fi
 
       - name: Set up JDK 25
-        if: steps.deployment.outputs.reupload == 'true' && steps.central-recheck.outputs.state == 'missing'
+        if: (steps.deployment.outputs.reupload == 'true' || steps.no-deployment.outputs.reupload == 'true') && steps.central-recheck.outputs.state == 'missing'
         uses: actions/setup-java@v5
         with:
           java-version: "25.0.5+0.3.1"
@@ -140,11 +168,11 @@ jobs:
           MAVEN_PASSWORD: ${{ secrets.OSS_SONATYPE_PASSWORD }}
 
       - name: Make Maven wrapper executable
-        if: steps.deployment.outputs.reupload == 'true' && steps.central-recheck.outputs.state == 'missing'
+        if: (steps.deployment.outputs.reupload == 'true' || steps.no-deployment.outputs.reupload == 'true') && steps.central-recheck.outputs.state == 'missing'
         run: chmod +x ./release-source/queryeer-backend/mvnw
 
       - name: Re-upload backend artifacts to Maven Central
-        if: steps.deployment.outputs.reupload == 'true' && steps.central-recheck.outputs.state == 'missing'
+        if: (steps.deployment.outputs.reupload == 'true' || steps.no-deployment.outputs.reupload == 'true') && steps.central-recheck.outputs.state == 'missing'
         run: ./release-source/queryeer-backend/mvnw -B -f release-source/queryeer-backend/pom.xml clean deploy -DperformRelease=true -DskipTests=true -Dmaven.test.skip=true -DwaitUntil=uploaded
         env:
           MAVEN_USERNAME: ${{ secrets.OSS_SONATYPE_USERNAME }}
