@@ -35,8 +35,8 @@ final class PluginManifestBackedPlugin implements BackendPlugin
     @Override
     public PluginDescriptor descriptor()
     {
-        return new PluginDescriptor(manifest.id(), manifest.name(), manifest.version(), manifest.dependenciesOrEmpty(), manifest.providesCapabilitiesOrEmpty(), manifest.requiredCapabilitiesOrEmpty(),
-                manifest.dependencyVersions());
+        return new PluginDescriptor(manifest.id(), manifest.name(), manifest.version(), manifest.requiredDependencyIds(), manifest.providesCapabilitiesOrEmpty(),
+                manifest.requiredCapabilitiesOrEmpty(), manifest.dependencyVersions(), manifest.optionalDependencyIds());
     }
 
     /** The same plugin, described by another manifest (e.g. a built-in with the backend's version). */

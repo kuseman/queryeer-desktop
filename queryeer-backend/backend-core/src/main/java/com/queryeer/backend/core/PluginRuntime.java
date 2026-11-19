@@ -2,9 +2,11 @@ package com.queryeer.backend.core;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.queryeer.backend.api.BackendPlugin;
 import com.queryeer.backend.api.BackendPluginContext;
@@ -32,8 +34,14 @@ public final class PluginRuntime
 
     public void activateAll(BackendPluginContext context) throws Exception
     {
-        PluginValidationPlan plan = PluginValidation.planActivation(plugins);
+        activateAll(context, PluginValidation.planActivation(plugins));
+    }
+
+    /** Activates by a plan made beforehand from {@link #plugins()}, so the caller can prepare for it first (e.g. which exports each plugin sees). */
+    public void activateAll(BackendPluginContext context, PluginValidationPlan plan) throws Exception
+    {
         warnings = Map.copyOf(plan.warnings());
+        Set<String> activatedIds = new HashSet<>();
 
         for (Map.Entry<String, PluginRuntimeState> entry : plan.preActivationStates()
                 .entrySet())
@@ -49,8 +57,15 @@ public final class PluginRuntime
                     .id();
             try
             {
-                plugin.activate(context, plugin.descriptor());
+                Set<String> dependencies = new HashSet<>(plugin.descriptor()
+                        .dependencies());
+                dependencies.addAll(plan.activeOptionalDependencies()
+                        .getOrDefault(pluginId, Set.of()));
+                // A dependency counts as active only once it activated: a failed one doesn't
+                dependencies.retainAll(activatedIds);
+                plugin.activate(new PluginScopedContext(context, Set.copyOf(dependencies)), plugin.descriptor());
                 activated.add(plugin);
+                activatedIds.add(pluginId);
                 String warning = warnings.get(pluginId);
                 statusByPluginId.put(pluginId, new PluginRuntimeStatus(pluginId, PluginRuntimeState.ACTIVATED, warning == null ? "Activated"
                         : "Activated. " + warning));

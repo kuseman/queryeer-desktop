@@ -2,6 +2,8 @@ package com.queryeer.backend.core;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -85,9 +87,10 @@ public final class PluginValidation
             }
 
             // A plugin in a dependency cycle, or depending on one, can't be ordered: it is skipped, the others still run.
-            // Its capabilities are then gone too, so the checks above run again.
+            // Its capabilities are then gone too, so the checks above run again. Only required dependencies count here:
+            // an optional dependency never skips a plugin (see optionalWithoutCycles)
             Set<String> ordered = new LinkedHashSet<>();
-            for (BackendPlugin plugin : topologicalSort(pluginById, descriptorById, skipReasons.keySet()))
+            for (BackendPlugin plugin : topologicalSort(pluginById, descriptorById, skipReasons.keySet(), Map.of()))
             {
                 ordered.add(plugin.descriptor()
                         .id());
@@ -103,7 +106,10 @@ public final class PluginValidation
             }
         }
 
-        List<BackendPlugin> sorted = topologicalSort(pluginById, descriptorById, skipReasons.keySet());
+        Map<String, List<String>> optionalNotes = new LinkedHashMap<>();
+        Map<String, Set<String>> activeOptional = activeOptionalDependencies(descriptorById, skipReasons, optionalNotes);
+        List<BackendPlugin> sorted = optionalWithoutCycles(pluginById, descriptorById, skipReasons.keySet(), activeOptional, optionalNotes);
+        optionalNotes.forEach((id, notes) -> warnings.merge(id, String.join(". ", notes), (required, optional) -> required + ". " + optional));
 
         for (String id : descriptorById.keySet())
         {
@@ -113,7 +119,201 @@ public final class PluginValidation
 
         warnings.keySet()
                 .removeAll(skipReasons.keySet());
-        return new PluginValidationPlan(sorted, skipReasons, preStates, warnings);
+        Map<String, Set<String>> frozenOptional = new LinkedHashMap<>();
+        activeOptional.forEach((id, active) -> frozenOptional.put(id, Set.copyOf(active)));
+        return new PluginValidationPlan(sorted, skipReasons, preStates, warnings, Collections.unmodifiableMap(frozenOptional));
+    }
+
+    /**
+     * The activation order, with the optional dependencies in use as ordering edges. Required dependencies alone have no cycle (those plugins were skipped), so plugins left unordered are in a cycle
+     * that an optional dependency closes, including one on itself, or depend on one. Each cycle is a strongly connected component of the unordered plugins: its members stop using their optional
+     * dependencies on each other, with a note, and the sort runs again. Optional dependencies between components, or from a plugin outside any cycle, are kept. Within a component, the required edges
+     * alone are acyclic, so the next sort orders everything.
+     */
+    private static List<BackendPlugin> optionalWithoutCycles(Map<String, BackendPlugin> pluginById, Map<String, PluginDescriptor> descriptorById, Set<String> skipped,
+            Map<String, Set<String>> activeOptional, Map<String, List<String>> notes)
+    {
+        while (true)
+        {
+            List<BackendPlugin> sorted = topologicalSort(pluginById, descriptorById, skipped, activeOptional);
+            if (sorted.size() + skipped.size() == descriptorById.size())
+            {
+                return sorted;
+            }
+            Set<String> unordered = new LinkedHashSet<>(descriptorById.keySet());
+            unordered.removeAll(skipped);
+            for (BackendPlugin plugin : sorted)
+            {
+                unordered.remove(plugin.descriptor()
+                        .id());
+            }
+            Map<String, Integer> component = stronglyConnectedComponents(unordered, descriptorById, activeOptional);
+            boolean dropped = false;
+            for (String id : unordered)
+            {
+                Set<String> active = activeOptional.getOrDefault(id, Set.of());
+                for (String dependency : List.copyOf(active))
+                {
+                    // Same component: a self-dependency, or both on one cycle
+                    if (component.containsKey(dependency)
+                            && component.get(dependency)
+                                    .equals(component.get(id))
+                            && (dependency.equals(id)
+                                    || componentSize(component, component.get(id)) > 1))
+                    {
+                        active.remove(dependency);
+                        notes.computeIfAbsent(id, key -> new ArrayList<>())
+                                .add("Optional dependency " + dependency + " not used: it would close a dependency cycle");
+                        dropped = true;
+                    }
+                }
+            }
+            if (!dropped)
+            {
+                // Can't happen: a cycle among plugins that aren't skipped contains an optional edge
+                return sorted;
+            }
+        }
+    }
+
+    /** Tarjan's algorithm over the given plugins and the ordering edges between them: a component number per plugin. */
+    private static Map<String, Integer> stronglyConnectedComponents(Set<String> ids, Map<String, PluginDescriptor> descriptorById, Map<String, Set<String>> activeOptional)
+    {
+        Map<String, Integer> index = new HashMap<>();
+        Map<String, Integer> lowLink = new HashMap<>();
+        ArrayDeque<String> stack = new ArrayDeque<>();
+        Set<String> onStack = new HashSet<>();
+        Map<String, Integer> component = new HashMap<>();
+        int[] counters = new int[2]; // next index, next component
+        for (String id : ids)
+        {
+            if (!index.containsKey(id))
+            {
+                strongConnect(id, ids, descriptorById, activeOptional, index, lowLink, stack, onStack, component, counters);
+            }
+        }
+        return component;
+    }
+
+    private static void strongConnect(String id, Set<String> ids, Map<String, PluginDescriptor> descriptorById, Map<String, Set<String>> activeOptional, Map<String, Integer> index,
+            Map<String, Integer> lowLink, ArrayDeque<String> stack, Set<String> onStack, Map<String, Integer> component, int[] counters)
+    {
+        index.put(id, counters[0]);
+        lowLink.put(id, counters[0]);
+        counters[0]++;
+        stack.push(id);
+        onStack.add(id);
+        for (String next : edges(descriptorById.get(id), activeOptional))
+        {
+            if (!ids.contains(next))
+            {
+                continue;
+            }
+            if (!index.containsKey(next))
+            {
+                strongConnect(next, ids, descriptorById, activeOptional, index, lowLink, stack, onStack, component, counters);
+                lowLink.put(id, Math.min(lowLink.get(id), lowLink.get(next)));
+            }
+            else if (onStack.contains(next))
+            {
+                lowLink.put(id, Math.min(lowLink.get(id), index.get(next)));
+            }
+        }
+        if (lowLink.get(id)
+                .equals(index.get(id)))
+        {
+            String member;
+            do
+            {
+                member = stack.pop();
+                onStack.remove(member);
+                component.put(member, counters[1]);
+            } while (!member.equals(id));
+            counters[1]++;
+        }
+    }
+
+    private static long componentSize(Map<String, Integer> component, Integer number)
+    {
+        return component.values()
+                .stream()
+                .filter(number::equals)
+                .count();
+    }
+
+    /** A plugin's ordering edges: its required dependencies and the optional ones it uses. */
+    private static Set<String> edges(PluginDescriptor descriptor, Map<String, Set<String>> activeOptional)
+    {
+        Set<String> edges = new LinkedHashSet<>(descriptor.dependencies());
+        edges.addAll(activeOptional.getOrDefault(descriptor.id(), Set.of()));
+        return edges;
+    }
+
+    /**
+     * The optional dependencies each plugin that isn't skipped will use, by plugin id: those that are loaded, not skipped and in range. A range isn't enforced against a development build, as for
+     * required dependencies. An optional dependency never skips a plugin.
+     *
+     * @param notes collects why an optional dependency that is loaded isn't used, or is used out of range, by plugin id; null to skip that
+     */
+    private static Map<String, Set<String>> activeOptionalDependencies(Map<String, PluginDescriptor> descriptorById, Map<String, String> skipReasons, Map<String, List<String>> notes)
+    {
+        Map<String, Set<String>> result = new LinkedHashMap<>();
+        for (PluginDescriptor descriptor : descriptorById.values())
+        {
+            if (skipReasons.containsKey(descriptor.id()))
+            {
+                continue;
+            }
+            Set<String> active = new LinkedHashSet<>();
+            for (String dependency : descriptor.optionalDependencies())
+            {
+                PluginDescriptor target = descriptorById.get(dependency);
+                if (target == null
+                        || skipReasons.containsKey(dependency))
+                {
+                    continue;
+                }
+                String note = null;
+                boolean use = true;
+                String range = descriptor.dependencyVersions()
+                        .get(dependency);
+                if (range != null)
+                {
+                    try
+                    {
+                        if (!SemVer.satisfies(target.version(), range))
+                        {
+                            if (SemVer.isDevelopmentBuild(target.version()))
+                            {
+                                note = "Needs " + dependency + " " + range + ", but " + target.version() + " is a development build; the range isn't enforced";
+                            }
+                            else
+                            {
+                                use = false;
+                                note = "Optional dependency " + dependency + " not used: needs " + range + ", but " + target.version() + " is installed";
+                            }
+                        }
+                    }
+                    catch (IllegalArgumentException e)
+                    {
+                        use = false;
+                        note = "Optional dependency " + dependency + " not used: cannot check its version: " + e.getMessage();
+                    }
+                }
+                if (use)
+                {
+                    active.add(dependency);
+                }
+                if (note != null
+                        && notes != null)
+                {
+                    notes.computeIfAbsent(descriptor.id(), id -> new ArrayList<>())
+                            .add(note);
+                }
+            }
+            result.put(descriptor.id(), active);
+        }
+        return result;
     }
 
     /**
@@ -175,7 +375,8 @@ public final class PluginValidation
         return null;
     }
 
-    private static List<BackendPlugin> topologicalSort(Map<String, BackendPlugin> pluginById, Map<String, PluginDescriptor> descriptorById, Set<String> skipped)
+    private static List<BackendPlugin> topologicalSort(Map<String, BackendPlugin> pluginById, Map<String, PluginDescriptor> descriptorById, Set<String> skipped,
+            Map<String, Set<String>> activeOptional)
     {
         Map<String, Integer> indegree = new LinkedHashMap<>();
         Map<String, Set<String>> dependents = new LinkedHashMap<>();
@@ -196,8 +397,8 @@ public final class PluginValidation
             {
                 continue;
             }
-            // Each dependency once: a repeated entry would count twice in indegree but be released once
-            for (String dependency : new LinkedHashSet<>(descriptor.dependencies()))
+            // Each dependency once: a repeated entry would count twice in indegree but be released once. Optional dependencies order a plugin only when it uses them
+            for (String dependency : edges(descriptor, activeOptional))
             {
                 if (!indegree.containsKey(dependency))
                 {
