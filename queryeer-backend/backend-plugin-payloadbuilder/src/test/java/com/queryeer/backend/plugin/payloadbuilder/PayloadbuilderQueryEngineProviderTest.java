@@ -80,7 +80,7 @@ class PayloadbuilderQueryEngineProviderTest
 
     private static PayloadbuilderQueryEngineProvider createProvider(ConfigService config)
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(config, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(config, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         return new PayloadbuilderQueryEngineProvider(config, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
     }
 
@@ -163,7 +163,7 @@ class PayloadbuilderQueryEngineProviderTest
                 return null;
             }
         };
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(config, TEST_MAPPER, mockJdbcRuntime, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(config, TEST_MAPPER, mockJdbcRuntime, JDBC_SQL_EDITOR_SERVICES);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(config, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
         RecordingPublisher publisher = new RecordingPublisher();
         Map<String, Object> engineState = Map.of("payloadbuilder", Map.of("catalogs", Map.of("myjdbc", Map.of("catalogId", "jdbc", "properties", Map.of("connectionId", "test-conn")))));
@@ -189,9 +189,50 @@ class PayloadbuilderQueryEngineProviderTest
     }
 
     @Test
+    void executeSaysWhyWhenTheJdbcCatalogIsNotAvailable()
+    {
+        // Without queryengine.payloadbuilder.jdbc (e.g. the JDBC engine didn't load), the jdbc catalog isn't registered
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER),
+                PARSE_SESSIONS, PARSE_FUNCTION);
+        RecordingPublisher publisher = new RecordingPublisher();
+        Map<String, Object> engineState = Map.of("payloadbuilder",
+                Map.of("defaultCatalogAlias", "db", "catalogs", Map.of("db", Map.of("catalogId", "jdbc", "properties", Map.of("connectionId", "conn-1")))));
+
+        provider.execute("exec-missing", "file-missing", "select 1", engineState, publisher);
+
+        Assertions.assertEquals("VALIDATION", publisher.errorCode);
+        Assertions.assertTrue(publisher.errorMessage.contains("Catalog 'jdbc' (alias 'db') is not available")
+                && publisher.errorMessage.contains("queryengine.payloadbuilder.jdbc"), publisher.errorMessage);
+        Assertions.assertFalse(publisher.completed);
+    }
+
+    @Test
+    void aCatalogIdCanBeRegisteredOnlyOnceIgnoringCase()
+    {
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+
+        IllegalStateException error = Assertions.assertThrows(IllegalStateException.class, () -> registry.registerContributor(new PayloadbuilderCatalogProviderContributor()
+        {
+            @Override
+            public String catalogId()
+            {
+                return "JDBC";
+            }
+
+            @Override
+            public se.kuseman.payloadbuilder.api.catalog.Catalog createCatalog()
+            {
+                return null;
+            }
+        }));
+        Assertions.assertTrue(error.getMessage()
+                .contains("'JDBC' is already registered"), error.getMessage());
+    }
+
+    @Test
     void executeRebuildsSessionWhenCatalogSelectionChanges()
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         registry.registerContributor(new AliasEchoCatalogProvider());
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
 
@@ -213,7 +254,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void executePreservesSessionAndTempTablesWhenCatalogPropertiesChange()
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         registry.registerContributor(new PropertyEchoCatalogProvider());
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
 
@@ -235,7 +276,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void executeReusesSessionAndAppliesNewConnectionState()
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         registry.registerContributor(new PropertyEchoCatalogProvider());
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
 
@@ -256,7 +297,7 @@ class PayloadbuilderQueryEngineProviderTest
     void executeSerializesConcurrentQueriesForSameFile() throws Exception
     {
         BlockingPropertyEchoCatalog catalog = new BlockingPropertyEchoCatalog();
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         registry.registerContributor(new BlockingPropertyEchoCatalogProvider(catalog));
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
 
@@ -285,7 +326,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void executeClearsSubmittedCatalogInputPropertiesBetweenRuns()
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         registry.registerContributor(new PropertyEchoCatalogProvider());
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
 
@@ -308,7 +349,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void executeClearsCatalogTranslatedPropertiesBetweenRuns()
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         registry.registerContributor(new TranslatedPropertyEchoCatalogProvider());
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
 
@@ -809,7 +850,7 @@ class PayloadbuilderQueryEngineProviderTest
         IncrementalParseSessionService sessions = Mockito.mock(IncrementalParseSessionService.class);
         Mockito.when(sessions.get("payloadbuilder", "file-1"))
                 .thenReturn(Optional.of(snapshot));
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, sessions, PARSE_FUNCTION);
 
         Object result = provider.invoke("file-1", "sql.parse.snapshot", null);
@@ -826,7 +867,7 @@ class PayloadbuilderQueryEngineProviderTest
     void invokeSqlCompleteDelegatesToSqlCompletionSupport()
     {
         IncrementalParseSessionService sessions = Mockito.mock(IncrementalParseSessionService.class);
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, sessions, PARSE_FUNCTION);
 
         Object result = provider.invoke("file-1", "sql.complete",
@@ -839,7 +880,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void invokeSqlCompleteIncludesOptedInPayloadbuilderCatalogTables()
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         registry.registerContributor(new TestSemanticCatalogProvider(true));
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
 
@@ -859,7 +900,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void invokeSqlCompleteQuotesInvalidQualifiedTableNameParts()
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         registry.registerContributor(new TestSemanticCatalogProvider(true));
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
 
@@ -878,7 +919,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void invokeSqlCompleteIncludesOptedInPayloadbuilderCatalogColumns()
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         registry.registerContributor(new TestSemanticCatalogProvider(true));
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
 
@@ -901,7 +942,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void invokeSqlCompleteUsesExplicitCatalogPrefixForSystemTableCatalogTables()
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         registry.registerContributor(new TestSemanticCatalogProvider(true));
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
         String text = "SELECT * FROM sem#pro";
@@ -923,7 +964,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void invokeSqlCompleteUsesExplicitCatalogPrefixForSystemTableCatalogColumns()
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         registry.registerContributor(new TestSemanticCatalogProvider(true));
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
         String text = "SELECT * FROM sem#products p WHERE p.";
@@ -941,7 +982,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void invokeSqlCompleteDoesNotQualifyColumnsForCatalogQualifiedUnaliasedSystemTable()
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         registry.registerContributor(new TestSemanticCatalogProvider(true));
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
         String text = "SELECT * FROM sem#products WHERE ";
@@ -962,7 +1003,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void invokeSqlHoverDoesNotQualifyColumnForCatalogQualifiedUnaliasedSystemTable()
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         registry.registerContributor(new TestSemanticCatalogProvider(true));
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
         String text = "SELECT * FROM sem#products WHERE id = 1";
@@ -981,7 +1022,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void invokeSqlHoverUsesExplicitCatalogPrefixForSystemTableCatalogTable()
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         registry.registerContributor(new TestSemanticCatalogProvider(true));
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
         String text = "SELECT * FROM sem#products";
@@ -1003,7 +1044,7 @@ class PayloadbuilderQueryEngineProviderTest
         JdbcSqlEditorServices jdbcSqlEditorServices = Mockito.mock(JdbcSqlEditorServices.class);
         Mockito.when(jdbcSqlEditorServices.complete(Mockito.any()))
                 .thenReturn(List.of(new JdbcSqlEditorServices.CompletionItem("id", "column", "JDBC column", null, "id", "plain", "jdbc.schema")));
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
         Map<String, Object> engineState = Map.of("payloadbuilder",
                 Map.of("defaultCatalogAlias", "jdbc", "catalogs", Map.of("jdbc", Map.of("catalogId", "jdbc", "properties", Map.of("connectionId", "conn-1", "database", "appdb")))));
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
@@ -1052,7 +1093,7 @@ class PayloadbuilderQueryEngineProviderTest
         JdbcSqlEditorServices jdbcSqlEditorServices = Mockito.mock(JdbcSqlEditorServices.class);
         Mockito.when(jdbcSqlEditorServices.complete(Mockito.any()))
                 .thenReturn(List.of(new JdbcSqlEditorServices.CompletionItem("jdbc.col1", "column", "jdbc.col1", null, "jdbc.col1", "plain", "jdbc.schema")));
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
         Map<String, Object> engineState = Map.of("payloadbuilder",
                 Map.of("defaultCatalogAlias", "jdbc", "catalogs", Map.of("jdbc", Map.of("catalogId", "jdbc", "properties", Map.of("connectionId", "conn-1", "database", "appdb")))));
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
@@ -1077,7 +1118,7 @@ class PayloadbuilderQueryEngineProviderTest
         JdbcSqlEditorServices jdbcSqlEditorServices = Mockito.mock(JdbcSqlEditorServices.class);
         Mockito.when(jdbcSqlEditorServices.complete(Mockito.any()))
                 .thenReturn(List.of(new JdbcSqlEditorServices.CompletionItem("id", "column", "JDBC column", null, "id", "plain", "jdbc.schema")));
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
         Map<String, Object> engineState = jdbcCatalogEngineStateWithoutDefault();
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
         String text = "SELECT * FROM jdbc#dbo.Article_ListPage WHERE ";
@@ -1103,7 +1144,7 @@ class PayloadbuilderQueryEngineProviderTest
         JdbcSqlEditorServices jdbcSqlEditorServices = Mockito.mock(JdbcSqlEditorServices.class);
         Mockito.when(jdbcSqlEditorServices.hover(Mockito.any()))
                 .thenReturn(new JdbcSqlEditorServices.Hover("**Column: id**"));
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
         Map<String, Object> engineState = jdbcCatalogEngineStateWithoutDefault();
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
         String text = "SELECT * FROM jdbc#dbo.Article_ListPage WHERE id = 1";
@@ -1130,7 +1171,7 @@ class PayloadbuilderQueryEngineProviderTest
         JdbcSqlEditorServices jdbcSqlEditorServices = Mockito.mock(JdbcSqlEditorServices.class);
         Mockito.when(jdbcSqlEditorServices.complete(Mockito.any()))
                 .thenReturn(List.of(new JdbcSqlEditorServices.CompletionItem("jdbc.col1", "column", "jdbc.col1", null, "jdbc.col1", "plain", "jdbc.schema")));
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
         Map<String, Object> engineState = Map.of("payloadbuilder",
                 Map.of("defaultCatalogAlias", "jdbc", "catalogs", Map.of("jdbc", Map.of("catalogId", "jdbc", "properties", Map.of("connectionId", "conn-1", "database", "appdb")))));
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
@@ -1153,7 +1194,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void invokeSqlCompleteDoesNotUseCatalogThatHasNotOptedIn()
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         registry.registerContributor(new TestSemanticCatalogProvider(false));
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
 
@@ -1176,7 +1217,7 @@ class PayloadbuilderQueryEngineProviderTest
                 .thenReturn(new JdbcSqlEditorServices.Hover("**Table: PUBLIC.ORDERS**"));
         Mockito.when(jdbcSqlEditorServices.symbolAtPosition(Mockito.any()))
                 .thenReturn(new JdbcSqlEditorServices.Symbol("table", "PUBLIC.ORDERS", "APPDB.PUBLIC.ORDERS", "TABLE", Map.of("name", "ORDERS")));
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
         Map<String, Object> engineState = jdbcCatalogEngineState();
 
@@ -1222,7 +1263,7 @@ class PayloadbuilderQueryEngineProviderTest
                 .thenReturn(new JdbcSqlEditorServices.Hover("jdbc.col1"));
         Mockito.when(jdbcSqlEditorServices.symbolAtPosition(Mockito.any()))
                 .thenReturn(new JdbcSqlEditorServices.Symbol("column", "jdbc.col1", "jdbc.dbo.orders.col1", "jdbc.column", Map.of("name", "COL1")));
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
         Map<String, Object> engineState = Map.of("payloadbuilder",
                 Map.of("defaultCatalogAlias", "jdbc", "catalogs", Map.of("jdbc", Map.of("catalogId", "jdbc", "properties", Map.of("connectionId", "conn-1", "database", "appdb")))));
@@ -1249,7 +1290,7 @@ class PayloadbuilderQueryEngineProviderTest
                 .thenReturn(List.of(new JdbcSqlEditorServices.CompletionItem("order_id", "column", "JDBC column", null, "order_id", "plain", "jdbc.schema")));
         Map<String, Object> engineState = Map.of("payloadbuilder",
                 Map.of("defaultCatalogAlias", "myalias", "catalogs", Map.of("myalias", Map.of("catalogId", "jdbc", "properties", Map.of("connectionId", "conn-1", "database", "appdb")))));
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, jdbcRuntimeServiceFor("conn-1"), jdbcSqlEditorServices);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
 
         Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete", Map.of("fileId", "file-1", "version", 1L, "text", "SELECT * FROM myalias#orders WHERE myalias.or",
@@ -1282,7 +1323,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void invokeSqlHoverUsesOptedInPayloadbuilderCatalog()
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         registry.registerContributor(new TestSemanticCatalogProvider(true));
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
 
@@ -1299,7 +1340,7 @@ class PayloadbuilderQueryEngineProviderTest
     @Test
     void invokeSqlSymbolAtPositionUsesOptedInPayloadbuilderCatalog()
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         registry.registerContributor(new TestSemanticCatalogProvider(true));
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
 
@@ -1339,7 +1380,7 @@ class PayloadbuilderQueryEngineProviderTest
                 return "{}";
             }
         };
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, throwingMapper, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, throwingMapper, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, throwingMapper, registry, PARSE_SESSIONS, PARSE_FUNCTION);
         RecordingPublisher publisher = new RecordingPublisher();
 
@@ -1378,7 +1419,7 @@ class PayloadbuilderQueryEngineProviderTest
                 return "{}";
             }
         };
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, throwingMapper, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, throwingMapper, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, throwingMapper, registry, PARSE_SESSIONS, PARSE_FUNCTION);
         RecordingPublisher publisher = new RecordingPublisher();
 
@@ -1490,7 +1531,7 @@ class PayloadbuilderQueryEngineProviderTest
     void onOpenOnChangeOnCloseDelegateToParseSessionService()
     {
         IncrementalParseSessionService sessions = Mockito.mock(IncrementalParseSessionService.class);
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, sessions, PARSE_FUNCTION);
         FileSession session = new FileSession("file-1", java.net.URI.create("file:///tmp.sql"), "text/sql", "jdbc", "jdbc-1", 1L);
 
@@ -1551,7 +1592,7 @@ class PayloadbuilderQueryEngineProviderTest
                 return null;
             }
         };
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(config, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(config, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
         PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(config, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
         Map<String, SessionHolder> executionIdMap = provider.sessionByExecutionId;
 
@@ -2156,5 +2197,13 @@ class PayloadbuilderQueryEngineProviderTest
         public void failed(String errorCode, String errorMessage)
         {
         }
+    }
+
+    /** The registry as it is at runtime: payloadbuilder's own catalogs, plus the jdbc catalog that queryengine.payloadbuilder.jdbc registers. */
+    private static PayloadbuilderCatalogProviderRegistry registryWithJdbc(ConfigService config, PayloadMapper mapper, JdbcRuntimeService jdbcRuntime, JdbcSqlEditorServices jdbcSqlEditorServices)
+    {
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(config, mapper);
+        registry.registerContributor(new com.queryeer.backend.plugin.payloadbuilder.jdbc.JdbcCatalogProvider(jdbcRuntime, jdbcSqlEditorServices));
+        return registry;
     }
 }

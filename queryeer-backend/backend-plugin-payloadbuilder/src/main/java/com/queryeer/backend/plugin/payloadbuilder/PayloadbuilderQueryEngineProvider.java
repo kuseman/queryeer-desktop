@@ -154,6 +154,7 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
                 throw new IllegalArgumentException("Engine state is required");
             }
             catalogState = PayloadbuilderEngineStateSupport.parse(typedState);
+            requireAvailableCatalogs(catalogState);
             fileSessionHolder = sessionByFileId.computeIfAbsent(fileId, _ -> new FileSessionHolder());
             fileSessionHolder.lock.lock();
             fileSessionLocked = true;
@@ -380,6 +381,28 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
             return sqlSemanticHandler.symbolAtPosition(fileId, payload);
         }
         return catalogProviders.invoke(action, payload);
+    }
+
+    /**
+     * Refuses a file that uses a catalog no loaded plugin provides. Catalogs come from plugins (jdbc from queryengine.payloadbuilder.jdbc, others from third parties), so one can be missing while the
+     * frontend still offers it; without this the query fails later with a generic unknown-alias error.
+     */
+    private void requireAvailableCatalogs(PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
+    {
+        for (PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState.Instance instance : state.instancesByAlias()
+                .values())
+        {
+            if (catalogProviders.getCatalogProvider(instance.catalogId()) == null)
+            {
+                throw new IllegalArgumentException("Catalog '" + instance.catalogId()
+                                                   + "' (alias '"
+                                                   + instance.alias()
+                                                   + "') is not available: no loaded plugin provides it. "
+                                                   + ("jdbc".equalsIgnoreCase(instance.catalogId()) ? "It comes from queryengine.payloadbuilder.jdbc, which needs the JDBC engine. "
+                                                           : "")
+                                                   + "Observability shows why a plugin didn't load.");
+            }
+        }
     }
 
     private CatalogRegistry buildCatalogRegistry(PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)

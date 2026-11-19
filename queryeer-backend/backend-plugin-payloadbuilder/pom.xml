@@ -29,11 +29,18 @@
             <artifactId>backend-lib-queryengine-payloadbuilder-foundation</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- Tests run the jdbc catalog through the engine, registered as queryengine.payloadbuilder.jdbc does -->
         <dependency>
             <groupId>com.queryeer.backend</groupId>
             <artifactId>backend-lib-queryengine-jdbc-foundation</artifactId>
             <version>${project.version}</version>
-            <scope>provided</scope>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.queryeer.backend</groupId>
+            <artifactId>backend-plugin-payloadbuilder-jdbc</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.queryeer.backend</groupId>
@@ -61,6 +68,13 @@
         <dependency>
             <groupId>se.kuseman.payloadbuilder</groupId>
             <artifactId>payloadbuilder-catalog</artifactId>
+            <exclusions>
+                <!-- Only the jdbc catalog uses it, which queryengine.payloadbuilder.jdbc bundles -->
+                <exclusion>
+                    <groupId>com.zaxxer</groupId>
+                    <artifactId>HikariCP</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <!--
             payloadbuilder-catalog declares avro as an optional dependency. Optional deps are not pulled transitively, so we declare it explicitly

@@ -10,8 +10,6 @@ import com.queryeer.backend.api.BackendPluginContext;
 import com.queryeer.backend.api.LargeValueStore;
 import com.queryeer.backend.api.PluginDescriptor;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
-import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
-import com.queryeer.backend.queryengine.jdbc.JdbcSqlEditorServices;
 import com.queryeer.backend.queryengine.sql.parser.TreeSitterSqlParseFunction;
 
 import se.kuseman.payloadbuilder.core.Payloadbuilder;
@@ -21,10 +19,8 @@ public final class PayloadbuilderBackendPlugin implements BackendPlugin
     @Override
     public void activate(BackendPluginContext context, PluginDescriptor descriptor)
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(context.config(), context.payloadMapper(), context.services()
-                .get(JdbcRuntimeService.class),
-                context.services()
-                        .get(JdbcSqlEditorServices.class));
+        // The jdbc catalog comes from queryengine.payloadbuilder.jdbc, which registers it here when the JDBC engine is there too
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(context.config(), context.payloadMapper());
 
         // Register in PluginServiceRegistry so external plugins can contribute catalogs
         context.services()

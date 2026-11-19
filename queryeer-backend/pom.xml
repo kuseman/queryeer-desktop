@@ -267,6 +267,7 @@
         <module>backend-transport-stdio</module>
         <module>backend-runner</module>
         <module>backend-plugin-payloadbuilder</module>
+        <module>backend-plugin-payloadbuilder-jdbc</module>
         <module>backend-plugin-jdbc</module>
         <module>backend-plugin-dialect-sqlserver</module>
         <module>backend-plugin-dialect-postgres</module>

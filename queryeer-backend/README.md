@@ -10,6 +10,8 @@ Standalone Java backend reactor for Queryeer Desktop.
 - `backend-transport-stdio`: stdio protocol adapter scaffold
 - `backend-runner`: executable bootstrap/wiring
 - `backend-plugin-payloadbuilder`: payloadbuilder query engine plugin
+- `backend-plugin-payloadbuilder-jdbc`: payloadbuilder's jdbc catalog (`queryengine.payloadbuilder.jdbc`), over the JDBC engine's connections
+- `backend-lib-queryengine-sql-parser`: the SQL parser, also the built-in plugin `queryengine.sql.parser`
 - `backend-plugin-jdbc`: JDBC query engine plugin
 - `backend-plugin-dialect-sqlserver`: SQL Server JDBC dialect plugin
 
@@ -24,7 +26,7 @@ From repository root:
 Prepare the development backend runner and builtin plugins without tests:
 
 ```bash
-./mvnw -f queryeer-backend/pom.xml -pl backend-runner,backend-lib-queryengine-jdbc-foundation,backend-lib-queryengine-sql-parser,backend-plugin-jdbc,backend-plugin-payloadbuilder,backend-plugin-dialect-sqlserver -am -DskipTests=true -DcheckstyleSkip=true install
+./mvnw -f queryeer-backend/pom.xml -pl backend-runner,backend-lib-queryengine-jdbc-foundation,backend-lib-queryengine-sql-parser,backend-plugin-jdbc,backend-plugin-payloadbuilder,backend-plugin-payloadbuilder-jdbc,backend-plugin-dialect-sqlserver -am -DskipTests=true -DcheckstyleSkip=true install
 ```
 
 The desktop dev transport normally runs that preparation automatically, then starts the backend directly with `java` using `backend-runner/target/classes` plus `backend-runner/target/queryeer-runner-classpath.txt`.
