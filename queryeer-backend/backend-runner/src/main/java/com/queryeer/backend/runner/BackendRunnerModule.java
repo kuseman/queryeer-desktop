@@ -63,9 +63,12 @@ public final class BackendRunnerModule
 
         PluginRuntime runtime = new PluginRuntime();
         List<DiscoveredPlugin> discoveredPlugins;
+        List<PluginDiscoveryService.DiscoveryFailure> discoveryFailures;
         try
         {
-            discoveredPlugins = discoverPlugins(discoveryService, services, builtinsDir);
+            DiscoveredPlugins discovery = discoverPlugins(discoveryService, services, builtinsDir);
+            discoveredPlugins = discovery.plugins();
+            discoveryFailures = discovery.failures();
             classLoaderFactory.publishExports(discoveredPlugins);
             for (DiscoveredPlugin discovered : discoveredPlugins)
             {
@@ -95,7 +98,8 @@ public final class BackendRunnerModule
                 .collect(Collectors.toMap(plugin -> plugin.descriptor()
                         .id(), BackendPlugin::descriptor));
         StdioTransportModule.RunningTransport transportServer = new StdioTransportModule().create(input, output, MapperUtils.MAPPER, services.queryEngines(), services.fileRegistryView(),
-                services.events(), () -> runtimeStatusSnapshot(runtime), startedAt, services.config(), securitySession, services.changelogRegistry(), descriptorMap::get, services.largeValues());
+                services.events(), () -> runtimeStatusSnapshot(runtime, discoveryFailures), startedAt, services.config(), securitySession, services.changelogRegistry(), descriptorMap::get,
+                services.largeValues());
         System.err.println(withCorrelation("Queryeer backend runner started (stdio mode).", null));
 
         Thread selfDestruct = new Thread(() ->
@@ -209,7 +213,12 @@ public final class BackendRunnerModule
         return second;
     }
 
-    private List<DiscoveredPlugin> discoverPlugins(PluginDiscoveryService discoveryService, BackendPlatformServices services, Path builtinsDir)
+    /** The plugins to run, and the external ones that were skipped because they couldn't be loaded. */
+    record DiscoveredPlugins(List<DiscoveredPlugin> plugins, List<PluginDiscoveryService.DiscoveryFailure> failures)
+    {
+    }
+
+    private DiscoveredPlugins discoverPlugins(PluginDiscoveryService discoveryService, BackendPlatformServices services, Path builtinsDir)
     {
         String pluginsDir = services.config()
                 .get("queryeer.plugins.dir");
@@ -232,12 +241,34 @@ public final class BackendRunnerModule
         List<DiscoveredPlugin> builtin = new BuiltinPluginDiscovery(discoveryService, builtinsDir, backendVersion).discover();
         if (safeMode)
         {
-            return builtin;
+            return new DiscoveredPlugins(builtin, List.of());
         }
 
-        List<DiscoveredPlugin> external = isBlank(pluginsDir) ? List.of()
-                : discoveryService.discoverFromPath(pluginsDir)
-                        .backendPlugins();
+        // An installed plugin that can't be loaded is skipped and reported; it must not stop the backend
+        List<PluginDiscoveryService.DiscoveryFailure> failures = new ArrayList<>();
+        List<DiscoveredPlugin> external = List.of();
+        // Plugins that loaded, with or without a backend: a failed duplicate of one isn't listed as failed
+        Set<String> loadedIds = new HashSet<>();
+        if (!isBlank(pluginsDir))
+        {
+            try
+            {
+                PluginDiscoveryService.DiscoveryResult installed = discoveryService.discoverFromPath(pluginsDir);
+                external = installed.backendPlugins();
+                loadedIds.addAll(installed.loadedIds());
+                installed.failures()
+                        .stream()
+                        // A disabled plugin isn't loaded anyway
+                        .filter(failure -> !disabledPluginIds.contains(failure.pluginId()))
+                        .forEach(failures::add);
+            }
+            catch (RuntimeException e)
+            {
+                // The plugins folder itself can't be read: no installed plugins, but the backend starts
+                services.logger()
+                        .error(withCorrelation("Installed plugins not loaded: the plugins folder " + pluginsDir + " can't be read", null), e);
+            }
+        }
         external = filterDisabledExternalPlugins(external, disabledPluginIds);
 
         List<Path> devDirs = parseDevPluginDirs(services.config()
@@ -250,6 +281,7 @@ public final class BackendRunnerModule
                     .collect(Collectors.toSet());
             PluginManifestLoader manifestLoader = new PluginManifestLoader();
             Set<String> replacedIds = new HashSet<>();
+            Set<String> developmentLoadedIds = new HashSet<>();
             List<DiscoveredPlugin> development = new ArrayList<>();
             for (Path devDir : devDirs)
             {
@@ -270,20 +302,40 @@ public final class BackendRunnerModule
                     }
                     // Replaces the installed plugin by its plugin.json id, also when this folder has no backend or its
                     // backend fails to load: the frontend does the same, so the two halves never come from different builds
-                    development.addAll(discoveryService.discoverFromSources(List.of(devDir))
-                            .backendPlugins());
+                    PluginDiscoveryService.DiscoveryResult result = discoveryService.discoverFromSources(List.of(devDir));
+                    development.addAll(result.backendPlugins());
+                    developmentLoadedIds.addAll(result.loadedIds());
+                    failures.addAll(result.failures());
                 }
                 catch (RuntimeException e)
                 {
-                    services.logger()
-                            .error(withCorrelation("Developer plugin folder " + devDir + " skipped", null), e);
+                    failures.add(new PluginDiscoveryService.DiscoveryFailure(PluginDiscoveryService.idFromSource(devDir), devDir, "Developer plugin folder skipped: " + e.getMessage()));
                 }
             }
             services.logger()
                     .info(withCorrelation("Developer plugin folders: " + devDirs.size() + ", backend plugins: " + development.size(), null));
             external = preferDevelopmentPlugins(development, replacedIds, external);
+            // A replaced plugin counts as loaded only if its developer folder loaded
+            loadedIds.removeAll(replacedIds);
+            loadedIds.addAll(developmentLoadedIds);
         }
-        return mergeDiscoveredPlugins(builtin, external);
+        List<DiscoveredPlugin> merged = mergeDiscoveredPlugins(builtin, external, failures);
+        for (PluginDiscoveryService.DiscoveryFailure failure : failures)
+        {
+            services.logger()
+                    .error(withCorrelation("Plugin " + failure.pluginId() + " not loaded (" + failure.source() + "): " + failure.reason(), null), null);
+        }
+        // For the status list: one row per id (the last reason: a developer folder's over the installed copy's it replaced), and none for an id that loaded after all
+        Map<String, PluginDiscoveryService.DiscoveryFailure> reported = new LinkedHashMap<>();
+        for (PluginDiscoveryService.DiscoveryFailure failure : failures)
+        {
+            // A loaded id is a failed duplicate (or a clash with a built-in) of a plugin that runs; the log has it
+            if (!loadedIds.contains(failure.pluginId()))
+            {
+                reported.put(failure.pluginId(), failure);
+            }
+        }
+        return new DiscoveredPlugins(merged, List.copyOf(reported.values()));
     }
 
     /** The developer plugin folders (copies the main process made of them), separated like the platform's path list. */
@@ -390,7 +442,11 @@ public final class BackendRunnerModule
         return appBuiltinsDir;
     }
 
-    static List<DiscoveredPlugin> mergeDiscoveredPlugins(List<DiscoveredPlugin> primary, List<DiscoveredPlugin> secondary)
+    /**
+     * The built-in plugins followed by the external ones. An external plugin with the id of a built-in (or of an earlier external one) is skipped and added to {@code failures}: it must not stop the
+     * backend.
+     */
+    static List<DiscoveredPlugin> mergeDiscoveredPlugins(List<DiscoveredPlugin> primary, List<DiscoveredPlugin> secondary, List<PluginDiscoveryService.DiscoveryFailure> failures)
     {
         List<DiscoveredPlugin> merged = new ArrayList<>(primary);
         Set<String> seen = new HashSet<>();
@@ -409,7 +465,10 @@ public final class BackendRunnerModule
                 String source = plugin.source() == null ? "builtin"
                         : plugin.source()
                                 .toString();
-                throw new PluginDiscoveryException("Duplicate external plugin id conflicts with an already discovered plugin: " + pluginId + " (source: " + source + ")");
+                failures.add(new PluginDiscoveryService.DiscoveryFailure(pluginId, plugin.source(),
+                        "Duplicate external plugin id conflicts with an already discovered plugin: " + pluginId + " (source: " + source + ")"));
+                closeQuietly(plugin.classLoaderResource());
+                continue;
             }
             merged.add(plugin);
         }
@@ -417,7 +476,23 @@ public final class BackendRunnerModule
         return merged;
     }
 
-    private RuntimeStatusResult runtimeStatusSnapshot(PluginRuntime runtime)
+    private static void closeQuietly(AutoCloseable resource)
+    {
+        if (resource == null)
+        {
+            return;
+        }
+        try
+        {
+            resource.close();
+        }
+        catch (Exception e)
+        {
+            // Nothing was loaded from it; a failed close leaves only an open file handle
+        }
+    }
+
+    private RuntimeStatusResult runtimeStatusSnapshot(PluginRuntime runtime, List<PluginDiscoveryService.DiscoveryFailure> discoveryFailures)
     {
         List<PluginRuntimeStatus> coreStatuses = runtime.statuses();
         List<String> pluginOrder = runtime.plugins()
@@ -443,6 +518,15 @@ public final class BackendRunnerModule
                     .findFirst()
                     .ifPresent(plugin -> providedCapabilities.addAll(plugin.descriptor()
                             .providesCapabilities()));
+        }
+
+        // Plugins skipped at discovery (see discoverPlugins) are listed as failed, unless a plugin with that id runs
+        for (PluginDiscoveryService.DiscoveryFailure failure : discoveryFailures)
+        {
+            if (!pluginOrder.contains(failure.pluginId()))
+            {
+                statuses.add(new RuntimePluginStatus(failure.pluginId(), RuntimePluginState.FAILED, failure.reason()));
+            }
         }
 
         return new RuntimeStatusResult(STARTED_AT, statuses, runtime.activatedPluginIds(), new ArrayList<>(providedCapabilities));

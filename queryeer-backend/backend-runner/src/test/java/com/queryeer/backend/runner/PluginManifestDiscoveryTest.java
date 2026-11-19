@@ -96,7 +96,7 @@ class PluginManifestDiscoveryTest
     }
 
     @Test
-    void throwsForDuplicatePluginIdsAcrossSources() throws IOException
+    void skipsAndReportsASecondPluginWithTheSameId() throws IOException
     {
         Path pluginsDir = tempDir.resolve("plugins");
         Path pluginFolderA = pluginsDir.resolve("plugin-a");
@@ -132,10 +132,110 @@ class PluginManifestDiscoveryTest
         PluginClassLoaderFactory classLoaderFactory = new PluginClassLoaderFactory(new SharedClassLoader(List.of(), getClass().getClassLoader()));
         BackendPlatformServices platformServices = BackendPlatformServices.fileBased(Map.of(), new SecuritySession());
         PluginDiscoveryService service = new PluginDiscoveryService(platformServices, classLoaderFactory);
-        PluginDiscoveryException error = Assertions.assertThrows(PluginDiscoveryException.class, () -> service.discoverFromPath(pluginsDir.toString()));
+        PluginDiscoveryService.DiscoveryResult result = service.discoverFromPath(pluginsDir.toString());
 
-        Assertions.assertTrue(error.getMessage()
+        Assertions.assertEquals(1, result.frontendPlugins()
+                .size());
+        Assertions.assertEquals(1, result.failures()
+                .size());
+        Assertions.assertEquals("duplicate.plugin", result.failures()
+                .get(0)
+                .pluginId());
+        Assertions.assertTrue(result.failures()
+                .get(0)
+                .reason()
                 .contains("Duplicate plugin id discovered: duplicate.plugin"));
+    }
+
+    @Test
+    void aBrokenCopyDoesNotKeepAWorkingOneWithTheSameIdOut() throws IOException
+    {
+        Path pluginsDir = tempDir.resolve("plugins");
+        Path broken = pluginsDir.resolve("a-broken");
+        Path working = pluginsDir.resolve("b-working");
+        Files.createDirectories(broken);
+        Files.createDirectories(working);
+        Files.writeString(broken.resolve("plugin.json"), """
+                {
+                  "schemaVersion": 1,
+                  "id": "same.plugin",
+                  "name": "Same",
+                  "version": "1.0.0",
+                  "dependencies": ["x.y", "x.y"],
+                  "frontend": { "entryModule": "dist/index.mjs" }
+                }
+                """, StandardCharsets.UTF_8);
+        Files.writeString(working.resolve("plugin.json"), """
+                {
+                  "schemaVersion": 1,
+                  "id": "same.plugin",
+                  "name": "Same",
+                  "version": "1.0.1",
+                  "frontend": { "entryModule": "dist/index.mjs" }
+                }
+                """, StandardCharsets.UTF_8);
+
+        PluginClassLoaderFactory classLoaderFactory = new PluginClassLoaderFactory(new SharedClassLoader(List.of(), getClass().getClassLoader()));
+        PluginDiscoveryService service = new PluginDiscoveryService(BackendPlatformServices.fileBased(Map.of(), new SecuritySession()), classLoaderFactory);
+        PluginDiscoveryService.DiscoveryResult result = service.discoverFromPath(pluginsDir.toString());
+
+        Assertions.assertEquals(List.of(working), result.frontendPlugins()
+                .stream()
+                .map(FrontendPluginResolver.ResolvedFrontendPlugin::source)
+                .toList());
+        Assertions.assertEquals(java.util.Set.of("same.plugin"), result.loadedIds());
+        // The broken copy is still reported, by the id in its JSON
+        Assertions.assertEquals(List.of("same.plugin"), result.failures()
+                .stream()
+                .map(PluginDiscoveryService.DiscoveryFailure::pluginId)
+                .toList());
+    }
+
+    @Test
+    void skipsAPluginWithAnInvalidManifestAndKeepsTheOthers() throws IOException
+    {
+        // E.g. a plugin installed under 0.19 that lists a dependency twice, which 0.20 refuses
+        Path pluginsDir = tempDir.resolve("plugins");
+        Path good = pluginsDir.resolve("good-plugin");
+        Path invalid = pluginsDir.resolve("invalid-plugin");
+        Path unreadable = pluginsDir.resolve("unreadable-plugin");
+        Files.createDirectories(good);
+        Files.createDirectories(invalid);
+        Files.createDirectories(unreadable);
+        Files.writeString(good.resolve("plugin.json"), """
+                {
+                  "schemaVersion": 1,
+                  "id": "good.plugin",
+                  "name": "Good",
+                  "version": "1.0.0",
+                  "frontend": { "entryModule": "dist/index.mjs" }
+                }
+                """, StandardCharsets.UTF_8);
+        Files.writeString(invalid.resolve("plugin.json"), """
+                {
+                  "schemaVersion": 1,
+                  "id": "invalid.plugin",
+                  "name": "Invalid",
+                  "version": "1.0.0",
+                  "dependencies": ["good.plugin", "good.plugin"],
+                  "frontend": { "entryModule": "dist/index.mjs" }
+                }
+                """, StandardCharsets.UTF_8);
+        Files.writeString(unreadable.resolve("plugin.json"), "{ not json", StandardCharsets.UTF_8);
+
+        PluginClassLoaderFactory classLoaderFactory = new PluginClassLoaderFactory(new SharedClassLoader(List.of(), getClass().getClassLoader()));
+        PluginDiscoveryService service = new PluginDiscoveryService(BackendPlatformServices.fileBased(Map.of(), new SecuritySession()), classLoaderFactory);
+        PluginDiscoveryService.DiscoveryResult result = service.discoverFromPath(pluginsDir.toString());
+
+        Assertions.assertEquals(List.of("good.plugin"), result.frontendPlugins()
+                .stream()
+                .map(FrontendPluginResolver.ResolvedFrontendPlugin::pluginId)
+                .toList());
+        Assertions.assertEquals(List.of("invalid.plugin", "unreadable-plugin"), result.failures()
+                .stream()
+                .map(PluginDiscoveryService.DiscoveryFailure::pluginId)
+                .sorted()
+                .toList());
     }
 
     @Test

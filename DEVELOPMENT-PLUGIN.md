@@ -16,6 +16,7 @@ Queryeer is an extensible desktop application for data querying and exploration.
 8. [Debugging & Testing](#8-debugging--testing)
 9. [Distribution](#9-distribution)
 10. [Current Limitations & Known Gaps](#10-current-limitations--known-gaps)
+11. [Upgrading Plugins to 0.20.0](#11-upgrading-plugins-to-0200)
 
 ---
 
@@ -1240,6 +1241,69 @@ The following plugin-provided render callbacks are **not** yet wrapped in `<Plug
 | Toolbar select/menu callbacks | `Toolbar.tsx` | `isVisible()`, `getOptions()`, etc. | Crashes the toolbar |
 
 A throw in any of these still takes down the surrounding UI area.
+
+---
+
+## 11. Upgrading Plugins to 0.20.0
+
+0.20.0 changes the plugin API in ways that can break a plugin built for 0.19. Check each item against your plugin.
+
+### 11.1 Subscriptions return a `Disposable`, not a function
+
+These used to return an unsubscribe function and now return a `Disposable`:
+
+- `files.subscribe`
+- `fileMediator.onActiveFileChanged`
+- `notifications.subscribe`
+- `jdbcDrivers.subscribe`
+- `settings.subscribe`
+- `assistant.registerContextContribution` and `assistant.registerToolContribution`
+
+Code that calls the result as a function now throws `TypeError: ... is not a function`. Call `dispose()` instead:
+
+```ts
+// 0.19
+const unsubscribe = context.files.subscribe(listener);
+unsubscribe();
+
+// 0.20
+const subscription = context.files.subscribe(listener);
+subscription.dispose();
+```
+
+Every other `register*` and `on*` on `PluginContext` now returns a `Disposable` too. They used to return nothing, so existing code keeps working.
+
+### 11.2 A plugin's identity comes only from `plugin.json`
+
+An external plugin's `id`, `name`, `version` and `description` are read from `plugin.json`. The same fields in the frontend module's `manifest` are ignored; a plugin that still sets them loads, with a warning in the console when they differ from `plugin.json`.
+
+- Type the module as `ExternalPluginModule` (§4.4) and leave the identity out of its manifest.
+- Read the identity from `context.plugin` in `activate` instead of repeating it, e.g. for a settings `moduleId`.
+- If your module's `id` differed from `plugin.json`'s, anything keyed by the module's id (settings, `activeFile.metadata.<id>`) now uses `plugin.json`'s id.
+
+### 11.3 Backend: the JDBC foundation and the SQL parser come from `queryengine.jdbc`
+
+The built-in plugins `queryengine.runtime.jdbc-foundation` and `queryengine.runtime.sql-parser` are gone, and their classes are no longer on the shared class path. `queryengine.jdbc` exports them instead (§3.3.1):
+
+- A backend plugin that uses `com.queryeer.backend.queryengine.jdbc.` or `com.queryeer.backend.queryengine.sql.parser.` classes must declare a dependency on `queryengine.jdbc`, e.g. `{ "id": "queryengine.jdbc", "version": "^0.20.0" }`. Without it, loading those classes fails with an error that names the plugin to depend on.
+- A plugin that lists one of the removed ids as a dependency is skipped ("Missing dependency").
+- Compile against the foundation and the parser with `provided` scope; don't bundle them.
+- tree-sitter is no longer shared. The parser's API takes SQL text, not parse trees.
+
+### 11.4 Stricter `plugin.json` validation in the backend
+
+`dependencies` entries are either an id or `{ "id", "version" }` with an npm SemVer range (§3.3). The backend refuses a manifest with:
+
+- the same dependency listed twice
+- an object entry without an `id`
+- a version range it can't parse
+- an invalid `backend.exports` entry (§3.3.1)
+
+A refused plugin is skipped, and the others still load. It is logged as an error and listed as failed, with the reason, in Observability (click the backend status in the status bar). A plugin is also skipped now when one of its dependencies was skipped, or when it is in a dependency cycle (including depending on itself).
+
+### 11.5 JDBC drivers contributed by a plugin
+
+A plugin's managed driver (`context.jdbcDrivers.registerDriver`, §7.12) is installed only after the user approves it. The host asks before the first install, and again when the plugin changes what it declares. A native companion's archive entry template must contain `{releaseVersion}`, and a driver class that another contribution already declares is refused.
 
 ---
 
