@@ -20,7 +20,7 @@ public final class PayloadbuilderBackendPlugin implements BackendPlugin
     public void activate(BackendPluginContext context, PluginDescriptor descriptor)
     {
         // The jdbc catalog comes from queryengine.payloadbuilder.jdbc, which registers it here when the JDBC engine is there too
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(context.config(), context.payloadMapper());
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(context.config(), context.payloadMapper(), context.logger()::info);
 
         // Register in PluginServiceRegistry so external plugins can contribute catalogs
         context.services()
