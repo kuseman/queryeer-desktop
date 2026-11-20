@@ -90,3 +90,80 @@ describe("ExpressionRuntimeService", () => {
     expect(rendered).toBe("7");
   });
 });
+
+describe("ExpressionRuntimeService synchronous when-expression cache", () => {
+  function countingBackend(result: (request: EvaluateRequest) => unknown) {
+    const calls: EvaluateRequest[] = [];
+    const backend: ExpressionBackend = {
+      evaluate: async () => {
+        throw new Error("not used");
+      },
+      evaluateSync<T>(request: EvaluateRequest): T {
+        calls.push(request);
+        return result(request) as T;
+      },
+      dispose: async () => {}
+    };
+    return { backend, calls };
+  }
+
+  it("reuses a result for the same expression and context, briefly", () => {
+    let now = 0;
+    const { backend, calls } = countingBackend((request) => request.context.running === true);
+    const runtime = new ExpressionRuntimeService({ backend, now: () => now });
+
+    expect(runtime.evaluateBooleanSync("running", { running: true })).toBe(true);
+    expect(runtime.evaluateBooleanSync("running", { running: true })).toBe(true);
+    expect(calls).toHaveLength(1);
+
+    expect(runtime.evaluateBooleanSync("running", { running: false })).toBe(false);
+    expect(calls).toHaveLength(2);
+
+    now = 1000;
+    runtime.evaluateBooleanSync("running", { running: true });
+    expect(calls).toHaveLength(3);
+  });
+
+  it("evaluates again once a function is registered", () => {
+    const { backend, calls } = countingBackend(() => true);
+    const runtime = new ExpressionRuntimeService({ backend, now: () => 0 });
+
+    runtime.evaluateBooleanSync("fn.later.check()", {});
+    runtime.getFunctionRegistry().registerNamespace("later", { check: () => true });
+    runtime.evaluateBooleanSync("fn.later.check()", {});
+
+    expect(calls).toHaveLength(2);
+    expect(calls[1].functions).toHaveProperty("later");
+  });
+
+  it("caches only when-mode results, and never failures", () => {
+    let fail = true;
+    const { backend, calls } = countingBackend(() => {
+      if (fail) {
+        throw new Error("boom");
+      }
+      return 1;
+    });
+    const runtime = new ExpressionRuntimeService({ backend, now: () => 0 });
+
+    expect(() => runtime.evaluateBooleanSync("x", {})).toThrow();
+    fail = false;
+    expect(runtime.evaluateBooleanSync("x", {})).toBe(true);
+    runtime.evaluateValueSync("x", {}, { mode: "value" });
+    runtime.evaluateValueSync("x", {}, { mode: "value" });
+
+    expect(calls).toHaveLength(4);
+  });
+
+  it("doesn't cache when the context can't be serialized", () => {
+    const { backend, calls } = countingBackend(() => true);
+    const runtime = new ExpressionRuntimeService({ backend, now: () => 0 });
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+
+    runtime.evaluateBooleanSync("true", cyclic);
+    runtime.evaluateBooleanSync("true", cyclic);
+
+    expect(calls).toHaveLength(2);
+  });
+});
