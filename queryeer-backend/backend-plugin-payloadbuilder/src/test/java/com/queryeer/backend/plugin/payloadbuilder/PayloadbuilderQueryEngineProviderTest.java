@@ -1,7 +1,5 @@
 package com.queryeer.backend.plugin.payloadbuilder;
 
-import static org.junit.jupiter.api.Assertions.assertNull;
-
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -114,7 +112,8 @@ class PayloadbuilderQueryEngineProviderTest
     void invokeThrowsForUnsupportedAction()
     {
         PayloadbuilderQueryEngineProvider provider = createProvider(NOOP_CONFIG);
-        assertNull(provider.invoke("file-1", "payloadbuilder.unknown", null));
+        UnsupportedOperationException unknown = Assertions.assertThrows(UnsupportedOperationException.class, () -> provider.invoke("file-1", "payloadbuilder.unknown", null));
+        Assertions.assertEquals("No payloadbuilder catalog provides the action 'payloadbuilder.unknown'", unknown.getMessage());
     }
 
     @Test
