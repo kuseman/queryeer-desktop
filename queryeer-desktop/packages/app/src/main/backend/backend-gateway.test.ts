@@ -854,6 +854,29 @@ describe("BackendGateway", () => {
     await gateway.stop();
   });
 
+  it("keeps already buffered non-trace logs when log flow is disabled", async () => {
+    const { gateway } = createGatewayWithTestTransport();
+    await gateway.start();
+
+    gateway.setTracePayloads(true);
+    await gateway.executeQuery({
+      queryExecutionId: "exec-before-disable",
+      engineId: "payloadbuilder",
+      fileId: "file-1",
+      text: "select 1"
+    });
+    const before = gateway.getStatus().backendLogs;
+    expect(before.some((entry) => entry.level === "debug" && entry.message.includes("queryengine.execute"))).toBe(true);
+
+    gateway.setLogFlowEnabled(false);
+
+    const after = gateway.getStatus().backendLogs;
+    expect(after.some((entry) => entry.level === "debug" && entry.message.includes("queryengine.execute"))).toBe(true);
+    expect(after.some((entry) => entry.level === "trace")).toBe(false);
+
+    await gateway.stop();
+  });
+
   it("sends settings.module.changed notification", async () => {
     const { gateway, transport } = createGatewayWithTestTransport();
     await gateway.start();

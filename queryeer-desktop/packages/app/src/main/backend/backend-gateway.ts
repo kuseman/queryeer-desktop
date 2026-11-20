@@ -203,7 +203,9 @@ export class BackendGateway {
   public setLogFlowEnabled(enabled: boolean): void {
     this.logFlowEnabled = enabled;
     if (!enabled) {
-      this.logBuffer.clear();
+      // Only trace entries are suppressed while log flow is disabled; keep everything else
+      // so errors logged before the console was first opened are not lost.
+      this.logBuffer.removeLevel("trace");
       this.syncLogSnapshot();
     }
   }

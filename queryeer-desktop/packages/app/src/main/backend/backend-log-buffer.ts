@@ -21,8 +21,11 @@ export class BackendLogBuffer {
       message: params.message
     });
 
-    if (this.entries.length > this.limit) {
-      this.entries.splice(0, this.entries.length - this.limit);
+    while (this.entries.length > this.limit) {
+      // Evict the oldest low-priority entry first so a burst of debug/info
+      // traffic cannot push warnings and errors out before they are read.
+      const lowPriorityIndex = this.entries.findIndex((entry) => !isHighPriority(entry.level));
+      this.entries.splice(lowPriorityIndex >= 0 ? lowPriorityIndex : 0, 1);
     }
   }
 
@@ -30,7 +33,19 @@ export class BackendLogBuffer {
     return [...this.entries];
   }
 
+  public removeLevel(level: BackendLogLevel): void {
+    for (let i = this.entries.length - 1; i >= 0; i -= 1) {
+      if (this.entries[i].level === level) {
+        this.entries.splice(i, 1);
+      }
+    }
+  }
+
   public clear(): void {
     this.entries.length = 0;
   }
+}
+
+function isHighPriority(level: BackendLogLevel): boolean {
+  return level === "warn" || level === "error";
 }
