@@ -1,38 +1,20 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
-import type { BackendLogEntry, BackendLogLevel } from "@queryeer/api/backend";
+import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import type { BackendLogLevel } from "@queryeer/api/backend";
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
 import { requestOpenPanel } from "../../renderer/shell/layout-panel-events";
 import { XtermTextConsole } from "../../renderer/components/XtermTextConsole";
 import {
   getConsolePanelVisible,
   getConsoleNotificationState,
-  notifyConsoleErrorAppended,
   setConsolePanelVisible,
   subscribeConsoleNotification,
-  getFrontendLogEntries,
-  clearFrontendLogEntries,
-  type FrontendLogEntry,
+  getConsoleLogEntries,
+  ingestBackendLogEntries,
+  clearConsoleLogEntries,
 } from "./console-state";
+import { formatConsoleLogLines } from "./console-format";
 
 export const CONSOLE_PANEL_TAB_ID = "core.panel.console.tab";
-
-const LOG_LEVEL_ORDER: Record<BackendLogLevel, number> = {
-  trace: 10,
-  debug: 20,
-  info: 30,
-  warn: 40,
-  error: 50
-};
-
-const LOG_LEVEL_COLOR: Record<BackendLogLevel, string> = {
-  trace: "\x1b[2m",    // dim — least prominent
-  debug: "\x1b[36m",   // cyan — clearly above trace, below info
-  info:  "",           // terminal default
-  warn:  "\x1b[33m",   // yellow
-  error: "\x1b[91m"    // bright red
-};
-
-const ANSI_RESET = "\x1b[0m";
 
 const LOG_LEVEL_OPTIONS: { value: BackendLogLevel; label: string }[] = [
   { value: "trace", label: "TRACE" },
@@ -48,35 +30,35 @@ function isBackendLogLevel(value: string): value is BackendLogLevel {
   return value === "trace" || value === "debug" || value === "info" || value === "warn" || value === "error";
 }
 
-function pad2(value: number): string {
-  return String(value).padStart(2, "0");
-}
+const POLL_INTERVAL_VISIBLE_MS = 1000;
+const POLL_INTERVAL_HIDDEN_MS = 3000;
 
-function pad3(value: number): string {
-  return String(value).padStart(3, "0");
-}
+let pollTimer: number | undefined;
+let pollInFlight = false;
 
-function formatLocalIsoDateTime(input: string): string {
-  const date = new Date(input);
-  if (Number.isNaN(date.getTime())) {
-    return input;
+/**
+ * Pulls the main-process backend log buffer into the console store. Runs continuously
+ * (faster while the panel is visible) so entries are captured before the main-process
+ * ring buffer evicts them.
+ */
+async function pollBackendLogs(): Promise<void> {
+  if (pollInFlight) {
+    // The in-flight poll reschedules itself using the current panel visibility.
+    return;
   }
-
-  const year = date.getFullYear();
-  const month = pad2(date.getMonth() + 1);
-  const day = pad2(date.getDate());
-  const hours = pad2(date.getHours());
-  const minutes = pad2(date.getMinutes());
-  const seconds = pad2(date.getSeconds());
-  const milliseconds = pad3(date.getMilliseconds());
-
-  const offsetMinutes = -date.getTimezoneOffset();
-  const offsetSign = offsetMinutes >= 0 ? "+" : "-";
-  const offsetHours = pad2(Math.floor(Math.abs(offsetMinutes) / 60));
-  const offsetRemainderMinutes = pad2(Math.abs(offsetMinutes) % 60);
-  const offset = `${offsetSign}${offsetHours}:${offsetRemainderMinutes}`;
-
-  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${milliseconds}${offset}`;
+  window.clearTimeout(pollTimer);
+  pollInFlight = true;
+  try {
+    const status = await window.appShell.getBackendStatus();
+    ingestBackendLogEntries(status.backendLogs);
+  } catch {
+    // ignore transient polling errors
+  } finally {
+    pollInFlight = false;
+  }
+  pollTimer = window.setTimeout(() => {
+    void pollBackendLogs();
+  }, getConsolePanelVisible() ? POLL_INTERVAL_VISIBLE_MS : POLL_INTERVAL_HIDDEN_MS);
 }
 
 let configureLogFlowPromise: Promise<void> | null = null;
@@ -130,28 +112,7 @@ export const corePanelConsolePlugin: Plugin = {
       }
     });
 
-    const logSeenKeys = new Set<string>();
-    const pollForErrors = async () => {
-      try {
-        const status = await window.appShell.getBackendStatus();
-        for (const entry of status.backendLogs) {
-          const key = `${entry.timestamp}-${entry.level}-${entry.source}-${entry.message}`;
-          if (logSeenKeys.has(key)) {
-            continue;
-          }
-          logSeenKeys.add(key);
-          if (entry.level === "error" && !getConsolePanelVisible()) {
-            notifyConsoleErrorAppended();
-          }
-        }
-      } catch {
-        // ignore transient polling errors
-      }
-      window.setTimeout(() => {
-        void pollForErrors();
-      }, 3000);
-    };
-    void pollForErrors();
+    void pollBackendLogs();
   }
 };
 
@@ -197,19 +158,18 @@ const ConsoleStatusItem = memo(ConsoleStatusItemComponent);
 function ConsolePanel() {
   useEffect(() => {
     setConsolePanelVisible(true);
+    void ensureLogFlowConfigured();
+    void pollBackendLogs();
     return () => {
       setConsolePanelVisible(false);
     };
   }, []);
 
-  const renderedKeysRef = useRef<Set<string>>(new Set());
-  const clearCutoffMsRef = useRef<number>(0);
   const traceEnabledRef = useRef<boolean | null>(null);
   const levelInitializedRef = useRef(false);
-  const [entries, setEntries] = useState<BackendLogEntry[]>([]);
-  const [displayedLines, setDisplayedLines] = useState<string[]>([]);
   const [levelFilter, setLevelFilter] = useState<BackendLogLevel>("info");
-  const [frontendEntries, setFrontendEntries] = useState<FrontendLogEntry[]>([]);
+  const entries = useSyncExternalStore(subscribeConsoleNotification, getConsoleLogEntries);
+  const displayedLines = useMemo(() => formatConsoleLogLines(entries, levelFilter), [entries, levelFilter]);
 
   useEffect(() => {
     let active = true;
@@ -255,86 +215,8 @@ function ConsolePanel() {
     void window.appShell.toggleBackendTrace(traceEnabled);
   }, [levelFilter]);
 
-  useEffect(() => {
-    let active = true;
-
-    const refresh = async () => {
-      const status = await window.appShell.getBackendStatus();
-      if (!active) {
-        return;
-      }
-      const cutoff = clearCutoffMsRef.current;
-      const nextEntries = status.backendLogs.filter((entry) => {
-        const timestamp = Date.parse(entry.timestamp);
-        return Number.isFinite(timestamp) ? timestamp >= cutoff : true;
-      });
-      setEntries(nextEntries);
-    };
-
-    void ensureLogFlowConfigured();
-    void refresh();
-    const interval = window.setInterval(() => {
-      void refresh();
-    }, 1000);
-
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-    };
-  }, []);
-
-  // Subscribe to frontend log entry changes
-  useEffect(() => {
-    setFrontendEntries(getFrontendLogEntries());
-    return subscribeConsoleNotification(() => {
-      setFrontendEntries(getFrontendLogEntries());
-    });
-  }, []);
-
-  const threshold = useMemo(() => LOG_LEVEL_ORDER[levelFilter], [levelFilter]);
-
-  useEffect(() => {
-    const nextLines: string[] = [];
-    for (const entry of entries) {
-      const key = `backend-${entry.timestamp}-${entry.level}-${entry.source}-${entry.message}`;
-      if (renderedKeysRef.current.has(key)) {
-        continue;
-      }
-      renderedKeysRef.current.add(key);
-      if (LOG_LEVEL_ORDER[entry.level] < threshold) {
-        continue;
-      }
-      const time = formatLocalIsoDateTime(entry.timestamp);
-      const color = LOG_LEVEL_COLOR[entry.level];
-      const line = `[${time}] [${entry.level.toUpperCase()}] [${entry.source}] ${entry.message}`;
-      nextLines.push(color ? `${color}${line}${ANSI_RESET}` : line);
-    }
-    for (const entry of frontendEntries) {
-      const key = `frontend-${entry.timestamp}-${entry.level}-${entry.source}-${entry.message}`;
-      if (renderedKeysRef.current.has(key)) {
-        continue;
-      }
-      renderedKeysRef.current.add(key);
-      if (LOG_LEVEL_ORDER[entry.level] < threshold) {
-        continue;
-      }
-      const time = formatLocalIsoDateTime(entry.timestamp);
-      const color = LOG_LEVEL_COLOR[entry.level];
-      const line = `[${time}] [${entry.level.toUpperCase()}] [FRONTEND:${entry.source}] ${entry.message}`;
-      nextLines.push(color ? `${color}${line}${ANSI_RESET}` : line);
-    }
-    if (nextLines.length > 0) {
-      setDisplayedLines((previous) => [...previous, ...nextLines]);
-    }
-  }, [entries, frontendEntries, threshold]);
-
   const clearConsole = async () => {
-    clearCutoffMsRef.current = Date.now();
-    renderedKeysRef.current.clear();
-    setEntries([]);
-    setDisplayedLines([]);
-    clearFrontendLogEntries();
-    setFrontendEntries([]);
+    clearConsoleLogEntries();
     await window.appShell.clearBackendLogs();
   };
 

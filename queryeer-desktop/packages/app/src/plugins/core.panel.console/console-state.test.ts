@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
+import type { BackendLogEntry } from "@queryeer/api/backend";
 import {
+  MAX_CONSOLE_LOG_ENTRIES,
   addFrontendLogEntry,
-  clearFrontendLogEntries,
+  clearConsoleLogEntries,
   getConsolePanelVisible,
   getConsoleNotificationState,
-  getFrontendLogEntries,
+  getConsoleLogEntries,
+  ingestBackendLogEntries,
   notifyConsoleErrorAppended,
   resetConsoleNotifications,
   setConsolePanelVisible,
@@ -14,7 +17,12 @@ import {
 afterEach(() => {
   setConsolePanelVisible(false);
   resetConsoleNotifications();
+  clearConsoleLogEntries();
 });
+
+function backendEntry(level: BackendLogEntry["level"], message: string, timestamp = new Date().toISOString()): BackendLogEntry {
+  return { timestamp, level, source: "backend", message };
+}
 
 describe("console-state", () => {
   it("always increments unseen error count and notifies listeners", () => {
@@ -84,16 +92,13 @@ describe("console-state", () => {
   });
 
   describe("frontend log entries", () => {
-    afterEach(() => {
-      clearFrontendLogEntries();
-    });
-
     it("adds and retrieves frontend log entries", () => {
       addFrontendLogEntry("error", "TestModule", "Something went wrong");
       addFrontendLogEntry("warn", "TestModule", "Warning message");
 
-      const entries = getFrontendLogEntries();
+      const entries = getConsoleLogEntries();
       expect(entries).toHaveLength(2);
+      expect(entries[0].origin).toBe("frontend");
       expect(entries[0].level).toBe("error");
       expect(entries[0].source).toBe("TestModule");
       expect(entries[0].message).toBe("Something went wrong");
@@ -131,17 +136,111 @@ describe("console-state", () => {
 
     it("clears all frontend entries", () => {
       addFrontendLogEntry("error", "TestModule", "Err");
-      expect(getFrontendLogEntries()).toHaveLength(1);
+      expect(getConsoleLogEntries()).toHaveLength(1);
 
-      clearFrontendLogEntries();
-      expect(getFrontendLogEntries()).toHaveLength(0);
+      clearConsoleLogEntries();
+      expect(getConsoleLogEntries()).toHaveLength(0);
     });
 
     it("includes timestamp on each entry", () => {
       addFrontendLogEntry("info", "Test", "msg");
-      const entry = getFrontendLogEntries()[0];
+      const entry = getConsoleLogEntries()[0];
       expect(entry.timestamp).toBeDefined();
       expect(() => new Date(entry.timestamp)).not.toThrow();
+    });
+  });
+
+  describe("backend log entries", () => {
+    it("ingests backend entries and skips ones already seen", () => {
+      const first = backendEntry("info", "one");
+      const second = backendEntry("warn", "two");
+
+      ingestBackendLogEntries([first]);
+      ingestBackendLogEntries([first, second]);
+
+      expect(getConsoleLogEntries().map((entry) => entry.message)).toEqual(["one", "two"]);
+      expect(getConsoleLogEntries()[0].origin).toBe("backend");
+    });
+
+    it("counts new backend errors only while the panel is hidden", () => {
+      ingestBackendLogEntries([backendEntry("error", "hidden error")]);
+      expect(getConsoleNotificationState().unseenErrorCount).toBe(1);
+
+      // Re-polling the same buffer does not count the error twice
+      ingestBackendLogEntries([backendEntry("error", "hidden error", getConsoleLogEntries()[0].timestamp)]);
+      expect(getConsoleNotificationState().unseenErrorCount).toBe(1);
+
+      setConsolePanelVisible(true);
+      ingestBackendLogEntries([backendEntry("error", "visible error")]);
+      expect(getConsoleNotificationState().unseenErrorCount).toBe(0);
+    });
+
+    it("keeps errors after the main-process buffer has evicted them", () => {
+      // Regression: the panel used to re-read the main-process ring buffer on open,
+      // so an error counted by the badge could be gone by the time the user clicked.
+      const error = backendEntry("error", "boom");
+      ingestBackendLogEntries([error]);
+      ingestBackendLogEntries([backendEntry("debug", "later noise")]);
+
+      setConsolePanelVisible(true);
+
+      expect(getConsoleLogEntries().map((entry) => entry.message)).toEqual(["boom", "later noise"]);
+    });
+
+    it("does not emit when nothing new was ingested", () => {
+      const entry = backendEntry("info", "one");
+      ingestBackendLogEntries([entry]);
+      let notifications = 0;
+      const dispose = subscribeConsoleNotification(() => {
+        notifications += 1;
+      });
+
+      ingestBackendLogEntries([entry]);
+
+      expect(notifications).toBe(0);
+      dispose();
+    });
+
+    it("ignores backend entries logged before a clear", () => {
+      const beforeClear = backendEntry("error", "old", "2000-01-01T00:00:00.000Z");
+      clearConsoleLogEntries();
+
+      ingestBackendLogEntries([beforeClear]);
+
+      expect(getConsoleLogEntries()).toHaveLength(0);
+    });
+
+    it("does not re-ingest or re-count an entry the store evicted while main still holds it", () => {
+      const now = Date.now();
+      const backendError = backendEntry("error", "backend error", new Date(now).toISOString());
+      ingestBackendLogEntries([backendError]);
+      for (let i = 0; i < MAX_CONSOLE_LOG_ENTRIES; i += 1) {
+        addFrontendLogEntry("error", "Loop", `frontend-${i}`);
+      }
+      expect(getConsoleLogEntries().some((entry) => entry.message === "backend error")).toBe(false);
+      const countBefore = getConsoleNotificationState().unseenErrorCount;
+
+      // Main's priority-evicting buffer still holds the old error
+      ingestBackendLogEntries([backendError]);
+
+      expect(getConsoleLogEntries().some((entry) => entry.message === "backend error")).toBe(false);
+      expect(getConsoleNotificationState().unseenErrorCount).toBe(countBefore);
+    });
+
+    it("evicts low-priority entries before errors when over capacity", () => {
+      const now = Date.now();
+      ingestBackendLogEntries([backendEntry("error", "keep me", new Date(now).toISOString())]);
+      const noise: BackendLogEntry[] = [];
+      for (let i = 0; i < MAX_CONSOLE_LOG_ENTRIES + 10; i += 1) {
+        noise.push(backendEntry("debug", `noise-${i}`, new Date(now + 1000).toISOString()));
+      }
+
+      ingestBackendLogEntries(noise);
+
+      const entries = getConsoleLogEntries();
+      expect(entries).toHaveLength(MAX_CONSOLE_LOG_ENTRIES);
+      expect(entries[0].message).toBe("keep me");
+      expect(entries[entries.length - 1].message).toBe(`noise-${MAX_CONSOLE_LOG_ENTRIES + 9}`);
     });
   });
 });

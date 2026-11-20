@@ -151,6 +151,8 @@ export function XtermTextConsole({
   const scrollLineRef = useRef(initialScrollLine);
   const renderRevisionRef = useRef(0);
   const lastRenderedSnapshotRef = useRef<string>("");
+  // Bumped whenever a terminal instance is created so the current lines are written into it
+  const [terminalGeneration, setTerminalGeneration] = useState(0);
   const currentMatchIndexRef = useRef(-1);
   const currentSearchTextRef = useRef("");
   const onLinkActivateRef = useRef(onLinkActivate);
@@ -245,12 +247,15 @@ export function XtermTextConsole({
     fitAddon.fit();
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
+    setTerminalGeneration((generation) => generation + 1);
 
     return () => {
       terminal.dispose();
       editorLinkDisposable?.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
+      // The next terminal starts empty, so whatever was written to this one must be written again
+      lastRenderedSnapshotRef.current = "";
     };
   }, [fontFamily, fontSize, scrollback]);
 
@@ -311,7 +316,7 @@ export function XtermTextConsole({
     renderRevisionRef.current += 1;
     const revision = renderRevisionRef.current;
     renderLinesWithFlowControl(terminal, lines, scrollLineRef.current, () => revision !== renderRevisionRef.current);
-  }, [lines]);
+  }, [lines, terminalGeneration]);
 
   useEffect(() => {
     const root = rootRef.current;
