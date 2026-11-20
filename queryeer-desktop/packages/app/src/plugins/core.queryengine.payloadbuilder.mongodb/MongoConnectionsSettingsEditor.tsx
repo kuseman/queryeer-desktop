@@ -1,5 +1,5 @@
 import type { SecretRefValue } from "@queryeer/api/security/Security";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { generateConnectionId } from "../../core/utils/ids";
 import {
   CollectionSettingsListEditor,
@@ -32,6 +32,9 @@ type Props = {
 export function MongoConnectionsSettingsEditor({ value, readonly, setValue }: Props): JSX.Element {
   const [rows, setRows] = useState<Row[]>(() => toRows(parseMongoConnectionDefinitions(value)));
   const [selectedRowId, setSelectedRowId] = useState<string | undefined>(() => rows[0]?.id);
+  // The latest rows, for updates that land after a re-render, e.g. a password field's async vault write.
+  // Reading `rows` there would write back a stale list and drop rows added since (such as a clone).
+  const rowsRef = useRef(rows);
 
   useEffect(() => {
     if (rows.length === 0) {
@@ -46,6 +49,7 @@ export function MongoConnectionsSettingsEditor({ value, readonly, setValue }: Pr
   });
 
   const syncRows = (nextRows: Row[], nextSelectedId?: string, debouncePersist = false): void => {
+    rowsRef.current = nextRows;
     setRows(nextRows);
     if (nextSelectedId !== undefined) {
       setSelectedRowId(nextSelectedId);
@@ -58,7 +62,7 @@ export function MongoConnectionsSettingsEditor({ value, readonly, setValue }: Pr
   };
 
   const updateRow = (id: string, patch: Partial<Row>): void => {
-    syncRows(rows.map((row) => row.id === id ? { ...row, ...patch } : row), undefined, true);
+    syncRows(rowsRef.current.map((row) => row.id === id ? { ...row, ...patch } : row), undefined, true);
   };
 
   const addRow = (): void => {

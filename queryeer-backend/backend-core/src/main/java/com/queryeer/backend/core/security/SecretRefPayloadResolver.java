@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
@@ -26,9 +27,8 @@ public final class SecretRefPayloadResolver
     private final SecuritySession securitySession;
     private final ObjectMapper objectMapper;
 
-    private volatile String cachedVaultPath;
-    private volatile long cachedModifiedAt = -1;
-    private volatile JsonNode cachedEntriesNode;
+    /** The vault's parsed entries, kept until the vault file or the frontend's last vault-changed notification differs. */
+    private volatile CachedEntries cachedEntries;
 
     public SecretRefPayloadResolver(SecuritySession securitySession, ObjectMapper objectMapper)
     {
@@ -96,7 +96,7 @@ public final class SecretRefPayloadResolver
             throw new SecuritySessionClosedException("Security session is not open");
         }
 
-        JsonNode entries = loadEntries(session.vaultPath());
+        JsonNode entries = loadEntries(session.vaultPath(), session.vaultUpdatedAt());
         JsonNode entry = entries.get(secretRef);
         if (entry == null
                 || entry.isMissingNode())
@@ -124,7 +124,7 @@ public final class SecretRefPayloadResolver
         }
     }
 
-    private JsonNode loadEntries(String vaultPath)
+    private JsonNode loadEntries(String vaultPath, String vaultUpdatedAt)
     {
         try
         {
@@ -133,12 +133,16 @@ public final class SecretRefPayloadResolver
                     .toMillis()
                     : -1;
 
-            JsonNode localCachedEntries = cachedEntriesNode;
-            if (localCachedEntries != null
-                    && vaultPath.equals(cachedVaultPath)
-                    && modifiedAt == cachedModifiedAt)
+            // The modified time alone can miss a write: two writes in the same millisecond, or a filesystem with coarse
+            // timestamps. The frontend's vaultUpdatedAt changes on every write, so a stale cache is never served.
+            CachedEntries cached = cachedEntries;
+            if (cached != null
+                    && cached.vaultPath()
+                            .equals(vaultPath)
+                    && cached.modifiedAt() == modifiedAt
+                    && Objects.equals(cached.vaultUpdatedAt(), vaultUpdatedAt))
             {
-                return localCachedEntries;
+                return cached.entries();
             }
 
             JsonNode root = objectMapper.readTree(path.toFile());
@@ -148,9 +152,7 @@ public final class SecretRefPayloadResolver
                 throw new SecretResolutionException("Vault entries are missing");
             }
 
-            cachedVaultPath = vaultPath;
-            cachedModifiedAt = modifiedAt;
-            cachedEntriesNode = entries;
+            cachedEntries = new CachedEntries(vaultPath, modifiedAt, vaultUpdatedAt, entries);
             return entries;
         }
         catch (IOException e)
@@ -175,6 +177,10 @@ public final class SecretRefPayloadResolver
         cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(keyBytes, "AES"), new GCMParameterSpec(128, iv));
         byte[] plaintext = cipher.doFinal(payload);
         return new String(plaintext, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private record CachedEntries(String vaultPath, long modifiedAt, String vaultUpdatedAt, JsonNode entries)
+    {
     }
 
     private static boolean isSecretRefWrapper(Map<?, ?> map)

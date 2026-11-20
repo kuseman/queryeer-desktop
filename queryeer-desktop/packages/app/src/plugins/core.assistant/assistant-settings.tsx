@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { SecretRefValue } from "@queryeer/api/security/Security";
 import { CollectionSettingsListEditor } from "../core.settings/CollectionSettingsListEditor";
 import { PasswordFieldInput } from "../core.settings/PasswordFieldInput";
@@ -18,6 +18,9 @@ type Props = {
 export function AssistantConnectionsSettingsEditor({ value, setValue, readonly }: Props): JSX.Element {
   const [connections, setConnections] = useState<AssistantConnectionDraft[]>(() => sanitizeAssistantConnections(value));
   const [selectedId, setSelectedId] = useState<string | undefined>(() => connections[0]?.id);
+  // The latest connections, for updates that land after a re-render, e.g. a password field's async vault write.
+  // Reading `connections` there would write back a stale list and drop connections added since (such as a clone).
+  const connectionsRef = useRef(connections);
 
   const items = useMemo(() => connections.map((connection) => ({
     id: connection.id,
@@ -27,12 +30,13 @@ export function AssistantConnectionsSettingsEditor({ value, setValue, readonly }
   })), [connections]);
 
   const persist = (next: AssistantConnectionDraft[]): void => {
+    connectionsRef.current = next;
     setConnections(next);
     setValue(next);
   };
 
   const updateConnection = (id: string, patch: Partial<AssistantConnectionDraft>): void => {
-    persist(connections.map((connection) => {
+    persist(connectionsRef.current.map((connection) => {
       if (connection.id !== id) {
         return connection;
       }

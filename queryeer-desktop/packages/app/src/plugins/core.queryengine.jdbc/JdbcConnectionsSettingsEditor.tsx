@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { SecretRefValue } from "@queryeer/api/security/Security";
 import { generateConnectionId } from "../../core/utils/ids";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
@@ -56,6 +56,9 @@ const TEST_CONNECTION_SUFFIX = "::test";
 export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Props): JSX.Element {
   const [rows, setRows] = useState<Row[]>(() => toRows(parseJdbcConnectionDefinitions(value)));
   const [selectedRowId, setSelectedRowId] = useState<string | undefined>(() => rows[0]?.id);
+  // The latest rows, for updates that land after a re-render, e.g. a password field's async vault write.
+  // Reading `rows` there would write back a stale list and drop rows added since (such as a clone).
+  const rowsRef = useRef(rows);
   const [dialects, setDialects] = useState<JdbcDialectOption[]>([{ id: "jdbc", displayName: "Other Database (JDBC)" }]);
   // Until the backend's dialect list arrives, a dialect's fields are unknown
   const [dialectsState, setDialectsState] = useState<"loading" | "loaded" | "failed">("loading");
@@ -119,6 +122,7 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
   });
 
   const syncRows = (nextRows: Row[], nextSelectedId?: string, debouncePersist = false): void => {
+    rowsRef.current = nextRows;
     setRows(nextRows);
     if (nextSelectedId !== undefined) {
       setSelectedRowId(nextSelectedId);
@@ -133,7 +137,7 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
 
   const updateRow = (id: string, patch: Partial<Row>): void => {
     syncRows(
-      rows.map((row) => (row.id === id ? { ...row, ...patch } : row)),
+      rowsRef.current.map((row) => (row.id === id ? { ...row, ...patch } : row)),
       undefined,
       true
     );

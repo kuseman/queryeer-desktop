@@ -2,6 +2,7 @@ package com.queryeer.backend.core.security;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.security.GeneralSecurityException;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -79,6 +80,27 @@ class SecretRefPayloadResolverTest
 
         Assertions.assertTrue(error.getMessage()
                 .contains("Secret reference was not found"));
+    }
+
+    @Test
+    void materializeRereadsTheVaultWhenItChangedWithinTheSameModifiedTime() throws Exception
+    {
+        byte[] key = new byte[32];
+        Path vaultPath = createVault("first", key, "first-value");
+        SecuritySession session = new SecuritySession();
+        session.openSession("session-4", vaultPath.toString(), Base64.getEncoder()
+                .encodeToString(key), "2026-11-20T10:00:00.000Z");
+        SecretRefPayloadResolver resolver = new SecretRefPayloadResolver(session, MapperUtils.MAPPER);
+        Assertions.assertEquals("first-value", resolver.materialize(Map.of("secretRef", "first")));
+
+        // A second write the filesystem's timestamp can't tell apart from the first (same millisecond, or a coarse-grained
+        // filesystem); only the frontend's vault-changed notification says the vault is new
+        FileTime modifiedAt = Files.getLastModifiedTime(vaultPath);
+        createVault("second", key, "second-value");
+        Files.setLastModifiedTime(vaultPath, modifiedAt);
+        session.markVaultChanged(vaultPath.toString(), "2026-11-20T10:00:00.001Z");
+
+        Assertions.assertEquals("second-value", resolver.materialize(Map.of("secretRef", "second")));
     }
 
     @Test
