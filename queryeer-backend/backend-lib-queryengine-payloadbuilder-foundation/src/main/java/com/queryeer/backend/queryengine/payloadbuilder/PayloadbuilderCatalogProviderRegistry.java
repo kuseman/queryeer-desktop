@@ -18,7 +18,7 @@ package com.queryeer.backend.queryengine.payloadbuilder;
  * }</pre>
  *
  * <p>
- * With an optional dependency, check {@code context.isDependencyActive("queryengine.payloadbuilder")} first.
+ * With an optional dependency, do this in a {@code DependencyExtension} started by {@code DependencyExtension.whenDependencyActive(context, "queryengine.payloadbuilder", ...)}.
  * </p>
  */
 public interface PayloadbuilderCatalogProviderRegistry

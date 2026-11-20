@@ -26,15 +26,9 @@ public interface BackendPluginContext
      * that is in use but fails to activate can leave its exports visible, so this method, not class visibility, is the check. Needs Queryeer 0.21 or later.
      *
      * <p>
-     * Check it before touching an optional dependency's classes. Keep the code that uses them in a class of its own, loaded only when this returns true:
+     * To run code that uses an optional dependency's classes, use {@link DependencyExtension#whenDependencyActive(BackendPluginContext, String, String, Object)}, which also keeps those classes from
+     * loading too early.
      * </p>
-     *
-     * <pre>{@code
-     * if (context.isDependencyActive("queryengine.payloadbuilder"))
-     * {
-     *     PayloadbuilderSupport.register(context); // the only class that imports payloadbuilder types
-     * }
-     * }</pre>
      */
     default boolean isDependencyActive(String pluginId)
     {
