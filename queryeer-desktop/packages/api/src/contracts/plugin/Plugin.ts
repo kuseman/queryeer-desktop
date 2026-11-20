@@ -54,6 +54,11 @@ export type PluginIdentity = {
 export type PluginContext = {
   /** This plugin's identity, e.g. for a settings `moduleId` or `activeFile.metadata.<id>` keys, so it isn't hard-coded. */
   plugin: PluginIdentity;
+  /**
+   * Whether the plugin with this id is a dependency of this plugin (required or optional) and activated before it. Use
+   * it to add to an optional dependency only when it is there. Since 0.21.
+   */
+  isDependencyActive(pluginId: string): boolean;
   commands: CommandRegistry;
   filesystems: FileSystemRegistry;
   files: FilesRegistry;

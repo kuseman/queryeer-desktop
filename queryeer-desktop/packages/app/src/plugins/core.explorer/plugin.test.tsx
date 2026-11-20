@@ -116,6 +116,7 @@ function createContext(args: {
 
   return {
     plugin: { id: "test.plugin", name: "Test plugin", version: "0.0.0" },
+    isDependencyActive: () => false,
     commands: {
       registerCommand: vi.fn((command) => {
         args.commands.set(command.id, command.handler);
@@ -213,7 +214,10 @@ function createContext(args: {
       getValue: vi.fn(),
       getAllValues: vi.fn(() => ({})),
       subscribe: vi.fn(() => ({ dispose: vi.fn() })),
-      open: vi.fn()
+      open: vi.fn(),
+      setValue: vi.fn(async () => ({ ok: true as const })),
+      readModuleValues: vi.fn(async () => ({})),
+      runOnce: vi.fn()
     },
     quickcommand: {
       registerProvider: vi.fn((provider) => {

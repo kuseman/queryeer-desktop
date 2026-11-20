@@ -152,7 +152,7 @@ Manifests are validated for required fields, duplicate IDs, and schema version. 
 
 ### 3.3 Dependency Resolution
 
-Plugins are activated in dependency order using a topological sort (Kahn's algorithm). Dependencies are resolved by plugin ID. Circular dependencies are detected and rejected.
+Plugins are activated in dependency order using a topological sort (Kahn's algorithm). Dependencies are resolved by plugin ID. The plugins in a cycle of required dependencies are skipped.
 
 **Backend version ranges.** A dependency can name the versions it works with, as an npm-style SemVer range:
 
@@ -166,7 +166,7 @@ Plugins are activated in dependency order using a topological sort (Kahn's algor
 - Other prereleases follow npm: `1.2.0-beta.1` satisfies a range only when the range names a prerelease of `1.2.0`.
 - A plain ID accepts any version. An invalid range rejects the manifest.
 
-**Skipped plugins.** The backend skips, with a reason shown in the runtime status, a plugin whose dependency is missing (`Missing dependency: <id>`), out of range (`Needs <id> <range>, but <version> is installed`) or itself skipped (`Dependency <id> was skipped`), and one whose required capability is only provided by skipped plugins. These checks are backend-only; the frontend resolves a plugin's dependencies from the `manifest` in its TypeScript plugin object.
+**Skipped plugins.** The backend skips, with a reason shown in the runtime status, a plugin whose dependency is missing (`Missing dependency: <id>`), out of range (`Needs <id> <range>, but <version> is installed`) or itself skipped (`Dependency <id> was skipped`), and one whose required capability is only provided by skipped plugins. Version ranges are backend-only. The frontend resolves a plugin's dependencies from the `manifest` in its TypeScript plugin object, with the same skipping rules (§3.3.3).
 
 **Optional dependencies.** A plugin that adds to another plugin when it is there, and works without it, marks the dependency optional:
 
@@ -290,6 +290,37 @@ Checking `isDependencyActive` and calling a class of your own that alone uses th
 **A broken plugin affects only itself.** A plugin whose classes fail to load, or whose `activate` throws (also a `NoClassDefFoundError`), is marked failed with the reason in Observability, and the other plugins activate as usual. An error thrown later, from a query, fails that query.
 
 **One plugin, or a plugin and a bridge.** A feature that joins two plugins can live in either of them, behind an optional dependency as above, or in a third plugin that requires both (a bridge). For users, an optional dependency means one plugin to install: installing it brings the feature whenever the other plugin is there. A bridge is a second plugin to install, but leaves both plugins free of the other's code. Queryeer's built-in plugins use bridges (`queryengine.payloadbuilder.jdbc` joins `queryengine.jdbc` and `queryengine.payloadbuilder`), which costs users nothing since they ship together. A plugin you distribute should prefer an optional dependency.
+
+### 3.3.3 Frontend Dependencies
+
+The frontend half of a plugin declares its dependencies on other frontend plugins in its TypeScript manifest, as plugin ids (required) or, since 0.21, `{ id, optional: true }`:
+
+```ts
+manifest: {
+  kind: "feature",
+  dependencies: ["core.settings", { id: "core.queryengine.payloadbuilder", optional: true }]
+}
+```
+
+- Plugins activate after their dependencies (required, and optional ones in use).
+- **One plugin never stops the others** (since 0.21). A plugin is skipped when a required dependency is missing, skipped or fails to activate, when its required dependencies form a cycle, when a dependency entry is invalid, or when no remaining plugin provides a capability it requires. A plugin whose `activate` throws is marked failed, and its `deactivate` is called; what it registered and doesn't undo there stays registered. Each skipped or failed plugin gets an error notification at startup and is listed in Observability → Manifest diagnostics, with the reason. Before 0.21, any of these stopped the app from starting.
+- **Optional dependencies** are used when the plugin is there and activates. One that would close a dependency cycle is not used, with a warning in Observability. Check `context.isDependencyActive(id)` before using what it contributes:
+
+```ts
+activate(context) {
+  // ... the plugin's own features ...
+  if (context.isDependencyActive("core.queryengine.payloadbuilder")) {
+    context.payloadbuilderCatalog.registerContribution(mongoCatalog);
+  }
+}
+```
+
+The frontend has no class loading to guard: the check is all it takes. `isDependencyActive` is true for a required or optional dependency that activated before the plugin, and false for any other id.
+
+- **Needs Queryeer 0.21.** A 0.20 host doesn't understand `{ id, optional }` entries and fails to start with them. A plugin that uses them, or `isDependencyActive`, must not load on 0.20: give a built-in dependency in `plugin.json` a range that starts at 0.21, e.g. `{ "id": "queryengine.payloadbuilder", "version": ">=0.21.0 <1.0.0", "optional": true }`, which the backend checks before the frontend loads.
+- Frontend entries have no `version`; one is ignored. Ranges belong in `plugin.json`.
+- Capabilities (`providesCapabilities`, `requiredCapabilities`) don't affect the order. A plugin is skipped when no plugin provides a capability it requires, or when every provider failed before it; if a provider fails after it activated, it stays active.
+- A plugin whose `activate` throws gets its `deactivate` called, so it can undo what it registered.
 
 ### 3.4 Activation
 
@@ -824,12 +855,53 @@ A table result provider's `getItems(context)` receives the selection (`selection
 | `settings.getAllValues()` | `Readonly<Record<string, unknown>>` | Snapshot all effective values |
 | `settings.subscribe(cb)` | `Disposable` | Subscribe to effective-value changes |
 | `settings.open(id?)` | `void` | Open Settings, optionally selecting a specific setting ID |
+| `settings.setValue(id, value)` | `Promise<AdvancedValidationResult>` | Set a registered setting, validated and saved like an edit in Settings (0.21) |
+| `settings.readModuleValues(moduleId)` | `Promise<Readonly<Record<string, unknown>>>` | The stored values of any settings module, also one no plugin registers (0.21) |
+| `settings.runOnce(id, run)` | `void` | Run `run` once per installation, after settings are loaded (0.21) |
 
 Use `context.components.PasswordFieldInput` in advanced settings renderers for credentials. The component stores plaintext through the host vault and reports only a `SecretRefValue` to the plugin.
 
 Use `context.components.CollectionSettingsListEditor` for host-styled add, clone, delete, selection, validation markers, read-only behavior, and a caller-rendered detail pane. `context.components.useCollectionSettingsPersistence` provides `persistNow` and debounced persistence helpers; the latest pending debounced value is flushed when the component unmounts.
 
 The settings service may still be initializing while a plugin's `activate` function runs. Plugins that need a setting during activation should register `settings.subscribe` first and read the value from the callback; the callback runs when settings become ready and on later changes. Settings contributions registered after initialization are refreshed and hydrated automatically.
+
+#### 7.7.1 Migrating Settings From Another Module
+
+A plugin that takes over a feature (for example connections Queryeer kept in its own module until now) copies the user's settings once, with `runOnce`, `readModuleValues`, `setValue` and `window.appShell.copySecret`:
+
+```ts
+activate(context) {
+  context.settings.registerSettings(connectionsContribution); // the plugin's own module
+  context.settings.runOnce("connections-from-core.v1", async () => {
+    const old = await context.settings.readModuleValues("core.queryengine.payloadbuilder.mongodb");
+    const legacy = (old["core.queryengine.payloadbuilder.mongodb.connections"] ?? []) as LegacyConnection[];
+    const current = context.settings.getValue<Connection[]>(CONNECTIONS_SETTING_ID) ?? [];
+    const known = new Set(current.map((connection) => connection.id));
+    const migrated: Connection[] = [];
+    for (const connection of legacy.filter((entry) => !known.has(entry.id))) {
+      // Never share a secretRef between two settings: editing or clearing one would change the other
+      const password = connection.authPassword?.secretRef
+        ? await window.appShell.copySecret({ secretRef: connection.authPassword.secretRef })
+        : undefined;
+      migrated.push(toConnection(connection, password?.found ? { secretRef: password.secretRef } : undefined));
+    }
+    if (migrated.length > 0) {
+      const result = await context.settings.setValue(CONNECTIONS_SETTING_ID, [...current, ...migrated]);
+      if (!result.ok) {
+        throw new Error(result.message); // runs again on the next start
+      }
+    }
+  });
+}
+```
+
+- `runOnce` runs after every plugin has activated and settings are loaded, not during `activate`; one registered later runs right away. Tasks run one at a time. Its id is per plugin; use a new id for a new migration. The tasks of a plugin whose `activate` fails don't run.
+- Register your settings in `activate` itself (not after an `await` of something else), so they are loaded when the task runs.
+- It counts as done only when `run` resolves, after what it changed is saved. One that throws is logged and runs again on the next start, so keep it safe to repeat: skip what is already there (by id), as above. `setValue` reports a failure in its result rather than throwing: throw it, as above, or the task counts as done.
+- Until the task has run, the plugin's own settings don't have the migrated values yet; UI that reads them with `getValue` should `subscribe`.
+- Keep ids (such as `connectionId`) the same, so saved files that refer to them keep working, and leave the old module as it is.
+- `readModuleValues` returns a copy of what is stored, whether or not a plugin registers the module: `{}` when the module has no file. It throws when the file exists but can't be read, so a migration fails (and runs again) instead of finding nothing to migrate. `setValue` only sets settings a plugin registers.
+- `copySecret` copies the encrypted vault entry under a new ref; it works while the vault is locked, and the secret never reaches the renderer. `found` is false for a ref with no entry, or when there is no vault. Copies made by a run that then fails stay in the vault unused; that is harmless.
 
 ### 7.8 Native Query Engines
 
@@ -1289,6 +1361,12 @@ context.payloadbuilderCatalog.registerContribution({
 
 On the backend, a catalog plugin implements `PayloadbuilderCatalogProviderContributor` and registers it with the `PayloadbuilderCatalogProviderRegistry` it gets from `context.services()`. It compiles against `backend-lib-queryengine-payloadbuilder-foundation` with `provided` scope, and declares `queryengine.payloadbuilder` in `plugin.json`, required or optional (§3.3). Since 0.21 `queryengine.payloadbuilder` exports that API and `se.kuseman.payloadbuilder.api.`; a plugin that doesn't declare the dependency doesn't see them.
 
+**Taking over a built-in catalog** (since 0.21). A plugin can register a catalog with the id of one of Queryeer's built-in catalogs (`elasticsearch`, `kafka`, `mongodb`, `filesystem`, `http`), for example to serve it from its own connections. Its contribution replaces the built-in one: on the backend for the rest of the run, with the built-in's actions; on the frontend until the plugin's registration is disposed, which brings the built-in back.
+
+- **Replace both halves.** The built-in frontend panel stores properties for the built-in backend (its `connectionId`s) and calls its actions. A plugin that replaces only the backend half, or whose frontend half is skipped or fails, leaves that panel talking to the plugin's backend: a removed action fails with "No payloadbuilder catalog provides the action …".
+- Use the built-in's id exactly (ids are matched ignoring case, and a different spelling is refused on the frontend). Files keep working as long as the plugin keeps the catalog id and the properties it stores, such as `connectionId`.
+- Two plugins can't register the same catalog id: the second registration throws. `jdbc` can't be taken over on the backend: it comes from the built-in plugin `queryengine.payloadbuilder.jdbc`, not from payloadbuilder itself.
+
 See the `payloadbuilder-catalog` example in [`plugins-examples/payloadbuilder-catalog/`](./plugins-examples/payloadbuilder-catalog/) for a complete working example.
 
 ### 10.2 Frontend Plugin SDK
@@ -1419,9 +1497,17 @@ The built-in plugin `queryengine.runtime.payloadbuilder-foundation` is gone, and
 
 ### 12.4 Optional dependencies and `require`
 
+Frontend: `dependencies` entries can be `{ id, optional: true }`, and `context.isDependencyActive(id)` is new (§3.3.3). A plugin with a missing dependency, or one that throws in `activate`, no longer stops the app: it is skipped or marked failed, with a notification. `PluginContext` has the new member `isDependencyActive`, so a test that builds a whole `PluginContext` object needs it (`isDependencyActive: () => false`).
+
+Backend:
+
 New: `{ "id": ..., "optional": true }` in `dependencies`, `context.isDependencyActive(id)` to check one is in use (§3.3), and `DependencyExtension.whenDependencyActive(context, id, className, state)` to run the code that uses it, a `DependencyExtension` loaded only then (§3.3.2). Also new: `context.services().require(type)`, which returns a service or throws with what to check, instead of `get` and a null check. `PluginDescriptor.dependencies()` now lists required dependencies only; optional ones are in `optionalDependencies()`. A plugin that uses `isDependencyActive`, `DependencyExtension` or `require` needs Queryeer 0.21 or later.
 
 `require` is a default method on `PluginServiceRegistry`. A test that mocks the registry with Mockito gets `null` from `require` with a plain mock; use `mock(PluginServiceRegistry.class, CALLS_REAL_METHODS)` and stub `get`, or stub `require` directly.
+
+### 12.5 Migrating settings, copying secrets
+
+New: `context.settings.setValue`, `readModuleValues` and `runOnce`, and `window.appShell.copySecret` (§7.7.1). A plugin that builds a whole `PluginContext` in its tests needs them in its `settings` mock, and a test that builds a whole `ShellApi` needs `copySecret`.
 
 ## Reference: Example Plugins
 

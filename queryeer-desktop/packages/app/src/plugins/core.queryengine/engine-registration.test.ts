@@ -42,6 +42,7 @@ function createContext(file: FileEntity): PluginContext {
   const filesById = new Map<string, FileEntity>([[file.fileId, file]]);
   return {
     plugin: { id: "test.plugin", name: "Test plugin", version: "0.0.0" },
+    isDependencyActive: () => false,
     commands: {
       registerCommand: vi.fn(),
       executeCommand: vi.fn(async () => ({ commandId: "noop", executed: true })),
@@ -139,7 +140,10 @@ function createContext(file: FileEntity): PluginContext {
       getValue: vi.fn(),
       getAllValues: vi.fn(() => ({})),
       subscribe: vi.fn(() => ({ dispose: vi.fn() })),
-      open: vi.fn()
+      open: vi.fn(),
+      setValue: vi.fn(async () => ({ ok: true as const })),
+      readModuleValues: vi.fn(async () => ({})),
+      runOnce: vi.fn()
     },
     quickcommand: { registerProvider: vi.fn() },
     contextMenu: { registerProvider: vi.fn(), unregisterProvider: vi.fn() },

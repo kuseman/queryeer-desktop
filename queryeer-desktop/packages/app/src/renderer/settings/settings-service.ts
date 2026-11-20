@@ -11,7 +11,7 @@ import {
 
 type SettingsBridge = {
   getSettingsIndex: () => Promise<SettingsIndexDocument>;
-  getSettingsModule: (params: { moduleId: string }) => Promise<SettingsModuleDocument>;
+  getSettingsModule: (params: { moduleId: string; strict?: boolean }) => Promise<SettingsModuleDocument>;
   saveSettingsIndex: (document: SettingsIndexDocument) => Promise<{ accepted: boolean }>;
   saveSettingsModule: (params: {
     moduleId: string;
@@ -28,6 +28,8 @@ export type SettingsServiceOptions = {
 };
 
 const DEFAULT_DEBOUNCE_MS = 500;
+/** Where one-time tasks (`runOnce`) record that they ran, by task id. Not registered, so not shown in Settings. */
+export const RUN_ONCE_MODULE_ID = "core.settings.runonce";
 
 export class SettingsService {
   private readonly registry: SettingsContributionRegistry;
@@ -231,6 +233,48 @@ export class SettingsService {
     return () => {
       this.modalSubscribers.delete(listener);
     };
+  }
+
+  /**
+   * A module's stored values, whether or not a plugin registers it (e.g. to migrate from a module no longer in use).
+   * A copy: changing it changes nothing. `{}` when the module has no file; throws when its file can't be read, so a
+   * migration doesn't take a failed read for "nothing to migrate".
+   */
+  public async readModuleValues(moduleId: string): Promise<Record<string, unknown>> {
+    const loaded = this.moduleDocs.get(moduleId);
+    if (loaded) {
+      return structuredClone(loaded.values);
+    }
+    // Not cached: an unknown module would otherwise end up in the index
+    const doc = await this.bridge.getSettingsModule({ moduleId, strict: true });
+    return typeof doc?.values === "object" && doc.values !== null ? structuredClone(doc.values) : {};
+  }
+
+  /** Whether the one-time task `id` (see `completeOnce`) has run. */
+  public hasCompletedOnce(id: string): boolean {
+    const doc = this.moduleDocs.get(RUN_ONCE_MODULE_ID);
+    return doc !== undefined && Object.prototype.hasOwnProperty.call(doc.values, id);
+  }
+
+  /** Records that the one-time task `id` has run, and writes it, with every pending change, before returning. */
+  public async completeOnce(id: string): Promise<void> {
+    const doc = this.ensureModuleDocument(RUN_ONCE_MODULE_ID);
+    doc.values[id] = this.now().toISOString();
+    doc.version = (typeof doc.version === "number" ? doc.version : 1) + 1;
+    doc.updatedAt = this.now().toISOString();
+    this.schedulePersist(RUN_ONCE_MODULE_ID);
+    await this.flushPending();
+  }
+
+  /** Writes every change still waiting for its debounce now. */
+  public async flushPending(): Promise<void> {
+    const moduleIds = [...this.modulePersistTimers.keys()];
+    for (const moduleId of moduleIds) {
+      await this.persistModule(moduleId);
+    }
+    if (this.indexPersistTimer !== null) {
+      await this.persistIndex();
+    }
   }
 
   public dispose(): void {

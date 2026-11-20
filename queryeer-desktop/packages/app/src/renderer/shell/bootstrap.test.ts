@@ -78,6 +78,7 @@ describe("bootstrapShell diagnostics wiring", () => {
       storeSecret: async () => ({ secretRef: "secret-ref-1" }),
       resolveSecret: async () => ({ found: false }),
       deleteSecret: async () => ({ deleted: false }),
+      copySecret: async () => ({ found: false }),
       rotateSecurityMasterPassword: async () => ({ accepted: true }),
       listAssistantModels: async () => ({ models: [] }),
       completeAssistantChat: async () => ({ message: { role: "assistant", content: "" } }),

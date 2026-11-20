@@ -134,7 +134,7 @@ type AppShellApi = {
   getUserKeybindings: () => Promise<UserKeybindingsDocument>;
   saveUserKeybindings: (document: UserKeybindingsDocument) => Promise<{ accepted: boolean }>;
   getSettingsIndex: () => Promise<SettingsIndexDocument>;
-  getSettingsModule: (params: { moduleId: string }) => Promise<SettingsModuleDocument>;
+  getSettingsModule: (params: { moduleId: string; strict?: boolean }) => Promise<SettingsModuleDocument>;
   saveSettingsIndex: (document: SettingsIndexDocument) => Promise<{ accepted: boolean }>;
   saveSettingsModule: (params: { moduleId: string; document: SettingsModuleDocument }) => Promise<{ accepted: boolean }>;
   getSecurityStatus: () => Promise<SecurityStatus>;
@@ -147,6 +147,7 @@ type AppShellApi = {
   storeSecret: (params: { plaintext: string; secretRef?: string }) => Promise<{ secretRef: string }>;
   resolveSecret: (params: { secretRef: string }) => Promise<{ found: boolean; plaintext?: string }>;
   deleteSecret: (params: { secretRef: string }) => Promise<{ deleted: boolean }>;
+  copySecret: (params: { secretRef: string }) => Promise<{ found: boolean; secretRef?: string }>;
   rotateSecurityMasterPassword: (params: {
     oldMasterPassword: string;
     newMasterPassword: string;
@@ -398,6 +399,9 @@ const appShellApi: AppShellApi = {
   },
   deleteSecret: async (params) => {
     return ipcRenderer.invoke("security:delete-secret", params);
+  },
+  copySecret: async (params) => {
+    return ipcRenderer.invoke("security:copy-secret", params);
   },
   rotateSecurityMasterPassword: async (params) => {
     return ipcRenderer.invoke("security:rotate-master-password", params);

@@ -1,5 +1,6 @@
 import type { PluginKind } from "@queryeer/api/plugin/PluginManifest";
 import type { PluginManifestFile } from "@queryeer/api/plugin/PluginManifestFile";
+import { dependencyEntries } from "../core/plugin-runtime/PluginValidation";
 
 const validPluginKinds: PluginKind[] = ["core", "feature"];
 
@@ -23,8 +24,9 @@ export function validatePluginManifestFile(manifest: PluginManifestFile): void {
   if (!manifest.modulePath || typeof manifest.modulePath !== "string") {
     throw new Error(`Plugin '${manifest.id}' has invalid modulePath`);
   }
-  if (manifest.dependencies && !isStringArray(manifest.dependencies)) {
-    throw new Error(`Plugin '${manifest.id}' has invalid dependencies`);
+  if (manifest.dependencies) {
+    // An id, or { id, optional }
+    dependencyEntries(manifest);
   }
   if (
     manifest.providesCapabilities &&

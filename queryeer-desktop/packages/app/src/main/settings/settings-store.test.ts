@@ -110,3 +110,21 @@ describe("SettingsStore write", () => {
     expect(existsSync(join(settingsDir, "core.editor.texteditor.json.tmp"))).toBe(false);
   });
 });
+
+describe("SettingsStore strict module read", () => {
+  it("returns an empty document for a missing file", async () => {
+    const { store } = makeStore();
+
+    expect((await store.readModule("old.module", true)).values).toEqual({});
+  });
+
+  it("throws for a file it can't parse, and leaves it in place", async () => {
+    const { store, settingsDir } = makeStore();
+    mkdirSync(settingsDir, { recursive: true });
+    writeFileSync(join(settingsDir, "old.module.json"), "{ broken", "utf8");
+
+    await expect(store.readModule("old.module", true)).rejects.toThrow("Settings module old.module could not be read");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(existsSync(join(settingsDir, "old.module.json"))).toBe(true);
+  });
+});

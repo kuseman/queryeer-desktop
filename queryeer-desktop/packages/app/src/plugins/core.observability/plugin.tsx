@@ -358,6 +358,34 @@ function ObservabilityEditor({ listFiles }: ObservabilityEditorProps) {
               </div>
             ))}
 
+            <h3>Plugins skipped, failed or with warnings</h3>
+            <div className="manifest-grid-head">
+              <span>Plugin</span>
+              <span>State</span>
+              <span>Reason</span>
+              <span>-</span>
+              <span>-</span>
+            </div>
+            {(diagnostics.pluginProblems?.length ?? 0) === 0 ? (
+              <div className="manifest-grid-row">
+                <span>-</span>
+                <span>-</span>
+                <span>none</span>
+                <span>-</span>
+                <span>-</span>
+              </div>
+            ) : (
+              (diagnostics.pluginProblems ?? []).map((problem, index) => (
+                <div className="manifest-grid-row" key={`${problem.pluginId}-${index}`}>
+                  <span>{problem.pluginId}</span>
+                  <span>{problem.state}</span>
+                  <span>{problem.message}</span>
+                  <span>-</span>
+                  <span>-</span>
+                </div>
+              ))
+            )}
+
             <h3>External plugin load errors</h3>
             <div className="manifest-grid-head">
               <span>Plugin</span>
