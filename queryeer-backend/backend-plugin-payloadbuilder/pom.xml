@@ -65,19 +65,30 @@
             <groupId>se.kuseman.payloadbuilder</groupId>
             <artifactId>payloadbuilder-core</artifactId>
         </dependency>
+        <!-- The built-in catalogs; jdbc comes from queryengine.payloadbuilder.jdbc -->
         <dependency>
             <groupId>se.kuseman.payloadbuilder</groupId>
-            <artifactId>payloadbuilder-catalog</artifactId>
-            <exclusions>
-                <!-- Only the jdbc catalog uses it, which queryengine.payloadbuilder.jdbc bundles -->
-                <exclusion>
-                    <groupId>com.zaxxer</groupId>
-                    <artifactId>HikariCP</artifactId>
-                </exclusion>
-            </exclusions>
+            <artifactId>payloadbuilder-catalog-es</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>se.kuseman.payloadbuilder</groupId>
+            <artifactId>payloadbuilder-catalog-fs</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>se.kuseman.payloadbuilder</groupId>
+            <artifactId>payloadbuilder-catalog-http</artifactId>
+        </dependency>
+        <!-- Until the mongodb and kafka catalogs move to com.queryeer.mongodb and com.queryeer.kafka -->
+        <dependency>
+            <groupId>se.kuseman.payloadbuilder</groupId>
+            <artifactId>payloadbuilder-catalog-kafka</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>se.kuseman.payloadbuilder</groupId>
+            <artifactId>payloadbuilder-catalog-mongodb</artifactId>
         </dependency>
         <!--
-            payloadbuilder-catalog declares avro as an optional dependency. Optional deps are not pulled transitively, so we declare it explicitly
+            payloadbuilder-catalog-kafka declares avro as an optional dependency. Optional deps are not pulled transitively, so we declare it explicitly
             here to ensure the plugin assembly (which uses useTransitiveDependencies=true, scope=runtime) bundles avro-1.11.4.jar into lib/. The plugin
             never references avro classes directly, so this is a packaging-only requirement. Marked optional so the avro jar is not propagated to
             downstream consumers of this plugin.

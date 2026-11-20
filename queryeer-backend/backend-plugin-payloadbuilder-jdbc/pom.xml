@@ -37,36 +37,10 @@
             <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
-        <!--
-            The jdbc catalog's implementation. Until payloadbuilder 1.15.0 publishes payloadbuilder-catalog-jdbc, this is the
-            combined catalog jar; the libraries only the other catalogs use are left out. Switch to payloadbuilder-catalog-jdbc
-            (and drop the exclusions) once it is released.
-        -->
+        <!-- The jdbc catalog's implementation -->
         <dependency>
             <groupId>se.kuseman.payloadbuilder</groupId>
-            <artifactId>payloadbuilder-catalog</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.apache.kafka</groupId>
-                    <artifactId>kafka-clients</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.mongodb</groupId>
-                    <artifactId>mongodb-driver-sync</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.httpcomponents.client5</groupId>
-                    <artifactId>httpclient5</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.github.spullara.mustache.java</groupId>
-                    <artifactId>compiler</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                    <artifactId>jackson-databind</artifactId>
-                </exclusion>
-            </exclusions>
+            <artifactId>payloadbuilder-catalog-jdbc</artifactId>
         </dependency>
 
         <!-- TEST -->

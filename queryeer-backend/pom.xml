@@ -19,11 +19,11 @@
         <surefire.plugin.version>3.5.5</surefire.plugin.version>
         <maven.enforcer.plugin.version>3.6.2</maven.enforcer.plugin.version>
         <jackson.version>3.1.4</jackson.version>
-        <jackson2.version>2.22.1</jackson2.version>
+        <jackson2.version>2.22.3</jackson2.version>
         <junit.jupiter.version>6.1.0</junit.jupiter.version>
         <mockito.core.version>5.23.0</mockito.core.version>
         <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
-        <payloadbuilder.version>1.14.0</payloadbuilder.version>
+        <payloadbuilder.version>1.15.0</payloadbuilder.version>
         <tree-sitter.version>0.26.6</tree-sitter.version>
         <tree-sitter-sql.version>gh-pages-a</tree-sitter-sql.version>
         <testcontainers.version>1.21.3</testcontainers.version>
@@ -249,9 +249,35 @@
                 <artifactId>payloadbuilder-core</artifactId>
                 <version>${payloadbuilder.version}</version>
             </dependency>
+            <!-- One artifact per catalog; each brings payloadbuilder-catalog-common -->
             <dependency>
                 <groupId>se.kuseman.payloadbuilder</groupId>
-                <artifactId>payloadbuilder-catalog</artifactId>
+                <artifactId>payloadbuilder-catalog-es</artifactId>
+                <version>${payloadbuilder.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>se.kuseman.payloadbuilder</groupId>
+                <artifactId>payloadbuilder-catalog-fs</artifactId>
+                <version>${payloadbuilder.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>se.kuseman.payloadbuilder</groupId>
+                <artifactId>payloadbuilder-catalog-http</artifactId>
+                <version>${payloadbuilder.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>se.kuseman.payloadbuilder</groupId>
+                <artifactId>payloadbuilder-catalog-jdbc</artifactId>
+                <version>${payloadbuilder.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>se.kuseman.payloadbuilder</groupId>
+                <artifactId>payloadbuilder-catalog-kafka</artifactId>
+                <version>${payloadbuilder.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>se.kuseman.payloadbuilder</groupId>
+                <artifactId>payloadbuilder-catalog-mongodb</artifactId>
                 <version>${payloadbuilder.version}</version>
             </dependency>
         </dependencies>
