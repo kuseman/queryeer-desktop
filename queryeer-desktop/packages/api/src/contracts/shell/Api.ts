@@ -168,9 +168,18 @@ export interface ShellApi {
   openPath: (uri: string) => Promise<{ success: boolean; error?: string }>;
   getAppDir: () => Promise<string>;
   openExternal: (url: string) => Promise<void>;
-  openExportStream: (params: { executionId: string; resultSetIndex: number }) => Promise<void>;
+  /**
+   * Opens an export stream. With `targetPath` the stream is written next to that file and
+   * finalizing replaces it; otherwise it is a temporary NDJSON row file.
+   */
+  openExportStream: (params: { executionId: string; resultSetIndex: number; targetPath?: string }) => Promise<void>;
   appendExportChunk: (params: { executionId: string; resultSetIndex: number; rows: unknown[][] }) => Promise<void>;
+  /** Appends already-formatted text to an export stream verbatim. */
+  appendExportText: (params: { executionId: string; resultSetIndex: number; text: string }) => Promise<void>;
+  /** Waits for the stream's pending writes and returns the finished file's URL. */
   finalizeExportStream: (params: { executionId: string; resultSetIndex: number }) => Promise<{ exportPath: string }>;
+  /** Abandons an export stream and deletes what it wrote. */
+  discardExportStream: (params: { executionId: string; resultSetIndex: number }) => Promise<void>;
   getRecentFiles: () => Promise<RecentFileEntry[]>;
   addRecentFile: (uri: string, maxCount?: number) => Promise<{ accepted: boolean }>;
   removeRecentFile: (uri: string) => Promise<{ removed: boolean }>;

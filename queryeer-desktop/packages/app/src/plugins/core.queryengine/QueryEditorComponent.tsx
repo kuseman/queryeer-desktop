@@ -11,6 +11,7 @@ import { getQueryEngineService } from "./QueryEngineService";
 import { resolveOutputMaxRows } from "./output-limits";
 import { getOutputRegistry } from "./output/OutputRegistry";
 import { getQueryOutputFormatRegistry } from "./QueryOutputFormatRegistry";
+import type { ResultFileWriter } from "./QueryOutputFormatRegistry";
 import { queryTextRegistry } from "./QueryTextEditorRegistry";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import { getFileStateRegistry } from "../../core/plugin-runtime/FileStateRegistryImpl";
@@ -75,6 +76,16 @@ type OutputContextBySession = Record<string, OutputContext>;
 
 const OUTPUT_CONTEXT_KEY = defineStateKey<OutputContextBySession>("core.queryengine.outputContextBySession");
 const FILE_OUTPUT_PRIMARY_ID = "core.queryengine.output.file";
+/** File output writes every result set, already formatted, into this one export stream. */
+const FILE_OUTPUT_STREAM_INDEX = -1;
+
+/** Drops a cancelled execution's file output so no partial file or open handle is left behind. */
+function discardFileOutputStream(state: QueryEditorFileRuntimeState, executionId: string): void {
+  if (state.fileOutputPath == null) return;
+  void window.appShell
+    .discardExportStream({ executionId, resultSetIndex: FILE_OUTPUT_STREAM_INDEX })
+    .catch(() => {});
+}
 const TABLE_OUTPUT_PRIMARY_ID = "core.queryengine.output.table";
 const DEFAULT_OUTPUT_SESSION_KEY = "__default__";
 
@@ -420,6 +431,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
       const existingExecution = runtimeState.activeExecution;
       if (existingExecution) {
         existingExecution.unsubscribe();
+        discardFileOutputStream(runtimeState, existingExecution.executionId);
         await getQueryEngineService().cancel(existingExecution.executionId).catch(() => {});
         runtimeState.activeExecution = undefined;
       }
@@ -556,6 +568,34 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
           return;
         }
 
+        // File output formats rows as they arrive and streams them next to the chosen file,
+        // so result size is never bounded by memory.
+        let fileOutputWriter: ResultFileWriter | undefined;
+        let fileOutputSetIndex: number | undefined;
+        if (runtimeState.fileOutputPath != null) {
+          const formatRegistry = getQueryOutputFormatRegistry();
+          fileOutputWriter = (formatRegistry.getFormatter(runtimeState.fileOutputFormat ?? "plain")
+            ?? formatRegistry.getFormatter("plain"))?.createFileWriter();
+          void window.appShell
+            .openExportStream({ executionId, resultSetIndex: FILE_OUTPUT_STREAM_INDEX, targetPath: runtimeState.fileOutputPath })
+            .catch(() => {});
+        }
+        const writeFileOutput = (resultSetIndex: number, rows?: QueryResultCell[][]): void => {
+          if (!fileOutputWriter) return;
+          let text = "";
+          if (fileOutputSetIndex !== resultSetIndex) {
+            fileOutputSetIndex = resultSetIndex;
+            const columns = runtimeState.fileOutputSchema?.get(resultSetIndex)?.columns ?? [];
+            text += fileOutputWriter.beginResultSet({ resultSetIndex, columns });
+          }
+          if (rows) text += fileOutputWriter.writeRows(rows);
+          if (text.length === 0) return;
+          // A failed write rejects the stream; finalization reports it.
+          void window.appShell
+            .appendExportText({ executionId, resultSetIndex: FILE_OUTPUT_STREAM_INDEX, text })
+            .catch(() => {});
+        };
+
         const unsubscribe = service.subscribe(executionId, (event) => {
           if (event.method === "queryengine.progress") {
             const p = event.params as { percent?: number; message?: string };
@@ -569,11 +609,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
             const schemas = runtimeState.fileOutputSchema;
             schemas?.set(p.resultSetIndex, { columns: p.schema.columns });
 
-            // Pre-open the export stream for file output so it's ready before rows arrive.
-            const startCtx = readOutputContextForFile(targetFileId);
-            if (startCtx.rowsTargetPrimaryId === FILE_OUTPUT_PRIMARY_ID) {
-              void window.appShell.openExportStream({ executionId, resultSetIndex: p.resultSetIndex });
-            }
+            writeFileOutput(p.resultSetIndex);
 
             updateOutputContextForFile(targetFileId, (prev) => {
               if (prev.resultSets.some((rs) => rs.resultSetIndex === p.resultSetIndex)) return prev;
@@ -628,11 +664,8 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
 
             // ---- File output: pipe ALL rows to the export stream, no in-memory accumulation ----
             if (rowsTargetPrimaryId === FILE_OUTPUT_PRIMARY_ID) {
-              void window.appShell.appendExportChunk({
-                executionId,
-                resultSetIndex: p.resultSetIndex,
-                rows: p.rows
-              });
+              writeFileOutput(p.resultSetIndex, p.rows);
+              if (currentSet?.rowLimitExceeded) return;
               updateOutputContextForFile(targetFileId, (prev) => ({
                 ...prev,
                 resultSets: prev.resultSets.map((rs) =>
@@ -775,57 +808,44 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
             // Finalize any open export streams and patch exportPath back into the result set
             const ctx = readOutputContextForFile(targetFileId);
             const fileOutputPath = runtimeState.fileOutputPath;
-            const schemas = runtimeState.fileOutputSchema;
-            const fileOutputFormat = runtimeState.fileOutputFormat;
 
             const isFileOutput = fileOutputPath != null;
 
             if (isFileOutput) {
               runtimeState.fileOutputFinalizationExecutionId = executionId;
-              // File output: finalize all streams, merge all result sets → single formatted file
+              // File output: close the formatted stream, then move it over the chosen file
+              const fileStream = { executionId, resultSetIndex: FILE_OUTPUT_STREAM_INDEX };
               void (async () => {
                 try {
-                  const limitSets = ctx.resultSets.filter((rs) => rs.rowLimitExceeded);
-                  const finalized = await Promise.all(
-                    limitSets.map(async (rs) => {
-                      const { exportPath: tempPath } = await window.appShell.finalizeExportStream({
-                        executionId, resultSetIndex: rs.resultSetIndex
-                      });
-                      const { content: ndjsonContent } = await window.appShell.readFile(tempPath);
-                      const columns = schemas?.get(rs.resultSetIndex)?.columns ?? rs.schema.columns;
-                      const rows = ndjsonContent
-                        .trim()
-                        .split("\n")
-                        .filter(Boolean)
-                        .map((line) => JSON.parse(line) as QueryResultCell[]);
-                      return { resultSetIndex: rs.resultSetIndex, schema: { columns }, rows, rowLimitExceeded: false as const };
-                    })
-                  );
-
-                  if (finalized.length > 0) {
-                    const formatId = fileOutputFormat ?? "plain";
-                    const formatter = getQueryOutputFormatRegistry().getFormatter(formatId);
-                    if (!formatter) {
-                      console.error(`[QueryEditor] No formatter found for '${formatId}'`);
-                    } else {
-                      const formatted = formatter.formatFile(finalized);
-                      const targetUri = "file:///" + fileOutputPath.replace(/\\/g, "/");
-                      await window.appShell.writeFile(targetUri, formatted);
-
-                      if (runtimeState.fileOutputFinalizationExecutionId === executionId) {
-                        updateOutputContextForFile(targetFileId, (prev) => ({
-                          ...prev,
-                          resultSets: prev.resultSets.map((s) => ({
-                            ...s,
-                            rowLimitExceeded: true,
-                            exportPath: targetUri
-                          }))
-                        }));
-                      }
-                    }
+                  if (!fileOutputWriter) {
+                    throw new Error(`No formatter found for '${runtimeState.fileOutputFormat ?? "plain"}'`);
+                  }
+                  const tail = fileOutputWriter.end();
+                  if (tail.length > 0) {
+                    await window.appShell.appendExportText({ ...fileStream, text: tail });
+                  }
+                  const { exportPath } = await window.appShell.finalizeExportStream(fileStream);
+                  if (runtimeState.fileOutputFinalizationExecutionId === executionId) {
+                    updateOutputContextForFile(targetFileId, (prev) => ({
+                      ...prev,
+                      resultSets: prev.resultSets.map((s) => ({
+                        ...s,
+                        rowLimitExceeded: true,
+                        exportPath
+                      }))
+                    }));
                   }
                 } catch (err) {
                   console.error("[QueryEditor] File output failed:", err);
+                  void window.appShell.discardExportStream(fileStream).catch(() => {});
+                  if (runtimeState.fileOutputFinalizationExecutionId === executionId) {
+                    const reason = err instanceof Error ? err.message : String(err);
+                    updateOutputContextForFile(targetFileId, (prev) => ({
+                      ...prev,
+                      output: [...prev.output, { severity: "error", message: `Could not write ${fileOutputPath}: ${reason}` }],
+                      resultSets: prev.resultSets.map((s) => ({ ...s, rowLimitExceeded: false, exportPath: undefined }))
+                    }));
+                  }
                 } finally {
                   if (runtimeState.fileOutputFinalizationExecutionId === executionId) {
                     const deferredExecution = runtimeState.executeAfterFileOutputFinalization;
@@ -854,6 +874,12 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
               clearRuntimeExecutionState(targetFileId);
             }
           } else if (event.method === "queryengine.failed") {
+            if (fileOutputWriter) {
+              fileOutputWriter = undefined;
+              void window.appShell
+                .discardExportStream({ executionId, resultSetIndex: FILE_OUTPUT_STREAM_INDEX })
+                .catch(() => {});
+            }
             const p = event.params as {
               error?: { code: string; message: string; details?: Record<string, unknown> };
             };
@@ -1079,6 +1105,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
     void getQueryEngineService()
       .cancel(execution.executionId)
       .catch(() => {});
+    discardFileOutputStream(runtimeState, execution.executionId);
     clearRuntimeExecutionState(targetFileId);
     updateOutputContextForFile(targetFileId, (prev) => ({
       ...prev,
@@ -1201,6 +1228,7 @@ export function QueryEditorComponent({ file, editorRegistryHost, outlineRegistry
         const execution = state.activeExecution;
         if (execution) {
           execution.unsubscribe();
+          discardFileOutputStream(state, execution.executionId);
           void getQueryEngineService().cancel(execution.executionId).catch(() => {});
         } else if (state.pendingExecutionStart === true) {
           state.cancelPendingExecution = true;

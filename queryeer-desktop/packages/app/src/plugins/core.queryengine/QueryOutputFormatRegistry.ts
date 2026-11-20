@@ -1,5 +1,18 @@
 export type { OutputContext, ResultSet } from "@queryeer/api/queryengine/OutputExtension";
-import type { OutputContext, ResultSet } from "@queryeer/api/queryengine/OutputExtension";
+import type { Column, OutputContext, ResultSet } from "@queryeer/api/queryengine/OutputExtension";
+
+/**
+ * Formats a result file incrementally so arbitrarily large results never have to be
+ * held in memory as one string. Concatenating every returned piece gives the file content.
+ */
+export type ResultFileWriter = {
+  /** Starts a result set (closing the previous one, if any). */
+  beginResultSet: (set: { resultSetIndex: number; columns: Column[] }) => string;
+  /** Formats rows of the current result set. */
+  writeRows: (rows: unknown[][]) => string;
+  /** Closes the file. */
+  end: () => string;
+};
 
 export type QueryResultFormatter = {
   id: string;
@@ -8,6 +21,8 @@ export type QueryResultFormatter = {
   format: (context: OutputContext) => string[];
   /** Format completed result sets as file content string. */
   formatFile: (resultSets: ResultSet[]) => string;
+  /** Incremental variant of formatFile, used when writing results to a file. */
+  createFileWriter: () => ResultFileWriter;
 };
 
 let registryInstance: QueryOutputFormatRegistry | undefined;

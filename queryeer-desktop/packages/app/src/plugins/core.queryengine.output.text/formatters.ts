@@ -1,15 +1,9 @@
-import type { ColumnType, OutputContext, ResultSet } from "@queryeer/api/queryengine/OutputExtension";
+import type { Column, ColumnType, OutputContext, ResultSet } from "@queryeer/api/queryengine/OutputExtension";
+import type { QueryResultFormatter, ResultFileWriter } from "../core.queryengine/QueryOutputFormatRegistry";
+
+export type { QueryResultFormatter, ResultFileWriter };
 
 export type TextOutputFormatId = "plain" | "json" | "csv";
-
-export type QueryResultFormatter = {
-  id: string;
-  label: string;
-  /** Format for text display — full context with status and output lines. */
-  format: (context: OutputContext) => string[];
-  /** Format completed result sets as file content string. */
-  formatFile: (resultSets: ResultSet[]) => string;
-};
 
 /** @deprecated Use QueryResultFormatter. */
 export type TextOutputFormatter = QueryResultFormatter;
@@ -78,12 +72,28 @@ function formatRowsPlain(context: OutputContext): string[] {
   return lines;
 }
 
-function plainFileContent(resultSets: ResultSet[]): string {
-  return resultSets.map((set) => {
-    const header = set.schema.columns.map((col) => col.name).join(" | ");
-    const rows = set.rows.map((row) => row.map((cell) => stringifyCell(cell)).join(" | "));
-    return [`Result set ${set.resultSetIndex + 1}`, header, ...rows].join("\n");
-  }).join("\n\n");
+function createPlainFileWriter(): ResultFileWriter {
+  let started = false;
+  return {
+    beginResultSet: (set) => {
+      const separator = started ? "\n\n" : "";
+      started = true;
+      return `${separator}Result set ${set.resultSetIndex + 1}\n${set.columns.map((col) => col.name).join(" | ")}`;
+    },
+    writeRows: (rows) => rows.map((row) => `\n${row.map((cell) => stringifyCell(cell)).join(" | ")}`).join(""),
+    end: () => ""
+  };
+}
+
+/** Formats complete result sets in one go through the formatter's incremental writer. */
+export function formatFileWithWriter(writer: ResultFileWriter, resultSets: ResultSet[]): string {
+  const parts: string[] = [];
+  for (const set of resultSets) {
+    parts.push(writer.beginResultSet({ resultSetIndex: set.resultSetIndex, columns: set.schema.columns }));
+    parts.push(writer.writeRows(set.rows));
+  }
+  parts.push(writer.end());
+  return parts.join("");
 }
 
 function formatRowSets(context: OutputContext, rowsFormatter: (context: OutputContext) => string[]): string[] {
@@ -121,14 +131,29 @@ function formatRowsJson(context: OutputContext): string[] {
   return JSON.stringify(sets, null, 2).split("\n");
 }
 
-function jsonFileContent(resultSets: ResultSet[]): string {
-  const sets = resultSets.map((set) => ({
-    resultSetIndex: set.resultSetIndex,
-    rows: set.rows.map((row) =>
-      Object.fromEntries(set.schema.columns.map((col, i) => [col.name, toJsonCell(row[i], col.type)]))
-    )
-  }));
-  return JSON.stringify(sets, null, 2);
+const JSON_ROW_INDENT = "      ";
+
+/** Produces the same text as JSON.stringify([{ resultSetIndex, rows }, ...], null, 2), piece by piece. */
+function createJsonFileWriter(): ResultFileWriter {
+  let setCount = 0;
+  let rowCount = 0;
+  let columns: Column[] = [];
+  const closeSet = (): string => (rowCount === 0 ? "[]" : "\n    ]") + "\n  }";
+  return {
+    beginResultSet: (set) => {
+      const prefix = setCount === 0 ? "[\n" : `${closeSet()},\n`;
+      setCount++;
+      rowCount = 0;
+      columns = set.columns;
+      return `${prefix}  {\n    "resultSetIndex": ${JSON.stringify(set.resultSetIndex)},\n    "rows": `;
+    },
+    writeRows: (rows) => rows.map((row) => {
+      const value = Object.fromEntries(columns.map((col, i) => [col.name, toJsonCell(row[i], col.type)]));
+      const text = JSON.stringify(value, null, 2).split("\n").map((line) => JSON_ROW_INDENT + line).join("\n");
+      return `${rowCount++ === 0 ? "[\n" : ",\n"}${text}`;
+    }).join(""),
+    end: () => (setCount === 0 ? "[]" : `${closeSet()}\n]`)
+  };
 }
 
 // ---- CSV format ----
@@ -149,12 +174,17 @@ function formatRowsCsv(context: OutputContext): string[] {
   return lines;
 }
 
-function csvFileContent(resultSets: ResultSet[]): string {
-  return resultSets.map((set) => {
-    const header = set.schema.columns.map((col) => escapeCsv(col.name)).join(",");
-    const rows = set.rows.map((row) => row.map((cell) => escapeCsv(stringifyCell(cell))).join(","));
-    return [header, ...rows].join("\n");
-  }).join("\n");
+function createCsvFileWriter(): ResultFileWriter {
+  let started = false;
+  return {
+    beginResultSet: (set) => {
+      const separator = started ? "\n" : "";
+      started = true;
+      return separator + set.columns.map((col) => escapeCsv(col.name)).join(",");
+    },
+    writeRows: (rows) => rows.map((row) => `\n${row.map((cell) => escapeCsv(stringifyCell(cell))).join(",")}`).join(""),
+    end: () => ""
+  };
 }
 
 const ANSI_RED = "\x1b[31m";
@@ -229,19 +259,22 @@ export const TEXT_OUTPUT_FORMATTERS: QueryResultFormatter[] = [
     id: "plain",
     label: "Plain",
     format: (context) => formatRowSets(context, formatRowsPlain),
-    formatFile: plainFileContent
+    formatFile: (resultSets) => formatFileWithWriter(createPlainFileWriter(), resultSets),
+    createFileWriter: createPlainFileWriter
   },
   {
     id: "json",
     label: "JSON",
     format: (context) => formatRowSets(context, formatRowsJson),
-    formatFile: jsonFileContent
+    formatFile: (resultSets) => formatFileWithWriter(createJsonFileWriter(), resultSets),
+    createFileWriter: createJsonFileWriter
   },
   {
     id: "csv",
     label: "CSV",
     format: (context) => formatRowSets(context, formatRowsCsv),
-    formatFile: csvFileContent
+    formatFile: (resultSets) => formatFileWithWriter(createCsvFileWriter(), resultSets),
+    createFileWriter: createCsvFileWriter
   }
 ];
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -173,6 +173,75 @@ describe("QueryExportStore stream isolation", () => {
     expect(url1).not.toBe(url2);
     expect(readRows(url1)).toEqual([["exec1-row"]]);
     expect(readRows(url2)).toEqual([["exec2-row"]]);
+  });
+});
+
+describe("QueryExportStore target streams", () => {
+  const STREAM = { executionId: "exec-1", resultSetIndex: -1 };
+
+  it("writes next to the target and replaces it on finalize, leaving no partial file", async () => {
+    const store = makeStore();
+    const target = join(workDir, "out", "result.csv");
+    mkdirSync(join(workDir, "out"));
+    writeFileSync(target, "previous run");
+
+    await store.openStream({ ...STREAM, targetPath: target });
+    const p1 = store.appendText({ ...STREAM, text: "\"id\"" });
+    const p2 = store.appendText({ ...STREAM, text: "\n\"1\"" });
+    // The previous file stays intact until the new one is complete
+    expect(readFileSync(target, "utf8")).toBe("previous run");
+    const url = await store.finalizeStream(STREAM);
+    await Promise.all([p1, p2]);
+
+    expect(fileURLToPath(url)).toBe(target);
+    expect(readFileSync(target, "utf8")).toBe("\"id\"\n\"1\"");
+    expect(readdirSync(join(workDir, "out"))).toEqual(["result.csv"]);
+  });
+
+  it("creates an empty target when nothing was written", async () => {
+    const store = makeStore();
+    const target = join(workDir, "empty.csv");
+    await store.openStream({ ...STREAM, targetPath: target });
+    await store.finalizeStream(STREAM);
+    expect(readFileSync(target, "utf8")).toBe("");
+  });
+
+  it("discard deletes the partial file and leaves the target untouched", async () => {
+    const store = makeStore();
+    const target = join(workDir, "keep.csv");
+    writeFileSync(target, "keep me");
+    await store.openStream({ ...STREAM, targetPath: target });
+    await store.appendText({ ...STREAM, text: "half written" });
+
+    await store.discardStream(STREAM);
+
+    expect(readFileSync(target, "utf8")).toBe("keep me");
+    expect(readdirSync(workDir)).toEqual(["keep.csv"]);
+  });
+
+  it("removes the partial file when a write fails mid-stream", async () => {
+    const store = makeStore();
+    const target = join(workDir, "out.csv");
+    await store.openStream({ ...STREAM, targetPath: target });
+    await store.appendText({ ...STREAM, text: "first chunk" });
+    expect(readdirSync(workDir)).toHaveLength(1);
+    // Simulate a failing disk write (e.g. ENOSPC): the stream's handle stops accepting writes
+    const handles = (store as unknown as { handlesByKey: Map<string, { close: () => Promise<void> }> }).handlesByKey;
+    await [...handles.values()][0].close();
+    await expect(store.appendText({ ...STREAM, text: "second chunk" })).rejects.toThrow();
+
+    await expect(store.finalizeStream(STREAM)).rejects.toThrow();
+    expect(readdirSync(workDir)).toEqual([]);
+  });
+
+  it("rejects finalize when a write failed and cleans up the partial file", async () => {
+    const store = makeStore();
+    const target = join(workDir, "missing-dir-is-a-file", "out.csv");
+    writeFileSync(join(workDir, "missing-dir-is-a-file"), "not a directory");
+    await store.openStream({ ...STREAM, targetPath: target }).catch(() => {});
+
+    await expect(store.finalizeStream(STREAM)).rejects.toThrow();
+    expect(existsSync(target)).toBe(false);
   });
 });
 
