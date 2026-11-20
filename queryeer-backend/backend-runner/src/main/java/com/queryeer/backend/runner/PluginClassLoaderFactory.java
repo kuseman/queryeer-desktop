@@ -426,9 +426,9 @@ final class PluginClassLoaderFactory
                                                      + exporter
                                                      + " exports it, but it is an optional dependency of "
                                                      + pluginId
-                                                     + " that isn't in use; check context.isDependencyActive(\""
+                                                     + " that isn't in use; use its classes only from a DependencyExtension started by DependencyExtension.whenDependencyActive(context, \""
                                                      + exporter
-                                                     + "\") before using its classes",
+                                                     + "\", ...)",
                             e);
                 }
                 if (exporter != null)

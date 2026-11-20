@@ -178,22 +178,9 @@ Plugins are activated in dependency order using a topological sort (Kahn's algor
 
 - **In use** when the plugin is loaded, isn't skipped, and its version is in range: it activates first, and its exports and services are visible, as for a required dependency.
 - **Not in use** otherwise. The plugin still loads, but it doesn't see the dependency's exports. A dependency that is loaded but out of range is listed as a warning in the runtime status ("Optional dependency … not used"). As for required dependencies, a development build (`-SNAPSHOT`) doesn't enforce the range.
-- **Check before use.** Ask `context.isDependencyActive(id)` in `activate`, and keep every class that refers to the dependency's types in a class of its own, loaded only when it returns true. Otherwise loading that class fails, with an error that says the dependency isn't in use.
-
-```java
-@Override
-public void activate(BackendPluginContext context, PluginDescriptor descriptor)
-{
-    // ... the plugin's own features ...
-    if (context.isDependencyActive("queryengine.payloadbuilder"))
-    {
-        PayloadbuilderSupport.register(context); // the only class that imports payloadbuilder types
-    }
-}
-```
-
+- **Use it through one line.** Put the code that uses the dependency in a `DependencyExtension`, and start it with `DependencyExtension.whenDependencyActive(context, id, className, state)`, which loads the class by name only when the dependency is in use (§3.3.2).
 - An optional dependency never skips a plugin, also not in a cycle. When an optional dependency would close a dependency cycle (or names the plugin itself), the plugins in that cycle don't use their optional dependencies on each other, with a warning ("Optional dependency … not used: it would close a dependency cycle"). A cycle of required dependencies skips its plugins, as before.
-- `isDependencyActive` needs Queryeer 0.21 or later: declare a range on a built-in plugin that excludes older versions.
+- `optional`, `isDependencyActive` and `DependencyExtension` need Queryeer 0.21 or later: declare a range on a built-in plugin that excludes older versions.
 
 ### 3.3.1 Sharing Classes Between Backend Plugins
 
@@ -240,6 +227,69 @@ The built-in JDBC engine (`queryengine.jdbc`) exports the JDBC foundation (`com.
 ```
 
 In 0.20 `queryengine.jdbc` also exported the parser; since 0.21 it depends on `queryengine.sql.parser` like any other plugin, and exports are not passed on.
+
+### 3.3.2 Code That Uses an Optional Dependency
+
+When an optional dependency isn't in use, its classes don't exist for your plugin. Code that uses them must run only when it is in use, and must not be reachable in ways the JVM resolves early: a class of yours that extends or implements a dependency type fails to load, and a method that passes your own class where a dependency type is expected can fail when the JVM verifies it, even if that code never runs. Errors like these appear only for users without the dependency, never in your tests, where it is on the classpath.
+
+The safe way is to keep that code in a class that nothing else in the plugin refers to, and have Queryeer load it by name. `DependencyExtension.whenDependencyActive` does that in one line, through your plugin's class loader, only when the dependency is in use:
+
+```java
+public final class MongoBackendPlugin implements BackendPlugin
+{
+    @Override
+    public void activate(BackendPluginContext context, PluginDescriptor descriptor) throws Exception
+    {
+        MongoConnections connections = ...; // the plugin's own features
+        // The only line about payloadbuilder: no import of its types, no reference to the extension class
+        DependencyExtension.whenDependencyActive(context, "queryengine.payloadbuilder", "com.example.mongo.MongoPayloadbuilderCatalog", connections);
+    }
+}
+
+// The only class that uses payloadbuilder types (with the classes only it uses)
+final class MongoPayloadbuilderCatalog implements DependencyExtension<MongoConnections>
+{
+    @Override
+    public void activate(BackendPluginContext context, MongoConnections connections)
+    {
+        context.services()
+                .require(PayloadbuilderCatalogProviderRegistry.class)
+                .registerContributor(new MongoCatalogProvider(connections));
+    }
+}
+```
+
+- The extension needs a no-argument constructor (it may be package-private). A nested class is named by its binary name (`com.example.Outer$Extension`) and must be `static`.
+- It gets the last argument, `state`, as is: hand it what it needs from the plugin's activation. To undo its registrations in the plugin's `deactivate`, keep what to undo in `state`. `whenDependencyActive` returns whether the extension ran.
+- An exception from the extension is thrown from `whenDependencyActive`, so it fails the plugin's activation. Catch it when the plugin should keep working without the dependency's features.
+- A missing class, a class that isn't a `DependencyExtension`, or one that uses classes the plugin can't see (the dependency doesn't export their package, they come from a plugin that isn't a dependency of yours, or the plugin bundles its own copy) fails with an error naming the class and what to check.
+- In a plugin's tests, a mocked context with `isDependencyActive` stubbed to true runs the extension; it is a static method, so there is nothing else to stub.
+
+**What to avoid.** Each of these puts the dependency's types where the JVM may resolve them whether it is in use or not:
+
+```java
+// ✗ Implementing a dependency interface in a class that always loads: the class fails to load
+public final class MongoBackendPlugin implements BackendPlugin, PayloadbuilderCatalogProviderContributor
+
+// ✗ Passing your own class as a dependency type in a class that always loads, even inside the check: when the
+//   JVM verifies the method, it may load PayloadbuilderCatalogProviderContributor to check that it can be
+if (context.isDependencyActive("queryengine.payloadbuilder"))
+{
+    registry.registerContributor(new MongoCatalogProvider(connections));
+}
+
+// ✗ Fields and method signatures of dependency types: fine for the JVM until something reflects over the class
+//   (Mockito, Jackson, a DI container), or a method body needs the verifier to check the type
+private PayloadbuilderCatalogProviderRegistry registry;
+```
+
+Checking `isDependencyActive` and calling a class of your own that alone uses the dependency also works, as long as nothing else refers to that class; `whenDependencyActive` makes that the only way.
+
+**Test without the dependency.** Activate the plugin with a context whose `isDependencyActive` returns false and check the plugin's own features still work. To catch the problems above, run that test with the dependency's jar off the test classpath, or load the plugin through a class loader that hides its packages.
+
+**A broken plugin affects only itself.** A plugin whose classes fail to load, or whose `activate` throws (also a `NoClassDefFoundError`), is marked failed with the reason in Observability, and the other plugins activate as usual. An error thrown later, from a query, fails that query.
+
+**One plugin, or a plugin and a bridge.** A feature that joins two plugins can live in either of them, behind an optional dependency as above, or in a third plugin that requires both (a bridge). For users, an optional dependency means one plugin to install: installing it brings the feature whenever the other plugin is there. A bridge is a second plugin to install, but leaves both plugins free of the other's code. Queryeer's built-in plugins use bridges (`queryengine.payloadbuilder.jdbc` joins `queryengine.jdbc` and `queryengine.payloadbuilder`), which costs users nothing since they ship together. A plugin you distribute should prefer an optional dependency.
 
 ### 3.4 Activation
 
@@ -1369,7 +1419,7 @@ The built-in plugin `queryengine.runtime.payloadbuilder-foundation` is gone, and
 
 ### 12.4 Optional dependencies and `require`
 
-New: `{ "id": ..., "optional": true }` in `dependencies`, and `context.isDependencyActive(id)` to check one is in use (§3.3). Also new: `context.services().require(type)`, which returns a service or throws with what to check, instead of `get` and a null check. `PluginDescriptor.dependencies()` now lists required dependencies only; optional ones are in `optionalDependencies()`. A plugin that calls `isDependencyActive` or `require` needs Queryeer 0.21 or later.
+New: `{ "id": ..., "optional": true }` in `dependencies`, `context.isDependencyActive(id)` to check one is in use (§3.3), and `DependencyExtension.whenDependencyActive(context, id, className, state)` to run the code that uses it, a `DependencyExtension` loaded only then (§3.3.2). Also new: `context.services().require(type)`, which returns a service or throws with what to check, instead of `get` and a null check. `PluginDescriptor.dependencies()` now lists required dependencies only; optional ones are in `optionalDependencies()`. A plugin that uses `isDependencyActive`, `DependencyExtension` or `require` needs Queryeer 0.21 or later.
 
 `require` is a default method on `PluginServiceRegistry`. A test that mocks the registry with Mockito gets `null` from `require` with a plain mock; use `mock(PluginServiceRegistry.class, CALLS_REAL_METHODS)` and stub `get`, or stub `require` directly.
 
