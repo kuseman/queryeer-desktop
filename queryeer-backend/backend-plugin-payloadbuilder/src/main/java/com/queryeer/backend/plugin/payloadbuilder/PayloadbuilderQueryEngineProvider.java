@@ -154,7 +154,6 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
                 throw new IllegalArgumentException("Engine state is required");
             }
             catalogState = PayloadbuilderEngineStateSupport.parse(typedState);
-            requireAvailableCatalogs(catalogState);
             fileSessionHolder = sessionByFileId.computeIfAbsent(fileId, _ -> new FileSessionHolder());
             fileSessionHolder.lock.lock();
             fileSessionLocked = true;
@@ -235,12 +234,25 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
         catch (ParseException e)
         {
             outputWriter.flushMessages(publisher);
-            publisher.failed("VALIDATION", e.getMessage(), parseErrorDetails(text, e));
+            String unavailable = unavailableCatalogMessage(catalogState, e);
+            if (unavailable != null)
+            {
+                publisher.failed("VALIDATION", unavailable);
+            }
+            else
+            {
+                publisher.failed("VALIDATION", e.getMessage(), parseErrorDetails(text, e));
+            }
         }
         catch (Exception e)
         {
             outputWriter.flushMessages(publisher);
-            if (cancelledExecutionIds.contains(queryExecutionId))
+            String unavailable = unavailableCatalogMessage(catalogState, e);
+            if (unavailable != null)
+            {
+                publisher.failed("VALIDATION", unavailable);
+            }
+            else if (cancelledExecutionIds.contains(queryExecutionId))
             {
                 publisher.failed("CANCELLED", "Execution cancelled by client");
             }
@@ -384,27 +396,52 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
     }
 
     /**
-     * Refuses a file that uses a catalog no loaded plugin provides. Catalogs come from plugins (jdbc from queryengine.payloadbuilder.jdbc, others from third parties), so one can be missing while the
-     * frontend still offers it; without this the query fails later with a generic unknown-alias error.
+     * Why a query failed when it used a catalog no loaded plugin provides, or null. A file can list catalogs a query doesn't use, so a missing one is skipped (see {@link #buildCatalogRegistry}); only
+     * a query that uses it fails, and payloadbuilder's "no catalog found" then gets this explanation. Catalogs come from plugins (jdbc from queryengine.payloadbuilder.jdbc, others from third
+     * parties), so one can be missing while the frontend still offers it.
      */
-    private void requireAvailableCatalogs(PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
+    private String unavailableCatalogMessage(PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state, Throwable error)
     {
-        for (PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState.Instance instance : state.instancesByAlias()
-                .values())
+        if (state == null)
         {
-            if (catalogProviders.getCatalogProvider(instance.catalogId()) == null)
+            return null;
+        }
+        for (Throwable cause = error; cause != null; cause = cause.getCause())
+        {
+            String message = cause.getMessage();
+            if (message == null)
             {
-                throw new IllegalArgumentException("Catalog '" + instance.catalogId()
-                                                   + "' (alias '"
-                                                   + instance.alias()
-                                                   + "') is not available: no loaded plugin provides it. "
-                                                   + ("jdbc".equalsIgnoreCase(instance.catalogId()) ? "It comes from queryengine.payloadbuilder.jdbc, which needs the JDBC engine. "
-                                                           : "")
-                                                   + "Observability shows why a plugin didn't load.");
+                continue;
+            }
+            String lowerMessage = message.toLowerCase(Locale.ROOT);
+            for (PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState.Instance instance : state.instancesByAlias()
+                    .values())
+            {
+                if (catalogProviders.getCatalogProvider(instance.catalogId()) != null)
+                {
+                    continue;
+                }
+                boolean usedByAlias = lowerMessage.contains(("No catalog found with alias: " + instance.alias()).toLowerCase(Locale.ROOT));
+                boolean usedAsDefault = lowerMessage.contains("no default catalog specified")
+                        && instance.alias()
+                                .equalsIgnoreCase(state.defaultCatalogAlias());
+                if (usedByAlias
+                        || usedAsDefault)
+                {
+                    return "Catalog '" + instance.catalogId()
+                           + "' (alias '"
+                           + instance.alias()
+                           + "') is not available: no loaded plugin provides it. "
+                           + ("jdbc".equalsIgnoreCase(instance.catalogId()) ? "It comes from queryengine.payloadbuilder.jdbc, which needs the JDBC engine. "
+                                   : "")
+                           + "Observability shows why a plugin didn't load.";
+                }
             }
         }
+        return null;
     }
 
+    /** The file's catalogs that a loaded plugin provides; the others are left out, and a query that uses one fails (see {@link #unavailableCatalogMessage}). */
     private CatalogRegistry buildCatalogRegistry(PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state)
     {
         CatalogRegistry registry = new CatalogRegistry();
