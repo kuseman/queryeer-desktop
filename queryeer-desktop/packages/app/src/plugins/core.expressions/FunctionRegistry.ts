@@ -2,6 +2,13 @@ import type { ExpressionFunction, ExpressionFunctionMeta, RegisteredExpressionFu
 
 export class FunctionRegistry {
   private readonly functions = new Map<string, RegisteredExpressionFunction>();
+  private serializedBindings: Record<string, unknown> | null = null;
+  private changeCount = 0;
+
+  /** Changes whenever a function is registered, so results computed with the old set can be told apart. */
+  get version(): number {
+    return this.changeCount;
+  }
 
   registerGlobalFunction(name: string, fn: ExpressionFunction, meta?: ExpressionFunctionMeta): void {
     this.register(name, fn, meta);
@@ -40,7 +47,11 @@ export class FunctionRegistry {
     return root;
   }
 
+  /** The functions as source text, for evaluation in the main process. Built once per set of functions; don't change it. */
   resolveSerializedBindings(): Record<string, unknown> {
+    if (this.serializedBindings) {
+      return this.serializedBindings;
+    }
     const root: Record<string, unknown> = {};
     for (const [fqName, entry] of this.functions) {
       const segments = fqName.split(".");
@@ -54,6 +65,7 @@ export class FunctionRegistry {
       }
       current[segments[segments.length - 1]] = entry.fn.toString();
     }
+    this.serializedBindings = root;
     return root;
   }
 
@@ -62,5 +74,7 @@ export class FunctionRegistry {
       throw new Error(`Expression function '${fqName}' is already registered.`);
     }
     this.functions.set(fqName, { fqName, fn, meta });
+    this.serializedBindings = null;
+    this.changeCount++;
   }
 }
