@@ -223,16 +223,22 @@ type AppShellApi = {
   addRecentFile: (uri: string, maxCount?: number) => Promise<{ accepted: boolean }>;
   removeRecentFile: (uri: string) => Promise<{ removed: boolean }>;
   clearRecentFiles: () => Promise<{ cleared: boolean }>;
-  openExportStream: (params: { executionId: string; resultSetIndex: number }) => Promise<void>;
+  openExportStream: (params: { executionId: string; resultSetIndex: number; targetPath?: string }) => Promise<void>;
   appendExportChunk: (params: {
     executionId: string;
     resultSetIndex: number;
     rows: unknown[][];
   }) => Promise<void>;
+  appendExportText: (params: {
+    executionId: string;
+    resultSetIndex: number;
+    text: string;
+  }) => Promise<void>;
   finalizeExportStream: (params: {
     executionId: string;
     resultSetIndex: number;
   }) => Promise<{ exportPath: string }>;
+  discardExportStream: (params: { executionId: string; resultSetIndex: number }) => Promise<void>;
   evaluateExpression: (params: {
     expression: string;
     context: Record<string, unknown>;
@@ -578,8 +584,14 @@ const appShellApi: AppShellApi = {
   appendExportChunk: async (params) => {
     return ipcRenderer.invoke("workspace:export-append", params);
   },
+  appendExportText: async (params) => {
+    return ipcRenderer.invoke("workspace:export-append-text", params);
+  },
   finalizeExportStream: async (params) => {
     return ipcRenderer.invoke("workspace:export-finalize", params);
+  },
+  discardExportStream: async (params) => {
+    return ipcRenderer.invoke("workspace:export-discard", params);
   },
   evaluateExpression: async (params) => {
     return ipcRenderer.invoke("expressions:evaluate", params);

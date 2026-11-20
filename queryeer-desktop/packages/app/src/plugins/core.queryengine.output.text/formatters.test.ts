@@ -358,4 +358,70 @@ describe("text output formatters", () => {
       expect(content).not.toContain('"<item');
     });
   });
+
+  describe("createFileWriter", () => {
+    const sets = [
+      {
+        resultSetIndex: 0,
+        schema: { columns: [{ name: "id", type: "int" as const }, { name: "tags", type: "array" as const }] },
+        rows: [[1, '["a",{"b":[1,2]}]'], [2, null], [3, "[]"]],
+        rowLimitExceeded: false
+      },
+      {
+        resultSetIndex: 1,
+        schema: { columns: [{ name: "empty", type: "string" as const }] },
+        rows: [],
+        rowLimitExceeded: false
+      },
+      {
+        resultSetIndex: 2,
+        schema: { columns: [{ name: "text", type: "string" as const }] },
+        rows: [["x \"quoted\"\nline"]],
+        rowLimitExceeded: false
+      }
+    ];
+
+    /** Writes the sets in chunks of one row, the way rows stream in from the backend. */
+    function writeInChunks(formatId: string, resultSets: typeof sets): string {
+      const writer = resolveTextOutputFormatter(formatId).createFileWriter();
+      let content = "";
+      for (const set of resultSets) {
+        content += writer.beginResultSet({ resultSetIndex: set.resultSetIndex, columns: set.schema.columns });
+        for (const row of set.rows) content += writer.writeRows([row]);
+      }
+      return content + writer.end();
+    }
+
+    it("json writes exactly what one JSON.stringify of all result sets would", () => {
+      const expected = JSON.stringify([
+        { resultSetIndex: 0, rows: [{ id: 1, tags: ["a", { b: [1, 2] }] }, { id: 2, tags: null }, { id: 3, tags: [] }] },
+        { resultSetIndex: 1, rows: [] },
+        { resultSetIndex: 2, rows: [{ text: "x \"quoted\"\nline" }] }
+      ], null, 2);
+      expect(writeInChunks("json", sets)).toBe(expected);
+      expect(writeInChunks("json", [])).toBe("[]");
+    });
+
+    it("csv chunked output matches one-shot formatting across result sets", () => {
+      expect(writeInChunks("csv", sets)).toBe([
+        '"id","tags"',
+        '"1","[""a"",{""b"":[1,2]}]"',
+        '"2","NULL"',
+        '"3","[]"',
+        '"empty"',
+        '"text"',
+        '"x ""quoted""\nline"'
+      ].join("\n"));
+      expect(writeInChunks("csv", sets)).toBe(resolveTextOutputFormatter("csv").formatFile(sets));
+    });
+
+    it("plain chunked output matches one-shot formatting across result sets", () => {
+      expect(writeInChunks("plain", sets)).toBe([
+        "Result set 1\nid | tags\n1 | [\"a\",{\"b\":[1,2]}]\n2 | NULL\n3 | []",
+        "Result set 2\nempty",
+        "Result set 3\ntext\nx \"quoted\"\nline"
+      ].join("\n\n"));
+      expect(writeInChunks("plain", sets)).toBe(resolveTextOutputFormatter("plain").formatFile(sets));
+    });
+  });
 });

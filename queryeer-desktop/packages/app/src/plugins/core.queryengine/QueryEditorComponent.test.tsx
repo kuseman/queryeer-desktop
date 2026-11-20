@@ -91,13 +91,21 @@ vi.mock("./output/OutputPanel", () => ({
     selectedPrimaryId,
     onSelectPrimary
   }: {
-    context: { state: string; textOutputFormat?: string; rowsTargetPrimaryId?: string | null };
+    context: {
+      state: string;
+      textOutputFormat?: string;
+      rowsTargetPrimaryId?: string | null;
+      output?: Array<{ message: string }>;
+      resultSets?: Array<{ rowLimitExceeded: boolean; exportPath?: string }>;
+    };
     selectedPrimaryId?: string | null;
     onSelectPrimary?: (id: string) => void;
   }) => (
     <div
       data-testid="mock-output"
       data-state={context.state}
+      data-output-messages={(context.output ?? []).map((m) => m.message).join("|")}
+      data-export-pending={(context.resultSets ?? []).some((rs) => rs.rowLimitExceeded && !rs.exportPath) ? "true" : "false"}
       data-selected-primary={selectedPrimaryId ?? ""}
       data-text-format={context.textOutputFormat ?? ""}
       data-rows-target-primary={context.rowsTargetPrimaryId ?? ""}
@@ -561,8 +569,8 @@ const filesRegistry = {
     window.appShell.finalizeExportStream = vi.fn(() => new Promise<{ exportPath: string }>((resolve) => {
       resolveFinalize = resolve;
     }));
-    window.appShell.readFile = vi.fn(async () => ({ success: true, content: "[1]\n" }));
-    window.appShell.writeFile = vi.fn(async () => ({ success: true }));
+    window.appShell.appendExportText = vi.fn(async () => {});
+    window.appShell.discardExportStream = vi.fn(async () => {});
     getQueryViewStateStore().setSelectedOutput(file.fileId, "core.queryengine:left", "core.queryengine.output.file");
     mocks.executeMock.mockResolvedValueOnce("exec-1").mockResolvedValueOnce("exec-2");
     await act(async () => {
@@ -605,8 +613,8 @@ const filesRegistry = {
     window.appShell.finalizeExportStream = vi.fn(() => new Promise<{ exportPath: string }>((resolve) => {
       resolveFinalize = resolve;
     }));
-    window.appShell.readFile = vi.fn(async () => ({ success: true, content: "[1]\n" }));
-    window.appShell.writeFile = vi.fn(async () => ({ success: true }));
+    window.appShell.appendExportText = vi.fn(async () => {});
+    window.appShell.discardExportStream = vi.fn(async () => {});
     mocks.executeMock.mockResolvedValueOnce("exec-1").mockResolvedValueOnce("exec-2");
 
     await act(async () => {
@@ -1470,9 +1478,10 @@ const filesRegistry = {
     appShell.showDialogSave = vi.fn(async () => ({ canceled: false, filePath: "C:\\tmp\\result.txt" }));
     appShell.openExportStream = vi.fn(async () => {});
     appShell.appendExportChunk = vi.fn(async () => {});
-    appShell.finalizeExportStream = vi.fn(async () => ({ exportPath: "file:///C:/tmp/result.ndjson" }));
-    appShell.readFile = vi.fn(async () => ({ success: true, content: '["{\\n  \\"id\\": 1\\n}"]\n' }));
-    appShell.writeFile = vi.fn(async () => ({ success: true }));
+    appShell.finalizeExportStream = vi.fn(async () => ({ exportPath: "file:///C:/tmp/result.txt" }));
+    const appendExportText = vi.fn(async (_params: { executionId: string; resultSetIndex: number; text: string }) => {});
+    appShell.appendExportText = appendExportText;
+    appShell.discardExportStream = vi.fn(async () => {});
 
     await act(async () => {
       root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
@@ -1500,10 +1509,61 @@ const filesRegistry = {
       await Promise.resolve();
     });
 
-    expect(appShell.writeFile).toHaveBeenCalledWith(
-      "file:///C:/tmp/result.txt",
+    expect(appShell.openExportStream).toHaveBeenCalledWith(expect.objectContaining({ targetPath: "C:\\tmp\\result.txt" }));
+    expect(appendExportText.mock.calls.map(([params]) => params.text).join("")).toBe(
       "Result set 1\npayload\n{\n  \"id\": 1\n}"
     );
+    expect(appShell.finalizeExportStream).toHaveBeenCalledTimes(1);
+  });
+
+  it("streams every row into the file as it arrives and reports a failed write instead of hanging", async () => {
+    const file1 = makeFile({ fileId: "file-1", uri: "file:///q1.sql" });
+    getQueryViewStateStore().setSelectedOutput("file-1", "file-1", "core.queryengine.output.file");
+    getQueryViewStateStore().setTextOutputFormat("file-1", "file-1", "csv");
+
+    const appShell = window.appShell;
+    appShell.showDialogSave = vi.fn(async () => ({ canceled: false, filePath: "C:\\tmp\\big.csv" }));
+    appShell.openExportStream = vi.fn(async () => {});
+    appShell.appendExportChunk = vi.fn(async () => {});
+    const appendExportText = vi.fn(async (_params: { executionId: string; resultSetIndex: number; text: string }) => {});
+    appShell.appendExportText = appendExportText;
+    appShell.finalizeExportStream = vi.fn(async () => {
+      throw new Error("EBUSY: resource busy or locked");
+    });
+    const discardExportStream = vi.fn(async () => {});
+    appShell.discardExportStream = discardExportStream;
+
+    await act(async () => {
+      root.render(<QueryEditorComponent file={file1} editorRegistryHost={mockEditorRegistryHost} outlineRegistry={mockOutlineRegistry} />);
+    });
+    await act(async () => {
+      for (const listener of mocks.executeRequestListeners) listener();
+      await Promise.resolve();
+    });
+
+    const listener = [...mocks.subscribeByExecutionId.values()][0];
+    await act(async () => {
+      listener?.({
+        method: "queryengine.chunkStart",
+        params: { resultSetIndex: 0, schema: { columns: [{ name: "id", type: "int" }] } }
+      });
+      for (let chunk = 0; chunk < 3; chunk++) {
+        listener?.({ method: "queryengine.chunkRows", params: { resultSetIndex: 0, rows: [[chunk * 2], [chunk * 2 + 1]] } });
+      }
+      // Rows were written as they arrived, never buffered for the end
+      expect(appendExportText).toHaveBeenCalledTimes(4);
+      listener?.({ method: "queryengine.completed", params: { metrics: { rowCount: 6 }, features: ["rows"] } });
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+    });
+
+    expect(appendExportText.mock.calls.map(([params]) => params.text).join("")).toBe(
+      "\"id\"\n\"0\"\n\"1\"\n\"2\"\n\"3\"\n\"4\"\n\"5\""
+    );
+    expect(appShell.appendExportChunk).not.toHaveBeenCalled();
+    expect(discardExportStream).toHaveBeenCalledTimes(1);
+    const output = rootElement.querySelector('[data-testid="mock-output"]');
+    expect(output?.getAttribute("data-export-pending")).toBe("false");
+    expect(output?.getAttribute("data-output-messages")).toContain("Could not write C:\\tmp\\big.csv: EBUSY: resource busy or locked");
   });
 
   it("uses toolbar-selected output when executing rows", async () => {

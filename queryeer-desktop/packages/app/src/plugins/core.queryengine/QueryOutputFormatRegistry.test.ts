@@ -7,7 +7,8 @@ function makeFormatter(id: string): QueryResultFormatter {
     id,
     label: id.charAt(0).toUpperCase() + id.slice(1),
     format: () => [],
-    formatFile: () => ""
+    formatFile: () => "",
+    createFileWriter: () => ({ beginResultSet: () => "", writeRows: () => "", end: () => "" })
   };
 }
 
