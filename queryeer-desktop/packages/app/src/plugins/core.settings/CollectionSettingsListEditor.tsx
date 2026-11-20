@@ -3,7 +3,7 @@ import type {
   CollectionSettingsListItem,
   UseCollectionSettingsPersistence
 } from "@queryeer/api/settings/SettingsExtension";
-import { useCallback, useEffect, useRef } from "react";
+import { Fragment, useCallback, useEffect, useRef } from "react";
 
 export type { CollectionSettingsListItem };
 
@@ -67,7 +67,11 @@ export function CollectionSettingsListEditor({
           {addLabel ?? "Add"}
         </button>
       </aside>
-      <section className="settings-list-editor-details">{renderDetails(selectedId)}</section>
+      <section className="settings-list-editor-details">
+        {/* Keyed by item so each item gets fresh field state: a password field reused across items would keep the
+            previous item's secretRef and write to (or delete) that item's vault entry. */}
+        <Fragment key={selectedId ?? ""}>{renderDetails(selectedId)}</Fragment>
+      </section>
     </div>
   );
 }

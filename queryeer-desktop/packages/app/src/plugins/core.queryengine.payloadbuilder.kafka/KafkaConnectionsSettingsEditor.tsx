@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { generateConnectionId } from "../../core/utils/ids";
 import {
   CollectionSettingsListEditor,
@@ -54,6 +54,9 @@ const SECURITY_PROTOCOL_OPTIONS: { value: KafkaSecurityProtocol; label: string }
 export function KafkaConnectionsSettingsEditor({ value, readonly, setValue }: Props): JSX.Element {
   const [rows, setRows] = useState<Row[]>(() => toRows(parseKafkaConnectionDefinitions(value)));
   const [selectedRowId, setSelectedRowId] = useState<string | undefined>(() => rows[0]?.id);
+  // The latest rows, for updates that land after a re-render, e.g. a password field's async vault write.
+  // Reading `rows` there would write back a stale list and drop rows added since (such as a clone).
+  const rowsRef = useRef(rows);
 
   useEffect(() => {
     if (rows.length === 0) {
@@ -74,6 +77,7 @@ export function KafkaConnectionsSettingsEditor({ value, readonly, setValue }: Pr
   });
 
   const syncRows = (nextRows: Row[], nextSelectedId?: string, options?: { debouncePersist?: boolean }): void => {
+    rowsRef.current = nextRows;
     setRows(nextRows);
     if (nextSelectedId !== undefined) {
       setSelectedRowId(nextSelectedId);
@@ -88,7 +92,7 @@ export function KafkaConnectionsSettingsEditor({ value, readonly, setValue }: Pr
   };
 
   const updateRow = (id: string, patch: Partial<Row>): void => {
-    syncRows(rows.map((row) => (row.id === id ? { ...row, ...patch } : row)), undefined, {
+    syncRows(rowsRef.current.map((row) => (row.id === id ? { ...row, ...patch } : row)), undefined, {
       debouncePersist: true
     });
   };

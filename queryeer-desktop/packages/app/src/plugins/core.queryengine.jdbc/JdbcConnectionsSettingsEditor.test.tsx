@@ -2,14 +2,17 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { invoke } = vi.hoisted(() => ({ invoke: vi.fn<() => Promise<unknown>>(async () => []) }));
+const { invoke, securityHolder } = vi.hoisted(() => ({
+  invoke: vi.fn<() => Promise<unknown>>(async () => []),
+  securityHolder: { current: undefined as unknown }
+}));
 
 vi.mock("../core.queryengine/QueryEngineService", () => ({
   getQueryEngineService: () => ({ invoke })
 }));
 
 vi.mock("../core.security/service", () => ({
-  getCoreSecurityService: () => undefined
+  getCoreSecurityService: () => securityHolder.current
 }));
 
 import { JdbcConnectionsSettingsEditor } from "./JdbcConnectionsSettingsEditor";
@@ -40,6 +43,7 @@ describe("JdbcConnectionsSettingsEditor", () => {
     rootElement.remove();
     vi.unstubAllGlobals();
     invoke.mockImplementation(async () => []);
+    securityHolder.current = undefined;
   });
 
   it("does not share the password secretRef with a cloned connection", async () => {
@@ -85,6 +89,97 @@ describe("JdbcConnectionsSettingsEditor", () => {
     expect(latest[1]?.connectionId).not.toBe("conn-1");
     expect(latest[1]?.url).toBe("jdbc:test://prod");
     expect(latest[1]?.username).toBe("admin");
+    expect(latest[1]?.password).toBeUndefined();
+  });
+
+  it("does not carry the source's in-flight password save over to the clone it jumps to", async () => {
+    let releaseStore: () => void = () => undefined;
+    const storeSecret = vi.fn((_plaintext: string, secretRef?: string) =>
+      new Promise<{ secretRef: string }>((resolve) => {
+        releaseStore = () => resolve({ secretRef: secretRef ?? "secret-new" });
+      })
+    );
+    const deleteSecret = vi.fn(async () => ({ deleted: true }));
+    securityHolder.current = {
+      getStatus: async () => ({ unlocked: true, hasPersistedVault: true, hasStoredMasterPassword: false }),
+      subscribeStatus: () => () => undefined,
+      peekSecret: () => "old-pass",
+      storeSecret,
+      deleteSecret,
+      ensureUnlockedForSecretAccess: async () => true
+    };
+    const setValue = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <JdbcConnectionsSettingsEditor
+          readonly={false}
+          value={[
+            {
+              connectionId: "conn-1",
+              title: "Prod",
+              dialectId: "jdbc",
+              url: "jdbc:test://prod",
+              username: "admin",
+              password: { secretRef: "secret-1" },
+              enabled: true
+            }
+          ]}
+          setValue={setValue}
+        />
+      );
+      await flush();
+    });
+
+    const passwordInput = (): HTMLInputElement => rootElement.querySelector<HTMLInputElement>("input[type='password']")!;
+    const typeInto = (input: HTMLInputElement, text: string): void => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, text);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+
+    // Edit the source's password, then click Clone before the save has finished
+    await act(async () => {
+      typeInto(passwordInput(), "new-pass");
+      await flush();
+    });
+    await act(async () => {
+      passwordInput().dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+      rootElement.querySelector<HTMLButtonElement>("button[title='Clone']")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flush();
+    });
+    expect(storeSecret).toHaveBeenCalledWith("new-pass", "secret-1");
+    await act(async () => {
+      releaseStore();
+      await flush();
+    });
+
+    // The clone starts empty; clearing its (empty) password must not touch the source's vault entry
+    expect(passwordInput().value).toBe("");
+    await act(async () => {
+      typeInto(passwordInput(), "clone-pass");
+      await flush();
+    });
+    await act(async () => {
+      passwordInput().dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+      await flush();
+    });
+    expect(storeSecret).toHaveBeenLastCalledWith("clone-pass", undefined);
+    await act(async () => {
+      releaseStore();
+      await flush();
+    });
+    await act(async () => {
+      typeInto(passwordInput(), "");
+      await flush();
+    });
+    await act(async () => {
+      passwordInput().dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+      await flush();
+    });
+
+    expect(deleteSecret).not.toHaveBeenCalledWith("secret-1");
+    const latest = setValue.mock.calls[setValue.mock.calls.length - 1]?.[0] as Array<{ password?: { secretRef: string } }>;
+    expect(latest[0]?.password).toEqual({ secretRef: "secret-1" });
     expect(latest[1]?.password).toBeUndefined();
   });
 

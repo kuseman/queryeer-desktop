@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { SecretRefValue } from "@queryeer/api/security/Security";
 import {
   CollectionSettingsListEditor,
@@ -19,6 +19,9 @@ type Props = {
 export function PayloadbuilderEnvironmentsSettingsEditor({ value, readonly, setValue }: Props): JSX.Element {
   const [rows, setRows] = useState<EnvironmentRow[]>(() => toRows(value));
   const [selectedId, setSelectedId] = useState<string | undefined>(() => rows[0]?.id);
+  // The latest rows, for updates that land after a re-render, e.g. a password field's async vault write.
+  // Reading `rows` there would write back a stale list and drop rows added since (such as a clone).
+  const rowsRef = useRef(rows);
   const { persistNow, persistDebounced } = useCollectionSettingsPersistence<EnvironmentRow>({
     persist: (nextRows) => {
       setValue(
@@ -38,6 +41,7 @@ export function PayloadbuilderEnvironmentsSettingsEditor({ value, readonly, setV
   });
 
   const sync = (nextRows: EnvironmentRow[], debounce = false): void => {
+    rowsRef.current = nextRows;
     setRows(nextRows);
     if (debounce) persistDebounced(nextRows);
     else persistNow(nextRows);
@@ -87,7 +91,7 @@ export function PayloadbuilderEnvironmentsSettingsEditor({ value, readonly, setV
         <div className="payloadbuilder-settings-cell"><label>Title</label><input className="payloadbuilder-catalog-input" value={row.title} readOnly={readonly} onChange={(e) => sync(rows.map((r) => r.id === row.id ? { ...r, title: e.target.value } : r), true)} /></div>
         <div className="payloadbuilder-settings-cell"><label>Variables</label>
           <table className="payloadbuilder-environment-grid"><thead><tr><th>Name</th><th>Value</th><th>Secret Ref</th><th /></tr></thead><tbody>
-            {row.variables.map((v) => <tr key={v.id}><td><input className="payloadbuilder-catalog-input" value={v.key} readOnly={readonly} onChange={(e) => sync(rows.map((r) => r.id === row.id ? { ...r, variables: r.variables.map((x) => x.id === v.id ? { ...x, key: e.target.value } : x) } : r), true)} /></td><td><input className="payloadbuilder-catalog-input" value={v.value} readOnly={readonly || Boolean(v.secretRef?.secretRef)} onChange={(e) => sync(rows.map((r) => r.id === row.id ? { ...r, variables: r.variables.map((x) => x.id === v.id ? { ...x, value: e.target.value, secretRef: undefined } : x) } : r), true)} /></td><td><PasswordFieldInput inputId={`payloadbuilder-env-secret-${row.id}-${v.id}`} valueRef={v.secretRef} readonly={readonly || Boolean(v.value.trim())} onChangeRef={(nextRef) => sync(rows.map((r) => r.id === row.id ? { ...r, variables: r.variables.map((x) => x.id === v.id ? { ...x, secretRef: nextRef, value: "" } : x) } : r), true)} /></td><td><button type="button" className="payloadbuilder-catalog-button" disabled={readonly} onClick={() => sync(rows.map((r) => r.id === row.id ? { ...r, variables: r.variables.filter((x) => x.id !== v.id) } : r))}>Delete</button></td></tr>)}
+            {row.variables.map((v) => <tr key={v.id}><td><input className="payloadbuilder-catalog-input" value={v.key} readOnly={readonly} onChange={(e) => sync(rows.map((r) => r.id === row.id ? { ...r, variables: r.variables.map((x) => x.id === v.id ? { ...x, key: e.target.value } : x) } : r), true)} /></td><td><input className="payloadbuilder-catalog-input" value={v.value} readOnly={readonly || Boolean(v.secretRef?.secretRef)} onChange={(e) => sync(rows.map((r) => r.id === row.id ? { ...r, variables: r.variables.map((x) => x.id === v.id ? { ...x, value: e.target.value, secretRef: undefined } : x) } : r), true)} /></td><td><PasswordFieldInput inputId={`payloadbuilder-env-secret-${row.id}-${v.id}`} valueRef={v.secretRef} readonly={readonly || Boolean(v.value.trim())} onChangeRef={(nextRef) => sync(rowsRef.current.map((r) => r.id === row.id ? { ...r, variables: r.variables.map((x) => x.id === v.id ? { ...x, secretRef: nextRef, value: "" } : x) } : r), true)} /></td><td><button type="button" className="payloadbuilder-catalog-button" disabled={readonly} onClick={() => sync(rows.map((r) => r.id === row.id ? { ...r, variables: r.variables.filter((x) => x.id !== v.id) } : r))}>Delete</button></td></tr>)}
           </tbody></table>
           <button type="button" className="payloadbuilder-catalog-button" disabled={readonly} onClick={() => sync(rows.map((r) => r.id === row.id ? { ...r, variables: [...r.variables, { id: crypto.randomUUID(), key: "", value: "" }] } : r))}>Add Variable</button>
         </div>
