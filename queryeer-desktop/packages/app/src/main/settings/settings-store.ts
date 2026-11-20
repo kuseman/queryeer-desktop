@@ -27,8 +27,8 @@ export class SettingsStore {
 
   public wireIpc(): void {
     ipcMain.handle("settings:get-index", async () => this.readIndex());
-    ipcMain.handle("settings:get-module", async (_event, params: { moduleId: string }) => {
-      return this.readModule(params.moduleId);
+    ipcMain.handle("settings:get-module", async (_event, params: { moduleId: string; strict?: boolean }) => {
+      return this.readModule(params.moduleId, params.strict === true);
     });
     ipcMain.handle("settings:save-index", async (_event, document: SettingsIndexDocument) => {
       await this.writeIndex(document);
@@ -58,7 +58,11 @@ export class SettingsStore {
     }
   }
 
-  public async readModule(moduleId: string): Promise<SettingsModuleDocument> {
+  /**
+   * A module's document; an empty one when the file doesn't exist. Otherwise a file that can't be read or parsed also
+   * gives an empty one (an unparsable file is moved aside), unless `strict`: then it throws and leaves the file as is.
+   */
+  public async readModule(moduleId: string, strict = false): Promise<SettingsModuleDocument> {
     const path = this.moduleFilePath(moduleId);
     try {
       const raw = await readFile(path, "utf8");
@@ -70,6 +74,9 @@ export class SettingsStore {
         values: typeof parsed.values === "object" && parsed.values !== null ? parsed.values : {}
       };
     } catch (error) {
+      if (strict && (error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw new Error(`Settings module ${moduleId} could not be read: ${error instanceof Error ? error.message : String(error)}`);
+      }
       return this.handleReadError(path, error, emptySettingsModuleDocument(moduleId));
     }
   }

@@ -33,7 +33,7 @@ import { setKeybindingsRuntimeState } from "../../plugins/core.commands/keybindi
 import { requestMessageDialog } from "../../plugins/core.dialog/message-dialog-service";
 import { getRegisteredQueryExecutableEngines } from "../../plugins/core.queryengine/engine-registration";
 import { hasActiveQueryPlanDialect } from "../../plugins/core.queryengine/query-plan/supported-dialects";
-import { getCoreSettingsService } from "../../plugins/core.settings/service";
+import { getCoreSettingsService, runPendingCoreSettingsTasks } from "../../plugins/core.settings/service";
 import { JDBC_CONNECTIONS_SETTING_ID } from "../../plugins/core.queryengine.jdbc/jdbc-settings";
 import {
   getJdbcDriverManagementService,
@@ -278,10 +278,21 @@ export async function bootstrapShell() {
 
   await host.start(discovery.manifests);
   host.setExternalLoadErrors(discovery.loadErrors);
+  for (const problem of host.getPluginProblems()) {
+    if (problem.state !== "warning") {
+      getNotificationService()?.notify({
+        title: problem.state === "failed" ? `Plugin failed to activate: ${problem.pluginId}` : `Plugin skipped: ${problem.pluginId}`,
+        message: problem.message,
+        severity: "error"
+      });
+    }
+  }
 
   const settings = getCoreSettingsService();
   settings?.refreshSchemaFromRegistry();
   await settings?.syncRegistryModules();
+  // Settings are loaded: plugins' one-time tasks (e.g. migrations) can run
+  void runPendingCoreSettingsTasks();
   await getJdbcDriverManagementService().initialize({
     contributions: host.getJdbcDrivers(),
     shell: window.appShell,

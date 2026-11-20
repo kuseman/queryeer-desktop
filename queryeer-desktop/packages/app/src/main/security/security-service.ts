@@ -18,6 +18,7 @@ import {
   verifyMasterKey
 } from "./vault-crypto.js";
 import { VaultStore } from "./vault-store.js";
+import { copyVaultEntry, createSerialQueue } from "./vault-entries.js";
 
 type UnlockParams = {
   masterPassword: string;
@@ -56,6 +57,8 @@ export class SecurityService {
   private readonly backendHooks: SecurityBackendBridgeHooks;
   private masterKey: Buffer | null = null;
   private currentSessionId: string | null = null;
+  /** Vault changes run one at a time: each reads vault.json, changes it and writes it back. */
+  private readonly serializeVaultChange = createSerialQueue();
 
   public constructor(vaultStore: VaultStore, backendHooks?: SecurityBackendBridgeHooks) {
     this.vaultStore = vaultStore;
@@ -71,16 +74,19 @@ export class SecurityService {
       return { accepted: true };
     });
     ipcMain.handle("security:store-secret", async (_event, params: { plaintext: string; secretRef?: string }) => {
-      return this.storeSecret(params);
+      return this.serializeVaultChange(() => this.storeSecret(params));
     });
     ipcMain.handle("security:resolve-secret", async (_event, params: { secretRef: string }) => {
       return this.resolveSecret(params.secretRef);
     });
+    ipcMain.handle("security:copy-secret", async (_event, params: { secretRef: string }) => {
+      return this.copySecret(typeof params?.secretRef === "string" ? params.secretRef : "");
+    });
     ipcMain.handle("security:delete-secret", async (_event, params: { secretRef: string }) => {
-      return this.deleteSecret(params.secretRef);
+      return this.serializeVaultChange(() => this.deleteSecret(params.secretRef));
     });
     ipcMain.handle("security:rotate-master-password", async (_event, params: RotateParams) => {
-      return this.rotateMasterPassword(params);
+      return this.serializeVaultChange(() => this.rotateMasterPassword(params));
     });
   }
 
@@ -169,6 +175,24 @@ export class SecurityService {
       found: true,
       plaintext: decryptSecret(entry, key)
     };
+  }
+
+  /**
+   * A copy of a secret under a new ref, so two settings never share one (editing or clearing one would change the
+   * other). Copies the encrypted entry: needs no unlocked vault, and the secret never leaves the main process.
+   */
+  private copySecret(secretRef: string): Promise<{ found: boolean; secretRef?: string }> {
+    return this.serializeVaultChange(async () => {
+      // No vault (deleted, or moved aside as broken): nothing to copy, like an unknown ref
+      const vault = await this.vaultStore.readVault();
+      const copyRef = vault ? copyVaultEntry(vault, secretRef) : undefined;
+      if (!vault || copyRef === undefined) {
+        return { found: false };
+      }
+      await this.vaultStore.writeVault(vault);
+      await this.notifyBackendVaultChanged(vault.updatedAt);
+      return { found: true, secretRef: copyRef };
+    });
   }
 
   private async deleteSecret(secretRef: string): Promise<{ deleted: boolean }> {

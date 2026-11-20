@@ -89,6 +89,21 @@ export type SettingsRegistry = SettingsContributionRegistry & {
   getAllValues: () => Readonly<Record<string, unknown>>;
   subscribe: (listener: () => void) => Disposable;
   open: (settingId?: string) => void;
+  /**
+   * Sets a registered setting, validated and saved like an edit in Settings. A failure is in the result (`ok: false`),
+   * not thrown; in a `runOnce` task, throw it so the task runs again. Since 0.21.
+   */
+  setValue: (settingId: string, value: unknown) => Promise<AdvancedValidationResult>;
+  /**
+   * The stored values of any settings module, also one no plugin registers any more, by setting id. A copy. Since 0.21.
+   */
+  readModuleValues: (moduleId: string) => Promise<Readonly<Record<string, unknown>>>;
+  /**
+   * Runs `run` once per installation, after settings are loaded (at startup, once every plugin has activated), e.g. to
+   * migrate settings from another module. `id` is per plugin; use a new one for a new migration. It counts as done only
+   * when it resolves, after what it changed is saved; one that throws runs again on the next start. Since 0.21.
+   */
+  runOnce: (id: string, run: () => void | Promise<void>) => void;
 };
 
 export type CollectionSettingsListItem = {

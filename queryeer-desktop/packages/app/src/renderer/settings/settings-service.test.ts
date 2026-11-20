@@ -334,3 +334,81 @@ describe("SettingsService", () => {
     expect(byTag.map((definition) => definition.id)).toContain("core.editor.texteditor.wordWrap");
   });
 });
+
+describe("SettingsService migration support", () => {
+  function inMemoryBridge(files: Record<string, Record<string, unknown>>) {
+    const saved: string[] = [];
+    let index = {
+      version: 1,
+      updatedAt: "now",
+      modules: Object.fromEntries(
+        Object.keys(files)
+          .filter((moduleId) => moduleId !== "old.module")
+          .map((moduleId) => [moduleId, { file: `${moduleId}.json`, version: 1, updatedAt: "now" }])
+      )
+    };
+    return {
+      saved,
+      files,
+      getIndex: () => index,
+      bridge: {
+        getSettingsIndex: async () => index,
+        getSettingsModule: async ({ moduleId }: { moduleId: string }) => ({
+          version: 1,
+          moduleId,
+          updatedAt: "now",
+          values: structuredClone(files[moduleId] ?? {})
+        }),
+        saveSettingsIndex: async (document: typeof index) => {
+          index = document;
+          return { accepted: true };
+        },
+        saveSettingsModule: async ({ moduleId, document }: { moduleId: string; document: { values: Record<string, unknown> } }) => {
+          saved.push(moduleId);
+          files[moduleId] = structuredClone(document.values);
+          return { accepted: true };
+        }
+      }
+    };
+  }
+
+  it("reads a module no plugin registers, as a copy, without adding it to the index", async () => {
+    const store = inMemoryBridge({ "old.module": { "old.module.connections": [{ id: "c1" }] } });
+    const service = new SettingsService({ registry: makeRegistry(), bridge: store.bridge });
+    await service.initialize();
+
+    const values = await service.readModuleValues("old.module");
+    (values["old.module.connections"] as unknown[]).push({ id: "changed" });
+
+    expect(await service.readModuleValues("old.module")).toEqual({ "old.module.connections": [{ id: "c1" }] });
+    await service.completeOnce("anything");
+    expect(Object.keys(store.getIndex().modules)).not.toContain("old.module");
+  });
+
+  it("records a one-time task, and writes pending changes first", async () => {
+    const store = inMemoryBridge({ "core.editor.texteditor": {} });
+    const service = new SettingsService({ registry: makeRegistry(), bridge: store.bridge, debounceMs: 60_000 });
+    await service.initialize();
+    await service.setValue("core.editor.texteditor.tabSize", 8);
+
+    expect(service.hasCompletedOnce("plugin/migration.v1")).toBe(false);
+    await service.completeOnce("plugin/migration.v1");
+
+    expect(service.hasCompletedOnce("plugin/migration.v1")).toBe(true);
+    expect(store.files["core.editor.texteditor"]).toEqual({ "core.editor.texteditor.tabSize": 8 });
+    expect(Object.keys(store.files["core.settings.runonce"] ?? {})).toEqual(["plugin/migration.v1"]);
+    service.dispose();
+  });
+
+  it("remembers a one-time task across restarts", async () => {
+    const store = inMemoryBridge({});
+    const first = new SettingsService({ registry: makeRegistry(), bridge: store.bridge });
+    await first.initialize();
+    await first.completeOnce("plugin/migration.v1");
+
+    const second = new SettingsService({ registry: makeRegistry(), bridge: store.bridge });
+    await second.initialize();
+
+    expect(second.hasCompletedOnce("plugin/migration.v1")).toBe(true);
+  });
+});

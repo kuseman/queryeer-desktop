@@ -99,7 +99,8 @@ export interface ShellApi {
   getUserKeybindings: () => Promise<UserKeybindingsDocument>;
   saveUserKeybindings: (document: UserKeybindingsDocument) => Promise<{ accepted: boolean }>;
   getSettingsIndex: () => Promise<SettingsIndexDocument>;
-  getSettingsModule: (params: { moduleId: string }) => Promise<SettingsModuleDocument>;
+  /** `strict` (since 0.21): throw when the file exists but can't be read or parsed, instead of returning an empty document. */
+  getSettingsModule: (params: { moduleId: string; strict?: boolean }) => Promise<SettingsModuleDocument>;
   saveSettingsIndex: (document: SettingsIndexDocument) => Promise<{ accepted: boolean }>;
   saveSettingsModule: (params: { moduleId: string; document: SettingsModuleDocument }) => Promise<{ accepted: boolean }>;
   getSecurityStatus: () => Promise<SecurityStatus>;
@@ -109,6 +110,11 @@ export interface ShellApi {
   storeSecret: (params: { plaintext: string; secretRef?: string }) => Promise<{ secretRef: string }>;
   resolveSecret: (params: { secretRef: string }) => Promise<{ found: boolean; plaintext?: string }>;
   deleteSecret: (params: { secretRef: string }) => Promise<{ deleted: boolean }>;
+  /**
+   * A copy of a stored secret under a new `secretRef`, e.g. when migrating a connection to another settings module:
+   * two settings must never share a ref. Works while the vault is locked; `found` is false for an unknown ref. Since 0.21.
+   */
+  copySecret: (params: { secretRef: string }) => Promise<{ found: boolean; secretRef?: string }>;
   rotateSecurityMasterPassword: (params: {
     oldMasterPassword: string;
     newMasterPassword: string;
