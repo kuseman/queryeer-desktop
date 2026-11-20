@@ -197,12 +197,32 @@ class PayloadbuilderQueryEngineProviderTest
         Map<String, Object> engineState = Map.of("payloadbuilder",
                 Map.of("defaultCatalogAlias", "db", "catalogs", Map.of("db", Map.of("catalogId", "jdbc", "properties", Map.of("connectionId", "conn-1")))));
 
-        provider.execute("exec-missing", "file-missing", "select 1", engineState, publisher);
+        // The default catalog is the missing one
+        provider.execute("exec-missing", "file-missing", "select * from tbl", engineState, publisher);
 
         Assertions.assertEquals("VALIDATION", publisher.errorCode);
         Assertions.assertTrue(publisher.errorMessage.contains("Catalog 'jdbc' (alias 'db') is not available")
                 && publisher.errorMessage.contains("queryengine.payloadbuilder.jdbc"), publisher.errorMessage);
         Assertions.assertFalse(publisher.completed);
+    }
+
+    @Test
+    void aMissingCatalogFailsOnlyTheQueriesThatUseIt()
+    {
+        // A file lists a catalog from a plugin that isn't installed (here example.weather) next to one that is
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER),
+                PARSE_SESSIONS, PARSE_FUNCTION);
+        Map<String, Object> engineState = Map.of("payloadbuilder", Map.of("defaultCatalogAlias", "fs", "catalogs",
+                Map.of("fs", Map.of("catalogId", "filesystem", "properties", Map.of()), "weather", Map.of("catalogId", "example.weather", "properties", Map.of()))));
+
+        RecordingPublisher unused = new RecordingPublisher();
+        provider.execute("exec-unused", "file-weather", "select 1", engineState, unused);
+        Assertions.assertTrue(unused.completed, unused.errorMessage);
+
+        RecordingPublisher used = new RecordingPublisher();
+        provider.execute("exec-used", "file-weather", "select * from weather#forecast", engineState, used);
+        Assertions.assertEquals("VALIDATION", used.errorCode);
+        Assertions.assertTrue(used.errorMessage.contains("Catalog 'example.weather' (alias 'weather') is not available"), used.errorMessage);
     }
 
     @Test
