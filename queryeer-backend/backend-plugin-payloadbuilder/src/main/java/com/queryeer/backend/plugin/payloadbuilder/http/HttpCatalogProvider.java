@@ -1,6 +1,5 @@
 package com.queryeer.backend.plugin.payloadbuilder.http;
 
-import com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderSystemTableSqlEditorServices;
 import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
 import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogSqlEditorServices;
 
@@ -26,6 +25,6 @@ public class HttpCatalogProvider implements PayloadbuilderCatalogProviderContrib
     @Override
     public PayloadbuilderCatalogSqlEditorServices editorServices()
     {
-        return PayloadbuilderSystemTableSqlEditorServices.INSTANCE;
+        return PayloadbuilderCatalogSqlEditorServices.systemTables();
     }
 }

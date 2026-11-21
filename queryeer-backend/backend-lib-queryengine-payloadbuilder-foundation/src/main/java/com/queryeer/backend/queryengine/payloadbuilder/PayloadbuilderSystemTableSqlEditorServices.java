@@ -1,4 +1,4 @@
-package com.queryeer.backend.plugin.payloadbuilder;
+package com.queryeer.backend.queryengine.payloadbuilder;
 
 import static com.queryeer.backend.api.PayloadUtils.isBlank;
 import static com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogSqlEditorServices.normalizeAliases;
@@ -16,19 +16,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.regex.Pattern;
 
-import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogSqlEditorServices;
-
 import se.kuseman.payloadbuilder.api.QualifiedName;
 import se.kuseman.payloadbuilder.api.catalog.DatasourceData;
 import se.kuseman.payloadbuilder.api.catalog.IDatasource;
 import se.kuseman.payloadbuilder.api.catalog.Schema;
 import se.kuseman.payloadbuilder.api.execution.TupleIterator;
 import se.kuseman.payloadbuilder.api.execution.TupleVector;
+import se.kuseman.payloadbuilder.api.execution.ValueVector;
 
-/** Generic opt-in SQL editor services backed by Payloadbuilder catalog system tables. */
-public final class PayloadbuilderSystemTableSqlEditorServices implements PayloadbuilderCatalogSqlEditorServices
+/** Generic opt-in SQL editor services backed by Payloadbuilder catalog system tables. Reached through {@link PayloadbuilderCatalogSqlEditorServices#systemTables()}. */
+final class PayloadbuilderSystemTableSqlEditorServices implements PayloadbuilderCatalogSqlEditorServices
 {
-    public static final PayloadbuilderSystemTableSqlEditorServices INSTANCE = new PayloadbuilderSystemTableSqlEditorServices();
+    static final PayloadbuilderSystemTableSqlEditorServices INSTANCE = new PayloadbuilderSystemTableSqlEditorServices();
 
     private static final String CONTEXT_TABLE_REFERENCE = "TABLE_REFERENCE";
     private static final String CONTEXT_COLUMN_REFERENCE = "COLUMN_REFERENCE";
@@ -385,17 +384,17 @@ public final class PayloadbuilderSystemTableSqlEditorServices implements Payload
 
     private Metadata metadata(CompletionRequest request)
     {
-        return metadata(new MetadataKey(request.catalogAlias(), request.catalogId(), request.properties()), request);
+        return metadata(new MetadataKey(request.catalogAlias(), request.catalogId(), request.catalog(), request.properties()), request);
     }
 
     private Metadata metadata(HoverRequest request)
     {
-        return metadata(new MetadataKey(request.catalogAlias(), request.catalogId(), request.properties()), request);
+        return metadata(new MetadataKey(request.catalogAlias(), request.catalogId(), request.catalog(), request.properties()), request);
     }
 
     private Metadata metadata(SymbolRequest request)
     {
-        return metadata(new MetadataKey(request.catalogAlias(), request.catalogId(), request.properties()), request);
+        return metadata(new MetadataKey(request.catalogAlias(), request.catalogId(), request.catalog(), request.properties()), request);
     }
 
     private Metadata metadata(MetadataKey key, Object request)
@@ -425,6 +424,9 @@ public final class PayloadbuilderSystemTableSqlEditorServices implements Payload
         {
             metadata = Metadata.EMPTY;
         }
+        // Drop what expired, so aliases and property values that are no longer used don't stay
+        metadataCache.values()
+                .removeIf(entry -> now - entry.createdAtMs() > CACHE_TTL_MS);
         metadataCache.put(key, new CachedMetadata(metadata, now));
         return metadata;
     }
@@ -500,9 +502,13 @@ public final class PayloadbuilderSystemTableSqlEditorServices implements Payload
                         Map<String, Object> values = new LinkedHashMap<>();
                         for (int col = 0; col < schema.getSize(); col++)
                         {
+                            // Only ever read as text (stringValue): table, column and type names
+                            ValueVector column = vector.getColumn(col);
                             values.put(schema.getColumns()
                                     .get(col)
-                                    .getName(), PayloadbuilderQueryEngineProvider.rowValueAsSerializableObject(vector.getColumn(col), row));
+                                    .getName(),
+                                    column.isNull(row) ? null
+                                            : column.valueAsObject(row));
                         }
                         rows.add(values);
                     }
@@ -514,8 +520,9 @@ public final class PayloadbuilderSystemTableSqlEditorServices implements Payload
                 iterator.close();
             }
         }
-        catch (RuntimeException e)
+        catch (RuntimeException | LinkageError e)
         {
+            // A plugin's catalog that fails, or was built against another payloadbuilder: no metadata
             return List.of();
         }
     }
@@ -929,7 +936,8 @@ public final class PayloadbuilderSystemTableSqlEditorServices implements Payload
     {
     }
 
-    private record MetadataKey(String alias, String catalogId, Map<String, Object> properties)
+    /** By catalog instance too: a plugin that takes over a catalog id never gets the replaced catalog's metadata. */
+    private record MetadataKey(String alias, String catalogId, se.kuseman.payloadbuilder.api.catalog.Catalog catalog, Map<String, Object> properties)
     {
     }
 

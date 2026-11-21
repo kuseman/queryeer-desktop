@@ -11,7 +11,6 @@ import java.util.Set;
 import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.SettingsModule;
-import com.queryeer.backend.plugin.payloadbuilder.PayloadbuilderSystemTableSqlEditorServices;
 import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
 import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogSqlEditorServices;
 
@@ -127,7 +126,7 @@ public final class ElasticsearchCatalogProvider implements PayloadbuilderCatalog
     @Override
     public PayloadbuilderCatalogSqlEditorServices editorServices()
     {
-        return PayloadbuilderSystemTableSqlEditorServices.INSTANCE;
+        return PayloadbuilderCatalogSqlEditorServices.systemTables();
     }
 
     @Override

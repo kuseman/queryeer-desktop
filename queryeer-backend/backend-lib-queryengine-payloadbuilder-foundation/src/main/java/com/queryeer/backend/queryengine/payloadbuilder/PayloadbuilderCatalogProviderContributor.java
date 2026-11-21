@@ -75,11 +75,16 @@ public interface PayloadbuilderCatalogProviderContributor
     }
 
     /**
-     * After query execution, allows the provider to contribute catalog property changes to the engine state patch.
+     * After query execution, the catalog property changes the file's catalog panel should show, e.g. a {@code use alias.database = 'x'} in the query. The default reports each input property the query
+     * changed ({@link #compareInputProperties}), as for a catalog without a provider. Override it to map changed native properties back to input properties as well.
+     *
+     * <p>
+     * Until 0.22.0 the default reported nothing.
+     * </p>
      */
     default Map<String, Object> buildCatalogPatch(IQuerySession session, String alias, Map<String, Object> inputProperties)
     {
-        return Map.of();
+        return compareInputProperties(session, alias, inputProperties);
     }
 
     /**

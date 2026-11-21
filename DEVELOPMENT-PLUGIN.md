@@ -18,6 +18,7 @@ Queryeer is an extensible desktop application for data querying and exploration.
 10. [Current Limitations & Known Gaps](#10-current-limitations--known-gaps)
 11. [Upgrading Plugins to 0.20.0](#11-upgrading-plugins-to-0200)
 12. [Upgrading Plugins to 0.21.0](#12-upgrading-plugins-to-0210)
+13. [Upgrading Plugins to 0.22.0](#13-upgrading-plugins-to-0220)
 
 ---
 
@@ -1362,6 +1363,10 @@ context.payloadbuilderCatalog.registerContribution({
 
 On the backend, a catalog plugin implements `PayloadbuilderCatalogProviderContributor` and registers it with the `PayloadbuilderCatalogProviderRegistry` it gets from `context.services()`. It compiles against `backend-lib-queryengine-payloadbuilder-foundation` with `provided` scope, and declares `queryengine.payloadbuilder` in `plugin.json`, required or optional (§3.3). Since 0.21 `queryengine.payloadbuilder` exports that API and `se.kuseman.payloadbuilder.api.`; a plugin that doesn't declare the dependency doesn't see them.
 
+**Completion and hover** (since 0.22). `editorServices()` returns `PayloadbuilderCatalogSqlEditorServices.NONE` by default. A catalog that implements the `tables` and `columns` system tables (`sys#tables`, `sys#columns`) returns `PayloadbuilderCatalogSqlEditorServices.systemTables()` instead, as the built-in Elasticsearch, Kafka, MongoDB, filesystem and HTTP catalogs do: table and column completion, hover and symbols from those system tables, and functions from the catalog's `getFunctions()`.
+
+**What a run changes** (since 0.22). After a run, `buildCatalogPatch` says which of the alias's properties the file's catalog panel should now show, for example after `use alias.database = 'x'`. The default reports each input property the query changed. Override it to map changed native properties back to input properties as well, e.g. a connection string back to the `connectionId` of the matching connection. In 0.21 the default reported nothing.
+
 **Taking over a built-in catalog** (since 0.21). A plugin can register a catalog with the id of one of Queryeer's built-in catalogs (`elasticsearch`, `kafka`, `mongodb`, `filesystem`, `http`), for example to serve it from its own connections. Its contribution replaces the built-in one: on the backend for the rest of the run, with the built-in's actions; on the frontend until the plugin's registration is disposed, which brings the built-in back.
 
 - **Replace both halves.** The built-in frontend panel stores properties for the built-in backend (its `connectionId`s) and calls its actions. A plugin that replaces only the backend half, or whose frontend half is skipped or fails, leaves that panel talking to the plugin's backend: a removed action fails with "No payloadbuilder catalog provides the action …".
@@ -1509,6 +1514,15 @@ New: `{ "id": ..., "optional": true }` in `dependencies`, `context.isDependencyA
 ### 12.5 Migrating settings, copying secrets
 
 New: `context.settings.setValue`, `readModuleValues` and `runOnce`, and `window.appShell.copySecret` (§7.7.1). A plugin that builds a whole `PluginContext` in its tests needs them in its `settings` mock, and a test that builds a whole `ShellApi` needs `copySecret`.
+
+## 13. Upgrading Plugins to 0.22.0
+
+Nothing a 0.21 plugin has to change.
+
+Backend:
+
+- **`PayloadbuilderCatalogSqlEditorServices.systemTables()`**: the completion, hover and symbols Queryeer's built-in catalogs use, for a plugin's catalog (§10.1). A plugin that calls it needs Queryeer 0.22 or later: it is called while editing, not at activation, so on 0.21 it fails then.
+- **`PayloadbuilderCatalogProviderContributor.buildCatalogPatch` reports changed input properties by default** (§10.1), as it already did for a catalog without a provider. A contributor that relied on the empty default, and whose input properties a query can change, now has those changes shown in the file's catalog panel.
 
 ## Reference: Example Plugins
 
