@@ -213,6 +213,30 @@ class PluginOptionalDependencyTest
     }
 
     @Test
+    void theStatusShowsAnOptionalFeatureThePluginSkippedWhileActivating() throws Exception
+    {
+        PluginRuntime runtime = new PluginRuntime();
+        runtime.register(new LoggingPlugin(descriptor("mongo", "1.0.0", List.of(), Map.of(), List.of()), List.of("Catalog extension failed")));
+        runtime.register(new LoggingPlugin(descriptor("kafka", "1.0.0", List.of(), Map.of(), List.of()), List.of("first", "second")));
+        runtime.register(plugin("quiet", "1.0.0"));
+
+        runtime.activateAll(BackendPlatformServices.fileBased(Map.of(), new SecuritySession())
+                .pluginContext());
+
+        Map<String, PluginRuntimeStatus> statuses = new LinkedHashMap<>();
+        runtime.statuses()
+                .forEach(status -> statuses.put(status.pluginId(), status));
+        assertEquals(PluginRuntimeState.ACTIVATED, statuses.get("mongo")
+                .state());
+        assertEquals("Activated, with an error: Catalog extension failed", statuses.get("mongo")
+                .reason());
+        assertEquals("Activated, with 2 errors, the first: first", statuses.get("kafka")
+                .reason());
+        assertEquals("Activated", statuses.get("quiet")
+                .reason());
+    }
+
+    @Test
     void anActivePluginSeesItsActiveDependenciesOnly() throws Exception
     {
         Map<String, BackendPluginContext> contexts = new LinkedHashMap<>();
@@ -281,6 +305,17 @@ class PluginOptionalDependencyTest
         @Override
         public void activate(BackendPluginContext context, PluginDescriptor pluginDescriptor)
         {
+        }
+    }
+
+    /** Logs each error while activating, as a plugin does that catches the failure of an optional feature. */
+    private record LoggingPlugin(PluginDescriptor descriptor, List<String> errors) implements BackendPlugin
+    {
+        @Override
+        public void activate(BackendPluginContext context, PluginDescriptor pluginDescriptor)
+        {
+            errors.forEach(error -> context.logger()
+                    .error(error, null));
         }
     }
 

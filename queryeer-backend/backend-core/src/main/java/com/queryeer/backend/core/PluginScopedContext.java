@@ -1,5 +1,7 @@
 package com.queryeer.backend.core;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 
 import com.queryeer.backend.api.BackendPluginContext;
@@ -13,13 +15,67 @@ import com.queryeer.backend.api.PluginServiceRegistry;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.api.SchedulerService;
 
-/** The shared plugin context, as one plugin sees it: it knows which of that plugin's dependencies are active. */
-record PluginScopedContext(BackendPluginContext delegate, Set<String> activeDependencies) implements BackendPluginContext
+/**
+ * The shared plugin context, as one plugin sees it: it knows which of that plugin's dependencies are active, and collects the errors the plugin logs while it activates (e.g. an optional feature it
+ * skipped), for its status.
+ */
+record PluginScopedContext(BackendPluginContext delegate, Set<String> activeDependencies, ActivationErrors activationErrors) implements BackendPluginContext
 {
+    PluginScopedContext(BackendPluginContext delegate, Set<String> activeDependencies)
+    {
+        this(delegate, activeDependencies, new ActivationErrors());
+    }
+
     @Override
     public LoggerService logger()
     {
-        return delegate.logger();
+        LoggerService logger = delegate.logger();
+        if (logger == null)
+        {
+            return null;
+        }
+        return new LoggerService()
+        {
+            @Override
+            public void info(String message)
+            {
+                logger.info(message);
+            }
+
+            @Override
+            public void warn(String message)
+            {
+                logger.warn(message);
+            }
+
+            @Override
+            public void error(String message, Throwable error)
+            {
+                activationErrors.add(message);
+                logger.error(message, error);
+            }
+        };
+    }
+
+    /** The error messages logged until {@link #close()}, i.e. while the plugin activates; later ones are only logged. */
+    static final class ActivationErrors
+    {
+        private final List<String> messages = new ArrayList<>();
+        private boolean closed;
+
+        synchronized void add(String message)
+        {
+            if (!closed)
+            {
+                messages.add(String.valueOf(message));
+            }
+        }
+
+        synchronized List<String> close()
+        {
+            closed = true;
+            return List.copyOf(messages);
+        }
     }
 
     @Override

@@ -29,7 +29,14 @@ public interface DependencyExtension<T>
      *
      * <p>
      * The class is loaded through the class loader of the class that calls this method, so call it from the plugin's own code. It needs a no-argument constructor, and a nested class is named by its
-     * binary name ({@code com.example.Outer$Extension}). An exception from the extension is thrown from here, so it fails the plugin's activation unless the plugin catches it.
+     * binary name ({@code com.example.Outer$Extension}).
+     * </p>
+     *
+     * <p>
+     * <b>Failures.</b> What depends on the installed plugins is logged with {@code context.logger()} (the backend log, naming the extension and the dependency), and the plugin activates without the
+     * extension: a class the plugin can't see (the dependency doesn't export it, or is a version without it), a class that fails to load, or an exception from the extension's constructor or
+     * {@code activate}. What an {@code activate} registered before it threw stays registered, and the plugin's own {@code deactivate} runs as usual, so register last, or undo in {@code activate}
+     * before rethrowing. Errors such as {@link OutOfMemoryError} are thrown. A mistake in the plugin itself is thrown too, so the plugin's first test finds it: see {@code @throws}.
      * </p>
      *
      * <p>
@@ -40,12 +47,12 @@ public interface DependencyExtension<T>
      * @param pluginId the optional (or required) dependency the extension uses
      * @param extensionClassName the extension's fully qualified binary class name
      * @param state handed to the extension's {@code activate}
-     * @return whether the extension ran
-     * @throws IllegalArgumentException when the class is missing, isn't a {@link DependencyExtension}, or can't be created
-     * @throws IllegalStateException when the extension uses a class the plugin can't see, or fails to load
+     * @return whether the extension ran and activated
+     * @throws IllegalArgumentException when the class is missing, isn't a {@link DependencyExtension}, or can't be created (abstract, or without a no-argument constructor)
+     * @since 0.22.0 failures are logged; until then they were thrown, and the method declared {@code throws Exception}
      */
     @SuppressWarnings("unchecked")
-    static <T> boolean whenDependencyActive(BackendPluginContext context, String pluginId, String extensionClassName, T state) throws Exception
+    static <T> boolean whenDependencyActive(BackendPluginContext context, String pluginId, String extensionClassName, T state)
     {
         if (!context.isDependencyActive(pluginId))
         {
@@ -78,44 +85,67 @@ public interface DependencyExtension<T>
         }
         catch (InvocationTargetException e)
         {
-            // The constructor threw: pass it on as is
+            // The constructor threw: as from activate below
             Throwable cause = e.getCause();
-            if (cause instanceof NoClassDefFoundError missing)
+            if (cause instanceof Exception
+                    || cause instanceof LinkageError)
             {
-                throw classNotVisible(pluginId, extensionClassName, missing);
-            }
-            if (cause instanceof Exception exception)
-            {
-                throw exception;
+                return skip(context, pluginId, extensionClassName, cause);
             }
             if (cause instanceof Error error)
             {
+                // E.g. OutOfMemoryError or AssertionError: not a missing feature of the installed plugins
                 throw error;
             }
-            throw e;
+            throw new IllegalStateException(cause);
         }
         catch (ReflectiveOperationException e)
         {
             throw new IllegalArgumentException(extensionClassName + " can't be created: " + e, e);
         }
-        catch (NoClassDefFoundError e)
-        {
-            throw classNotVisible(pluginId, extensionClassName, e);
-        }
         catch (LinkageError e)
         {
-            // E.g. a static initializer that throws, or a class compiled for a newer Java
-            throw new IllegalStateException("Extension " + extensionClassName + " for dependency " + pluginId + " failed to load: " + e, e);
+            // A class it needs isn't visible, a static initializer that throws, or a class compiled for a newer Java
+            return skip(context, pluginId, extensionClassName, e);
         }
         try
         {
             extension.activate(context, state);
         }
-        catch (NoClassDefFoundError e)
+        catch (Exception | LinkageError e)
         {
-            throw classNotVisible(pluginId, extensionClassName, e);
+            return skip(context, pluginId, extensionClassName, e);
         }
         return true;
+    }
+
+    /** Logs why the extension didn't run, and returns false. */
+    private static boolean skip(BackendPluginContext context, String pluginId, String extensionClassName, Throwable failure)
+    {
+        if (failure instanceof InterruptedException)
+        {
+            Thread.currentThread()
+                    .interrupt();
+        }
+        // "Could not initialize class X" is a static initializer that failed earlier, not a visibility problem
+        Throwable error = failure instanceof NoClassDefFoundError missing
+                && (missing.getMessage() == null
+                        || !missing.getMessage()
+                                .startsWith("Could not initialize class")) ? classNotVisible(pluginId, extensionClassName, missing)
+                                        : failure;
+        try
+        {
+            LoggerService logger = context.logger();
+            if (logger != null)
+            {
+                logger.error("Extension " + extensionClassName + " for dependency " + pluginId + " failed, so the plugin runs without it: " + error, error);
+            }
+        }
+        catch (RuntimeException e)
+        {
+            // Logging must not turn a skipped extension into a failed plugin
+        }
+        return false;
     }
 
     private static IllegalStateException classNotVisible(String pluginId, String extensionClassName, NoClassDefFoundError e)

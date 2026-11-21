@@ -3,9 +3,11 @@ package com.queryeer.backend.core;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -20,6 +22,7 @@ import org.junit.jupiter.api.Test;
 
 import com.queryeer.backend.api.BackendPluginContext;
 import com.queryeer.backend.api.DependencyExtension;
+import com.queryeer.backend.api.LoggerService;
 import com.queryeer.backend.core.dependencyextension.PluginWithOptionalDependency;
 import com.queryeer.backend.core.dependencyextension.ThrowingExtension;
 
@@ -64,15 +67,18 @@ class DependencyExtensionTest
     }
 
     @Test
-    void saysWhatToCheckWhenTheExtensionCantSeeTheDependencysClasses() throws Exception
+    void logsWhatToCheckWhenTheExtensionCantSeeTheDependencysClasses() throws Exception
     {
         // Reported active, but its packages aren't exported to the plugin. Also proves the extension is loaded by the
         // calling plugin's loader: by the test's loader, it would see the type and succeed.
         HidingClassLoader loader = new HidingClassLoader(DependencyExtensionTest.class.getClassLoader(), MISSING_TYPE);
         BiFunction<BackendPluginContext, List<String>, Boolean> plugin = pluginLoadedBy(loader);
+        List<Throwable> logged = new ArrayList<>();
 
-        IllegalStateException error = assertThrows(IllegalStateException.class, () -> plugin.apply(context("dependency"), new ArrayList<>()));
+        assertFalse(plugin.apply(context(logged, "dependency"), new ArrayList<>()));
 
+        assertEquals(1, logged.size());
+        IllegalStateException error = assertInstanceOf(IllegalStateException.class, logged.get(0));
         assertInstanceOf(NoClassDefFoundError.class, error.getCause());
         assertTrue(error.getMessage()
                 .contains("uses a class the plugin can't see")
@@ -84,12 +90,23 @@ class DependencyExtensionTest
     }
 
     @Test
-    void passesOnWhatTheExtensionThrows()
+    void logsWhatTheExtensionThrowsAndThePluginActivatesWithoutIt()
     {
-        IllegalStateException error = assertThrows(IllegalStateException.class,
-                () -> DependencyExtension.whenDependencyActive(context("dependency"), "dependency", ThrowingExtension.class.getName(), null));
+        List<Throwable> logged = new ArrayList<>();
 
-        assertSame(ThrowingExtension.FAILURE, error);
+        assertFalse(DependencyExtension.whenDependencyActive(context(logged, "dependency"), "dependency", ThrowingExtension.class.getName(), null));
+
+        assertEquals(List.of(ThrowingExtension.FAILURE), logged);
+    }
+
+    @Test
+    void aContextWithoutALoggerStillSkipsAFailingExtension()
+    {
+        // A plain Mockito mock, as in a plugin's own tests, returns no logger
+        BackendPluginContext context = mock(BackendPluginContext.class);
+        when(context.isDependencyActive("dependency")).thenReturn(true);
+
+        assertFalse(DependencyExtension.whenDependencyActive(context, "dependency", ThrowingExtension.class.getName(), null));
     }
 
     @Test
@@ -129,7 +146,18 @@ class DependencyExtensionTest
 
     private static BackendPluginContext context(String... activeDependencies)
     {
-        return new PluginScopedContext(null, Set.of(activeDependencies));
+        return context(new ArrayList<>(), activeDependencies);
+    }
+
+    /** Records what the plugin's logger gets as errors. */
+    private static BackendPluginContext context(List<Throwable> loggedErrors, String... activeDependencies)
+    {
+        LoggerService logger = mock(LoggerService.class);
+        doAnswer(invocation -> loggedErrors.add(invocation.getArgument(1))).when(logger)
+                .error(anyString(), any());
+        BackendPluginContext delegate = mock(BackendPluginContext.class);
+        when(delegate.logger()).thenReturn(logger);
+        return new PluginScopedContext(delegate, Set.of(activeDependencies));
     }
 
     @SuppressWarnings("unchecked")

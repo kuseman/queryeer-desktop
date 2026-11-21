@@ -63,12 +63,20 @@ public final class PluginRuntime
                         .getOrDefault(pluginId, Set.of()));
                 // A dependency counts as active only once it activated: a failed one doesn't
                 dependencies.retainAll(activatedIds);
-                plugin.activate(new PluginScopedContext(context, Set.copyOf(dependencies)), plugin.descriptor());
+                PluginScopedContext scopedContext = new PluginScopedContext(context, Set.copyOf(dependencies));
+                List<String> activationErrors;
+                try
+                {
+                    plugin.activate(scopedContext, plugin.descriptor());
+                }
+                finally
+                {
+                    activationErrors = scopedContext.activationErrors()
+                            .close();
+                }
                 activated.add(plugin);
                 activatedIds.add(pluginId);
-                String warning = warnings.get(pluginId);
-                statusByPluginId.put(pluginId, new PluginRuntimeStatus(pluginId, PluginRuntimeState.ACTIVATED, warning == null ? "Activated"
-                        : "Activated. " + warning));
+                statusByPluginId.put(pluginId, new PluginRuntimeStatus(pluginId, PluginRuntimeState.ACTIVATED, activatedMessage(activationErrors, warnings.get(pluginId))));
             }
             catch (Throwable t)
             {
@@ -101,6 +109,30 @@ public final class PluginRuntime
             }
         }
         activated.clear();
+    }
+
+    /** "Activated", with what the plugin logged as errors while activating (e.g. a skipped optional feature) and the plan's warning. */
+    private static String activatedMessage(List<String> activationErrors, String warning)
+    {
+        StringBuilder message = new StringBuilder("Activated");
+        if (activationErrors.size() == 1)
+        {
+            message.append(", with an error: ")
+                    .append(activationErrors.get(0));
+        }
+        else if (activationErrors.size() > 1)
+        {
+            message.append(", with ")
+                    .append(activationErrors.size())
+                    .append(" errors, the first: ")
+                    .append(activationErrors.get(0));
+        }
+        if (warning != null)
+        {
+            message.append(". ")
+                    .append(warning);
+        }
+        return message.toString();
     }
 
     public List<PluginRuntimeStatus> statuses()

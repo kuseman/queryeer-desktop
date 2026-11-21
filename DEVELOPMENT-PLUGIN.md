@@ -262,8 +262,9 @@ final class MongoPayloadbuilderCatalog implements DependencyExtension<MongoConne
 
 - The extension needs a no-argument constructor (it may be package-private). A nested class is named by its binary name (`com.example.Outer$Extension`) and must be `static`.
 - It gets the last argument, `state`, as is: hand it what it needs from the plugin's activation. To undo its registrations in the plugin's `deactivate`, keep what to undo in `state`. `whenDependencyActive` returns whether the extension ran.
-- An exception from the extension is thrown from `whenDependencyActive`, so it fails the plugin's activation. Catch it when the plugin should keep working without the dependency's features.
-- A missing class, a class that isn't a `DependencyExtension`, or one that uses classes the plugin can't see (the dependency doesn't export their package, they come from a plugin that isn't a dependency of yours, or the plugin bundles its own copy) fails with an error naming the class and what to check.
+- **A failing extension doesn't fail the plugin** (since 0.22). `whenDependencyActive` logs the failure with `context.logger()` and returns false, and the plugin activates without the extension. The plugin's status in Observability then reads "Activated, with an error: …" (as for any error a plugin logs while activating). That covers an exception from the extension's constructor or `activate` (e.g. a registry that refuses it), and an extension that uses classes the plugin can't see: the dependency doesn't export their package, or is a version without them; they come from a plugin that isn't a dependency of yours; or the plugin bundles its own copy. The log names the class and what to check. In 0.21 these were thrown, so a plugin that supports 0.21 still catches them.
+- What the extension's `activate` registered before it threw stays registered, and the plugin's `deactivate` runs as usual. Register last, or undo what you registered before rethrowing.
+- A mistake in the plugin itself is thrown as `IllegalArgumentException`: a missing class, a class that isn't a `DependencyExtension`, or one that can't be created (abstract, or without a no-argument constructor). It fails every time, so the plugin's first test finds it.
 - In a plugin's tests, a mocked context with `isDependencyActive` stubbed to true runs the extension; it is a static method, so there is nothing else to stub.
 
 **What to avoid.** Each of these puts the dependency's types where the JVM may resolve them whether it is in use or not:
@@ -1521,6 +1522,7 @@ Nothing a 0.21 plugin has to change.
 
 Backend:
 
+- **`DependencyExtension.whenDependencyActive` logs failures instead of throwing them** (§3.3.2). It no longer declares `throws Exception`. A `catch (Exception e)` around it still compiles; a catch of a specific checked exception (e.g. `IOException`) doesn't, because nothing in the `try` throws it any more. A plugin that needs Queryeer 0.22 or later can drop its own catch. A plugin that logs an error while activating now has it in its status: "Activated, with an error: …".
 - **`PayloadbuilderCatalogSqlEditorServices.systemTables()`**: the completion, hover and symbols Queryeer's built-in catalogs use, for a plugin's catalog (§10.1). A plugin that calls it needs Queryeer 0.22 or later: it is called while editing, not at activation, so on 0.21 it fails then.
 - **`PayloadbuilderCatalogProviderContributor.buildCatalogPatch` reports changed input properties by default** (§10.1), as it already did for a catalog without a provider. A contributor that relied on the empty default, and whose input properties a query can change, now has those changes shown in the file's catalog panel.
 

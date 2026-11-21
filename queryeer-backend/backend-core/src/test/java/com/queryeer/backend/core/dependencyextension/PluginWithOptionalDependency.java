@@ -14,17 +14,6 @@ public final class PluginWithOptionalDependency implements BiFunction<BackendPlu
     @Override
     public Boolean apply(BackendPluginContext context, List<String> state)
     {
-        try
-        {
-            return DependencyExtension.whenDependencyActive(context, "dependency", EXTENSION, state);
-        }
-        catch (RuntimeException e)
-        {
-            throw e;
-        }
-        catch (Exception e)
-        {
-            throw new IllegalStateException(e);
-        }
+        return DependencyExtension.whenDependencyActive(context, "dependency", EXTENSION, state);
     }
 }
