@@ -3,9 +3,15 @@ import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import type { TextEditorApi } from "./TextEditorApi";
 import type { TextDocument } from "./types";
 import { setTextEditorContextChain, TextEditorRegistry } from "./TextEditorRegistry";
+import { disposeMonacoModel } from "./MonacoTextEditorApi";
 import { createContextChain } from "../../core.commands/context-chain";
 import { ContextPriority } from "../../core.commands/context-priority";
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+vi.mock("./MonacoTextEditorApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./MonacoTextEditorApi")>()),
+  disposeMonacoModel: vi.fn()
+}));
 
 declare module "./TextEditorRegistry" {
   interface TextEditorRegistry {
@@ -755,7 +761,7 @@ describe("TextEditorRegistry view state", () => {
         fileId: "file-1",
         persistentViewState: { [STATE_KEY]: { cursor: { line: 99 } } }
       });
-      registry.setFilesRegistry({} as any);
+      registry.setFilesRegistry({ getFile: () => file } as any);
 
       registry["activeFileId"] = file.fileId;
       registry["editorApi"] = api;
@@ -1172,5 +1178,94 @@ describe("TextEditorRegistry editor instances", () => {
     expect(registry.getActiveEditor("left-instance")).toBeNull();
     expect(registry.getActiveEditor("right-instance")).toBe(rightApi);
     expect(registry.getActiveFile("right-instance")?.fileId).toBe(file.fileId);
+  });
+});
+
+describe("TextEditorRegistry closing files", () => {
+  function makeFilesRegistry(files: FileEntity[]) {
+    const open = new Map(files.map((file) => [file.fileId, file]));
+    const subscribers = new Set<() => void>();
+    return {
+      getFile: (fileId: string) => open.get(fileId),
+      listFiles: () => [...open.values()],
+      markDirty: vi.fn(),
+      subscribe: (subscriber: () => void) => {
+        subscribers.add(subscriber);
+        return { dispose: () => subscribers.delete(subscriber) };
+      },
+      closeFile: (fileId: string) => {
+        open.delete(fileId);
+        subscribers.forEach((subscriber) => subscriber());
+      }
+    };
+  }
+
+  beforeEach(() => {
+    vi.mocked(disposeMonacoModel).mockClear();
+  });
+
+  it("releases a closed file's model and its Monaco model, so reopening starts fresh", () => {
+    const registry = new TextEditorRegistry();
+    const file = makeFile();
+    const other = makeFile({ fileId: "file-2", uri: "file:///other.sql" });
+    const filesRegistry = makeFilesRegistry([file, other]);
+    registry.setFilesRegistry(filesRegistry as any);
+    registry.openFile(file);
+    registry.openFile(other);
+    const closedModel = registry.getModelForFile(file.fileId);
+    registry.applyRuntimeViewState(file.fileId, { cursor: 1 });
+    expect(registry.getRuntimeViewState(file.fileId)).toEqual({ cursor: 1 });
+
+    filesRegistry.closeFile(file.fileId);
+
+    expect(registry.getModelForFile(file.fileId)).toBeUndefined();
+    expect(registry.getModelForUri(file.uri)).toBeUndefined();
+    expect(disposeMonacoModel).toHaveBeenCalledExactlyOnceWith(file.uri);
+    expect(registry.getModelForFile(other.fileId)).toBeDefined();
+    expect(registry.getRuntimeViewState(file.fileId)).toBeUndefined();
+
+    registry.openFile(file);
+    expect(registry.getModelForFile(file.fileId)).not.toBe(closedModel);
+  });
+
+  it("keeps the Monaco model while another open file has the URI (an untitled file saved onto an open file's path)", () => {
+    const registry = new TextEditorRegistry();
+    const file = makeFile();
+    const elsewhere = makeFile({ fileId: "file-2" });
+    const filesRegistry = makeFilesRegistry([file, elsewhere]);
+    registry.setFilesRegistry(filesRegistry as any);
+    registry.openFile(file);
+
+    filesRegistry.closeFile(file.fileId);
+
+    expect(registry.getModelForFile(file.fileId)).toBeUndefined();
+    expect(disposeMonacoModel).not.toHaveBeenCalled();
+  });
+
+  it("doesn't keep a model for a file closed while it was being read", async () => {
+    const registry = new TextEditorRegistry();
+    const file = makeFile();
+    const filesRegistry = makeFilesRegistry([file]);
+    registry.setFilesRegistry(filesRegistry as any);
+    const read = createDeferred<{ success: boolean; content: string }>();
+    const appShellTarget = window as unknown as { appShell?: Record<string, unknown> };
+    const previousAppShell = appShellTarget.appShell;
+    appShellTarget.appShell = { ...(previousAppShell ?? {}), readFile: vi.fn(() => read.promise) };
+
+    try {
+      const opening = registry.openFileAsync(file);
+      filesRegistry.closeFile(file.fileId);
+      read.resolve({ success: true, content: "select 1" });
+      await opening;
+    } finally {
+      if (previousAppShell) {
+        appShellTarget.appShell = previousAppShell;
+      } else {
+        delete appShellTarget.appShell;
+      }
+    }
+
+    expect(registry.getModelForFile(file.fileId)).toBeUndefined();
+    expect(registry.getModelForUri(file.uri)).toBeUndefined();
   });
 });

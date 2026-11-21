@@ -7,6 +7,7 @@ import { ContextPriority } from "../../core.commands/context-priority";
 import { TextEditorModel } from "./TextEditorModel";
 import { TextEditorApi } from "./TextEditorApi";
 import { ViewStateStore } from "./ViewStateStore";
+import { disposeMonacoModel } from "./MonacoTextEditorApi";
 import { registerTextEditorRepository } from "./TextEditorModelRepository";
 import { inflateDottedKeys } from "../../../renderer/shell/context-value-flatten";
 
@@ -289,6 +290,7 @@ export class TextEditorRegistry {
     this.filesRegistry = registry;
     this.viewStateStore.setFilesRegistry(registry);
     const subscription = registry.subscribe?.(() => {
+      this.disposeModelsOfClosedFiles();
       this.publishAllEditorInstanceContexts();
     });
     this.filesRegistryUnsubscribe = subscription ? disposeOnCleanup(subscription) : null;
@@ -516,6 +518,10 @@ export class TextEditorRegistry {
         // File not yet readable, will populate on next open
       }
 
+      if (file.fileId && this.filesRegistry && !this.filesRegistry.getFile(file.fileId)) {
+        // Closed while it was being read
+        return;
+      }
       const existingModel = this.modelsByUri.get(file.uri);
       if (existingModel) {
         model = existingModel;
@@ -642,6 +648,21 @@ export class TextEditorRegistry {
     }
   }
 
+  /** Releases the models of files the files registry no longer has: closed, by the user or otherwise. */
+  private disposeModelsOfClosedFiles(): void {
+    const registry = this.filesRegistry;
+    if (!registry) {
+      return;
+    }
+    for (const fileId of [...this.modelsByFileId.keys()]) {
+      if (!registry.getFile(fileId)) {
+        this.disposeModel(fileId);
+        // A reopened file gets a new fileId, so nothing would restore it
+        this.viewStateStore.putRuntime(fileId, null);
+      }
+    }
+  }
+
   disposeModel(fileId: string): void {
     for (const state of this.instanceStateByInstanceId.values()) {
       if (state.activeFileId === fileId) {
@@ -657,6 +678,11 @@ export class TextEditorRegistry {
       if (!stillInUse) {
         this.modelsByUri.delete(uri);
         model.dispose();
+        // Monaco's models are shared by all editors: keep it while any open file has the URI
+        const openElsewhere = this.filesRegistry?.listFiles().some((file) => file.fileId !== fileId && file.uri === uri) ?? false;
+        if (!openElsewhere) {
+          disposeMonacoModel(uri);
+        }
       }
     }
 

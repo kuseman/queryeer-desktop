@@ -768,6 +768,10 @@ Disposing removes the registration, unless a later registration with the same id
 | `editors.onActiveEditorChanged(cb)` | `Disposable` | Subscribe to editor changes |
 | `editorLanguages.registerMimeType(mime, languageId)` | `Disposable` | Map a MIME type to a Monaco language |
 | `editorLanguages.registerLanguage(definition)` | `Disposable` | Register a new Monaco language (Monarch tokenizer + optional brackets/comments/auto-closing configuration, no validation); map a MIME type to it with `registerMimeType` |
+| `editorLanguages.registerCompletionProvider(languageId, provider)` | `Disposable` | Completion items in editors of a language (since 0.22) |
+| `editorLanguages.registerHoverProvider(languageId, provider)` | `Disposable` | Hovers in editors of a language (since 0.22) |
+| `editorLanguages.registerSignatureHelpProvider(languageId, provider)` | `Disposable` | Parameter hints in editors of a language (since 0.22) |
+| `editorLanguages.registerDiagnosticsProvider(languageId, provider)` | `Disposable` | Problems underlined in editors of a language (since 0.22, §7.2.2) |
 
 A plugin whose files don't fit an existing Monaco language (for example MongoDB shell syntax,
 which `json` and `javascript` both flag as errors) registers its own language first:
@@ -805,6 +809,111 @@ The definition is applied after Monaco loads, so `registerLanguage` returns a `D
 tokenizer is broken (a bad regex, a rule pointing at a missing state). Such errors, and the built-in id
 warning above, only appear in the developer console (`[editorLanguages] ...`); check it when a language
 doesn't highlight as expected.
+
+#### 7.2.1 Completion, hover and parameter hints (since 0.22)
+
+The providers use the types in `@queryeer/api/editor/EditorApi` (`CompletionProvider`, `HoverProvider`,
+`SignatureHelpProvider`), not Monaco's. The `document` they get has `fileId` when it is an open file, so a
+provider can ask the plugin's backend, which knows the file's connection and session:
+
+```ts
+import { CompletionItemKind, type CompletionProvider } from "@queryeer/api/editor/EditorApi";
+
+const completion: CompletionProvider = {
+  triggerCharacters: ["."],
+  async provideCompletionItems(document, position, _context, token) {
+    if (!document.fileId) {
+      return null;
+    }
+    let names: string[] | undefined;
+    try {
+      // silent: typing must never open the vault's unlock dialog; it rejects instead
+      names = await context.queryEngines.invoke<string[]>({
+        engineId: "com.example.mongodb",
+        fileId: document.fileId,
+        action: "mongodb.collections",
+        payload: { text: document.getText(), line: position.lineNumber, column: position.column }
+      }, { silent: true });
+    }
+    catch {
+      // A locked vault or a stopped backend: expected while typing, so offer nothing without logging
+      return null;
+    }
+    if (token.isCancellationRequested) {
+      return null;
+    }
+    return {
+      suggestions: (names ?? []).map((name) => ({ label: name, kind: CompletionItemKind.Field, insertText: name }))
+    };
+  }
+};
+const registration = context.editorLanguages.registerCompletionProvider("mongodb", completion);
+// dispose on deactivate
+```
+
+- **Ranges.** A completion item without a `range` gets Monaco's default: the word before the cursor, or the
+  whole word in replace mode. A `range` must stay on the cursor's line and contain the cursor's start, or Monaco
+  drops the item. "Word" follows the language's `wordPattern` (`registerLanguage`'s `configuration`): for
+  `$lt` to count as one word, include `$` in it, or typing `$l` and picking `$lt` gives `$$lt`. A hover without
+  a `range` is about the word under the mouse.
+- **Snippets.** `insertText` is plain text. With `insertTextFormat: "snippet"` it has placeholders, such as
+  `find(${1:filter})`.
+- **Hover markdown** is not trusted by default. `isTrusted: true` makes `command:` links in it run commands, so
+  set it only for text you wrote, never for text with values from a database.
+- **Several providers** for one language, from core or other plugins, are merged, as in Monaco.
+- **Failures.** A provider that throws, rejects or returns something that can't be shown offers nothing, and
+  the error goes to the developer console (`[editorLanguages] ...`). The editor keeps working. Catch what is
+  expected while typing, such as a locked vault, as the example does, or the console fills with it.
+- **Cancellation.** Check `token.isCancellationRequested` after slow work. Monaco asks again as the user
+  types, and drops answers to earlier requests anyway.
+- `CompletionItemKind` is a runtime enum in `@queryeer/api`, mapped to Monaco's by name (the numbers differ).
+- The language id must be registered when the providers are used, by the plugin (`registerLanguage`) or
+  built into Monaco. Providers for a built-in language such as `sql` are merged with core's own.
+
+#### 7.2.2 Diagnostics (since 0.22)
+
+A diagnostics provider finds the problems in a document. They are underlined, with the message on hover:
+
+```ts
+import type { Diagnostic, DiagnosticsProvider } from "@queryeer/api/editor/EditorApi";
+
+const diagnostics: DiagnosticsProvider = {
+  provideDiagnostics(document) {
+    const problems: Diagnostic[] = [];
+    for (let lineNumber = 1; lineNumber <= document.lineCount; lineNumber++) {
+      const { text } = document.lineAt(lineNumber);
+      const column = text.indexOf("$where");
+      if (column >= 0) {
+        problems.push({
+          range: { startLineNumber: lineNumber, startColumn: column + 1, endLineNumber: lineNumber, endColumn: column + 7 },
+          message: "$where runs JavaScript on the server for each document",
+          severity: "warning",
+          source: "mongodb"
+        });
+      }
+    }
+    return problems;
+  }
+};
+const registration = context.editorLanguages.registerDiagnosticsProvider("mongodb", diagnostics);
+// dispose on deactivate
+```
+
+- **When it is asked.** For each document of the language: shortly after it opens (or changes to the
+  language), and after each pause in typing (half a second). Not on every keystroke, and not when something
+  outside the text changes, such as the file's connection: the next edit asks again.
+- **The result replaces** the provider's earlier diagnostics for the document; return `[]` for none. A newer
+  request cancels the one before it (`token`), and an answer for text that has since changed is dropped.
+- `severity` is `"error"` (the default), `"warning"`, `"info"` or `"hint"`. A hint shows as faint dots, not an
+  underline. A diagnostic with an empty `message` isn't shown.
+- **Several providers** for one language each keep their own diagnostics. Disposing a registration removes its
+  diagnostics; closing a file or changing its language removes them from it.
+- **Not only files.** Other editors in the language, such as a value preview, are checked too, without
+  `document.fileId`. A provider that needs the file's connection returns `[]` for them.
+- **Failures.** A provider that throws or rejects shows no diagnostics for the document, and the error goes to
+  the developer console. It is asked after every pause in typing, so catch what is expected, such as a locked
+  vault when asking the backend with `queryEngines.invoke(..., { silent: true })`.
+- `document.fileId` is the open file, as for completion (§7.2.1).
 
 ### 7.3 Files & MIME
 
@@ -1518,7 +1627,12 @@ New: `context.settings.setValue`, `readModuleValues` and `runOnce`, and `window.
 
 ## 13. Upgrading Plugins to 0.22.0
 
-Nothing a 0.21 plugin has to change.
+Nothing a 0.21 plugin has to change, except a test that builds a whole `PluginContext` (below).
+
+Frontend:
+
+- **Completion, hover, parameter hints and diagnostics for a plugin's language** (§7.2.1, §7.2.2): `editorLanguages.registerCompletionProvider`, `registerHoverProvider`, `registerSignatureHelpProvider` and `registerDiagnosticsProvider`. A test that builds a whole `PluginContext` object needs them in `editorLanguages`.
+- `TextDocument` has the new optional `fileId`, `CompletionItem` the new optional `insertTextFormat`, and `Hover.range` is optional.
 
 Backend:
 

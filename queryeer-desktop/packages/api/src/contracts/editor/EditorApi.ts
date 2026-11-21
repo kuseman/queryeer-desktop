@@ -17,6 +17,12 @@ export type RevealType = "default" | "top" | "center" | "centerIfOutsideViewport
 export type TextDocument = {
   readonly uri: string;
   readonly languageId: string;
+  /**
+   * The open file the document shows, for calls such as `queryEngines.invoke(fileId, ...)`. Set on the documents
+   * passed to language feature providers (`editorLanguages.registerCompletionProvider` and the like), when the
+   * document is an open file. Since 0.22.
+   */
+  readonly fileId?: string;
   getText(range?: TextRange): string;
   lineCount: number;
   lineAt(lineNumber: number): TextLine;
@@ -58,6 +64,12 @@ export type CompletionItem = {
   detail?: string;
   documentation?: string;
   insertText: string;
+  /** `"snippet"`: `insertText` has placeholders such as `find($1)` or `${1:filter}`. Plain text by default. Since 0.22. */
+  insertTextFormat?: "plainText" | "snippet";
+  /**
+   * The text the item replaces, on the cursor's line and containing the cursor's start (Monaco drops an item whose
+   * range spans lines). Without it, the word at the cursor, by the language's `wordPattern`.
+   */
   range?: TextRange;
   sortText?: string;
   filterText?: string;
@@ -136,7 +148,8 @@ export type Command = {
 };
 
 export type Hover = {
-  range: TextRange;
+  /** The text the hover is about; without it, the word under the mouse. */
+  range?: TextRange;
   contents: MarkdownString[];
 };
 
@@ -178,6 +191,25 @@ export type SignatureHelpProvider = {
     position: Position,
     token: CancellationToken
   ): ProviderResult<SignatureHelp>;
+};
+
+export type DiagnosticSeverity = "error" | "warning" | "info" | "hint";
+
+/** A problem in a document, shown as an underline with the message on hover. Since 0.22. */
+export type Diagnostic = {
+  range: TextRange;
+  message: string;
+  /** Defaults to `"error"`. */
+  severity?: DiagnosticSeverity;
+  /** What found the problem, shown after the message, e.g. `"mongodb"`. */
+  source?: string;
+  code?: string;
+};
+
+/** Since 0.22. */
+export type DiagnosticsProvider = {
+  /** All of the document's problems; they replace what the provider returned before. */
+  provideDiagnostics(document: TextDocument, token: CancellationToken): ProviderResult<Diagnostic[]>;
 };
 
 export type FormatOptions = {

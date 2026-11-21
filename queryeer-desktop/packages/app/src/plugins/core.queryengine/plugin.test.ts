@@ -259,7 +259,11 @@ function createContext(fileOrFiles: FileEntity | FileEntity[]): PluginContext {
     queryEngines: { registerEngine: vi.fn(), invoke: vi.fn(), registerExecutionContextProvider: vi.fn(), onQueryEvent: vi.fn(), registerEditorHeaderItem: vi.fn(), registerEditorStatusItem: vi.fn(), execute: vi.fn() },
     editorLanguages: {
       registerMimeType: vi.fn(() => ({ dispose: vi.fn() })),
-      registerLanguage: vi.fn(() => ({ dispose: vi.fn() }))
+      registerLanguage: vi.fn(() => ({ dispose: vi.fn() })),
+      registerCompletionProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      registerHoverProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      registerSignatureHelpProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      registerDiagnosticsProvider: vi.fn(() => ({ dispose: vi.fn() }))
     },
     payloadbuilderCatalog: { registerContribution: vi.fn() }
   };

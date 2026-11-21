@@ -1,4 +1,4 @@
-import type { Disposable } from "./EditorApi.js";
+import type { CompletionProvider, DiagnosticsProvider, Disposable, HoverProvider, SignatureHelpProvider } from "./EditorApi.js";
 
 /**
  * Monaco Monarch tokenizer definition. Mirrors Monaco's `IMonarchLanguage` without
@@ -50,4 +50,21 @@ export type EditorLanguageRegistry = {
    * Throws if the id is blank or already registered by a plugin.
    */
   registerLanguage: (definition: EditorLanguageDefinition) => Disposable;
+  /**
+   * Offers completion items in editors of `languageId`, typically one the plugin registered with `registerLanguage`.
+   * The provider's `document.fileId` is the open file, to ask the plugin's backend with `queryEngines.invoke`.
+   * An item without a `range` replaces the word before the cursor. Several providers for one language are merged.
+   * A provider that throws or rejects offers nothing; the error is logged. Since 0.22.
+   */
+  registerCompletionProvider: (languageId: string, provider: CompletionProvider) => Disposable;
+  /** Shows a hover in editors of `languageId`. As `registerCompletionProvider`. Since 0.22. */
+  registerHoverProvider: (languageId: string, provider: HoverProvider) => Disposable;
+  /** Shows parameter hints in editors of `languageId`, e.g. inside a call's parentheses. As `registerCompletionProvider`. Since 0.22. */
+  registerSignatureHelpProvider: (languageId: string, provider: SignatureHelpProvider) => Disposable;
+  /**
+   * Underlines problems in editors of `languageId`. Asked when a document opens and after a pause in typing; its
+   * result replaces the provider's earlier diagnostics for that document. Disposing removes them. A provider that
+   * throws or rejects shows none; the error is logged. Since 0.22.
+   */
+  registerDiagnosticsProvider: (languageId: string, provider: DiagnosticsProvider) => Disposable;
 };

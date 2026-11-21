@@ -2,7 +2,7 @@ import type * as monacoType from "monaco-editor";
 
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import type { SqlHoverInvokePayload, SqlHoverInvokeResult } from "@queryeer/api/backend/Types";
-import { getFilesRegistry } from "../core.commands/files-registry-accessor";
+import { findFileForModelUri } from "../core.commands/files-registry-accessor";
 import { getRegisteredQueryExecutableEngines } from "./engine-registration";
 import { getQueryEngineService } from "./QueryEngineService";
 
@@ -16,21 +16,6 @@ async function getMonaco(): Promise<typeof monacoType>
     monacoModuleInstance = await import("monaco-editor");
   }
   return monacoModuleInstance;
-}
-
-function normalizeUri(uri: string): string {
-  return uri.toLowerCase().replace(/%3a/g, ":");
-}
-
-function findFileForModelUri(uri: string): FileEntity | undefined {
-  const filesRegistry = getFilesRegistry();
-  if (!filesRegistry) {
-    return undefined;
-  }
-  const normalized = normalizeUri(uri);
-  return filesRegistry
-    .listFiles()
-    .find((file) => normalizeUri(file.uri) === normalized);
 }
 
 function resolveEngineId(file: FileEntity): string | undefined {
