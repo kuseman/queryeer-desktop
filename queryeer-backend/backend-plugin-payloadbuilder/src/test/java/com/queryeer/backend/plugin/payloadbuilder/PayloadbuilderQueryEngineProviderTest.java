@@ -1706,7 +1706,7 @@ class PayloadbuilderQueryEngineProviderTest
         @Override
         public PayloadbuilderCatalogSqlEditorServices editorServices()
         {
-            return optIn ? PayloadbuilderSystemTableSqlEditorServices.INSTANCE
+            return optIn ? PayloadbuilderCatalogSqlEditorServices.systemTables()
                     : PayloadbuilderCatalogSqlEditorServices.NONE;
         }
     }

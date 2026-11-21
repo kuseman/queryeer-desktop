@@ -6,6 +6,9 @@ import java.util.Map;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
+
+import se.kuseman.payloadbuilder.api.catalog.Catalog;
 import se.kuseman.payloadbuilder.core.catalog.CatalogRegistry;
 import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
@@ -49,6 +52,38 @@ class PayloadbuilderEngineStateSupportTest
         Object patch = PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, state, Map.of(), "1");
 
         Assertions.assertEquals(Map.of("payloadbuilder", Map.of("catalogs", Map.of("jdbc1", Map.of("catalogId", "Jdbc", "properties", Map.of("database", "reporting"))), "sessionId", "1")), patch);
+    }
+
+    @Test
+    void aProviderWithoutItsOwnPatchReportsChangedInputPropertiesToo()
+    {
+        PayloadbuilderEngineState engineState = new PayloadbuilderEngineState(
+                new PayloadbuilderEngineState.PayloadbuilderCatalogState(null, null, Map.of("mongo", new PayloadbuilderCatalogInstance("mongodb", Map.of("connectionId", "c1"))), null));
+        PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state = PayloadbuilderEngineStateSupport.parse(engineState);
+        QuerySession session = new QuerySession(new CatalogRegistry());
+        // A plugin's contributor that overrides nothing but the required methods
+        PayloadbuilderCatalogProviderContributor provider = new PayloadbuilderCatalogProviderContributor()
+        {
+            @Override
+            public String catalogId()
+            {
+                return "mongodb";
+            }
+
+            @Override
+            public Catalog createCatalog()
+            {
+                return null;
+            }
+        };
+
+        PayloadbuilderEngineStateSupport.applyToSession(session, state);
+        // use mongo.connectionId = 'c2'
+        session.setCatalogProperty("mongo", "connectionId", se.kuseman.payloadbuilder.api.execution.ValueVector.literalAny(1, "c2"));
+
+        Object patch = PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, state, Map.of("mongo", provider), "1");
+
+        Assertions.assertEquals(Map.of("payloadbuilder", Map.of("catalogs", Map.of("mongo", Map.of("catalogId", "mongodb", "properties", Map.of("connectionId", "c2"))), "sessionId", "1")), patch);
     }
 
     @Test

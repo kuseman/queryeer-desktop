@@ -19,6 +19,17 @@ public interface PayloadbuilderCatalogSqlEditorServices
     {
     };
 
+    /**
+     * Completion, hover and symbols from the catalog itself: tables and columns from its {@code sys#tables} and {@code sys#columns} system tables, functions from {@link Catalog#getFunctions()}. The
+     * metadata is cached for a short while per alias, catalog and properties. For any catalog that implements those system tables, as the built-in catalogs do.
+     *
+     * @since 0.22.0
+     */
+    static PayloadbuilderCatalogSqlEditorServices systemTables()
+    {
+        return PayloadbuilderSystemTableSqlEditorServices.INSTANCE;
+    }
+
     default List<CompletionItem> complete(CompletionRequest request)
     {
         return List.of();

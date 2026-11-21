@@ -664,11 +664,6 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
         return rowCount;
     }
 
-    static Object rowValueAsSerializableObject(ValueVector valueVector, int rowIndex)
-    {
-        return rowValueAsSerializableObject(valueVector, rowIndex, LargeValueStore.inlineOnly(), "inline");
-    }
-
     private static Object rowValueAsSerializableObject(ValueVector valueVector, int rowIndex, LargeValueStore largeValueStore, String queryExecutionId)
     {
         if (valueVector.isNull(rowIndex))
