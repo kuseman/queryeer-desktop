@@ -26,6 +26,8 @@ type FakeEditor = {
   onDidChangeModelContent: (listener: (event: unknown) => void) => { dispose: () => void };
   onDidChangeCursorSelection: (listener: (event: unknown) => void) => { dispose: () => void };
   triggerModelContentChange: (event?: { isFlush?: boolean; isRedo?: boolean; isUndo?: boolean }) => void;
+  /** As when the user clicks into the editor. */
+  triggerFocus: () => void;
   getValue: ReturnType<typeof vi.fn>;
   getSelections: ReturnType<typeof vi.fn>;
   setSelections: ReturnType<typeof vi.fn>;
@@ -115,6 +117,11 @@ vi.mock("monaco-editor", () => {
             isUndoing: event?.isUndo ?? false,
             versionId: 2
           });
+        }
+      },
+      triggerFocus: () => {
+        for (const listener of focusListeners) {
+          listener();
         }
       },
       dispose: () => {
@@ -528,6 +535,45 @@ describe("TextEditorComponent integration: non-file -> file switch", () => {
 
     expect(editorRegistryHost.setActiveEditor).not.toHaveBeenCalled();
     openFileSpy.mockRestore();
+  });
+
+  it("publishes the tab it shows, not its first one, when clicked into after a tab switch", async () => {
+    // One editor serves every tab of its group: the layout keys it on the editor, not the file
+    const fileA = makeFile({ fileId: "file-first-tab", uri: "file:///first.sql" });
+    const fileB = makeFile({ fileId: "file-second-tab", uri: "file:///second.sql" });
+    filesById.set(fileA.fileId, fileA);
+    filesById.set(fileB.fileId, fileB);
+    const editorRegistryHost = createEditorRegistryHost();
+    const outlineRegistry = createOutlineRegistry();
+    const render = (file: FileEntity) =>
+      root.render(
+        <TextEditorComponent
+          file={file}
+          registry={registry}
+          editorRegistryHost={editorRegistryHost}
+          outlineRegistry={outlineRegistry}
+          editorInstanceId="left:core.queryengine.editor"
+          isActiveEditorGroup={true}
+        />
+      );
+
+    await act(async () => {
+      render(fileA);
+      await flush();
+    });
+    await act(async () => {
+      render(fileB);
+      await flush();
+    });
+    expect(editors).toHaveLength(1);
+    editorRegistryHost.setActiveEditor.mockClear();
+
+    act(() => {
+      editors[0].triggerFocus();
+    });
+
+    expect(editorRegistryHost.setActiveEditor).toHaveBeenCalledTimes(1);
+    expect(editorRegistryHost.setActiveEditor).toHaveBeenCalledWith(expect.objectContaining({ fileId: fileB.fileId }));
   });
 });
 
