@@ -263,7 +263,11 @@ function createContext(): PluginContext {
     },
     editorLanguages: {
       registerMimeType: vi.fn(() => ({ dispose: vi.fn() })),
-      registerLanguage: vi.fn(() => ({ dispose: vi.fn() }))
+      registerLanguage: vi.fn(() => ({ dispose: vi.fn() })),
+      registerCompletionProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      registerHoverProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      registerSignatureHelpProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      registerDiagnosticsProvider: vi.fn(() => ({ dispose: vi.fn() }))
     },
     payloadbuilderCatalog: { registerContribution: vi.fn() }
   };

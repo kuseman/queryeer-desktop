@@ -87,6 +87,10 @@ describe("PluginHost JDBC driver contexts", () => {
     expect(context?.settings.open).toBeTypeOf("function");
     expect(context?.editorLanguages.registerMimeType).toBeTypeOf("function");
     expect(context?.editorLanguages.registerLanguage).toBeTypeOf("function");
+    expect(context?.editorLanguages.registerCompletionProvider).toBeTypeOf("function");
+    expect(context?.editorLanguages.registerHoverProvider).toBeTypeOf("function");
+    expect(context?.editorLanguages.registerSignatureHelpProvider).toBeTypeOf("function");
+    expect(context?.editorLanguages.registerDiagnosticsProvider).toBeTypeOf("function");
     expect(context?.queryEngines.execute).toBeTypeOf("function");
     expect(context?.components.PasswordFieldInput).toBeTypeOf("function");
     expect(context?.components.CollectionSettingsListEditor).toBeTypeOf("function");

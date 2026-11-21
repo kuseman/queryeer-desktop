@@ -52,6 +52,7 @@ import {
 } from "../../plugins/core.settings/CollectionSettingsListEditor";
 import { registerMonacoLanguageIdForMimeType } from "../../plugins/core.editor/texteditor/mime-types";
 import { registerEditorLanguage } from "../../plugins/core.editor/texteditor/editor-languages";
+import { editorLanguageFeatures } from "../../plugins/core.editor/texteditor/editor-language-features";
 
 /** Dependencies as shown in Observability: `id`, or `id (optional)`. */
 function describeDependencies(dependencies: PluginManifest["dependencies"]): string[] {
@@ -209,7 +210,8 @@ export class PluginHost {
       payloadbuilderCatalog: createPayloadbuilderCatalogRegistry(),
       editorLanguages: {
         registerMimeType: registerMonacoLanguageIdForMimeType,
-        registerLanguage: registerEditorLanguage
+        registerLanguage: registerEditorLanguage,
+        ...editorLanguageFeatures
       },
       components: {
         FrameworkEditor: this.options.frameworkEditor ?? (() => null) as unknown as ComponentType<FrameworkEditorProps>,

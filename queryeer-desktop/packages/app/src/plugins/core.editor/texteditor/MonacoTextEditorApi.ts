@@ -36,6 +36,15 @@ function getMonacoFast(): typeof monacoType | null {
   return monacoModule;
 }
 
+/**
+ * Disposes the Monaco model of a URI, with its undo history and markers. An editor that shows it is left empty.
+ * Before Monaco has loaded there is none.
+ */
+export function disposeMonacoModel(uri: string): void {
+  const monaco = getMonacoFast();
+  monaco?.editor.getModel(monaco.Uri.parse(uri))?.dispose();
+}
+
 export class MonacoTextEditorApi extends TextEditorApi {
   private editor: monacoType.editor.IStandaloneCodeEditor | null = null;
   private readonly decorationIdsByOwner = new Map<string, string[]>();
