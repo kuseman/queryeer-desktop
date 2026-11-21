@@ -321,6 +321,7 @@ jobs:
     needs: backend-verify
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -371,13 +372,34 @@ jobs:
         working-directory: queryeer-desktop
         run: npm pack -w @queryeer/api --dry-run
 
-      - name: Publish npm package
+      # Trusted publishing (OIDC) is configured as stage-only on npmjs.com.
+      # The version lands in the stage queue and must be approved by a
+      # maintainer (npmjs.com or `npm stage approve <id>`) before it goes live.
+      # Pinned exactly: this job can mint a publish token. Bump deliberately
+      # (staged publishing needs npm >= 11.15.0).
+      - name: Install pinned npm CLI
+        if: github.event_name == 'push'
+        run: npm install -g npm@11.21.3
+
+      - name: Stage npm package
         if: github.event_name == 'push'
         working-directory: queryeer-desktop
-        run: npm publish -w @queryeer/api --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          set -o pipefail
+          npm stage publish -w @queryeer/api --access public 2>&1 | tee "$RUNNER_TEMP/npm-stage.log"
+          {
+            echo "### npm package staged — approval required"
+            echo
+            echo "\`@queryeer/api@${QUERYEER_RELEASE_VERSION}\` is in the npm stage queue and is **not live** until a maintainer approves it."
+            echo
+            echo "- Approve on https://www.npmjs.com/package/@queryeer/api (staged versions), or"
+            echo "- run \`npm stage approve <stage-id>\` (2FA required). Stage id is in the output below."
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/npm-stage.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   publish:
     name: Publish GitHub Release
