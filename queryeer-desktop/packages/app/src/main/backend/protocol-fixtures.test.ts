@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 import { describe, it, expect } from "vitest";
+import type { RuntimePluginStatus } from "@queryeer/api/backend";
 
 const BACKEND_PROTOCOL_VERSION = "1.0.0";
 const FIXTURE_DIR = join(process.cwd(), "..", "..", "..", "protocol-fixtures", "backend");
@@ -52,7 +53,11 @@ describe("Protocol fixture compatibility", () => {
     assertEnvelopeBase(response);
     expect(request.method).toBe("backend.runtimeStatus");
     expect(request.id).toBe(response.id);
-    expect(Array.isArray((response.result as Record<string, unknown>)?.pluginStatuses)).toBe(true);
+    const pluginStatuses = (response.result as { pluginStatuses?: RuntimePluginStatus[] })?.pluginStatuses;
+    expect(Array.isArray(pluginStatuses)).toBe(true);
+    // Descriptor fields are optional
+    expect(pluginStatuses?.[0].dependencies).toBeUndefined();
+    expect(pluginStatuses?.[1]).toMatchObject({ name: "JDBC Query Engine", dependencies: ["queryengine.sql.parser"] });
   });
 
   it("query execute fixtures", () => {

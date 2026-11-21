@@ -234,3 +234,90 @@ describe("PluginHost failure containment and optional dependencies", () => {
     expect(host.getPluginProblems()).toEqual([]);
   });
 });
+
+describe("PluginHost contribution ownership and activation timing", () => {
+  const createHost = () =>
+    new PluginHost({
+      fileWatcher: {
+        watch: async () => ({ subscriptionId: "test", unsubscribe: async () => {} }),
+        mutePath: async () => {}
+      }
+    });
+
+  it("records which plugin registered each contribution, including registrations made after activation", async () => {
+    const host = createHost();
+    let registerLater: (() => void) | undefined;
+    host.register({
+      manifest: { id: "plugin.one", name: "One", version: "1.0.0", kind: "core" },
+      activate: (context) => {
+        context.commands.registerCommand({ id: "one.run", title: "Run", handler: () => {} });
+        context.layout.registerView({ id: "one.view", title: "View", defaultZone: "primarySidebar", render: () => null });
+        registerLater = () => {
+          context.commands.registerCommand({ id: "one.late", title: "Late", handler: () => {} });
+        };
+      }
+    });
+    host.register({
+      manifest: { id: "plugin.two", name: "Two", version: "1.0.0", kind: "feature" },
+      activate: (context) => {
+        context.keybindings.registerKeybinding({ id: "two.key", commandId: "one.run", key: "CmdOrCtrl+K" });
+      }
+    });
+
+    await host.start();
+    registerLater?.();
+
+    const owners = host.getContributionOwners();
+    expect(owners.ownerOf("command", "one.run")).toBe("plugin.one");
+    expect(owners.ownerOf("view", "one.view")).toBe("plugin.one");
+    expect(owners.ownerOf("command", "one.late")).toBe("plugin.one");
+    expect(owners.ownerOf("keybinding", "two.key")).toBe("plugin.two");
+    expect(owners.ownerOf("command", "unknown")).toBeUndefined();
+    // The registration itself still reaches the shared registry
+    expect(host.getExtensions().commands.map((command) => command.id)).toEqual(["one.run", "one.late"]);
+  });
+
+  it("forgets the owner when a contribution is disposed", async () => {
+    const host = createHost();
+    let dispose: (() => void) | undefined;
+    host.register({
+      manifest: { id: "plugin.one", name: "One", version: "1.0.0", kind: "core" },
+      activate: (context) => {
+        const registration = context.commands.registerCommand({ id: "one.run", title: "Run", handler: () => {} });
+        dispose = () => registration.dispose();
+      }
+    });
+
+    await host.start();
+    dispose?.();
+
+    expect(host.getContributionOwners().ownerOf("command", "one.run")).toBeUndefined();
+    expect(host.getExtensions().commands).toEqual([]);
+  });
+
+  it("records how long each plugin took to activate, including one that failed", async () => {
+    const host = createHost();
+    host.register({ manifest: { id: "plugin.ok", name: "Ok", version: "1.0.0", kind: "core" }, activate: async () => {} });
+    host.register({
+      manifest: { id: "plugin.broken", name: "Broken", version: "1.0.0", kind: "core" },
+      activate: () => {
+        throw new Error("boom");
+      }
+    });
+
+    await host.start();
+
+    const durations = host.getDiagnostics().activationDurations ?? {};
+    expect(Object.keys(durations).sort()).toEqual(["plugin.broken", "plugin.ok"]);
+    expect(durations["plugin.ok"]).toBeGreaterThanOrEqual(0);
+  });
+
+  it("keeps manifest identity in the diagnostics", async () => {
+    const host = createHost();
+    host.register({ manifest: { id: "plugin.ok", name: "Ok", version: "1.0.0", kind: "core" }, activate: () => {} });
+
+    await host.start([{ id: "plugin.ok", name: "Ok", version: "1.2.3", kind: "feature", description: "Does things", modulePath: "./plugin.ok/module" }]);
+
+    expect(host.getDiagnostics().pluginManifests[0]).toMatchObject({ id: "plugin.ok", name: "Ok", version: "1.2.3", kind: "feature", description: "Does things" });
+  });
+});

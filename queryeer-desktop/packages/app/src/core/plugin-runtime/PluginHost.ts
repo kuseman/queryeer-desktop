@@ -25,6 +25,7 @@ import { createWhenExpressionRegistry } from "../../plugins/core.commands/when-e
 import { getGraphNodeTypeRegistry } from "../../plugins/core.graph/graph-node-type-registry";
 import { registerChangelog } from "../../plugins/core.about/about-service.js";
 import { toDisposable } from "./disposables";
+import { attributeContext, ContributionOwnership, type ContributionOwners } from "./ContributionOwnership";
 import { getNotificationService } from "../../plugins/core.notification/notification-service";
 import { createPayloadbuilderCatalogRegistry } from "../../plugins/core.queryengine.payloadbuilder/catalog-contributions";
 import { JdbcDriverRegistryHost } from "../../renderer/plugins/jdbc-driver-registry";
@@ -88,6 +89,7 @@ export class PluginHost {
   private readonly fileMediator: FileMediator;
   private readonly fileWatcher: FileWatcherService;
   private readonly activePlugins: Plugin[] = [];
+  private readonly contributionOwnership = new ContributionOwnership();
   private readonly jdbcDriverRegistry = new JdbcDriverRegistryHost();
   private startedAt: Date | null = null;
   private diagnostics: PluginDiagnostics = {
@@ -144,6 +146,10 @@ export class PluginHost {
       providedCapabilities: [],
       pluginManifests: discoveredManifests.map((manifest) => ({
         id: manifest.id,
+        name: manifest.name,
+        version: manifest.version,
+        kind: manifest.kind,
+        ...(manifest.description !== undefined ? { description: manifest.description } : {}),
         modulePath: manifest.modulePath,
         dependencies: describeDependencies(manifest.dependencies),
         providesCapabilities: manifest.providesCapabilities ?? [],
@@ -213,6 +219,7 @@ export class PluginHost {
       }
     };
 
+    const activationDurations: Record<string, number> = {};
     const activatedIds = new Set<string>();
     const notActivatedIds = new Set<string>();
     const failedIds = new Set<string>();
@@ -244,7 +251,7 @@ export class PluginHost {
         continue;
       }
       const activeDependencies = new Set([...(plan.dependencies.get(pluginId) ?? [])].filter((dependencyId) => activatedIds.has(dependencyId)));
-      const context: PluginContext = {
+      const context: PluginContext = attributeContext({
         ...sharedContext,
         plugin: Object.freeze({
           id: pluginId,
@@ -256,10 +263,13 @@ export class PluginHost {
         // One-time task ids are per plugin
         settings: { ...sharedContext.settings, runOnce: (id, run) => runCoreSettingsOnce(`${pluginId}/${id}`, run) },
         jdbcDrivers: this.jdbcDriverRegistry.createRegistry(pluginId)
-      };
+      }, pluginId, this.contributionOwnership);
+      const activationStart = performance.now();
       try {
         await plugin.activate(context);
+        activationDurations[pluginId] = performance.now() - activationStart;
       } catch (error) {
+        activationDurations[pluginId] = performance.now() - activationStart;
         // What the plugin registered before it failed stays registered
         console.error(`[plugins] ${pluginId} failed to activate`, error);
         problems.push({ pluginId, state: "failed", message: error instanceof Error ? error.message : String(error) });
@@ -285,7 +295,8 @@ export class PluginHost {
     this.diagnostics = {
       ...this.diagnostics,
       activationOrder: this.activePlugins.map((plugin) => plugin.manifest.id),
-      providedCapabilities: [...providedCapabilities].sort()
+      providedCapabilities: [...providedCapabilities].sort(),
+      activationDurations
     };
     this.startedAt = new Date();
   }
@@ -379,5 +390,10 @@ export class PluginHost {
 
   public getDiagnostics(): PluginDiagnostics {
     return this.diagnostics;
+  }
+
+  /** Which plugin registered each contribution. */
+  public getContributionOwners(): ContributionOwners {
+    return this.contributionOwnership;
   }
 }

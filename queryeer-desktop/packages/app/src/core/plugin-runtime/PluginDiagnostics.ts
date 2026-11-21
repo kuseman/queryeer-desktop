@@ -1,5 +1,9 @@
 export type PluginManifestDiagnostics = {
   id: string;
+  name?: string;
+  version?: string;
+  kind?: string;
+  description?: string;
   modulePath: string;
   dependencies: string[];
   providesCapabilities: string[];
@@ -20,6 +24,8 @@ export type PluginDiagnostics = {
   providedCapabilities: string[];
   pluginManifests: PluginManifestDiagnostics[];
   pluginProblems?: PluginProblem[];
+  /** How long each plugin's `activate` took, in milliseconds, including plugins that failed. */
+  activationDurations?: Record<string, number>;
   externalLoadErrors?: {
     pluginId: string;
     modulePath: string;

@@ -72,7 +72,7 @@ describe("MemoryIndicator", () => {
 
     await vi.waitFor(() => {
       const span = container.querySelector("span");
-      expect(span?.getAttribute("title")).toContain("JVM heap: 512 MB / 2048 MB");
+      expect(span?.getAttribute("title")).toContain("JVM heap: 512 MB / 2.0 GB");
     });
 
     const span = container.querySelector("span");

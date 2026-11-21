@@ -496,7 +496,7 @@ public final class BackendRunnerModule
         }
     }
 
-    private RuntimeStatusResult runtimeStatusSnapshot(PluginRuntime runtime, List<PluginDiscoveryService.DiscoveryFailure> discoveryFailures)
+    static RuntimeStatusResult runtimeStatusSnapshot(PluginRuntime runtime, List<PluginDiscoveryService.DiscoveryFailure> discoveryFailures)
     {
         List<PluginRuntimeStatus> coreStatuses = runtime.statuses();
         List<String> pluginOrder = runtime.plugins()
@@ -513,15 +513,21 @@ public final class BackendRunnerModule
                             .equals(pluginId))
                     .findFirst()
                     .orElse(new PluginRuntimeStatus(pluginId, com.queryeer.backend.core.PluginRuntimeState.LOADED, "Registered"));
-            statuses.add(new RuntimePluginStatus(status.pluginId(), toContractState(status.state()), status.reason()));
-            runtime.plugins()
+            PluginDescriptor descriptor = runtime.plugins()
                     .stream()
-                    .filter(plugin -> plugin.descriptor()
-                            .id()
+                    .map(plugin -> plugin.descriptor())
+                    .filter(candidate -> candidate.id()
                             .equals(status.pluginId()))
                     .findFirst()
-                    .ifPresent(plugin -> providedCapabilities.addAll(plugin.descriptor()
-                            .providesCapabilities()));
+                    .orElse(null);
+            if (descriptor == null)
+            {
+                statuses.add(new RuntimePluginStatus(status.pluginId(), toContractState(status.state()), status.reason()));
+                continue;
+            }
+            statuses.add(new RuntimePluginStatus(status.pluginId(), toContractState(status.state()), status.reason(), descriptor.name(), descriptor.version(), listOrEmpty(descriptor.dependencies()),
+                    descriptor.optionalDependencies(), listOrEmpty(descriptor.providesCapabilities()), listOrEmpty(descriptor.requiredCapabilities())));
+            providedCapabilities.addAll(listOrEmpty(descriptor.providesCapabilities()));
         }
 
         // Plugins skipped at discovery (see discoverPlugins) are listed as failed, unless a plugin with that id runs
@@ -536,7 +542,13 @@ public final class BackendRunnerModule
         return new RuntimeStatusResult(STARTED_AT, statuses, runtime.activatedPluginIds(), new ArrayList<>(providedCapabilities));
     }
 
-    private RuntimePluginState toContractState(com.queryeer.backend.core.PluginRuntimeState state)
+    private static List<String> listOrEmpty(List<String> list)
+    {
+        return list == null ? List.of()
+                : list;
+    }
+
+    private static RuntimePluginState toContractState(com.queryeer.backend.core.PluginRuntimeState state)
     {
         return RuntimePluginState.valueOf(state.name());
     }

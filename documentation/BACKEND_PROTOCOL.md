@@ -150,7 +150,13 @@ Success result:
     {
       "pluginId": "queryengine.payloadbuilder",
       "state": "activated",
-      "reason": "Activated"
+      "reason": "Activated",
+      "name": "Payloadbuilder Query Engine",
+      "version": "0.1.0",
+      "dependencies": ["queryengine.sql.parser"],
+      "optionalDependencies": [],
+      "providesCapabilities": ["queryengine.execute", "queryengine.invoke"],
+      "requiredCapabilities": []
     }
   ],
   "activatedPluginIds": ["queryengine.payloadbuilder"],
@@ -162,6 +168,7 @@ Notes:
 
 - `state` values: `loaded`, `skipped`, `activated`, `failed`, `deactivated`.
 - If `includeCapabilities` is false, backend MAY omit `providedCapabilities`.
+- `name`, `version`, `dependencies`, `optionalDependencies`, `providesCapabilities` and `requiredCapabilities` are the plugin's descriptor. They are optional: a plugin that failed before its descriptor was read (e.g. at discovery) has only `pluginId`, `state` and `reason`. The Observability view uses them to show backend plugin relations.
 
 ## 5.1.2 Handshake success result
 
