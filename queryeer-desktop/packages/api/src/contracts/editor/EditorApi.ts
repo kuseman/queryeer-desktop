@@ -134,7 +134,8 @@ export type CancellationToken = {
   readonly isCancellationRequested: boolean;
 };
 
-export type ProviderResult<T> = T | Promise<T> | null | undefined;
+/** What a provider returns: a value, or nothing (`null`/`undefined`), directly or from a promise (an `async` provider). */
+export type ProviderResult<T> = T | null | undefined | Promise<T | null | undefined>;
 
 export type CodeLens = {
   range: TextRange;
@@ -150,6 +151,7 @@ export type Command = {
 export type Hover = {
   /** The text the hover is about; without it, the word under the mouse. */
   range?: TextRange;
+  /** Empty: no hover, as for `null`. */
   contents: MarkdownString[];
 };
 

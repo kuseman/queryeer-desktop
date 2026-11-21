@@ -19,6 +19,7 @@ Queryeer is an extensible desktop application for data querying and exploration.
 11. [Upgrading Plugins to 0.20.0](#11-upgrading-plugins-to-0200)
 12. [Upgrading Plugins to 0.21.0](#12-upgrading-plugins-to-0210)
 13. [Upgrading Plugins to 0.22.0](#13-upgrading-plugins-to-0220)
+14. [Upgrading Plugins to 0.23.0](#14-upgrading-plugins-to-0230)
 
 ---
 
@@ -1639,6 +1640,12 @@ Backend:
 - **`DependencyExtension.whenDependencyActive` logs failures instead of throwing them** (§3.3.2). It no longer declares `throws Exception`. A `catch (Exception e)` around it still compiles; a catch of a specific checked exception (e.g. `IOException`) doesn't, because nothing in the `try` throws it any more. A plugin that needs Queryeer 0.22 or later can drop its own catch. A plugin that logs an error while activating now has it in its status: "Activated, with an error: …".
 - **`PayloadbuilderCatalogSqlEditorServices.systemTables()`**: the completion, hover and symbols Queryeer's built-in catalogs use, for a plugin's catalog (§10.1). A plugin that calls it needs Queryeer 0.22 or later: it is called while editing, not at activation, so on 0.21 it fails then.
 - **`PayloadbuilderCatalogProviderContributor.buildCatalogPatch` reports changed input properties by default** (§10.1), as it already did for a catalog without a provider. A contributor that relied on the empty default, and whose input properties a query can change, now has those changes shown in the file's catalog panel.
+
+## 14. Upgrading Plugins to 0.23.0
+
+Frontend:
+
+- **An `async` provider can return `null` or `undefined` for "nothing"** (`ProviderResult`). In 0.22 only a provider that wasn't `async` could, so the `async` completion example in §7.2.1 didn't compile against 0.22's types. A plugin that supports 0.22 returns an empty result from an `async` provider instead: `{ suggestions: [] }` for completion, `{ contents: [] }` for a hover (shown as none).
 
 ## Reference: Example Plugins
 
