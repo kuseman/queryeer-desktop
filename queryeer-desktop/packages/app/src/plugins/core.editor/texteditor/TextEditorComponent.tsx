@@ -313,7 +313,9 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
 
     disposablesRef.current.push(
       editor.onDidFocusEditorWidget(() => {
-        activateEditorHandle(file);
+        // The file the editor shows now. One editor serves every tab of its group, and this listener outlives the `file`
+        // it was created with, so passing `file` would publish the group's first tab as active.
+        activateEditorHandle();
       })
     );
 
@@ -399,7 +401,8 @@ export function TextEditorComponent({ file, registry, editorRegistryHost, outlin
       disposablesRef.current.push({ dispose: () => hoverDecorations.clear() });
     }
 
-    activateEditorHandle(file);
+    // A tab switch while Monaco loaded queued its file in pendingFileRef; that file is the one loaded below
+    activateEditorHandle(pendingFileRef.current ?? fileToLoad);
 
     disposablesRef.current.push(api.onDidChangeModelContent((event) => {
       updateNewlineDecorationsRef.current();
