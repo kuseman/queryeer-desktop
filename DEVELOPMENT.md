@@ -169,9 +169,40 @@ The repository `plugins/builtin` directory is development scaffolding only. Rele
 GitHub release automation is split into two workflows:
 
 - `create-release.yml`: manually dispatched with `major`, `minor`, or `patch`. It computes the next `vX.Y.Z`, bumps desktop and backend to that release version, commits and tags the release, then moves the backend Maven reactor to the next `-SNAPSHOT` version.
-- `release.yml`: triggered by `v*` tags. It verifies the backend, uploads the whitelisted public backend artifacts for asynchronous Maven Central publication, publishes `@queryeer/api` to npmjs, builds unsigned Windows, macOS, and Linux distributions in a matrix, generates the release changelog, and publishes a real GitHub release with the platform artifacts. GitHub release creation does not wait for Maven Central. Manual `workflow_dispatch` runs exercise the read-only release-history and Central-coordinate checks but skip Maven Central, npmjs, and GitHub release publishing.
+- `release.yml`: triggered by `v*` tags. It verifies the backend, uploads the whitelisted public backend artifacts for asynchronous Maven Central publication, stages `@queryeer/api` on npmjs (see [npm Publishing](#npm-publishing)), builds unsigned Windows, macOS, and Linux distributions in a matrix, generates the release changelog, and publishes a real GitHub release with the platform artifacts. GitHub release creation does not wait for Maven Central. Manual `workflow_dispatch` runs exercise the read-only release-history and Central-coordinate checks but skip Maven Central, npmjs, and GitHub release publishing.
 - `recover-maven-release.yml`: manually verifies an existing Central deployment and release coordinates. It waits for in-progress deployments, resumes validated deployments, and only re-uploads after Central reports the original deployment as failed and no release coordinates exist.
 - `recover-release.yml`: manually creates a missing GitHub release from distribution artifacts produced by an earlier release workflow run after verifying that the run commit matches the release tag.
+
+#### npm Publishing
+
+`@queryeer/api` is published with npm trusted publishing (GitHub OIDC); no npm token is stored in the repository. The trusted publisher on npmjs.com is `kuseman/queryeer-desktop`, workflow `release.yml`, and it is configured as **stage-only**: the `publish-npm` job runs `npm stage publish`, which puts the version in the npm stage queue instead of making it live.
+
+After every release run, a maintainer must approve the staged version (2FA required), either:
+
+- on https://www.npmjs.com/package/@queryeer/api (staged versions), or
+- with `npm stage approve <stage-id>`. The stage id is in the `publish-npm` job summary.
+
+Approval waits for npm's malware scan. The GitHub Release and Maven Central do not wait for approval, so approve right after the run; until then plugins cannot install the new `@queryeer/api` version.
+
+The npm CLI version in `publish-npm` is pinned exactly (that job can mint a publish token). Staged publishing needs npm >= 11.15.0; bump the pin deliberately.
+
+**Manual recovery publish.** If the `publish-npm` job fails, publish from the release tag on a workstation:
+
+```bash
+git checkout vX.Y.Z
+cd queryeer-desktop
+npm ci
+npm run -w @queryeer/api build
+npm login                 # opens the browser to sign in
+npm publish -w @queryeer/api --access public
+```
+
+Use `npm stage publish` instead of `npm publish` to keep the approval step. 2FA works as follows:
+
+- Passkey/security key: npm prints `Authenticate your account at: https://www.npmjs.com/auth/cli/...`, offers to open the browser on ENTER, and waits until you confirm there.
+- Authenticator app: npm prompts `Enter OTP:` in the terminal, or pass `--otp=123456`.
+
+`npm login` sessions are short-lived (about 2 hours), so log in right before publishing. The stage-only setting restricts only the workflow's OIDC publishing, not maintainers publishing with their own account.
 
 Artifacts do not use a trusted publisher certificate for now. macOS builds are ad-hoc signed for application integrity, but downloads may be blocked by Gatekeeper until users explicitly open the app or remove quarantine; public-friendly macOS releases will require Developer ID signing and notarization later.
 
