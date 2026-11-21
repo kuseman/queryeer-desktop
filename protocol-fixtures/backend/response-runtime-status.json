@@ -13,7 +13,13 @@
       {
         "pluginId": "queryengine.jdbc",
         "state": "activated",
-        "reason": "Activated"
+        "reason": "Activated",
+        "name": "JDBC Query Engine",
+        "version": "0.1.0",
+        "dependencies": ["queryengine.sql.parser"],
+        "optionalDependencies": [],
+        "providesCapabilities": ["queryengine.jdbc.connection"],
+        "requiredCapabilities": []
       }
     ],
     "activatedPluginIds": [

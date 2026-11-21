@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { DevelopmentPluginEntry, ManagedPluginInventory, ManagedPluginInventoryEntry } from "@queryeer/api/plugin/PluginInventory";
 import type { Plugin } from "@queryeer/api/plugin/Plugin";
+import { revealInObservability } from "../core.observability/navigation";
 
 export const PLUGIN_MANAGER_EDITOR_ID = "core.plugins.editor";
 export const PLUGIN_MANAGER_MIME_TYPE = "application/x-queryeer-plugin-manager";
@@ -21,7 +22,14 @@ export const corePluginsPlugin: Plugin = {
       title: "Plugin Manager",
       order: 30,
       supportedMimeTypes: [PLUGIN_MANAGER_MIME_TYPE],
-      render: () => <PluginManagerEditor />
+      render: () => (
+        <PluginManagerEditor
+          onShowInObservability={(pluginId) => {
+            revealInObservability({ section: "plugins", pluginId });
+            context.commands.executeCommand("core.observability.open").catch(() => undefined);
+          }}
+        />
+      )
     });
 
     context.commands.registerCommand({
@@ -58,7 +66,12 @@ type InventoryState = {
   installing: boolean;
 };
 
-export function PluginManagerEditor() {
+export type PluginManagerEditorProps = {
+  /** Opens Observability on a plugin's runtime details. The link is hidden without it. */
+  onShowInObservability?: (pluginId: string) => void;
+};
+
+export function PluginManagerEditor({ onShowInObservability }: PluginManagerEditorProps = {}) {
   const [state, setState] = useState<InventoryState>({
     inventory: null,
     loading: true,
@@ -221,7 +234,7 @@ export function PluginManagerEditor() {
           </p>
           <div className="plugin-manager-list">
             {developmentPlugins.map((plugin) => (
-              <DevelopmentPluginCard key={plugin.sourcePath} plugin={plugin} />
+              <DevelopmentPluginCard key={plugin.sourcePath} plugin={plugin} onShowInObservability={onShowInObservability} />
             ))}
           </div>
           <h3 className="plugin-manager-section-title">Installed plugins</h3>
@@ -243,6 +256,7 @@ export function PluginManagerEditor() {
               updating={state.updatingPluginId === plugin.id}
               onToggle={() => void handleToggle(plugin)}
               onUninstall={() => void handleUninstall(plugin.id)}
+              onShowInObservability={onShowInObservability}
             />
           ))}
         </div>
@@ -255,12 +269,14 @@ function PluginInventoryCard({
   plugin,
   updating,
   onToggle,
-  onUninstall
+  onUninstall,
+  onShowInObservability
 }: {
   plugin: ManagedPluginInventoryEntry;
   updating: boolean;
   onToggle: () => void;
   onUninstall: () => void;
+  onShowInObservability?: (pluginId: string) => void;
 }) {
   const canToggle = plugin.status !== "missing";
   const pendingUninstall = plugin.uninstallPending === true;
@@ -323,12 +339,23 @@ function PluginInventoryCard({
           {updating ? "Updating..." : plugin.enabled ? "Disable" : "Enable"}
         </button>
         {!pendingUninstall && <button type="button" onClick={onUninstall} disabled={updating}>Uninstall</button>}
+        {onShowInObservability && (
+          <button type="button" className="plugin-manager-observability-link" onClick={() => onShowInObservability(plugin.id)}>
+            Show in Observability
+          </button>
+        )}
       </div>
     </article>
   );
 }
 
-function DevelopmentPluginCard({ plugin }: { plugin: DevelopmentPluginEntry }) {
+function DevelopmentPluginCard({
+  plugin,
+  onShowInObservability
+}: {
+  plugin: DevelopmentPluginEntry;
+  onShowInObservability?: (pluginId: string) => void;
+}) {
   return (
     <article className={`plugin-manager-card plugin-manager-card-${plugin.error ? "invalid" : "available"}`}>
       <div className="plugin-manager-card-main">
@@ -355,6 +382,13 @@ function DevelopmentPluginCard({ plugin }: { plugin: DevelopmentPluginEntry }) {
         </div>
       </dl>
       {plugin.error && <p className="plugin-manager-error-text">{plugin.error}</p>}
+      {onShowInObservability && !plugin.error && (
+        <div className="plugin-manager-card-actions">
+          <button type="button" className="plugin-manager-observability-link" onClick={() => onShowInObservability(plugin.id)}>
+            Show in Observability
+          </button>
+        </div>
+      )}
     </article>
   );
 }

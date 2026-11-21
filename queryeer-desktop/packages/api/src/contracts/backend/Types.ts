@@ -100,6 +100,15 @@ export type RuntimePluginStatus = {
   pluginId: string;
   state: RuntimePluginState;
   reason?: string;
+  /** Descriptor fields: set for discovered plugins, omitted for plugins that failed before their descriptor was read. */
+  name?: string;
+  version?: string;
+  /** Ids of the plugins this plugin can't load without. */
+  dependencies?: string[];
+  /** Ids of the plugins this plugin uses when they are loaded. */
+  optionalDependencies?: string[];
+  providesCapabilities?: string[];
+  requiredCapabilities?: string[];
 };
 
 export type RuntimeStatusParams = {

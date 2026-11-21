@@ -9,7 +9,7 @@ import { RendererFileWatcherService } from "../file-watcher/file-watcher-service
 import { RendererWorkspaceService } from "../workspace/workspace-service";
 import { OwnFileWriteTracker } from "../workspace/own-file-write-tracker";
 import { discoverPluginModules } from "../../plugins/discovery";
-import { setRuntimeData } from "../../plugins/core.observability/runtime-data";
+import { setRuntimeDataSource } from "../../plugins/core.observability/runtime-data";
 import { createKeybindingService } from "../../plugins/core.commands/keybinding-service";
 import {
   resolveKeybindingState
@@ -501,12 +501,12 @@ export async function bootstrapShell() {
   };
   document.addEventListener("keydown", handleZoomKeyboard);
 
-  setRuntimeData({
-    hostState: host.getState(),
-    diagnostics: host.getDiagnostics(),
-    extensions: host.getExtensions(),
-    keybindingDiagnostics: keybindingService.diagnostics(),
-    commandExecution: { commandId: "", executed: false }
+  setRuntimeDataSource({
+    getHostState: () => host.getState(),
+    getDiagnostics: () => host.getDiagnostics(),
+    getExtensions: () => host.getExtensions(),
+    getKeybindingDiagnostics: () => keybindingService.diagnostics(),
+    getContributionOwners: () => host.getContributionOwners()
   });
 
   return {

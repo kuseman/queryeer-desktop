@@ -128,6 +128,31 @@ describe("core.plugins plugin", () => {
     });
   });
 
+  it("links each plugin to Observability when a handler is given", async () => {
+    const onShowInObservability = vi.fn();
+    await act(async () => {
+      root.render(<PluginManagerEditor onShowInObservability={onShowInObservability} />);
+      await Promise.resolve();
+    });
+
+    const link = Array.from(rootElement.querySelectorAll("button")).find((button) => button.textContent === "Show in Observability");
+    await act(async () => {
+      link?.click();
+    });
+
+    expect(onShowInObservability).toHaveBeenCalledWith("external.one");
+  });
+
+  it("hides the Observability link without a handler", async () => {
+    await act(async () => {
+      root.render(<PluginManagerEditor />);
+      await Promise.resolve();
+    });
+
+    expect(rootElement.textContent).toContain("External One");
+    expect(rootElement.textContent).not.toContain("Show in Observability");
+  });
+
   it("renders external inventory and toggles restart-based enablement", async () => {
     await act(async () => {
       root.render(<PluginManagerEditor />);

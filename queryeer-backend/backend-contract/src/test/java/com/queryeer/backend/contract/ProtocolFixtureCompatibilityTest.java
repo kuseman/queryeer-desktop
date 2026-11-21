@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Assertions;
@@ -104,6 +105,16 @@ class ProtocolFixtureCompatibilityTest
         Assertions.assertNotNull(result.startedAt());
         Assertions.assertFalse(result.pluginStatuses()
                 .isEmpty());
+        // Descriptor fields are optional: absent on one status, present on the other
+        Assertions.assertNull(result.pluginStatuses()
+                .get(0)
+                .dependencies());
+        Assertions.assertEquals(List.of("queryengine.sql.parser"), result.pluginStatuses()
+                .get(1)
+                .dependencies());
+        Assertions.assertEquals("JDBC Query Engine", result.pluginStatuses()
+                .get(1)
+                .name());
     }
 
     @Test

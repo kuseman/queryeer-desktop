@@ -246,3 +246,12 @@
     justify-content: flex-start;
   }
 }
+
+/* Sits at the start of the right-aligned action row */
+.plugin-manager-card-actions .plugin-manager-observability-link {
+  order: -1;
+  margin-right: auto;
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent-muted, var(--accent));
+}
