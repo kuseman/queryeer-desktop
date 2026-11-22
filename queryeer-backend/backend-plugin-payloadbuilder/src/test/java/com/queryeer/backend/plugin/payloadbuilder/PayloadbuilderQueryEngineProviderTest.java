@@ -16,6 +16,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mockito;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -998,6 +1000,43 @@ class PayloadbuilderQueryEngineProviderTest
     }
 
     @SuppressWarnings("unchecked")
+    @ParameterizedTest
+    @CsvSource(
+            delimiter = '|',
+            value = { //
+                    "SELECT p. FROM sem#shop.orders p|9|p._id", //
+                    "SELECT * FROM sem#shop.orders p WHERE p.|-1|p._id", //
+                    "'SELECT * FROM sem#shop.orders WHERE '|-1|_id", //
+                    // A quoted part: the system tables list the name unquoted
+                    "SELECT p. FROM sem#\"shop\".orders p|9|p._id", //
+                    "'SELECT  FROM sem#\"shop\".orders p'|7|p._id", //
+                    "SELECT * FROM sem#\"shop\".\"orders\" p WHERE p.|-1|p._id", //
+                    // A literal quote in the name: unquoted once, by the SQL parser
+                    "SELECT * FROM sem#shop.\"my \"\"x\"\"\" p WHERE p.|-1|p._id", //
+                    "'SELECT  FROM sem#shop.\"my \"\"x\"\"\" p'|7|p._id", //
+                    "SELECT p. FROM sem#\"shop\".\"my \"\"x\"\"\" p|9|p._id" })
+    void invokeSqlCompleteCompletesColumnsOfADottedSystemTableName(String text, int cursorOffset, String label)
+    {
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new TestSemanticCatalogProvider(true));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        // -1: the cursor at the end of the text
+        int column = (cursorOffset < 0 ? text.length()
+                : cursorOffset) + 1;
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete", Map.of("fileId", "file-1", "version", 1L, "text", text, "engineState",
+                semanticEngineStateWithoutDefault(), "cursor", Map.of("line", 1, "column", column), "limits", Map.of("maxItems", 50)));
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+        Assertions.assertTrue(items.stream()
+                .anyMatch(item -> label.equals(item.get("label"))),
+                () -> text + " -> "
+                      + items.stream()
+                              .map(item -> item.get("label"))
+                              .toList());
+    }
+
+    @SuppressWarnings("unchecked")
     @Test
     void invokeSqlCompleteDoesNotQualifyColumnsForCatalogQualifiedUnaliasedSystemTable()
     {
@@ -1054,6 +1093,26 @@ class PayloadbuilderQueryEngineProviderTest
                 .get("value"));
         Assertions.assertTrue(value.contains("Payloadbuilder Table: sem#products"), value);
         Assertions.assertTrue(value.contains("| id | int |"), value);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlHoverResolvesAQuotedSystemTableName()
+    {
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new TestSemanticCatalogProvider(true));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        String text = "SELECT * FROM sem#\"shop\".orders p";
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.hover",
+                Map.of("fileId", "file-1", "text", text, "engineState", semanticEngineStateWithoutDefault(), "cursor", Map.of("line", 1, "column", text.indexOf("orders") + 2)));
+
+        Assertions.assertNotNull(result, "No hover on the quoted table name");
+        List<Map<String, Object>> contents = (List<Map<String, Object>>) result.get("contents");
+        String value = String.valueOf(contents.get(0)
+                .get("value"));
+        Assertions.assertTrue(value.contains("sem#shop.orders"), value);
+        Assertions.assertTrue(value.contains("_id"), value);
     }
 
     @SuppressWarnings("unchecked")
@@ -1922,6 +1981,12 @@ class PayloadbuilderQueryEngineProviderTest
         private static final String CATALOG_ID = "test.semantic";
         private static final String PRODUCTS_TABLE = "products";
         private static final String DASHED_TABLE = "sales.order-items";
+        /** Named like MongoDB's catalog lists collections: database.collection */
+        private static final String DOTTED_TABLE = "shop.orders";
+        /** A name with a literal quote: written shop."my ""x""" */
+        private static final String QUOTE_TABLE = "shop.my \"x\"";
+        /** Columns of the database.collection tables, as table/name pairs */
+        private static final List<List<String>> DOTTED_TABLE_COLUMNS = List.of(List.of(DOTTED_TABLE, "_id"), List.of(DOTTED_TABLE, "key"), List.of(QUOTE_TABLE, "_id"));
         private static final String PRODUCTS_BY_CATEGORY_FUNCTION = "products_by_category";
         private static final Schema PRODUCTS_SCHEMA = Schema.of(Column.of("id", ResolvedType.INT), Column.of("name", ResolvedType.STRING), Column.of("category", ResolvedType.STRING),
                 Column.of("external-id", ResolvedType.STRING), Column.of("\"@timestamp\"", ResolvedType.STRING));
@@ -1958,14 +2023,21 @@ class PayloadbuilderQueryEngineProviderTest
             if (SYS_TABLES.equalsIgnoreCase(systemTable))
             {
                 Schema schema = Schema.of(Column.of(SYS_TABLES_NAME, Column.Type.String));
-                return _ -> TupleIterator.singleton(new se.kuseman.payloadbuilder.api.execution.ObjectTupleVector(schema, 2, (row, _) -> row == 0 ? PRODUCTS_TABLE
-                        : DASHED_TABLE));
+                List<String> tables = List.of(PRODUCTS_TABLE, DASHED_TABLE, DOTTED_TABLE, QUOTE_TABLE);
+                return _ -> TupleIterator.singleton(new se.kuseman.payloadbuilder.api.execution.ObjectTupleVector(schema, tables.size(), (row, _) -> tables.get(row)));
             }
             if (SYS_COLUMNS.equalsIgnoreCase(systemTable))
             {
                 Schema schema = Schema.of(Column.of(SYS_COLUMNS_TABLE, Column.Type.String), Column.of(SYS_COLUMNS_NAME, Column.Type.String), Column.of("type", Column.Type.String));
-                return _ -> TupleIterator.singleton(new se.kuseman.payloadbuilder.api.execution.ObjectTupleVector(schema, PRODUCTS_SCHEMA.getSize(), (row, col) ->
+                int productRows = PRODUCTS_SCHEMA.getSize();
+                return _ -> TupleIterator.singleton(new se.kuseman.payloadbuilder.api.execution.ObjectTupleVector(schema, productRows + DOTTED_TABLE_COLUMNS.size(), (row, col) ->
                 {
+                    if (row >= productRows)
+                    {
+                        List<String> tableColumn = DOTTED_TABLE_COLUMNS.get(row - productRows);
+                        return col <= 1 ? tableColumn.get(col)
+                                : null;
+                    }
                     Column column = PRODUCTS_SCHEMA.getColumns()
                             .get(row);
                     return switch (col)

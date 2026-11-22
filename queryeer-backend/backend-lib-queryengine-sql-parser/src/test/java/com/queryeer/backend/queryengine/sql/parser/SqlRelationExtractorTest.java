@@ -51,6 +51,16 @@ class SqlRelationExtractorTest
     }
 
     @Test
+    void extractsCatalogPrefixedNameWithAQuotedFirstPart()
+    {
+        // "mongo#" scans as one word and the quoted part as the next token
+        assertEquals("mongo#qmongo_showcase.orders", SqlRelationExtractor.extractAliases("SELECT x.\nFROM mongo#\"qmongo_showcase\".orders x", 1, 10)
+                .get("x"));
+        assertEquals("mongo#db.my orders", SqlRelationExtractor.extractAliases("SELECT * FROM mongo#\"db\".\"my orders\" x WHERE x.", 1, 47)
+                .get("x"));
+    }
+
+    @Test
     void doesNotCaptureClauseKeywordAsAlias()
     {
         assertEquals(Map.of("table_a", "table_a"), SqlRelationExtractor.extractAliases("SELECT * FROM table_a WHERE id = 1", 1, 30));
