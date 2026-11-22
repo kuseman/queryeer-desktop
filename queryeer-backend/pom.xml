@@ -77,9 +77,10 @@
 
     <distributionManagement>
         <snapshotRepository>
-            <id>sonatype.snapshots</id>
+            <!-- "central": the server id the release and snapshot workflows give credentials (setup-java server-id), as for central-publishing's publishingServerId -->
+            <id>central</id>
             <name>Sonatype Snapshot Repository</name>
-            <url>https://central.sonatype.com/repository/maven-snapshots</url>
+            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
         </snapshotRepository>
     </distributionManagement>
 
