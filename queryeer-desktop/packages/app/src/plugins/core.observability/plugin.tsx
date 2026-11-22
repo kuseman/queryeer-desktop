@@ -7,6 +7,7 @@ import { MemoryIndicator } from "./MemoryIndicator";
 import { formatDuration } from "./model";
 import { revealInObservability } from "./navigation";
 import { ObservabilityEditor } from "./ObservabilityEditor";
+import { ObservabilityNav } from "./ObservabilityNav";
 import { watchBackendPluginProblems } from "./plugin-status-notifications";
 
 export const OBSERVABILITY_MIME_TYPE = "application/x-observability";
@@ -35,6 +36,18 @@ export const coreObservabilityPlugin: Plugin = {
           openFile={(fileId) => context.fileMediator.setActiveFileId(fileId)}
         />
       )
+    });
+
+    // The sections, in the sidebar while the Observability tab is active, so the editor keeps its whole width
+    context.layout.registerView({
+      id: "core.observability.navigation",
+      title: "Observability",
+      defaultZone: "primarySidebar",
+      order: 5,
+      canMoveZones: true,
+      canCollapse: true,
+      when: `activeFile?.mimeType == '${OBSERVABILITY_MIME_TYPE}'`,
+      render: () => <ObservabilityNav listFiles={() => context.files.listFiles()} />
     });
 
     context.layout.registerStatusItem({

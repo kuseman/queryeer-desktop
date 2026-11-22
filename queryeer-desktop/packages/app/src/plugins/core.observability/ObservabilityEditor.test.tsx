@@ -9,6 +9,7 @@ import type { ExtensionSnapshot } from "../../core/plugin-runtime/ExtensionRegis
 import type { PluginDiagnostics } from "../../core/plugin-runtime/PluginDiagnostics";
 import { revealInObservability, resetNavigationForTests } from "./navigation";
 import { buildReport, ObservabilityEditor } from "./ObservabilityEditor";
+import { ObservabilityNav } from "./ObservabilityNav";
 import { setRuntimeDataSource } from "./runtime-data";
 import { resetHistoryForTests } from "./use-observability-data";
 
@@ -111,7 +112,13 @@ describe("ObservabilityEditor", () => {
 
   const render = async (files: FileEntity[] = []) => {
     await act(async () => {
-      root.render(<ObservabilityEditor listFiles={() => files} openFile={openFile} />);
+      // The sidebar menu and the editor, as the shell shows them side by side
+      root.render(
+        <>
+          <ObservabilityNav listFiles={() => files} />
+          <ObservabilityEditor listFiles={() => files} openFile={openFile} />
+        </>
+      );
     });
   };
 
@@ -230,7 +237,15 @@ describe("ObservabilityEditor", () => {
     expect(relation("Required by")?.textContent).toContain("backend.postgres");
   });
 
-  it("navigates when asked to reveal a location, and opens on a pending one", async () => {
+  it("polls once for the sidebar menu and the editor together", async () => {
+    install(false);
+    await render();
+
+    expect(window.appShell.getBackendStatus).toHaveBeenCalledTimes(1);
+    expect(container.querySelector(".obs-side-nav .obs-nav-count")?.textContent).toBe("4");
+  });
+
+  it("opens on a location revealed before it was open, and navigates to one revealed while open", async () => {
     install(true);
     revealInObservability({ section: "plugins", filter: "problems" });
     await render();
@@ -243,6 +258,40 @@ describe("ObservabilityEditor", () => {
     });
     expect(container.querySelector('[aria-current="page"]')?.textContent).toContain("Backend");
     expect(container.textContent).toContain("queryeer-backend 1.0");
+  });
+
+  it("keeps the newest backend status when an older poll answers last", async () => {
+    install(false);
+    let answerSlowPoll: () => void = () => undefined;
+    const getBackendStatus = vi
+      .fn<() => Promise<BackendGatewayStatus>>()
+      .mockImplementationOnce(() => new Promise((resolve) => (answerSlowPoll = () => resolve(status({ state: "unavailable" })))))
+      .mockImplementation(async () => status());
+    window.appShell = { ...window.appShell, getBackendStatus } as typeof window.appShell;
+    await render();
+
+    // Refresh answers at once, then the first poll answers with an older status
+    await click(buttonWithText("Refresh"));
+    await act(async () => answerSlowPoll());
+
+    const backendTile = container.querySelector(".obs-stats")?.textContent ?? "";
+    expect(backendTile).toContain("healthy");
+    expect(backendTile).not.toContain("unavailable");
+  });
+
+  it("keeps the section but not a revealed filter when reopened", async () => {
+    install(true);
+    revealInObservability({ section: "plugins", filter: "problems" });
+    await render();
+    const names = () => [...container.querySelectorAll(".obs-plugin-item-name")].map((element) => element.textContent);
+    expect(names()).toEqual(["Plugin Two"]);
+
+    // Closed, then opened again from the menu
+    act(() => root.render(<></>));
+    await render();
+
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain("Plugins");
+    expect(names()).toEqual(["Plugin Two", "backend.jdbc", "Plugin One", "Postgres dialect"]);
   });
 
   it("links open files to their tab and shows the bound engine", async () => {
