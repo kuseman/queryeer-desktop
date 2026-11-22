@@ -1,0 +1,68 @@
+name: Snapshot
+run-name: Snapshot from ${{ github.ref_name }}
+
+# Publishes the backend's -SNAPSHOT version to Sonatype's snapshot repository
+# (https://central.sonatype.com/repository/maven-snapshots/), so plugins can build against unreleased core.
+#
+# - Maven only: it creates no tag, so release.yml (npm, GitHub Release, Maven Central) doesn't run.
+# - The same modules as a release: backend-api, backend-contract and the shared libraries. Modules with
+#   skipPublishing (core, runner, built-in plugins) are left out, as in a release.
+# - Refuses a version without -SNAPSHOT, so it can never publish a release.
+# - Run it from the branch whose snapshot you want (Actions > Snapshot > Run workflow > branch).
+# - Needs "Enable SNAPSHOTs" on the com.queryeer namespace in the Central Portal. Snapshots are overwritten by
+#   the next run and cleaned up by Sonatype after about 90 days.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: snapshot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish-snapshot:
+    name: Publish Maven snapshot
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          java-version: "25.0.5+0.3.1"
+          distribution: zulu
+          cache: maven
+          server-id: central
+          server-username: MAVEN_USERNAME
+          server-password: MAVEN_PASSWORD
+          gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+
+      - name: Make Maven wrapper executable
+        run: chmod +x ./queryeer-backend/mvnw
+
+      - name: Require a snapshot version
+        shell: bash
+        run: |
+          VERSION=$(./queryeer-backend/mvnw -q -f queryeer-backend/pom.xml -DforceStdout help:evaluate -Dexpression=project.version)
+          case "$VERSION" in
+            *-SNAPSHOT)
+              echo "Publishing $VERSION from ${GITHUB_REF_NAME}." ;;
+            *)
+              echo "::error::Backend version $VERSION is not a -SNAPSHOT version. Releases go through Create Release and release.yml."
+              exit 1 ;;
+          esac
+          echo "## Maven snapshot $VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "From \`${GITHUB_REF_NAME}\` ($GITHUB_SHA)." >> "$GITHUB_STEP_SUMMARY"
+
+      # The release profile's central-publishing-maven-plugin sends -SNAPSHOT versions to the snapshot repository
+      # instead of a Central deployment. Tests run, as a snapshot is something plugins build against.
+      - name: Build, test and publish snapshot
+        run: ./queryeer-backend/mvnw -B -f queryeer-backend/pom.xml clean deploy -DperformRelease=true
+        env:
+          MAVEN_USERNAME: ${{ secrets.OSS_SONATYPE_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.OSS_SONATYPE_PASSWORD }}
+          GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
