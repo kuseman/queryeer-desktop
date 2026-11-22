@@ -199,12 +199,11 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
             // First try: qualifier is an actual table name in metadata (guards against
             // incorrect TreeSitter aliases for catalog#table references where the real
             // table name is mistaken for an alias).
-            String tableName = hasTable(metadata, qualifier) ? qualifier
-                    : null;
+            String tableName = tableNameInMetadata(metadata, qualifier);
             if (tableName == null)
             {
                 // Fallback: qualifier may be a user-defined alias (aliases are already normalized)
-                tableName = resolveTableNameCandidate(request.catalogAlias(), request.defaultCatalogAlias(), aliases.getOrDefault(qualifier.toLowerCase(Locale.ROOT), qualifier), metadata);
+                tableName = resolveTableNameCandidate(request.catalogAlias(), request.defaultCatalogAlias(), aliasTargetOrName(aliases, qualifier), metadata);
             }
             if (tableName == null)
             {
@@ -278,12 +277,11 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
             // First try: qualifier is an actual table name in metadata (guards against
             // incorrect TreeSitter aliases for catalog#table references where the real
             // table name is mistaken for an alias).
-            String tableName = hasTable(metadata, qualifier) ? qualifier
-                    : null;
+            String tableName = tableNameInMetadata(metadata, qualifier);
             if (tableName == null)
             {
                 // Fallback: qualifier may be a user-defined alias
-                tableName = resolveTableNameCandidate(catalogAlias, defaultCatalogAlias, aliases.getOrDefault(qualifier.toLowerCase(Locale.ROOT), qualifier), metadata);
+                tableName = resolveTableNameCandidate(catalogAlias, defaultCatalogAlias, aliasTargetOrName(aliases, qualifier), metadata);
             }
             if (tableName == null)
             {
@@ -328,9 +326,10 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
         // incorrect aliases produced by TreeSitter when it parses catalog#table
         // (e.g. "es#_doc") as two separate identifiers, treating the real table name
         // as an implicit alias.
-        if (hasTable(metadata, token))
+        String tokenTableName = tableNameInMetadata(metadata, token);
+        if (tokenTableName != null)
         {
-            String resolvedTableName = token;
+            String resolvedTableName = tokenTableName;
             return metadata.tables()
                     .stream()
                     .filter(t -> t.name()
@@ -341,8 +340,7 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
 
         // Fallback: token may be a user-defined alias → resolve through aliases map
         aliases = normalizedAliases(aliases);
-        String resolved = aliases.getOrDefault(Objects.toString(token, "")
-                .toLowerCase(Locale.ROOT), token);
+        String resolved = aliasTargetOrName(aliases, token);
         String tableName = resolveTableNameCandidate(catalogAlias, defaultCatalogAlias, resolved, metadata);
         if (tableName == null)
         {
@@ -635,7 +633,7 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
         }
         String alias = Pattern.quote(catalogAlias);
         String separator = Pattern.quote(String.valueOf(PayloadbuilderCatalogSqlEditorServices.CATALOG_PREFIX_SEPARATOR));
-        return Pattern.compile("(?i)\\b" + alias + separator + "[A-Z0-9_.$]+\\s+(?:AS\\s+)?" + alias + "\\b")
+        return Pattern.compile("(?i)\\b" + alias + separator + "[A-Z0-9_.$\"]+\\s+(?:AS\\s+)?" + alias + "\\b")
                 .matcher(text)
                 .find();
     }
@@ -653,6 +651,74 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
             return rawName;
         }
         return null;
+    }
+
+    /** A qualifier or token as typed in the editor that names a listed table: as typed, or with its quoted parts unquoted ({@code "shop".orders}). */
+    private static String tableNameInMetadata(Metadata metadata, String raw)
+    {
+        if (isBlank(raw))
+        {
+            return null;
+        }
+        if (hasTable(metadata, raw))
+        {
+            return raw;
+        }
+        String unquoted = unquoteIdentifierParts(raw);
+        return hasTable(metadata, unquoted) ? unquoted
+                : null;
+    }
+
+    /**
+     * What a qualifier or token as typed in the editor refers to: the table of the alias it names (alias keys and targets come from the SQL parser, unquoted), else the name itself unquoted. Unquoting
+     * only the typed text keeps a target such as {@code shop.my "x"} from being unquoted twice.
+     */
+    private static String aliasTargetOrName(Map<String, String> aliases, String raw)
+    {
+        String typed = Objects.toString(raw, "");
+        String unquoted = unquoteIdentifierParts(typed);
+        String target = aliases.get(typed.toLowerCase(Locale.ROOT));
+        if (target == null)
+        {
+            target = aliases.get(unquoted.toLowerCase(Locale.ROOT));
+        }
+        return target != null ? target
+                : unquoted;
+    }
+
+    /**
+     * A table name as the catalog's system tables list it: quoted identifier parts unquoted, so {@code "db"."my ""x""".coll} is {@code db.my "x".coll}. Payloadbuilder text may quote any part
+     * ({@code mongo#"qmongo_showcase".orders}); the system tables never do.
+     */
+    static String unquoteIdentifierParts(String value)
+    {
+        if (value == null
+                || value.indexOf('"') < 0)
+        {
+            return value;
+        }
+        StringBuilder result = new StringBuilder(value.length());
+        boolean quoted = false;
+        for (int i = 0; i < value.length(); i++)
+        {
+            char c = value.charAt(i);
+            if (c != '"')
+            {
+                result.append(c);
+            }
+            else if (quoted
+                    && i + 1 < value.length()
+                    && value.charAt(i + 1) == '"')
+            {
+                result.append('"');
+                i++;
+            }
+            else
+            {
+                quoted = !quoted;
+            }
+        }
+        return result.toString();
     }
 
     private static boolean hasTable(Metadata metadata, String tableName)

@@ -215,6 +215,20 @@ final class SqlRelationExtractor
         StringBuilder builder = new StringBuilder(unquote(tokens.get(index)
                 .text()));
         int i = index + 1;
+        // A catalog prefix scans as its own word ("mongo#"), so a quoted part right after it ("mongo#"db".orders) is a separate token
+        if (builder.toString()
+                .endsWith("#")
+                && i < tokens.size()
+                && tokens.get(i)
+                        .type() == SqlTokenType.QUOTED_IDENTIFIER
+                && tokens.get(i)
+                        .startOffset() == tokens.get(index)
+                                .endOffset())
+        {
+            builder.append(unquote(tokens.get(i)
+                    .text()));
+            i++;
+        }
         while (i + 1 < tokens.size()
                 && tokens.get(i)
                         .type() == SqlTokenType.DOT
