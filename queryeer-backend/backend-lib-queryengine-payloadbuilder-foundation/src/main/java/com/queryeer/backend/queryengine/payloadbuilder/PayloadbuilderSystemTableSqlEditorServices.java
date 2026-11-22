@@ -12,6 +12,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.regex.Pattern;
@@ -24,10 +25,13 @@ import se.kuseman.payloadbuilder.api.execution.TupleIterator;
 import se.kuseman.payloadbuilder.api.execution.TupleVector;
 import se.kuseman.payloadbuilder.api.execution.ValueVector;
 
-/** Generic opt-in SQL editor services backed by Payloadbuilder catalog system tables. Reached through {@link PayloadbuilderCatalogSqlEditorServices#systemTables()}. */
+/**
+ * Generic opt-in SQL editor services backed by Payloadbuilder catalog system tables, and optionally a provider's own per-table column lookup. Reached through
+ * {@link PayloadbuilderCatalogSqlEditorServices#systemTables()} and {@link PayloadbuilderCatalogSqlEditorServices#systemTables(TableColumns)}.
+ */
 final class PayloadbuilderSystemTableSqlEditorServices implements PayloadbuilderCatalogSqlEditorServices
 {
-    static final PayloadbuilderSystemTableSqlEditorServices INSTANCE = new PayloadbuilderSystemTableSqlEditorServices();
+    static final PayloadbuilderSystemTableSqlEditorServices INSTANCE = new PayloadbuilderSystemTableSqlEditorServices(null);
 
     private static final String CONTEXT_TABLE_REFERENCE = "TABLE_REFERENCE";
     private static final String CONTEXT_COLUMN_REFERENCE = "COLUMN_REFERENCE";
@@ -44,9 +48,13 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
     private static final long CACHE_TTL_MS = 30_000;
 
     private final ConcurrentMap<MetadataKey, CachedMetadata> metadataCache = new ConcurrentHashMap<>();
+    /** Null when the provider looks up no columns of its own. */
+    private final TableColumns tableColumns;
+    private final ConcurrentMap<TableColumnsKey, CachedColumns> tableColumnsCache = new ConcurrentHashMap<>();
 
-    private PayloadbuilderSystemTableSqlEditorServices()
+    PayloadbuilderSystemTableSqlEditorServices(TableColumns tableColumns)
     {
+        this.tableColumns = tableColumns;
     }
 
     @Override
@@ -175,7 +183,8 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
     {
         List<ColumnMatch> matches = resolveColumnCompletionCandidates(request, metadata);
         return matches.stream()
-                .map(column -> new CompletionItem(column.displayName(), "column", "Payloadbuilder column", null, quoteInvalidIdentifierParts(column.displayName()), "plain", source(request)))
+                .map(column -> new CompletionItem(column.displayName(), "column", "Payloadbuilder column", blankToNull(column.column()
+                        .detail()), quoteInvalidIdentifierParts(column.displayName()), "plain", source(request)))
                 .sorted(Comparator.comparing(CompletionItem::label, String.CASE_INSENSITIVE_ORDER))
                 .limit(request.maxItems())
                 .toList();
@@ -185,26 +194,18 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
     {
         String prefix = request.prefix() == null ? ""
                 : request.prefix();
-        int dotIndex = prefix.lastIndexOf('.');
+        Map<String, String> aliases = normalizedAliases(request.aliases());
+        int dotIndex = qualifierEnd(request.catalogAlias(), request.defaultCatalogAlias(), aliases, prefix, metadata);
         List<ColumnMatch> result = new ArrayList<>();
         if (dotIndex >= 0)
         {
             String qualifier = prefix.substring(0, dotIndex);
-            Map<String, String> aliases = normalizedAliases(request.aliases());
             if (qualifier.equalsIgnoreCase(request.catalogAlias())
                     && !hasExplicitCatalogAlias(request.text(), request.catalogAlias()))
             {
                 return List.of();
             }
-            // First try: qualifier is an actual table name in metadata (guards against
-            // incorrect TreeSitter aliases for catalog#table references where the real
-            // table name is mistaken for an alias).
-            String tableName = tableNameInMetadata(metadata, qualifier);
-            if (tableName == null)
-            {
-                // Fallback: qualifier may be a user-defined alias (aliases are already normalized)
-                tableName = resolveTableNameCandidate(request.catalogAlias(), request.defaultCatalogAlias(), aliasTargetOrName(aliases, qualifier), metadata);
-            }
+            String tableName = qualifierTable(request.catalogAlias(), request.defaultCatalogAlias(), aliases, qualifier, metadata);
             if (tableName == null)
             {
                 return List.of();
@@ -256,7 +257,7 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
         {
             return null;
         }
-        int dotIndex = token.lastIndexOf('.');
+        int dotIndex = qualifierEnd(catalogAlias, defaultCatalogAlias, aliases, token, metadata);
         String qualifier = dotIndex >= 0 ? token.substring(0, dotIndex)
                 : null;
         String columnName = dotIndex >= 0 ? token.substring(dotIndex + 1)
@@ -274,15 +275,7 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
 
         if (qualifier != null)
         {
-            // First try: qualifier is an actual table name in metadata (guards against
-            // incorrect TreeSitter aliases for catalog#table references where the real
-            // table name is mistaken for an alias).
-            String tableName = tableNameInMetadata(metadata, qualifier);
-            if (tableName == null)
-            {
-                // Fallback: qualifier may be a user-defined alias
-                tableName = resolveTableNameCandidate(catalogAlias, defaultCatalogAlias, aliasTargetOrName(aliases, qualifier), metadata);
-            }
+            String tableName = qualifierTable(catalogAlias, defaultCatalogAlias, aliases, qualifier, metadata);
             if (tableName == null)
             {
                 return null;
@@ -308,6 +301,40 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
             match = new ColumnMatch(tableName, column, columnDisplayName(entry, column));
         }
         return match;
+    }
+
+    /** The table a column qualifier names, as typed in the editor; null when it names none. */
+    private static String qualifierTable(String catalogAlias, String defaultCatalogAlias, Map<String, String> aliases, String qualifier, Metadata metadata)
+    {
+        // First try: qualifier is an actual table name in metadata (guards against
+        // incorrect TreeSitter aliases for catalog#table references where the real
+        // table name is mistaken for an alias).
+        String tableName = tableNameInMetadata(metadata, qualifier);
+        if (tableName == null)
+        {
+            // Fallback: qualifier may be a user-defined alias (aliases are already normalized)
+            tableName = resolveTableNameCandidate(catalogAlias, defaultCatalogAlias, aliasTargetOrName(aliases, qualifier), metadata);
+        }
+        return tableName;
+    }
+
+    /**
+     * Where the qualifier of a dotted column reference ends: at the last dot, unless only a shorter qualifier names a listed table. So {@code p.payload.orderId} is the column {@code payload.orderId}
+     * of {@code p}'s table, as a catalog that looks up nested fields lists it. -1 without a dot.
+     */
+    private static int qualifierEnd(String catalogAlias, String defaultCatalogAlias, Map<String, String> aliases, String token, Metadata metadata)
+    {
+        int last = token.lastIndexOf('.');
+        for (int i = last; i > 0; i = token.lastIndexOf('.', i - 1))
+        {
+            String tableName = qualifierTable(catalogAlias, defaultCatalogAlias, aliases, token.substring(0, i), metadata);
+            if (tableName != null
+                    && hasTable(metadata, tableName))
+            {
+                return i;
+            }
+        }
+        return last;
     }
 
     private TableEntry resolveTable(HoverRequest request, Metadata metadata)
@@ -382,20 +409,23 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
 
     private Metadata metadata(CompletionRequest request)
     {
-        return metadata(new MetadataKey(request.catalogAlias(), request.catalogId(), request.catalog(), request.properties()), request);
+        MetadataKey key = new MetadataKey(request.catalogAlias(), request.catalogId(), request.catalog(), request.properties());
+        return new Metadata(catalogMetadata(key, request), key, request.session(), request.executionContext());
     }
 
     private Metadata metadata(HoverRequest request)
     {
-        return metadata(new MetadataKey(request.catalogAlias(), request.catalogId(), request.catalog(), request.properties()), request);
+        MetadataKey key = new MetadataKey(request.catalogAlias(), request.catalogId(), request.catalog(), request.properties());
+        return new Metadata(catalogMetadata(key, request), key, request.session(), request.executionContext());
     }
 
     private Metadata metadata(SymbolRequest request)
     {
-        return metadata(new MetadataKey(request.catalogAlias(), request.catalogId(), request.catalog(), request.properties()), request);
+        MetadataKey key = new MetadataKey(request.catalogAlias(), request.catalogId(), request.catalog(), request.properties());
+        return new Metadata(catalogMetadata(key, request), key, request.session(), request.executionContext());
     }
 
-    private Metadata metadata(MetadataKey key, Object request)
+    private CatalogMetadata catalogMetadata(MetadataKey key, Object request)
     {
         long now = System.currentTimeMillis();
         CachedMetadata cached = metadataCache.get(key);
@@ -405,7 +435,7 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
             return cached.metadata();
         }
 
-        Metadata metadata;
+        CatalogMetadata metadata;
         if (request instanceof CompletionRequest r)
         {
             metadata = buildMetadata(r);
@@ -420,7 +450,7 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
         }
         else
         {
-            metadata = Metadata.EMPTY;
+            metadata = CatalogMetadata.EMPTY;
         }
         // Drop what expired, so aliases and property values that are no longer used don't stay
         metadataCache.values()
@@ -429,22 +459,22 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
         return metadata;
     }
 
-    private Metadata buildMetadata(CompletionRequest request)
+    private CatalogMetadata buildMetadata(CompletionRequest request)
     {
         return buildMetadata(request.catalogAlias(), request.catalog(), request.session(), request.executionContext());
     }
 
-    private Metadata buildMetadata(HoverRequest request)
+    private CatalogMetadata buildMetadata(HoverRequest request)
     {
         return buildMetadata(request.catalogAlias(), request.catalog(), request.session(), request.executionContext());
     }
 
-    private Metadata buildMetadata(SymbolRequest request)
+    private CatalogMetadata buildMetadata(SymbolRequest request)
     {
         return buildMetadata(request.catalogAlias(), request.catalog(), request.session(), request.executionContext());
     }
 
-    private Metadata buildMetadata(String catalogAlias, se.kuseman.payloadbuilder.api.catalog.Catalog catalog, se.kuseman.payloadbuilder.api.execution.IQuerySession session,
+    private CatalogMetadata buildMetadata(String catalogAlias, se.kuseman.payloadbuilder.api.catalog.Catalog catalog, se.kuseman.payloadbuilder.api.execution.IQuerySession session,
             se.kuseman.payloadbuilder.api.execution.IExecutionContext executionContext)
     {
         List<FunctionEntry> functions = catalog.getFunctions()
@@ -470,11 +500,11 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
                     {
                         return null;
                     }
-                    return new ColumnEntry(table, name, stringValue(row.get(COLUMN_TYPE)));
+                    return new ColumnEntry(table, name, stringValue(row.get(COLUMN_TYPE)), null);
                 })
                 .filter(Objects::nonNull)
                 .toList();
-        return new Metadata(tables, columns, functions);
+        return new CatalogMetadata(tables, columns, functions);
     }
 
     private List<Map<String, Object>> readSystemRows(String catalogAlias, se.kuseman.payloadbuilder.api.catalog.Catalog catalog, se.kuseman.payloadbuilder.api.execution.IQuerySession session,
@@ -559,16 +589,107 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
         return result;
     }
 
-    private static List<ColumnEntry> columnsForTable(Metadata metadata, String tableName)
+    /** The table's columns from {@code sys#columns}, then those the provider looks up that {@code sys#columns} doesn't list. */
+    private List<ColumnEntry> columnsForTable(Metadata metadata, String tableName)
     {
-        return metadata.columns()
+        List<ColumnEntry> listed = metadata.columns()
                 .stream()
                 .filter(column -> column.table()
                         .equalsIgnoreCase(tableName))
                 .toList();
+        if (tableColumns == null)
+        {
+            return listed;
+        }
+        // Only a listed table, by its listed name: a typo or an unknown alias never reaches the provider. The name as written first, since
+        // a catalog may list names that differ only in case (MongoDB collections)
+        TableEntry table = metadata.tables()
+                .stream()
+                .filter(t -> t.name()
+                        .equals(tableName))
+                .findFirst()
+                .or(() -> metadata.tables()
+                        .stream()
+                        .filter(t -> t.name()
+                                .equalsIgnoreCase(tableName))
+                        .findFirst())
+                .orElse(null);
+        if (table == null)
+        {
+            return listed;
+        }
+        List<ColumnEntry> lookedUp = lookedUpColumns(metadata, table.name());
+        if (lookedUp.isEmpty())
+        {
+            return listed;
+        }
+        Map<String, ColumnEntry> lookedUpByName = new LinkedHashMap<>();
+        for (ColumnEntry column : lookedUp)
+        {
+            lookedUpByName.putIfAbsent(column.name()
+                    .toLowerCase(Locale.ROOT), column);
+        }
+        List<ColumnEntry> result = new ArrayList<>();
+        for (ColumnEntry column : listed)
+        {
+            // A listed column keeps its own type and detail; the lookup fills in what it lacks
+            ColumnEntry found = lookedUpByName.remove(column.name()
+                    .toLowerCase(Locale.ROOT));
+            result.add(found == null ? column
+                    : new ColumnEntry(column.table(), column.name(), column.type() != null ? column.type()
+                            : found.type(),
+                            column.detail() != null ? column.detail()
+                                    : found.detail()));
+        }
+        result.addAll(lookedUpByName.values());
+        return result;
     }
 
-    private static ColumnEntry findColumn(Metadata metadata, String tableName, String columnName)
+    /**
+     * A table's looked-up columns, cached for {@link #CACHE_TTL_MS} from when the lookup finished. Concurrent requests for a table wait for one lookup rather than each starting their own.
+     */
+    private List<ColumnEntry> lookedUpColumns(Metadata metadata, String tableName)
+    {
+        MetadataKey m = metadata.key();
+        // Not by catalog instance, unlike the metadata: a provider may create a new catalog per request, and this cache is already the provider's own
+        TableColumnsKey key = new TableColumnsKey(m.alias(), m.catalogId(), m.properties(), tableName);
+        long now = System.currentTimeMillis();
+        CachedColumns created = new CachedColumns();
+        CachedColumns entry = tableColumnsCache.compute(key, (_, existing) -> existing != null
+                && !existing.expired(now) ? existing
+                        : created);
+        if (entry != created)
+        {
+            return entry.columns.join();
+        }
+        List<ColumnEntry> columns = List.of();
+        try
+        {
+            List<TableColumn> found = tableColumns.columns(new TableColumnsRequest(m.alias(), m.catalogId(), m.properties(), m.catalog(), metadata.session(), metadata.executionContext(), tableName));
+            columns = found == null ? List.of()
+                    : found.stream()
+                            .filter(column -> column != null
+                                    && !isBlank(column.name()))
+                            .map(column -> new ColumnEntry(tableName, column.name(), blankToNull(column.type()), blankToNull(column.detail())))
+                            .toList();
+        }
+        catch (RuntimeException | LinkageError e)
+        {
+            // Cached as none until it expires, so a failing lookup isn't repeated on every keystroke
+        }
+        finally
+        {
+            // Always, so requests waiting for this lookup never hang
+            created.complete(columns, System.currentTimeMillis());
+        }
+        // Drop what expired, as for the metadata
+        long done = System.currentTimeMillis();
+        tableColumnsCache.values()
+                .removeIf(cached -> cached.expired(done));
+        return columns;
+    }
+
+    private ColumnEntry findColumn(Metadata metadata, String tableName, String columnName)
     {
         return columnsForTable(metadata, tableName).stream()
                 .filter(column -> column.name()
@@ -873,7 +994,7 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
                         : request.catalogAlias() + PayloadbuilderCatalogSqlEditorServices.CATALOG_PREFIX_SEPARATOR + name;
     }
 
-    private static String tableMarkdown(HoverRequest request, Metadata metadata, TableEntry table)
+    private String tableMarkdown(HoverRequest request, Metadata metadata, TableEntry table)
     {
         String displayName = tableDisplayName(request, table.name());
         StringBuilder md = new StringBuilder();
@@ -888,13 +1009,24 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
             for (ColumnEntry column : columns)
             {
                 md.append("| ")
-                        .append(column.name())
+                        .append(tableCell(column.name()))
                         .append(" | ")
-                        .append(Objects.toString(column.type(), ""))
+                        .append(tableCell(Objects.toString(column.type(), "")))
                         .append(" |\n");
             }
         }
         return md.toString();
+    }
+
+    /** Text as one markdown table cell: a looked-up name or type such as {@code string | null} may hold a pipe. */
+    private static String tableCell(String value)
+    {
+        return oneLine(value).replace("|", "\\|");
+    }
+
+    private static String oneLine(String value)
+    {
+        return value.replaceAll("\\R", " ");
     }
 
     private static String columnMarkdown(HoverRequest request, ColumnMatch column)
@@ -910,6 +1042,14 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
                     .append(column.column()
                             .type())
                     .append("`\n");
+        }
+        if (!isBlank(column.column()
+                .detail()))
+        {
+            md.append("- ")
+                    .append(oneLine(column.column()
+                            .detail()))
+                    .append("\n");
         }
         md.append("- Catalog: `")
                 .append(request.catalogAlias())
@@ -981,16 +1121,37 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
                 : value;
     }
 
-    private record Metadata(List<TableEntry> tables, List<ColumnEntry> columns, List<FunctionEntry> functions)
+    /** What the system tables and functions list for a catalog instance; cached. */
+    private record CatalogMetadata(List<TableEntry> tables, List<ColumnEntry> columns, List<FunctionEntry> functions)
     {
-        private static final Metadata EMPTY = new Metadata(List.of(), List.of(), List.of());
+        private static final CatalogMetadata EMPTY = new CatalogMetadata(List.of(), List.of(), List.of());
+    }
+
+    /** The cached metadata with the request it serves, whose session a column lookup runs in. */
+    private record Metadata(CatalogMetadata data, MetadataKey key, se.kuseman.payloadbuilder.api.execution.IQuerySession session,
+            se.kuseman.payloadbuilder.api.execution.IExecutionContext executionContext)
+    {
+        List<TableEntry> tables()
+        {
+            return data.tables();
+        }
+
+        List<ColumnEntry> columns()
+        {
+            return data.columns();
+        }
+
+        List<FunctionEntry> functions()
+        {
+            return data.functions();
+        }
     }
 
     private record TableEntry(String name)
     {
     }
 
-    private record ColumnEntry(String table, String name, String type)
+    private record ColumnEntry(String table, String name, String type, String detail)
     {
     }
 
@@ -1007,7 +1168,31 @@ final class PayloadbuilderSystemTableSqlEditorServices implements Payloadbuilder
     {
     }
 
-    private record CachedMetadata(Metadata metadata, long createdAtMs)
+    private record CachedMetadata(CatalogMetadata metadata, long createdAtMs)
     {
+    }
+
+    /** A table by its listed name, exactly as listed, of a catalog alias and its properties. */
+    private record TableColumnsKey(String alias, String catalogId, Map<String, Object> properties, String table)
+    {
+    }
+
+    /** A lookup that is running or done; it expires {@link #CACHE_TTL_MS} after it finished. */
+    private static final class CachedColumns
+    {
+        private final CompletableFuture<List<ColumnEntry>> columns = new CompletableFuture<>();
+        private volatile long completedAtMs;
+
+        void complete(List<ColumnEntry> value, long nowMs)
+        {
+            completedAtMs = nowMs;
+            columns.complete(value);
+        }
+
+        boolean expired(long nowMs)
+        {
+            return columns.isDone()
+                    && nowMs - completedAtMs > CACHE_TTL_MS;
+        }
     }
 }
