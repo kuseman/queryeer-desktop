@@ -638,6 +638,34 @@ public final class MyPluginFactory implements BackendPluginFactory
 | `PluginServiceRegistry` | `context.services()` | Cross-plugin service registry |
 | `ChangelogRegistry` | `context.changelogs()` | Plugin changelogs |
 | `Logger` | `context.logger()` | Plugin-scoped logger |
+| `PluginActionRegistry` | `context.actions()` | The plugin's own backend actions, which its frontend calls with `context.backend.invoke` (since 0.23, §5.5.1) |
+
+#### 5.5.1 Backend actions (since 0.23)
+
+A plugin whose frontend needs its backend outside a query engine, e.g. for its own views, settings or dialogs (list a cluster's topics, test a connection), registers backend actions while it activates:
+
+```java
+@Override
+public void activate(BackendPluginContext context, PluginDescriptor descriptor)
+{
+    context.actions()
+            .register("topics.list", payload -> Map.of("topics", admin.listTopics(connectionId(payload))));
+}
+```
+
+and calls them from its frontend:
+
+```ts
+const { topics } = await context.backend.invoke<{ topics: string[] }>("topics.list", { connectionId });
+```
+
+- **Scope:** actions belong to the plugin that registers them, and `context.backend.invoke` calls only its own plugin's actions, so action names need no plugin prefix. The frontend and backend must share the plugin id, as an external plugin's `plugin.json` gives both. Scoping is a convention, not a security boundary. Actions are removed when the plugin deactivates or fails to activate; registering after that throws.
+- **Payload and result:** JSON values, as for `queryEngines.invoke`. Secret references (`{ "secretRef": ... }`) reach the handler unresolved: resolve them with `context.config().materializeSecrets(value)`. When the vault is locked that fails with a closed security session, and `context.backend.invoke` asks the user to unlock it and calls again, unless `{ silent: true }` is passed.
+- **Errors:** the promise rejects with an `Error` whose `code` is the backend's error code (`PluginBackendError`): `VALIDATION` when the handler throws `IllegalArgumentException` (with its message), `ACTION_NOT_FOUND` for an unknown action, `TIMEOUT`, or `INTERNAL`. It rejects with `BackendNotReadyError` at once while the backend is starting.
+- **Time:** the frontend waits 10 seconds unless `{ timeoutMs }` says otherwise. The action is not cancelled when the wait runs out.
+- **Threads:** handlers run on request threads, possibly several at once.
+- **Versions:** since 0.23. A plugin whose `apiVersion` also allows older Queryeer versions checks that `context.backend` exists.
+- **Versus `queryEngines.invoke`:** use that for calls tied to a query engine and a file (completion, a file's connection). Use backend actions for everything else, so the feature works without being an engine. Over the stdio protocol the request is `plugin.invoke` with `{ pluginId, action, payload }`, answered with `{ "result": <value> }`.
 
 ### 5.6 Building & Packaging
 

@@ -22,6 +22,7 @@ import type { AboutExtension } from "../extensions/AboutExtension.js";
 import type { NotificationService } from "../extensions/NotificationExtension.js";
 import type { AssistantRegistry } from "../assistant/Assistant.js";
 import type { PluginManifest } from "./PluginManifest.js";
+import type { PluginBackend } from "./PluginBackend.js";
 import type { JdbcDriverRegistry } from "../queryengine/JdbcDriverExtension.js";
 import type { JdbcDialectRegistry } from "../queryengine/JdbcDialectExtension.js";
 import type { NativeQueryEngineRegistry } from "../queryengine/NativeQueryEngineExtension.js";
@@ -59,6 +60,8 @@ export type PluginContext = {
    * it to add to an optional dependency only when it is there. Since 0.21.
    */
   isDependencyActive(pluginId: string): boolean;
+  /** This plugin's backend actions (`context.actions()` on the backend), for UI that isn't a query engine. Since 0.23. */
+  backend: PluginBackend;
   commands: CommandRegistry;
   filesystems: FileSystemRegistry;
   files: FilesRegistry;

@@ -157,7 +157,7 @@ class DependencyExtensionTest
                 .error(anyString(), any());
         BackendPluginContext delegate = mock(BackendPluginContext.class);
         when(delegate.logger()).thenReturn(logger);
-        return new PluginScopedContext(delegate, Set.of(activeDependencies));
+        return new PluginScopedContext(delegate, Set.of(activeDependencies), new PluginActionService().forPlugin("test"));
     }
 
     @SuppressWarnings("unchecked")

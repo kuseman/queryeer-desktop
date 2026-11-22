@@ -15,6 +15,7 @@ export type Capability =
   | "queryengine.cancel"
   | "queryengine.largeValue.read"
   | "queryengine.invoke"
+  | "plugin.invoke"
   | "queryengine.progress"
   | "queryengine.chunkStart"
   | "queryengine.chunkRows"
@@ -192,6 +193,18 @@ export type EngineInvokeParams = {
 };
 
 export type EngineInvokeResult = {
+  result?: unknown;
+  error?: { code: string; message: string };
+};
+
+/** `plugin.invoke`: a plugin's frontend calling one of its own backend actions (`context.backend.invoke`). Since 0.23.0. */
+export type PluginInvokeParams = {
+  pluginId: string;
+  action: string;
+  payload?: unknown;
+};
+
+export type PluginInvokeResult = {
   result?: unknown;
   error?: { code: string; message: string };
 };
@@ -479,6 +492,7 @@ export type BackendMethodParamsMap = {
   "queryengine.cancel": QueryCancelParams;
   "queryengine.largeValue.read": QueryLargeValueReadParams;
   "queryengine.invoke": EngineInvokeParams;
+  "plugin.invoke": PluginInvokeParams;
   "file.open": FileOpenParams;
   "file.close": FileCloseParams;
   "about.pluginChangelogs": Record<string, never>;
@@ -495,6 +509,7 @@ export type BackendMethodResultMap = {
   "queryengine.cancel": QueryCancelResult;
   "queryengine.largeValue.read": QueryLargeValueReadResult;
   "queryengine.invoke": EngineInvokeResult;
+  "plugin.invoke": PluginInvokeResult;
   "file.open": FileOpenResult;
   "file.close": FileCloseResult;
   "about.pluginChangelogs": AboutPluginChangelogsResult;

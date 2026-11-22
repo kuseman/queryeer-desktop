@@ -94,6 +94,15 @@ export interface ShellApi {
     action: string;
     payload?: unknown;
   }) => Promise<{ result?: unknown; error?: { code: string; message: string } }>;
+  /** Calls a backend action of the plugin `pluginId` (`plugin.invoke`). Since 0.23.0. */
+  invokeBackendPlugin: (
+    params: {
+      pluginId: string;
+      action: string;
+      payload?: unknown;
+    },
+    options?: { timeoutMs?: number }
+  ) => Promise<{ result?: unknown; error?: { code: string; message: string } }>;
   getWorkspace: () => Promise<WorkspaceSnapshot>;
   saveWorkspace: (snapshot: WorkspaceSnapshot) => Promise<{ accepted: boolean }>;
   getUserKeybindings: () => Promise<UserKeybindingsDocument>;

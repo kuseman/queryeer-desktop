@@ -1,0 +1,13 @@
+{
+  "protocolVersion": "1.0.0",
+  "type": "request",
+  "id": "req-fixture-plugin-invoke-1",
+  "method": "plugin.invoke",
+  "params": {
+    "pluginId": "com.example.kafka",
+    "action": "topics.list",
+    "payload": {
+      "connectionId": "local"
+    }
+  }
+}

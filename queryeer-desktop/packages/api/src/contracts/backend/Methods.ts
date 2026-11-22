@@ -9,6 +9,7 @@ export type BackendRequestMethod =
   | "queryengine.cancel"
   | "queryengine.largeValue.read"
   | "queryengine.invoke"
+  | "plugin.invoke"
   | "file.open"
   | "file.close"
   | "about.pluginChangelogs";

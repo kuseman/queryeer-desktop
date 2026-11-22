@@ -60,6 +60,18 @@ export class MockJavaBackend {
       return;
     }
 
+    if (envelope.method === "plugin.invoke") {
+      // The mock backend has no plugins, so no actions
+      const params = envelope.params as { pluginId?: string; action?: string };
+      this.sink({
+        protocolVersion: BACKEND_PROTOCOL_VERSION,
+        type: "response",
+        id: envelope.id,
+        error: { code: "ACTION_NOT_FOUND", message: `Plugin '${params.pluginId}' has no backend action '${params.action}'` }
+      });
+      return;
+    }
+
     if (envelope.method === "file.open") {
       this.respondFileOpen(envelope as BackendRequestEnvelope<"file.open">);
       return;
@@ -94,6 +106,7 @@ export class MockJavaBackend {
         "queryengine.execute",
         "queryengine.cancel",
         "queryengine.invoke",
+        "plugin.invoke",
         "queryengine.progress",
         "queryengine.chunkStart",
         "queryengine.chunkRows",

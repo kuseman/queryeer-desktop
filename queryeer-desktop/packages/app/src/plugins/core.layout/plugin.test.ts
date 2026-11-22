@@ -30,6 +30,7 @@ function createContext(file?: FileEntity) {
   const context = {
     plugin: { id: "test.plugin", name: "Test plugin", version: "0.0.0" },
     isDependencyActive: () => false,
+    backend: { invoke: async () => undefined as never },
     commands: {
       registerCommand: (command: RegisteredCommand) => {
         registeredCommands.set(command.id, command);

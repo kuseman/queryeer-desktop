@@ -36,6 +36,7 @@ type TransportBehavior = {
   failExecuteSend?: boolean;
   failPingAfterStart?: boolean;
   failInvokeWithError?: { code: BackendErrorCode; message: string };
+  dropPluginInvoke?: boolean;
 };
 
 const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
@@ -133,6 +134,19 @@ const createGatewayWithTestTransport = (behavior: TransportBehavior = {}) => {
             payload: params.payload ?? null
           }
         });
+        return;
+      }
+
+      if (envelope.method === "plugin.invoke") {
+        if (behavior.dropPluginInvoke) {
+          return;
+        }
+        if (behavior.failInvokeWithError) {
+          respondError(envelope.id, behavior.failInvokeWithError);
+          return;
+        }
+        const params = envelope.params as { pluginId: string; action: string; payload?: unknown };
+        respond(envelope.id, { result: { pluginId: params.pluginId, action: params.action, payload: params.payload ?? null } });
         return;
       }
 
@@ -740,6 +754,64 @@ describe("BackendGateway", () => {
     expect(result.error?.code).toBe("SECURITY_SESSION_CLOSED");
     expect(result.error?.message).toBe("Security session is not open");
 
+    await gateway.stop();
+  });
+
+  it("invokes a plugin's backend action with secret refs as they are", async () => {
+    const { gateway, transport } = createGatewayWithTestTransport();
+    await gateway.start();
+
+    const result = await gateway.invokePlugin({
+      pluginId: "com.example.kafka",
+      action: "connection.test",
+      payload: { connection: { password: { secretRef: "secret-ref-3" } } }
+    });
+
+    expect(result).toEqual({
+      result: { pluginId: "com.example.kafka", action: "connection.test", payload: { connection: { password: { secretRef: "secret-ref-3" } } } }
+    });
+    const invokeRequest = transport.sendEnvelope.mock.calls
+      .map((call: [BackendEnvelope]) => call[0])
+      .find((envelope): envelope is BackendRequestEnvelope => envelope.type === "request" && envelope.method === "plugin.invoke");
+    expect(invokeRequest?.params).toEqual({
+      pluginId: "com.example.kafka",
+      action: "connection.test",
+      payload: { connection: { password: { secretRef: "secret-ref-3" } } }
+    });
+
+    await gateway.stop();
+  });
+
+  it("preserves backend error code on invokePlugin failure", async () => {
+    const { gateway } = createGatewayWithTestTransport({
+      failInvokeWithError: { code: "ACTION_NOT_FOUND", message: "Plugin 'com.example.kafka' has no backend action 'x'" }
+    });
+    await gateway.start();
+
+    const result = await gateway.invokePlugin({ pluginId: "com.example.kafka", action: "x" });
+
+    expect(result.error).toEqual({ code: "ACTION_NOT_FOUND", message: "Plugin 'com.example.kafka' has no backend action 'x'" });
+    await gateway.stop();
+  });
+
+  it("answers a plugin invoke that runs out of time with TIMEOUT, after the timeout it was given", async () => {
+    const { gateway } = createGatewayWithTestTransport({ dropPluginInvoke: true });
+    await gateway.start();
+    vi.useFakeTimers();
+
+    const pending = gateway.invokePlugin({ pluginId: "com.example.kafka", action: "topics.list" }, 30_000);
+    await vi.advanceTimersByTimeAsync(10_001);
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(20_000);
+    const result = await pending;
+
+    expect(result.error).toEqual({ code: "TIMEOUT", message: "The backend action 'topics.list' did not answer within 30 seconds" });
+    vi.useRealTimers();
     await gateway.stop();
   });
 

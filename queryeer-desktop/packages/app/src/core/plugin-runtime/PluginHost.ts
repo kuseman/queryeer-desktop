@@ -14,6 +14,7 @@ import {
 import type { PluginDiagnostics, PluginProblem } from "./PluginDiagnostics";
 import type { PluginManifest } from "@queryeer/api/plugin/PluginManifest";
 import { PluginRegistry } from "./PluginRegistry";
+import { createPluginBackend } from "./plugin-backend";
 import type { ContextValues } from "../../plugins/core.commands/context-values";
 import { planActivation } from "./PluginValidation";
 import { getFileStateRegistry } from "./FileStateRegistryImpl";
@@ -160,7 +161,7 @@ export class PluginHost {
     };
 
     const settingsContributions = this.extensionRegistry.createSettingsRegistry();
-    const sharedContext: Omit<PluginContext, "jdbcDrivers" | "plugin" | "isDependencyActive"> = {
+    const sharedContext: Omit<PluginContext, "jdbcDrivers" | "plugin" | "isDependencyActive" | "backend"> = {
       commands: this.extensionRegistry.createCommandRegistry(),
       filesystems: this.extensionRegistry.createFileSystemRegistry(),
       files: this.extensionRegistry.createFilesRegistry(),
@@ -262,6 +263,8 @@ export class PluginHost {
           ...(plugin.manifest.description !== undefined ? { description: plugin.manifest.description } : {})
         }),
         isDependencyActive: (dependencyId: string) => activeDependencies.has(dependencyId),
+        // Only this plugin's own backend actions
+        backend: createPluginBackend(pluginId),
         // One-time task ids are per plugin
         settings: { ...sharedContext.settings, runOnce: (id, run) => runCoreSettingsOnce(`${pluginId}/${id}`, run) },
         jdbcDrivers: this.jdbcDriverRegistry.createRegistry(pluginId)

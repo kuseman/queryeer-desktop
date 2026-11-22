@@ -24,6 +24,7 @@ export * from "./contracts/graph/GraphNodeTypeExtension.js";
 export * from "./contracts/graph/constants.js";
 export * from "./contracts/plugin/ExternalFrontendPluginManifest.js";
 export * from "./contracts/plugin/Plugin.js";
+export * from "./contracts/plugin/PluginBackend.js";
 export * from "./contracts/plugin/PluginManifest.js";
 export * from "./contracts/plugin/PluginManifestFile.js";
 export * from "./contracts/plugin/PluginInventory.js";
