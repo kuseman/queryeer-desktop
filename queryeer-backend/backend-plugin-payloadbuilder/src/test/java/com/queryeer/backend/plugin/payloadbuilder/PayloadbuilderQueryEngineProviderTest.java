@@ -1038,6 +1038,207 @@ class PayloadbuilderQueryEngineProviderTest
 
     @SuppressWarnings("unchecked")
     @Test
+    void invokeSqlCompleteAddsColumnsTheProviderLooksUpForAReferencedTable()
+    {
+        List<String> lookups = new java.util.concurrent.CopyOnWriteArrayList<>();
+        PayloadbuilderCatalogSqlEditorServices services = PayloadbuilderCatalogSqlEditorServices.systemTables(request ->
+        {
+            lookups.add(request.table());
+            Assertions.assertEquals("sem", request.catalogAlias());
+            Assertions.assertNotNull(request.session());
+            // "key" is listed by sys#columns too: that one is kept
+            return List.of(new PayloadbuilderCatalogSqlEditorServices.TableColumn("status", "String", "In 90% of 100 sampled documents"),
+                    new PayloadbuilderCatalogSqlEditorServices.TableColumn("KEY", "Int", null), new PayloadbuilderCatalogSqlEditorServices.TableColumn("payload.orderId", null, null));
+        });
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new LookupSemanticCatalogProvider(services));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        String text = "SELECT * FROM sem#\"shop\".orders p WHERE p.";
+
+        for (int i = 0; i < 2; i++)
+        {
+            Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete", Map.of("fileId", "file-1", "version", 1L, "text", text, "engineState",
+                    semanticEngineStateWithoutDefault(), "cursor", Map.of("line", 1, "column", text.length() + 1), "limits", Map.of("maxItems", 50)));
+
+            List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+            List<Object> labels = items.stream()
+                    .map(item -> item.get("label"))
+                    .toList();
+            Assertions.assertTrue(labels.containsAll(List.of("p._id", "p.key", "p.status", "p.payload.orderId")), labels::toString);
+            Assertions.assertFalse(labels.contains("p.KEY"), labels::toString);
+            Assertions.assertTrue(items.stream()
+                    .anyMatch(item -> "p.status".equals(item.get("label"))
+                            && String.valueOf(item.get("documentation"))
+                                    .contains("In 90% of 100 sampled documents")),
+                    items::toString);
+        }
+        // Only the referenced table, by its listed name, and once: the second completion is cached
+        Assertions.assertEquals(List.of("shop.orders"), lookups);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlHoverShowsALookedUpColumn()
+    {
+        PayloadbuilderCatalogSqlEditorServices services = PayloadbuilderCatalogSqlEditorServices
+                .systemTables(_ -> List.of(new PayloadbuilderCatalogSqlEditorServices.TableColumn("status", "String", "In 90% of 100 sampled documents")));
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new LookupSemanticCatalogProvider(services));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        String text = "SELECT p.status FROM sem#shop.orders p";
+
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.hover",
+                Map.of("fileId", "file-1", "text", text, "engineState", semanticEngineStateWithoutDefault(), "cursor", Map.of("line", 1, "column", text.indexOf("status") + 2)));
+
+        Assertions.assertNotNull(result, "No hover on the looked-up column");
+        List<Map<String, Object>> contents = (List<Map<String, Object>>) result.get("contents");
+        String value = String.valueOf(contents.get(0)
+                .get("value"));
+        Assertions.assertTrue(value.contains("Payloadbuilder Column: p.status"), value);
+        Assertions.assertTrue(value.contains("`String`"), value);
+        Assertions.assertTrue(value.contains("In 90% of 100 sampled documents"), value);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void invokeSqlCompleteKeepsTheSystemTableColumnsWhenTheLookupFails()
+    {
+        AtomicInteger lookups = new AtomicInteger();
+        PayloadbuilderCatalogSqlEditorServices services = PayloadbuilderCatalogSqlEditorServices.systemTables(_ ->
+        {
+            lookups.incrementAndGet();
+            throw new IllegalStateException("Sampling timed out");
+        });
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new LookupSemanticCatalogProvider(services));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        String text = "SELECT * FROM sem#shop.orders p WHERE p.";
+
+        for (int i = 0; i < 2; i++)
+        {
+            List<Object> labels = completionLabels(provider, text, text.length());
+            Assertions.assertTrue(labels.containsAll(List.of("p._id", "p.key")), labels::toString);
+        }
+        // The failure is cached too, so it isn't repeated on every keystroke
+        Assertions.assertEquals(1, lookups.get());
+    }
+
+    @Test
+    void invokeSqlCompleteAndHoverResolveANestedLookedUpColumn()
+    {
+        PayloadbuilderCatalogSqlEditorServices services = PayloadbuilderCatalogSqlEditorServices
+                .systemTables(_ -> List.of(new PayloadbuilderCatalogSqlEditorServices.TableColumn("payload", "object", null),
+                        new PayloadbuilderCatalogSqlEditorServices.TableColumn("payload.orderId", "int", "In 3 of 5 sampled documents")));
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new LookupSemanticCatalogProvider(services));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+
+        // After the second dot, by alias and by the table's own dotted name
+        String text = "SELECT * FROM sem#shop.orders p WHERE p.payload.";
+        Assertions.assertEquals(List.of("p.payload.orderId"), completionLabels(provider, text, text.length()));
+        text = "SELECT * FROM sem#shop.orders WHERE shop.orders.payload.o";
+        Assertions.assertEquals(List.of("shop.orders.payload.orderId"), completionLabels(provider, text, text.length()));
+
+        text = "SELECT p.payload.orderId FROM sem#shop.orders p";
+        String hover = hoverValue(provider, text, text.indexOf("orderId") + 2);
+        Assertions.assertTrue(hover.contains("Payloadbuilder Column: p.payload.orderId"), hover);
+        Assertions.assertTrue(hover.contains("In 3 of 5 sampled documents"), hover);
+    }
+
+    @Test
+    void invokeSqlHoverFillsInWhatASystemTableColumnLacksAndListsLookedUpColumnsOnTheTable()
+    {
+        // sys#columns lists shop.orders' _id without a type
+        PayloadbuilderCatalogSqlEditorServices services = PayloadbuilderCatalogSqlEditorServices
+                .systemTables(_ -> List.of(new PayloadbuilderCatalogSqlEditorServices.TableColumn("_id", "objectId", "In 5 of 5 sampled documents"),
+                        new PayloadbuilderCatalogSqlEditorServices.TableColumn("status", "string | null", null)));
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new LookupSemanticCatalogProvider(services));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+
+        String text = "SELECT p._id FROM sem#shop.orders p";
+        String hover = hoverValue(provider, text, text.indexOf("_id") + 2);
+        Assertions.assertTrue(hover.contains("`objectId`"), hover);
+        Assertions.assertTrue(hover.contains("In 5 of 5 sampled documents"), hover);
+
+        hover = hoverValue(provider, text, text.indexOf("orders") + 2);
+        Assertions.assertTrue(hover.contains("| _id | objectId |"), hover);
+        // A pipe in a type doesn't split the table cell
+        Assertions.assertTrue(hover.contains("| status | string \\| null |"), hover);
+    }
+
+    @Test
+    void invokeSqlCompleteRunsOneLookupForConcurrentRequests() throws Exception
+    {
+        AtomicInteger lookups = new AtomicInteger();
+        CountDownLatch lookupStarted = new CountDownLatch(1);
+        CountDownLatch releaseLookup = new CountDownLatch(1);
+        PayloadbuilderCatalogSqlEditorServices services = PayloadbuilderCatalogSqlEditorServices.systemTables(_ ->
+        {
+            lookups.incrementAndGet();
+            lookupStarted.countDown();
+            try
+            {
+                releaseLookup.await(5, TimeUnit.SECONDS);
+            }
+            catch (InterruptedException e)
+            {
+                Thread.currentThread()
+                        .interrupt();
+            }
+            return List.of(new PayloadbuilderCatalogSqlEditorServices.TableColumn("status", null, null));
+        });
+        PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
+        registry.registerContributor(new LookupSemanticCatalogProvider(services));
+        PayloadbuilderQueryEngineProvider provider = new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
+        String text = "SELECT * FROM sem#shop.orders p WHERE p.";
+
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try
+        {
+            java.util.concurrent.Future<List<Object>> first = executor.submit(() -> completionLabels(provider, text, text.length()));
+            Assertions.assertTrue(lookupStarted.await(5, TimeUnit.SECONDS));
+            java.util.concurrent.Future<List<Object>> second = executor.submit(() -> completionLabels(provider, text, text.length()));
+            // Give the second request time to reach the running lookup
+            Thread.sleep(200);
+            releaseLookup.countDown();
+
+            Assertions.assertTrue(first.get(5, TimeUnit.SECONDS)
+                    .contains("p.status"));
+            Assertions.assertTrue(second.get(5, TimeUnit.SECONDS)
+                    .contains("p.status"));
+            Assertions.assertEquals(1, lookups.get());
+        }
+        finally
+        {
+            releaseLookup.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Object> completionLabels(PayloadbuilderQueryEngineProvider provider, String text, int cursorOffset)
+    {
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.complete", Map.of("fileId", "file-1", "version", 1L, "text", text, "engineState",
+                semanticEngineStateWithoutDefault(), "cursor", Map.of("line", 1, "column", cursorOffset + 1), "limits", Map.of("maxItems", 50)));
+        return ((List<Map<String, Object>>) result.get("items")).stream()
+                .map(item -> item.get("label"))
+                .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String hoverValue(PayloadbuilderQueryEngineProvider provider, String text, int column)
+    {
+        Map<String, Object> result = (Map<String, Object>) provider.invoke("file-1", "sql.hover",
+                Map.of("fileId", "file-1", "text", text, "engineState", semanticEngineStateWithoutDefault(), "cursor", Map.of("line", 1, "column", column)));
+        Assertions.assertNotNull(result, () -> "No hover in " + text + " at " + column);
+        List<Map<String, Object>> contents = (List<Map<String, Object>>) result.get("contents");
+        return String.valueOf(contents.get(0)
+                .get("value"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
     void invokeSqlCompleteDoesNotQualifyColumnsForCatalogQualifiedUnaliasedSystemTable()
     {
         PayloadbuilderCatalogProviderRegistry registry = registryWithJdbc(NOOP_CONFIG, TEST_MAPPER, JDBCRUNTIMESERVICE, JDBC_SQL_EDITOR_SERVICES);
@@ -1767,6 +1968,33 @@ class PayloadbuilderQueryEngineProviderTest
         {
             return optIn ? PayloadbuilderCatalogSqlEditorServices.systemTables()
                     : PayloadbuilderCatalogSqlEditorServices.NONE;
+        }
+    }
+
+    /** The semantic test catalog with editor services that look up columns of their own. One catalog instance, as real providers return, so the editor services' cache applies. */
+    private record LookupSemanticCatalogProvider(PayloadbuilderCatalogSqlEditorServices services, Catalog catalog) implements PayloadbuilderCatalogProviderContributor
+    {
+        LookupSemanticCatalogProvider(PayloadbuilderCatalogSqlEditorServices services)
+        {
+            this(services, new TestSemanticCatalog());
+        }
+
+        @Override
+        public String catalogId()
+        {
+            return TestSemanticCatalog.CATALOG_ID;
+        }
+
+        @Override
+        public Catalog createCatalog()
+        {
+            return catalog;
+        }
+
+        @Override
+        public PayloadbuilderCatalogSqlEditorServices editorServices()
+        {
+            return services;
         }
     }
 
