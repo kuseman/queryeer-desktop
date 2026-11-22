@@ -19,6 +19,8 @@ import com.queryeer.backend.contract.file.FileOpenParams;
 import com.queryeer.backend.contract.file.FileOpenResult;
 import com.queryeer.backend.contract.handshake.HandshakeResult;
 import com.queryeer.backend.contract.health.PingResult;
+import com.queryeer.backend.contract.plugin.PluginInvokeParams;
+import com.queryeer.backend.contract.plugin.PluginInvokeResult;
 import com.queryeer.backend.contract.query.QueryCancelResult;
 import com.queryeer.backend.contract.query.QueryChunkRowsNotification;
 import com.queryeer.backend.contract.query.QueryChunkStartNotification;
@@ -286,6 +288,28 @@ class ProtocolFixtureCompatibilityTest
 
         EngineInvokeResult result = objectMapper.convertValue(response.result(), EngineInvokeResult.class);
         Assertions.assertNotNull(result.result());
+    }
+
+    @Test
+    void pluginInvokeFixturesAreCompatible() throws IOException
+    {
+        BackendEnvelope request = readFixture("request-plugin-invoke.json");
+        BackendEnvelope response = readFixture("response-plugin-invoke.json");
+
+        assertEnvelopeBase(request);
+        assertEnvelopeBase(response);
+        Assertions.assertEquals(EnvelopeType.REQUEST, request.type());
+        Assertions.assertEquals(EnvelopeType.RESPONSE, response.type());
+        Assertions.assertEquals("plugin.invoke", request.method());
+        Assertions.assertEquals(request.id(), response.id());
+
+        PluginInvokeParams params = objectMapper.convertValue(request.params(), PluginInvokeParams.class);
+        Assertions.assertEquals("com.example.kafka", params.pluginId());
+        Assertions.assertEquals("topics.list", params.action());
+        Assertions.assertEquals(java.util.Map.of("connectionId", "local"), params.payload());
+
+        PluginInvokeResult result = objectMapper.convertValue(response.result(), PluginInvokeResult.class);
+        Assertions.assertEquals(java.util.Map.of("topics", java.util.List.of("orders", "payments")), result.result());
     }
 
     @Test

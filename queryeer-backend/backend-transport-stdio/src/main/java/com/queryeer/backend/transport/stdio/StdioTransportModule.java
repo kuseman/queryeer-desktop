@@ -16,6 +16,7 @@ import com.queryeer.backend.api.LargeValueStore;
 import com.queryeer.backend.api.PluginDescriptor;
 import com.queryeer.backend.api.QueryEngineRegistry;
 import com.queryeer.backend.contract.runtime.RuntimeStatusResult;
+import com.queryeer.backend.core.PluginActionService;
 import com.queryeer.backend.core.engine.EngineInvokeService;
 import com.queryeer.backend.core.query.QueryExecutionService;
 import com.queryeer.backend.core.security.SecuritySession;
@@ -28,6 +29,16 @@ public final class StdioTransportModule
             Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt, ConfigService configService, SecuritySession securitySession, ChangelogRegistry changelogRegistry,
             Function<String, PluginDescriptor> descriptorLookup, LargeValueStore largeValueStore)
     {
+        return create(input, output, objectMapper, queryEngines, fileRegistry, events, runtimeStatusSupplier, startedAt, configService, securitySession, changelogRegistry, descriptorLookup,
+                largeValueStore, new PluginActionService());
+    }
+
+    /** As above, with the plugins' backend actions ({@code plugin.invoke}). */
+    public RunningTransport create(InputStream input, OutputStream output, ObjectMapper objectMapper, QueryEngineRegistry queryEngines, FileRegistry fileRegistry, EventBus events,
+            Supplier<RuntimeStatusResult> runtimeStatusSupplier, long startedAt, ConfigService configService, SecuritySession securitySession, ChangelogRegistry changelogRegistry,
+            Function<String, PluginDescriptor> descriptorLookup, LargeValueStore largeValueStore, PluginActionService pluginActions)
+    {
+        requireNonNull(pluginActions, "pluginActions");
         requireNonNull(configService, "configService");
         requireNonNull(events, "events");
         requireNonNull(changelogRegistry, "changelogRegistry");
@@ -44,8 +55,9 @@ public final class StdioTransportModule
                 new SecurityVaultChangedRequestHandler(responseWriter, codec, securitySession), new HealthPingRequestHandler(startedAt, responseWriter, codec),
                 new QueryExecuteRequestHandler(responseWriter, codec, queryExecutionService, notificationPublisher, largeValueStore),
                 new QueryCancelRequestHandler(responseWriter, codec, queryExecutionService), new QueryLargeValueReadRequestHandler(responseWriter, codec, largeValueStore),
-                new EngineInvokeRequestHandler(responseWriter, codec, engineInvokeService), new FileOpenRequestHandler(responseWriter, codec, fileRegistry),
-                new FileCloseRequestHandler(responseWriter, codec, fileRegistry, largeValueStore), new AboutPluginChangelogsRequestHandler(responseWriter, changelogRegistry, descriptorLookup));
+                new EngineInvokeRequestHandler(responseWriter, codec, engineInvokeService), new PluginInvokeRequestHandler(responseWriter, codec, pluginActions),
+                new FileOpenRequestHandler(responseWriter, codec, fileRegistry), new FileCloseRequestHandler(responseWriter, codec, fileRegistry, largeValueStore),
+                new AboutPluginChangelogsRequestHandler(responseWriter, changelogRegistry, descriptorLookup));
 
         RequestDispatcher requestDispatcher = new RequestDispatcher(responseWriter, handlers);
 

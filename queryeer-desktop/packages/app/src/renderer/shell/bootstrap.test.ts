@@ -50,6 +50,7 @@ describe("bootstrapShell diagnostics wiring", () => {
       cancelBackendQuery: async () => ({ accepted: true, queryExecutionId: "q-1" }),
       readBackendLargeValue: async ({ ref }) => ({ ref, logicalType: "text", byteLength: 0, content: "" }),
       invokeBackendEngine: async () => ({ result: {} }),
+      invokeBackendPlugin: async () => ({ result: {} }),
       getWorkspace: async () => ({
         schemaVersion: 2 as const,
         savedAt: "1970-01-01T00:00:00.000Z",

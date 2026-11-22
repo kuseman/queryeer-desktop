@@ -17,6 +17,13 @@ public final class PluginRuntime
     private final List<BackendPlugin> activated = new ArrayList<>();
     private final Map<String, PluginRuntimeStatus> statusByPluginId = new LinkedHashMap<>();
     private Map<String, String> warnings = Map.of();
+    private final PluginActionService actions = new PluginActionService();
+
+    /** The backend actions plugins registered while they activated ({@code plugin.invoke}). */
+    public PluginActionService actions()
+    {
+        return actions;
+    }
 
     public void register(BackendPlugin plugin)
     {
@@ -63,7 +70,7 @@ public final class PluginRuntime
                         .getOrDefault(pluginId, Set.of()));
                 // A dependency counts as active only once it activated: a failed one doesn't
                 dependencies.retainAll(activatedIds);
-                PluginScopedContext scopedContext = new PluginScopedContext(context, Set.copyOf(dependencies));
+                PluginScopedContext scopedContext = new PluginScopedContext(context, Set.copyOf(dependencies), actions.forPlugin(pluginId));
                 List<String> activationErrors;
                 try
                 {
@@ -80,6 +87,8 @@ public final class PluginRuntime
             }
             catch (Throwable t)
             {
+                // Nothing of a plugin that failed stays callable
+                actions.removePlugin(pluginId);
                 // A plugin loaded despite a version mismatch most likely failed because of it
                 String warning = warnings.get(pluginId);
                 String message = t.getMessage() != null ? t.getMessage()
@@ -100,6 +109,7 @@ public final class PluginRuntime
                     .id();
             try
             {
+                actions.removePlugin(pluginId);
                 plugin.deactivate();
                 statusByPluginId.put(pluginId, new PluginRuntimeStatus(pluginId, PluginRuntimeState.DEACTIVATED, "Deactivated"));
             }

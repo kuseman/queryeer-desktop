@@ -10,6 +10,7 @@ export const BACKEND_REQUEST_CAPABILITIES: ReadonlyArray<Capability> = [
   "queryengine.cancel",
   "queryengine.largeValue.read",
   "queryengine.invoke",
+  "plugin.invoke",
   "file.open",
   "file.close"
 ];

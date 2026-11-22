@@ -121,6 +121,7 @@ Request params:
     "queryengine.execute",
     "queryengine.cancel",
     "queryengine.invoke",
+    "plugin.invoke",
     "queryengine.largeValue.read",
     "queryengine.progress",
     "queryengine.chunkStart",
@@ -184,6 +185,7 @@ Notes:
     "queryengine.execute",
     "queryengine.cancel",
     "queryengine.invoke",
+    "plugin.invoke",
     "queryengine.largeValue.read",
     "queryengine.progress",
     "queryengine.chunkStart",
@@ -634,6 +636,35 @@ Rules:
 - `payload` and `result` are opaque to the core protocol and transported as `unknown` JSON.
 - Backends SHOULD return `ENGINE_NOT_FOUND` for unknown `engineId` and `VALIDATION` for unsupported or invalid actions.
 
+## 5.4b `plugin.invoke` (since 0.23)
+
+Purpose: a plugin's frontend calling one of its own backend actions, registered with `BackendPluginContext.actions()` (`PluginActionRegistry`). For plugin UI that isn't tied to a query engine or a file, such as listing a Kafka cluster's topics or testing a connection. The renderer calls it through `context.backend.invoke(action, payload, options)`, which fills in the calling plugin's id.
+
+Request params:
+
+```json
+{
+  "pluginId": "com.example.kafka",
+  "action": "topics.list",
+  "payload": { "connectionId": "local" }
+}
+```
+
+Success result:
+
+```json
+{
+  "result": { "topics": ["orders", "payments"] }
+}
+```
+
+Rules:
+
+- `action` is owned by the plugin and needs no prefix: actions are looked up by `pluginId` and `action`.
+- `payload` and `result` are opaque JSON. Secret references in `payload` are passed on unresolved; the handler resolves them with `ConfigService.materializeSecrets`, which may fail with `SECURITY_SESSION_CLOSED`.
+- Errors: `VALIDATION` for a missing action name or a handler that throws `IllegalArgumentException`, `ACTION_NOT_FOUND` when the plugin has no such action (or isn't active), `SECURITY_SESSION_CLOSED`, and `INTERNAL` for anything else.
+- The desktop gateway waits 10 seconds for the answer unless the caller passes `timeoutMs`; a call that runs out of time is answered with `TIMEOUT` in the renderer, while the backend action may still finish.
+
 SQL semantic action `sql.complete` request payload:
 
 ```json
@@ -906,6 +937,7 @@ Rules:
 - `METHOD_NOT_FOUND`: unknown method
 - `UNSUPPORTED_PROTOCOL`: no compatible protocol major
 - `ENGINE_NOT_FOUND`: requested engine unavailable
+- `ACTION_NOT_FOUND`: the plugin has no backend action of that name (`plugin.invoke`, since 0.23)
 - `QUERY_NOT_FOUND`: cancellation or progress target missing
 - `LARGE_VALUE_NOT_FOUND`: requested large-value reference is unavailable
 - `TIMEOUT`: operation exceeded deadline

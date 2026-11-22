@@ -14,6 +14,8 @@ import {
   type FileOpenResult,
   type EngineInvokeParams,
   type EngineInvokeResult,
+  type PluginInvokeParams,
+  type PluginInvokeResult,
   type HandshakeParams,
   type HandshakeResult,
   type PingParams,
@@ -168,6 +170,9 @@ export class BackendGateway {
     ipcMain.handle("backend:engine-invoke", async (_event, params: EngineInvokeParams) => {
       return this.invokeEngine(params);
     });
+    ipcMain.handle("backend:plugin-invoke", async (_event, params: PluginInvokeParams, options?: { timeoutMs?: number }) => {
+      return this.invokePlugin(params, options?.timeoutMs);
+    });
     ipcMain.handle("backend:file-open", async (_event, params: FileOpenParams) => {
       return this.openFile(params);
     });
@@ -312,6 +317,32 @@ export class BackendGateway {
         return { error: { code: e.code, message: e.originalMessage } };
       }
       const message = e instanceof Error ? e.message : String(e);
+      return { error: { code: "INVOKE_ERROR", message } };
+    }
+  }
+
+  public async invokePlugin(params: PluginInvokeParams, timeoutMs?: number): Promise<PluginInvokeResult> {
+    const envelope = this.createRequest("plugin.invoke", params);
+    this.appendLog("debug", "gateway", `Sending request ${envelope.id} plugin.invoke ${params.pluginId} ${params.action}`);
+    await this.waitUntilHealthy(30_000);
+    if (this.statusStore.get().state !== "healthy") {
+      return { error: { code: "BACKEND_NOT_READY", message: this.statusStore.get().error ?? "Backend is not healthy yet" } };
+    }
+    if (this.tracePayloads) {
+      this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
+    }
+    try {
+      const response = await this.sendRequest(envelope, timeoutMs !== undefined && timeoutMs > 0 ? timeoutMs : undefined);
+      return (response.result ?? {}) as PluginInvokeResult;
+    } catch (e) {
+      if (e instanceof BackendResponseError) {
+        return { error: { code: e.code, message: e.originalMessage } };
+      }
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.startsWith("Request timeout")) {
+        const seconds = Math.round((timeoutMs !== undefined && timeoutMs > 0 ? timeoutMs : 10_000) / 1000);
+        return { error: { code: "TIMEOUT", message: `The backend action '${params.action}' did not answer within ${seconds} seconds` } };
+      }
       return { error: { code: "INVOKE_ERROR", message } };
     }
   }
@@ -622,6 +653,7 @@ export class BackendGateway {
       | "queryengine.cancel"
       | "queryengine.largeValue.read"
       | "queryengine.invoke"
+      | "plugin.invoke"
       | "file.open"
       | "file.close"
       | "about.pluginChangelogs",

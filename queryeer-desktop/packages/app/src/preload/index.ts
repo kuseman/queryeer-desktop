@@ -7,6 +7,8 @@ import type {
   FileCloseResult,
   EngineInvokeParams,
   EngineInvokeResult,
+  PluginInvokeParams,
+  PluginInvokeResult,
   FileOpenParams,
   FileOpenResult,
   QueryCancelParams,
@@ -125,6 +127,7 @@ type AppShellApi = {
   cancelBackendQuery: (params: QueryCancelParams) => Promise<QueryCancelResult>;
   readBackendLargeValue: (params: QueryLargeValueReadParams) => Promise<QueryLargeValueReadResult>;
   invokeBackendEngine: (params: EngineInvokeParams) => Promise<EngineInvokeResult>;
+  invokeBackendPlugin: (params: PluginInvokeParams, options?: { timeoutMs?: number }) => Promise<PluginInvokeResult>;
   openBackendFile: (params: FileOpenParams) => Promise<FileOpenResult>;
   closeBackendFile: (params: FileCloseParams) => Promise<FileCloseResult>;
   notifyBackendFileChange: (params: FileChangeNotification) => Promise<void>;
@@ -348,6 +351,9 @@ const appShellApi: AppShellApi = {
   },
   invokeBackendEngine: async (params) => {
     return ipcRenderer.invoke("backend:engine-invoke", params);
+  },
+  invokeBackendPlugin: async (params, options) => {
+    return ipcRenderer.invoke("backend:plugin-invoke", params, options);
   },
   openBackendFile: async (params) => {
     return ipcRenderer.invoke("backend:file-open", params);

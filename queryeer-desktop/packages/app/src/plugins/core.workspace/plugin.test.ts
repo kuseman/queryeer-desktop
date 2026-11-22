@@ -51,6 +51,7 @@ function createContext(providers: QuickCommandProvider[]): PluginContext {
   return {
     plugin: { id: "test.plugin", name: "Test plugin", version: "0.0.0" },
     isDependencyActive: () => false,
+    backend: { invoke: async () => undefined as never },
     commands: {
       registerCommand: vi.fn(),
       executeCommand: vi.fn(async () => ({ commandId: "noop", executed: true })),
