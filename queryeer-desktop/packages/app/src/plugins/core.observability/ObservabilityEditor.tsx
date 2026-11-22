@@ -1,27 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { BackendGatewayStatus } from "@queryeer/api/backend";
 import type { FileEntity } from "@queryeer/api/files/FileEntity";
 import { getQueryEngineService } from "../core.queryengine/QueryEngineService";
-import { getRegisteredQueryExecutableEngines } from "../core.queryengine/engine-registration";
 import { BACKEND_STATE_TONES, BackendSection } from "./BackendSection";
 import { Badge, Card, CopyButton, EmptyState, Icon, Meter, Sparkline, StatTile, StatusDot, toneOfSeverity, type Tone } from "./components";
 import { ContributionsSection } from "./ContributionsSection";
 import { EnginesSection } from "./EnginesSection";
-import {
-  buildPluginRows,
-  collectAttention,
-  collectContributions,
-  formatBytes,
-  formatDuration,
-  summarize,
-  type AttentionItem,
-  type PluginRow,
-  type SectionId
-} from "./model";
-import { onRevealInObservability, rememberSection, takeInitialLocation, type ObservabilityLocation } from "./navigation";
+import { formatBytes, formatDuration, summarize, type AttentionItem, type PluginRow } from "./model";
+import { revealInObservability, useObservabilityEditorOpen, useObservabilityLocation, type ObservabilityLocation } from "./navigation";
 import { PluginsSection, type PluginFilter } from "./PluginsSection";
-import { getRuntimeData, type RuntimeData } from "./runtime-data";
-import { getHistory, readRendererMemory, useObservabilityPolling, type Sample } from "./use-observability-data";
+import type { RuntimeData } from "./runtime-data";
+import { getHistory, readRendererMemory, type Sample } from "./use-observability-data";
+import { useObservabilityModel } from "./use-observability-model";
 
 type ObservabilityEditorProps = {
   listFiles: () => FileEntity[];
@@ -29,43 +19,19 @@ type ObservabilityEditorProps = {
   openFile: (fileId: string) => void;
 };
 
-const NAV: { id: SectionId; label: string; icon: string }[] = [
-  { id: "overview", label: "Overview", icon: "dashboard" },
-  { id: "plugins", label: "Plugins", icon: "extensions" },
-  { id: "contributions", label: "Contributions", icon: "symbol-namespace" },
-  { id: "engines", label: "Query engines", icon: "database" },
-  { id: "backend", label: "Backend", icon: "server-process" }
-];
-
+/** The section the sidebar menu (`ObservabilityNav`) picks; the editor itself has no menu. */
 export function ObservabilityEditor({ listFiles, openFile }: ObservabilityEditorProps) {
-  const [location, setLocation] = useState<ObservabilityLocation>(takeInitialLocation);
+  useObservabilityEditorOpen();
+  const location = useObservabilityLocation();
   const [pluginFilter, setPluginFilter] = useState<PluginFilter>(location.filter ?? "all");
-  const { backendStatus, tick, refresh } = useObservabilityPolling();
+  const { backendStatus, refresh, runtime, engines, contributions, rows, fileMatches, attention } = useObservabilityModel(listFiles);
 
-  const navigate = (next: ObservabilityLocation) => {
-    setLocation(next);
-    if (next.filter) {
-      setPluginFilter(next.filter);
+  // A location with a filter, such as "plugin problems", also sets the plugin list's filter
+  useEffect(() => {
+    if (location.filter) {
+      setPluginFilter(location.filter);
     }
-    rememberSection(next.section);
-  };
-
-  useEffect(() => onRevealInObservability(navigate), []);
-
-  // The frontend state has no change events: re-read it on every poll
-  const runtime = useMemo(() => getRuntimeData(), [tick]);
-  const engines = useMemo(() => getRegisteredQueryExecutableEngines(), [tick]);
-  const contributions = useMemo(() => (runtime ? collectContributions(runtime, engines) : []), [runtime, engines]);
-  const rows = useMemo(() => (runtime ? buildPluginRows(runtime, backendStatus, contributions) : []), [runtime, backendStatus, contributions]);
-  // Re-read on every poll: open files and their bindings have no change events here
-  const fileMatches = useMemo(
-    () => listFiles().map((file) => ({ file, ...getQueryEngineService().getEngineResolverDiagnostics(file.fileId) })),
-    [tick]
-  );
-  const attention = useMemo(
-    () => (runtime ? collectAttention(runtime, rows, backendStatus, fileMatches) : []),
-    [runtime, rows, backendStatus, fileMatches]
-  );
+  }, [location]);
 
   if (!runtime) {
     return (
@@ -76,7 +42,7 @@ export function ObservabilityEditor({ listFiles, openFile }: ObservabilityEditor
   }
 
   const now = Date.now();
-  const selectPlugin = (pluginId: string) => navigate({ section: "plugins", pluginId });
+  const selectPlugin = (pluginId: string) => revealInObservability({ section: "plugins", pluginId });
   const errorCount = attention.filter((item) => item.severity === "error").length;
   const warningCount = attention.filter((item) => item.severity === "warning").length;
 
@@ -103,93 +69,45 @@ export function ObservabilityEditor({ listFiles, openFile }: ObservabilityEditor
         </div>
       </header>
 
-      <div className="obs-body">
-        <nav className="obs-nav" aria-label="Observability sections">
-          {NAV.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`obs-nav-item${location.section === item.id ? " obs-nav-item-active" : ""}`}
-              aria-current={location.section === item.id ? "page" : undefined}
-              onClick={() => navigate({ section: item.id })}
-            >
-              <Icon name={item.icon} />
-              <span className="obs-nav-label">{item.label}</span>
-              <NavBadge section={item.id} rows={rows} contributions={contributions.length} attention={attention} backendStatus={backendStatus} />
-            </button>
-          ))}
-        </nav>
-
-        <main className="obs-content">
-          {location.section === "overview" && (
-            <OverviewSection
-              rows={rows}
-              attention={attention}
-              backendStatus={backendStatus}
-              history={getHistory()}
-              runtime={runtime}
-              errorCount={errorCount}
-              warningCount={warningCount}
-              navigate={navigate}
-            />
-          )}
-          {location.section === "plugins" && (
-            <PluginsSection
-              rows={rows}
-              selectedId={location.pluginId}
-              onSelect={selectPlugin}
-              filter={pluginFilter}
-              onFilterChange={setPluginFilter}
-            />
-          )}
-          {location.section === "contributions" && (
-            <ContributionsSection contributions={contributions} keybindingDiagnostics={runtime.keybindingDiagnostics} onSelectPlugin={selectPlugin} />
-          )}
-          {location.section === "engines" && (
-            <EnginesSection
-              registrations={engines}
-              resolvers={getQueryEngineService().getEngineResolverDiagnostics().resolvers}
-              fileMatches={fileMatches}
-              ownerOf={(engineId) => runtime.owners.ownerOf("queryEngine", engineId)}
-              onSelectPlugin={selectPlugin}
-              onOpenFile={openFile}
-            />
-          )}
-          {location.section === "backend" && <BackendSection status={backendStatus} history={getHistory()} now={now} onSelectPlugin={selectPlugin} />}
-        </main>
-      </div>
+      <main className="obs-content">
+        {location.section === "overview" && (
+          <OverviewSection
+            rows={rows}
+            attention={attention}
+            backendStatus={backendStatus}
+            history={getHistory()}
+            runtime={runtime}
+            errorCount={errorCount}
+            warningCount={warningCount}
+            navigate={revealInObservability}
+          />
+        )}
+        {location.section === "plugins" && (
+          <PluginsSection
+            rows={rows}
+            selectedId={location.pluginId}
+            onSelect={selectPlugin}
+            filter={pluginFilter}
+            onFilterChange={setPluginFilter}
+          />
+        )}
+        {location.section === "contributions" && (
+          <ContributionsSection contributions={contributions} keybindingDiagnostics={runtime.keybindingDiagnostics} onSelectPlugin={selectPlugin} />
+        )}
+        {location.section === "engines" && (
+          <EnginesSection
+            registrations={engines}
+            resolvers={getQueryEngineService().getEngineResolverDiagnostics().resolvers}
+            fileMatches={fileMatches}
+            ownerOf={(engineId) => runtime.owners.ownerOf("queryEngine", engineId)}
+            onSelectPlugin={selectPlugin}
+            onOpenFile={openFile}
+          />
+        )}
+        {location.section === "backend" && <BackendSection status={backendStatus} history={getHistory()} now={now} onSelectPlugin={selectPlugin} />}
+      </main>
     </div>
   );
-}
-
-function NavBadge({
-  section,
-  rows,
-  contributions,
-  attention,
-  backendStatus
-}: {
-  section: SectionId;
-  rows: PluginRow[];
-  contributions: number;
-  attention: AttentionItem[];
-  backendStatus: BackendGatewayStatus | null;
-}) {
-  if (section === "overview") {
-    const worst = attention[0]?.severity;
-    return worst && worst !== "info" ? <StatusDot tone={worst} label={`${attention.length} items need attention`} /> : null;
-  }
-  if (section === "plugins") {
-    const problems = rows.filter((row) => row.health === "error" || row.health === "warning").length;
-    return problems > 0 ? <span className="obs-nav-count obs-tone-error">{problems}</span> : <span className="obs-nav-count">{rows.length}</span>;
-  }
-  if (section === "contributions") {
-    return <span className="obs-nav-count">{contributions}</span>;
-  }
-  if (section === "backend" && backendStatus) {
-    return <StatusDot tone={BACKEND_STATE_TONES[backendStatus.state]} label={`Backend ${backendStatus.state}`} />;
-  }
-  return null;
 }
 
 function OverviewSection({

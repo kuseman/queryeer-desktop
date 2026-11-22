@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import type { BackendGatewayStatus } from "@queryeer/api/backend";
 
 export const POLL_INTERVAL_MS = 2000;
@@ -40,38 +40,80 @@ export function getHistory(): readonly Sample[] {
   return history;
 }
 
+type PollState = { backendStatus: BackendGatewayStatus | null; tick: number };
+
+// One poller for the editor and the sidebar menu, so each interval records one sample
+let pollState: PollState = { backendStatus: null, tick: 0 };
+const subscribers = new Set<() => void>();
+let interval: number | undefined;
+// Changes when polling stops, so an answer that arrives later is dropped
+let generation = 0;
+// Numbers each request; an answer older than the last one applied is dropped, so a slow poll can't overwrite a newer one
+let lastRequest = 0;
+let lastApplied = 0;
+
 export function resetHistoryForTests(): void {
   history.length = 0;
+  pollState = { backendStatus: null, tick: 0 };
+  subscribers.clear();
+  window.clearInterval(interval);
+  interval = undefined;
+  generation += 1;
+}
+
+async function poll(): Promise<void> {
+  const started = generation;
+  const request = ++lastRequest;
+  const status = await window.appShell.getBackendStatus().catch((): BackendGatewayStatus | null => null);
+  if (started !== generation || request < lastApplied) {
+    return;
+  }
+  lastApplied = request;
+  recordSample(status);
+  pollState = { backendStatus: status, tick: pollState.tick + 1 };
+  for (const subscriber of subscribers) {
+    subscriber();
+  }
+}
+
+/** Polls now and restarts the interval from here, so samples stay evenly spaced. */
+function startPolling(): void {
+  window.clearInterval(interval);
+  void poll();
+  interval = window.setInterval(() => void poll(), POLL_INTERVAL_MS);
+}
+
+function subscribe(subscriber: () => void): () => void {
+  subscribers.add(subscriber);
+  if (subscribers.size === 1) {
+    startPolling();
+  }
+  return () => {
+    subscribers.delete(subscriber);
+    if (subscribers.size === 0) {
+      window.clearInterval(interval);
+      interval = undefined;
+      generation += 1;
+    }
+  };
+}
+
+function getPollState(): PollState {
+  return pollState;
+}
+
+function refresh(): void {
+  if (subscribers.size > 0) {
+    startPolling();
+  }
 }
 
 /**
- * Polls the backend status while the view is shown. The shell pushes status only when the backend run changes, so
- * ping times, memory and executions are read on an interval. `tick` changes on every poll so the frontend state,
- * which has no change events, is re-read too.
+ * Polls the backend status while the editor or the sidebar menu is shown. The shell pushes status only when the
+ * backend run changes, so ping times, memory and executions are read on an interval. `tick` changes on every poll so
+ * the frontend state, which has no change events, is re-read too.
  */
 export function useObservabilityPolling(): { backendStatus: BackendGatewayStatus | null; tick: number; refresh: () => void } {
-  const [backendStatus, setBackendStatus] = useState<BackendGatewayStatus | null>(null);
-  const [tick, setTick] = useState(0);
-  const [refreshToken, setRefreshToken] = useState(0);
-
-  useEffect(() => {
-    let active = true;
-    const poll = async () => {
-      const status = await window.appShell.getBackendStatus().catch((): BackendGatewayStatus | null => null);
-      if (!active) {
-        return;
-      }
-      recordSample(status);
-      setBackendStatus(status);
-      setTick((value) => value + 1);
-    };
-    void poll();
-    const interval = window.setInterval(() => void poll(), POLL_INTERVAL_MS);
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-    };
-  }, [refreshToken]);
-
-  return { backendStatus, tick, refresh: () => setRefreshToken((value) => value + 1) };
+  const state = useSyncExternalStore(subscribe, getPollState);
+  return { backendStatus: state.backendStatus, tick: state.tick, refresh };
 }
