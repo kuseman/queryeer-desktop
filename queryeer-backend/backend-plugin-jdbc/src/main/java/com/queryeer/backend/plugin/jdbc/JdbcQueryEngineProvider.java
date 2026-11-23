@@ -47,6 +47,7 @@ import com.queryeer.backend.queryengine.jdbc.JdbcDialect;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectMetadata;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
 import com.queryeer.backend.queryengine.jdbc.JdbcSqlEditorServices;
+import com.queryeer.backend.queryengine.jdbc.execute.AbstractJdbcQueryExecutor;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryEventListener;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryRequest;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryResult;
@@ -286,20 +287,7 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
                 }
                 // Include stack trace and error type so the frontend sees more than just "NullPointerException"
                 details.putAll(ErrorMessages.buildErrorDetails(e));
-                // Convert character position (from e.g. PostgreSQL) to line/column using the SQL text
-                if (details.containsKey("position")
-                        && !details.containsKey("line")
-                        && sqlText != null)
-                {
-                    Object pos = details.get("position");
-                    if (pos instanceof Number n
-                            && n.intValue() > 0)
-                    {
-                        int[] lineCol = charPositionToLineColumn(sqlText, n.intValue());
-                        details.put("line", lineCol[0]);
-                        details.put("column", lineCol[1]);
-                    }
-                }
+                resolveErrorLocation(details, sqlText, failedStatementOffset(e));
                 publisher.failed(ERROR_CODE_INTERNAL, ErrorMessages.buildFailureMessage(e), details.isEmpty() ? null
                         : details);
             }
@@ -806,6 +794,57 @@ final class JdbcQueryEngineProvider implements QueryEngineProvider, FileSessionH
      * Converts a 1-based character position in SQL text to a 1-based line/column pair. Used to translate PostgreSQL's character-offset error positions into the line/column format the frontend expects
      * for editor navigation.
      */
+    /**
+     * Turns the error location a dialect extracted into a line/column in the whole executed text. Databases report it relative to the statement or batch they ran: a line (SQL Server) or a 1-based
+     * character position (PostgreSQL). When the text was split into statements, {@code statementOffset} is where the failing one starts in the text (null when unknown).
+     */
+    static void resolveErrorLocation(Map<String, Object> details, String sqlText, Integer statementOffset)
+    {
+        if (sqlText == null)
+        {
+            return;
+        }
+        int offset = statementOffset == null ? 0
+                : statementOffset;
+        if (details.get("line") instanceof Number line)
+        {
+            if (offset <= 0
+                    || line.intValue() < 1)
+            {
+                return;
+            }
+            int[] start = charPositionToLineColumn(sqlText, offset + 1);
+            details.put("line", start[0] + line.intValue() - 1);
+            if (line.intValue() == 1
+                    && details.get("column") instanceof Number column)
+            {
+                details.put("column", start[1] + column.intValue() - 1);
+            }
+            return;
+        }
+        if (details.get("position") instanceof Number position
+                && position.intValue() > 0)
+        {
+            int[] lineCol = charPositionToLineColumn(sqlText, Math.max(1, offset + position.intValue()));
+            details.put("line", lineCol[0]);
+            details.put("column", lineCol[1]);
+        }
+    }
+
+    private static Integer failedStatementOffset(Throwable throwable)
+    {
+        Throwable current = throwable;
+        while (current != null)
+        {
+            if (current instanceof AbstractJdbcQueryExecutor.JdbcQueryExecutionException executionException)
+            {
+                return executionException.statementOffset();
+            }
+            current = current.getCause();
+        }
+        return null;
+    }
+
     private static int[] charPositionToLineColumn(String sql, int position)
     {
         int line = 1;
