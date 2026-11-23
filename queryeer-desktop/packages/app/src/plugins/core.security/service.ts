@@ -21,6 +21,7 @@ type SecurityBridge = {
   storeSecret: (params: { plaintext: string; secretRef?: string }) => Promise<{ secretRef: string }>;
   resolveSecret: (params: { secretRef: string }) => Promise<{ found: boolean; plaintext?: string }>;
   deleteSecret: (params: { secretRef: string }) => Promise<{ deleted: boolean }>;
+  copySecret: (params: { secretRef: string }) => Promise<{ found: boolean; secretRef?: string }>;
   rotateMasterPassword: (params: {
     oldMasterPassword: string;
     newMasterPassword: string;
@@ -149,6 +150,15 @@ export class CoreSecurityService {
       });
       throw error;
     }
+  }
+
+  /**
+   * A copy of a stored secret under a new ref, or undefined for an unknown ref. Copies the encrypted entry, so it works
+   * while the vault is locked. The plaintext cache isn't copied: the copy is read from the vault when needed.
+   */
+  public async copySecret(secretRef: string): Promise<string | undefined> {
+    const copied = await this.bridge.copySecret({ secretRef });
+    return copied.found ? copied.secretRef : undefined;
   }
 
   public async ensureUnlockedForSecretAccess(options?: { interactive?: boolean }): Promise<boolean> {
@@ -290,6 +300,7 @@ export function initializeCoreSecurityService(dialog: DialogRegistry): CoreSecur
       storeSecret: (params) => window.appShell.storeSecret(params),
       resolveSecret: (params) => window.appShell.resolveSecret(params),
       deleteSecret: (params) => window.appShell.deleteSecret(params),
+      copySecret: (params) => window.appShell.copySecret(params),
       rotateMasterPassword: (params) => window.appShell.rotateSecurityMasterPassword(params)
     }, dialog);
   }

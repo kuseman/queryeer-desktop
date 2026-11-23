@@ -2,6 +2,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { PasswordFieldInputProps } from "@queryeer/api/settings/SettingsExtension";
 import { getCoreSecurityService } from "../core.security/service";
 
+/** Saves started by any password field that haven't finished, i.e. stored and reported through `onChangeRef`. */
+const pendingWrites = new Set<Promise<unknown>>();
+
+/**
+ * Resolves once every password save started so far has finished and reported its ref. A clone waits for this, so it
+ * copies the password the user just typed (saved on blur) rather than the previous one, or none.
+ */
+export async function passwordWritesSettled(): Promise<void> {
+  while (pendingWrites.size > 0) {
+    await Promise.allSettled([...pendingWrites]);
+  }
+}
+
 export function PasswordFieldInput({ inputId, valueRef, readonly = false, onChangeRef }: PasswordFieldInputProps): JSX.Element {
   const security = getCoreSecurityService();
   const [draft, setDraft] = useState("");
@@ -102,6 +115,11 @@ export function PasswordFieldInput({ inputId, valueRef, readonly = false, onChan
     };
 
     const result = writeChainRef.current.then(persist, persist);
+    pendingWrites.add(result);
+    const forget = (): void => {
+      pendingWrites.delete(result);
+    };
+    void result.then(forget, forget);
     writeChainRef.current = result.then(
       () => undefined,
       () => undefined

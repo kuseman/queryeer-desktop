@@ -4,6 +4,7 @@ import {
   CollectionSettingsListEditor,
   useCollectionSettingsPersistence
 } from "../core.settings/CollectionSettingsListEditor";
+import { copySettingSecrets } from "../core.settings/copy-secrets";
 import { PasswordFieldInput } from "../core.settings/PasswordFieldInput";
 import { parsePayloadbuilderEnvironments } from "./environment-settings";
 
@@ -71,17 +72,18 @@ export function PayloadbuilderEnvironmentsSettingsEditor({ value, readonly, setV
       setSelectedId(row.id);
     }}
     onDelete={(id) => sync(rows.filter((r) => r.id !== id))}
-    onClone={(id) => {
-      const source = rows.find((r) => r.id === id);
+    onClone={async (id) => {
+      const source = rowsRef.current.find((r) => r.id === id);
       if (!source) return;
-      // Never share a secretRef between environments; editing one would overwrite the other.
+      // The clone gets its own copy of every secret variable: a shared secretRef would let editing either change the other
+      const copied = await copySettingSecrets(source);
       const clone = {
-        ...source,
+        ...copied,
         id: crypto.randomUUID(),
         envId: crypto.randomUUID(),
-        variables: source.variables.map((v) => ({ ...v, id: crypto.randomUUID(), secretRef: undefined }))
+        variables: copied.variables.map((v) => ({ ...v, id: crypto.randomUUID() }))
       };
-      sync([...rows, clone]);
+      sync([...rowsRef.current, clone]);
       setSelectedId(clone.id);
     }}
     renderDetails={(id) => {

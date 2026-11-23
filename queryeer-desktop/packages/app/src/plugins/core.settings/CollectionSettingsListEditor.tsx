@@ -4,6 +4,7 @@ import type {
   UseCollectionSettingsPersistence
 } from "@queryeer/api/settings/SettingsExtension";
 import { Fragment, useCallback, useEffect, useRef } from "react";
+import { passwordWritesSettled } from "./PasswordFieldInput";
 
 export type { CollectionSettingsListItem };
 
@@ -19,6 +20,19 @@ export function CollectionSettingsListEditor({
   renderDetails
 }: CollectionSettingsListEditorProps): JSX.Element {
   const hasItems = items.length > 0;
+  const onCloneRef = useRef(onClone);
+  onCloneRef.current = onClone;
+
+  // A password typed just before clicking Clone is saved on blur, asynchronously: wait for it, so the clone's
+  // `copySecrets` copies that password and not the previous one (or none). Calls the latest onClone, which has
+  // seen the saved ref.
+  const clone = async (id: string): Promise<void> => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    await passwordWritesSettled();
+    onCloneRef.current(id);
+  };
 
   return (
     <div className="settings-list-editor">
@@ -41,7 +55,7 @@ export function CollectionSettingsListEditor({
                 type="button"
                 className="settings-list-editor-icon-button"
                 disabled={readonly}
-                onClick={() => onClone(item.id)}
+                onClick={() => void clone(item.id)}
                 title="Clone"
                 aria-label={`Clone ${item.label}`}
               >

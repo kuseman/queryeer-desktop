@@ -999,10 +999,25 @@ A table result provider's `getItems(context)` receives the selection (`selection
 | `settings.setValue(id, value)` | `Promise<AdvancedValidationResult>` | Set a registered setting, validated and saved like an edit in Settings (0.21) |
 | `settings.readModuleValues(moduleId)` | `Promise<Readonly<Record<string, unknown>>>` | The stored values of any settings module, also one no plugin registers (0.21) |
 | `settings.runOnce(id, run)` | `void` | Run `run` once per installation, after settings are loaded (0.21) |
+| `settings.copySecrets(value)` | `Promise<T>` | A deep copy of `value` with its own vault copy of every `{ secretRef }`, for cloning a setting (0.23) |
 
 Use `context.components.PasswordFieldInput` in advanced settings renderers for credentials. The component stores plaintext through the host vault and reports only a `SecretRefValue` to the plugin.
 
 Use `context.components.CollectionSettingsListEditor` for host-styled add, clone, delete, selection, validation markers, read-only behavior, and a caller-rendered detail pane. `context.components.useCollectionSettingsPersistence` provides `persistNow` and debounced persistence helpers; the latest pending debounced value is flushed when the component unmounts.
+
+The list editor only calls `onClone(id)`; the plugin makes the copy. Never copy a `{ secretRef }` into it: both rows would point at one vault entry, so editing or clearing the password of either would change the other's. Since 0.23, `context.settings.copySecrets(row)` returns a deep copy in which every `{ secretRef }`, also nested or in arrays, points at its own copy of the vault entry. The clone keeps a working password, and it works while the vault is locked. A secret that can't be copied becomes `undefined`. Before calling `onClone`, the list editor waits for any password the user just typed to be saved and reported through `onChangeRef`, so read the source row from your latest rows (a ref, not the rendered state). Give the copy its new ID after the call, and append it to your latest rows, since the call is asynchronous:
+
+```tsx
+onClone={async (id) => {
+  const source = rowsRef.current.find((row) => row.connectionId === id);
+  if (source) {
+    const copy = { ...(await context.settings.copySecrets(source)), connectionId: crypto.randomUUID() };
+    commit([...rowsRef.current, copy], copy.connectionId);
+  }
+}}
+```
+
+A plugin whose `apiVersion` also allows Queryeer before 0.23 checks that `copySecrets` exists, and otherwise leaves the secrets out of the clone.
 
 The settings service may still be initializing while a plugin's `activate` function runs. Plugins that need a setting during activation should register `settings.subscribe` first and read the value from the callback; the callback runs when settings become ready and on later changes. Settings contributions registered after initialization are refreshed and hydrated automatically.
 
@@ -1674,6 +1689,7 @@ Backend:
 Frontend:
 
 - **An `async` provider can return `null` or `undefined` for "nothing"** (`ProviderResult`). In 0.22 only a provider that wasn't `async` could, so the `async` completion example in §7.2.1 didn't compile against 0.22's types. A plugin that supports 0.22 returns an empty result from an `async` provider instead: `{ suggestions: [] }` for completion, `{ contents: [] }` for a hover (shown as none).
+- **`context.settings.copySecrets(value)`** copies a setting's secrets for a clone (§7.7). A settings editor that clones rows with secrets should use it instead of copying the `{ secretRef }`. A plugin that builds a whole `PluginContext` in its tests needs it in its `settings` mock.
 
 ## Reference: Example Plugins
 

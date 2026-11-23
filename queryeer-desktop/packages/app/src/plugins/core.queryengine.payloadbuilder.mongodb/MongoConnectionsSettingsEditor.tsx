@@ -5,6 +5,7 @@ import {
   CollectionSettingsListEditor,
   useCollectionSettingsPersistence
 } from "../core.settings/CollectionSettingsListEditor";
+import { copySettingSecrets } from "../core.settings/copy-secrets";
 import { PasswordFieldInput } from "../core.settings/PasswordFieldInput";
 import {
   isMongoConnectionString,
@@ -84,14 +85,14 @@ export function MongoConnectionsSettingsEditor({ value, readonly, setValue }: Pr
     syncRows(nextRows, nextRows[index]?.id ?? nextRows[index - 1]?.id);
   };
 
-  const cloneRow = (id: string): void => {
-    const source = rows.find((row) => row.id === id);
+  const cloneRow = async (id: string): Promise<void> => {
+    const source = rowsRef.current.find((row) => row.id === id);
     if (!source) {
       return;
     }
-    // Never share a secretRef between rows; editing one would overwrite the other.
-    const clone = { ...source, id: crypto.randomUUID(), connectionId: generateConnectionId(), authPassword: undefined };
-    syncRows([...rows, clone], clone.id);
+    // The clone gets its own copy of the password: a shared secretRef would let editing either change the other
+    const clone = { ...(await copySettingSecrets(source)), id: crypto.randomUUID(), connectionId: generateConnectionId() };
+    syncRows([...rowsRef.current, clone], clone.id);
   };
 
   const rowErrors = useMemo(() => buildRowErrors(rows), [rows]);
