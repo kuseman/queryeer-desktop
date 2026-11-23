@@ -23,7 +23,7 @@
         <junit.jupiter.version>6.1.0</junit.jupiter.version>
         <mockito.core.version>5.23.0</mockito.core.version>
         <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
-        <payloadbuilder.version>1.16.0</payloadbuilder.version>
+        <payloadbuilder.version>1.17.0</payloadbuilder.version>
         <tree-sitter.version>0.26.6</tree-sitter.version>
         <tree-sitter-sql.version>gh-pages-a</tree-sitter-sql.version>
         <testcontainers.version>1.21.3</testcontainers.version>
@@ -175,6 +175,8 @@
                             <autoPublish>true</autoPublish>
                             <waitUntil>uploaded</waitUntil>
                             <deploymentName>Queryeer Desktop</deploymentName>
+                            <!-- Only generate MD5 and SHA1 (required by Central). SHA256/SHA512 doubles the checksum file count which counts towards publishing limits -->
+                            <checksums>required</checksums>
                         </configuration>
                     </plugin>
                 </plugins>
