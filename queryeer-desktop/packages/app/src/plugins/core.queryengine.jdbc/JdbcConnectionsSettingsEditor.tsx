@@ -7,6 +7,7 @@ import {
   CollectionSettingsListEditor,
   useCollectionSettingsPersistence
 } from "../core.settings/CollectionSettingsListEditor";
+import { copySettingSecrets } from "../core.settings/copy-secrets";
 import { PasswordFieldInput } from "../core.settings/PasswordFieldInput";
 import {
   parseJdbcConnectionDefinitions,
@@ -163,20 +164,18 @@ export function JdbcConnectionsSettingsEditor({ value, readonly, setValue }: Pro
     syncRows(nextRows, nextSelection);
   };
 
-  const cloneRow = (id: string): void => {
-    const source = rows.find((row) => row.id === id);
+  const cloneRow = async (id: string): Promise<void> => {
+    const source = rowsRef.current.find((row) => row.id === id);
     if (!source) {
       return;
     }
+    // The clone gets its own copy of the password: a shared secretRef would let editing either change the other
     const clone: Row = {
-      ...source,
+      ...(await copySettingSecrets(source)),
       id: crypto.randomUUID(),
-      connectionId: generateConnectionId(),
-      // A secretRef points at one vault entry; sharing it would make edits to either
-      // connection's password overwrite the other's. The clone starts without one.
-      password: undefined
+      connectionId: generateConnectionId()
     };
-    syncRows([...rows, clone], clone.id);
+    syncRows([...rowsRef.current, clone], clone.id);
   };
 
   const rowErrors = useMemo(() => buildRowErrors(rows, setupFor), [rows, dialects, dialectRegistryVersion]);

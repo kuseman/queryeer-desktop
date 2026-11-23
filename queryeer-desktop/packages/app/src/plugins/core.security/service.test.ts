@@ -34,6 +34,7 @@ const createService = (options?: {
     storeSecret: vi.fn(async () => ({ secretRef: "secret-ref-1" })),
     resolveSecret: vi.fn(async () => ({ found: false })),
     deleteSecret: vi.fn(async () => ({ deleted: true })),
+    copySecret: vi.fn(async () => ({ found: false })),
     rotateMasterPassword: vi.fn(async () => response)
   };
 

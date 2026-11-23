@@ -149,7 +149,8 @@ function createContext(providers: QuickCommandProvider[]): PluginContext {
       open: vi.fn(),
       setValue: vi.fn(async () => ({ ok: true as const })),
       readModuleValues: vi.fn(async () => ({})),
-      runOnce: vi.fn()
+      runOnce: vi.fn(),
+      copySecrets: async <T,>(value: T) => value
     },
     quickcommand: {
       registerProvider: vi.fn((provider) => {

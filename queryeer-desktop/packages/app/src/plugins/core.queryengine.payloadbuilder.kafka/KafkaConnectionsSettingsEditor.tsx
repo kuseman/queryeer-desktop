@@ -4,6 +4,7 @@ import {
   CollectionSettingsListEditor,
   useCollectionSettingsPersistence
 } from "../core.settings/CollectionSettingsListEditor";
+import { copySettingSecrets } from "../core.settings/copy-secrets";
 import { PasswordFieldInput } from "../core.settings/PasswordFieldInput";
 import {
   parseKafkaConnectionDefinitions,
@@ -118,19 +119,18 @@ export function KafkaConnectionsSettingsEditor({ value, readonly, setValue }: Pr
     syncRows(nextRows, nextSelection);
   };
 
-  const cloneRow = (id: string): void => {
-    const source = rows.find((row) => row.id === id);
+  const cloneRow = async (id: string): Promise<void> => {
+    const source = rowsRef.current.find((row) => row.id === id);
     if (!source) {
       return;
     }
+    // The clone gets its own copy of every secret: a shared secretRef would let editing either change the other
     const clone: Row = {
-      ...source,
+      ...(await copySettingSecrets(source)),
       id: crypto.randomUUID(),
-      connectionId: generateConnectionId(),
-      // Never share a secretRef between rows; editing one would overwrite the other.
-      saslJaasConfig: undefined
+      connectionId: generateConnectionId()
     };
-    syncRows([...rows, clone], clone.id);
+    syncRows([...rowsRef.current, clone], clone.id);
   };
 
   const rowErrors = useMemo(() => buildRowErrors(rows), [rows]);

@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { SecretRefValue } from "@queryeer/api/security/Security";
 import { CollectionSettingsListEditor } from "../core.settings/CollectionSettingsListEditor";
+import { copySettingSecrets } from "../core.settings/copy-secrets";
 import { PasswordFieldInput } from "../core.settings/PasswordFieldInput";
 import {
   OPENAI_DEFAULT_HOST,
@@ -60,18 +61,18 @@ export function AssistantConnectionsSettingsEditor({ value, setValue, readonly }
         persist([...connections, created]);
         setSelectedId(created.id);
       }}
-      onClone={(id) => {
-        const source = connections.find((connection) => connection.id === id);
+      onClone={async (id) => {
+        const source = connectionsRef.current.find((connection) => connection.id === id);
         if (!source) {
           return;
         }
+        // The clone gets its own copy of the API key: a shared secretRef would let editing either change the other
         const cloned = {
-          ...source,
+          ...(await copySettingSecrets(source)),
           id: createAssistantConnection().id,
-          name: `${source.name} Copy`,
-          apiKeyRef: undefined
+          name: `${source.name} Copy`
         };
-        persist([...connections, cloned]);
+        persist([...connectionsRef.current, cloned]);
         setSelectedId(cloned.id);
       }}
       onDelete={(id) => {

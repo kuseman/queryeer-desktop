@@ -104,6 +104,14 @@ export type SettingsRegistry = SettingsContributionRegistry & {
    * when it resolves, after what it changed is saved; one that throws runs again on the next start. Since 0.21.
    */
   runOnce: (id: string, run: () => void | Promise<void>) => void;
+  /**
+   * A deep copy of `value` in which every `{ secretRef }` object points at its own new copy of the vault entry. Use it
+   * when cloning a setting, e.g. a connection in a `CollectionSettingsListEditor`: a copied `secretRef` would share one
+   * vault entry, so editing or clearing the password of either row would change the other's. Works while the vault is
+   * locked. A secret that can't be copied (unknown ref, no vault) becomes `undefined`, so the clone has no secret
+   * rather than a shared one. Arrays and plain objects are walked; other values are kept as they are. Since 0.23.
+   */
+  copySecrets: <T>(value: T) => Promise<T>;
 };
 
 export type CollectionSettingsListItem = {

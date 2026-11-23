@@ -22,6 +22,16 @@ async function flush(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+/** A locked vault that can only copy secrets, as copying needs no unlock. */
+function lockedVault(copySecret: (secretRef: string) => Promise<string | undefined>): unknown {
+  return {
+    getStatus: async () => ({ unlocked: false, hasPersistedVault: true, hasStoredMasterPassword: false }),
+    subscribeStatus: () => () => undefined,
+    peekSecret: () => undefined,
+    copySecret
+  };
+}
+
 describe("JdbcConnectionsSettingsEditor", () => {
   let rootElement: HTMLDivElement;
   let root: Root;
@@ -46,7 +56,9 @@ describe("JdbcConnectionsSettingsEditor", () => {
     securityHolder.current = undefined;
   });
 
-  it("does not share the password secretRef with a cloned connection", async () => {
+  it("gives a cloned connection its own copy of the password", async () => {
+    const copySecret = vi.fn(async (secretRef: string) => `${secretRef}-copy`);
+    securityHolder.current = lockedVault(copySecret);
     const setValue = vi.fn();
 
     await act(async () => {
@@ -89,10 +101,36 @@ describe("JdbcConnectionsSettingsEditor", () => {
     expect(latest[1]?.connectionId).not.toBe("conn-1");
     expect(latest[1]?.url).toBe("jdbc:test://prod");
     expect(latest[1]?.username).toBe("admin");
+    expect(copySecret).toHaveBeenCalledWith("secret-1");
+    expect(latest[1]?.password).toEqual({ secretRef: "secret-1-copy" });
+  });
+
+  it("clones a connection without a password when the secret can't be copied", async () => {
+    securityHolder.current = lockedVault(async () => undefined);
+    const setValue = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <JdbcConnectionsSettingsEditor
+          readonly={false}
+          value={[{ connectionId: "conn-1", title: "Prod", dialectId: "jdbc", url: "jdbc:test://prod", password: { secretRef: "gone" }, enabled: true }]}
+          setValue={setValue}
+        />
+      );
+      await flush();
+    });
+    await act(async () => {
+      rootElement.querySelector<HTMLButtonElement>("button[title='Clone']")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flush();
+    });
+
+    const latest = setValue.mock.calls[setValue.mock.calls.length - 1]?.[0] as Array<{ password?: { secretRef: string } }>;
+    expect(latest).toHaveLength(2);
+    expect(latest[0]?.password).toEqual({ secretRef: "gone" });
     expect(latest[1]?.password).toBeUndefined();
   });
 
-  it("does not carry the source's in-flight password save over to the clone it jumps to", async () => {
+  it("edits and clears only the clone's own copy of the password", async () => {
     let releaseStore: () => void = () => undefined;
     const storeSecret = vi.fn((_plaintext: string, secretRef?: string) =>
       new Promise<{ secretRef: string }>((resolve) => {
@@ -106,6 +144,7 @@ describe("JdbcConnectionsSettingsEditor", () => {
       peekSecret: () => "old-pass",
       storeSecret,
       deleteSecret,
+      copySecret: async () => "secret-1-copy",
       ensureUnlockedForSecretAccess: async () => true
     };
     const setValue = vi.fn();
@@ -153,8 +192,7 @@ describe("JdbcConnectionsSettingsEditor", () => {
       await flush();
     });
 
-    // The clone starts empty; clearing its (empty) password must not touch the source's vault entry
-    expect(passwordInput().value).toBe("");
+    // The clone has its own copy; editing and clearing it must not touch the source's vault entry
     await act(async () => {
       typeInto(passwordInput(), "clone-pass");
       await flush();
@@ -163,7 +201,7 @@ describe("JdbcConnectionsSettingsEditor", () => {
       passwordInput().dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
       await flush();
     });
-    expect(storeSecret).toHaveBeenLastCalledWith("clone-pass", undefined);
+    expect(storeSecret).toHaveBeenLastCalledWith("clone-pass", "secret-1-copy");
     await act(async () => {
       releaseStore();
       await flush();
@@ -177,7 +215,12 @@ describe("JdbcConnectionsSettingsEditor", () => {
       await flush();
     });
 
+    expect(deleteSecret).toHaveBeenCalledWith("secret-1-copy");
     expect(deleteSecret).not.toHaveBeenCalledWith("secret-1");
+    // The cleared password is saved with the settings' debounce
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
     const latest = setValue.mock.calls[setValue.mock.calls.length - 1]?.[0] as Array<{ password?: { secretRef: string } }>;
     expect(latest[0]?.password).toEqual({ secretRef: "secret-1" });
     expect(latest[1]?.password).toBeUndefined();

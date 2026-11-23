@@ -46,6 +46,7 @@ import {
   setCoreSetting,
   subscribeEffectiveSettings
 } from "../../plugins/core.settings/service";
+import { copySettingSecrets } from "../../plugins/core.settings/copy-secrets";
 import { PasswordFieldInput } from "../../plugins/core.settings/PasswordFieldInput";
 import {
   CollectionSettingsListEditor,
@@ -189,6 +190,7 @@ export class PluginHost {
         open: openCoreSettings,
         setValue: setCoreSetting,
         readModuleValues: readCoreSettingsModuleValues,
+        copySecrets: copySettingSecrets,
         runOnce: () => {
           throw new Error("runOnce is per plugin");
         }
