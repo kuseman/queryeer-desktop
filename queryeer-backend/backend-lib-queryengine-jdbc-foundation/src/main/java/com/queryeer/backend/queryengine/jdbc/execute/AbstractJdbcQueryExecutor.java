@@ -68,6 +68,49 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
     }
 
     /**
+     * A statement from {@link #splitStatements(String)} with the character offset (0-based) where it starts in the original SQL text, or -1 when it could not be located there.
+     */
+    protected record LocatedStatement(String sql, int offset)
+    {
+        /** The offset, or null when the statement could not be located. */
+        public Integer knownOffset()
+        {
+            return offset < 0 ? null
+                    : offset;
+        }
+    }
+
+    /**
+     * Splits the SQL text with {@link #splitStatements(String)} and locates each statement in the original text, so an error position the database reports relative to a statement can be mapped back
+     * to the whole text.
+     */
+    protected final List<LocatedStatement> splitLocatedStatements(String sql)
+    {
+        return locateStatements(sql, splitStatements(sql));
+    }
+
+    /**
+     * Locates each statement in the text. Statements are expected to be (trimmed) slices of the text in order; one that isn't gets offset -1 and doesn't move the search.
+     */
+    static List<LocatedStatement> locateStatements(String sql, List<String> statements)
+    {
+        List<LocatedStatement> result = new ArrayList<>(statements.size());
+        int searchFrom = 0;
+        for (String statement : statements)
+        {
+            int offset = sql == null
+                    || statement == null ? -1
+                            : sql.indexOf(statement, searchFrom);
+            if (offset >= 0)
+            {
+                searchFrom = offset + statement.length();
+            }
+            result.add(new LocatedStatement(statement, offset));
+        }
+        return result;
+    }
+
+    /**
      * Maps a raw column value fetched via {@code ResultSet.getObject()} to the value published to the event listener. Default: return the value unchanged.
      *
      * @param value the raw value from the result set (may be {@code null})
@@ -167,7 +210,7 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
     public final JdbcQueryResult execute(JdbcQueryRequest request, JdbcQueryEventListener eventListener)
     {
         long rowCount = 0L;
-        List<String> statements = splitStatements(request.sql());
+        List<LocatedStatement> statements = splitLocatedStatements(request.sql());
         String resolvedDatabase = null;
         String resolvedSessionId = null;
 
@@ -217,14 +260,18 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
         return new JdbcQueryResult(rowCount, engineState);
     }
 
-    private long executeStatements(JdbcQueryRequest request, JdbcQueryEventListener eventListener, List<String> statements, Connection connection) throws SQLException
+    private long executeStatements(JdbcQueryRequest request, JdbcQueryEventListener eventListener, List<LocatedStatement> statements, Connection connection) throws SQLException
     {
         long count = 0L;
-        for (String sql : statements)
+        for (LocatedStatement located : statements)
         {
             try (Statement statement = connection.createStatement())
             {
-                count += runStatement(sql, request.queryExecutionId(), eventListener, statement);
+                count += runStatement(located.sql(), request.queryExecutionId(), eventListener, statement);
+            }
+            catch (SQLException e)
+            {
+                throw new JdbcQueryExecutionException(e.getMessage(), e, located.knownOffset());
             }
         }
         return count;
@@ -427,9 +474,27 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
     {
         private static final long serialVersionUID = 1L;
 
+        private final Integer statementOffset;
+
         public JdbcQueryExecutionException(String message, Throwable cause)
         {
+            this(message, cause, null);
+        }
+
+        /**
+         * @param statementOffset character offset (0-based) in the executed SQL text where the text the database executed starts, or null when unknown. Error positions the database reports are
+         * relative to that text. May be negative when the executed text has a prefix the user didn't write (such as EXPLAIN).
+         */
+        public JdbcQueryExecutionException(String message, Throwable cause, Integer statementOffset)
+        {
             super(message, cause);
+            this.statementOffset = statementOffset;
+        }
+
+        /** See {@link #JdbcQueryExecutionException(String, Throwable, Integer)}; null when unknown. */
+        public Integer statementOffset()
+        {
+            return statementOffset;
         }
     }
 }

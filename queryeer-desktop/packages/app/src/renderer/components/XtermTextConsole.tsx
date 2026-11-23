@@ -3,6 +3,7 @@ import { Terminal } from "@xterm/xterm";
 import { isPrimaryModifier } from "../../shared/platform-utils";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { findEditorLinks } from "./xterm-editor-links";
 import "@xterm/xterm/css/xterm.css";
 
 const WRITE_BATCH_SIZE = 200;
@@ -190,56 +191,14 @@ export function XtermTextConsole({
       typeof terminal.registerLinkProvider === "function"
         ? terminal.registerLinkProvider({
             provideLinks: (bufferLineNumber, callback) => {
-              const line = terminal.buffer.active.getLine(bufferLineNumber - 1);
-              const text = line?.translateToString(true) ?? "";
-              const links: Array<{
-                range: {
-                  start: { x: number; y: number };
-                  end: { x: number; y: number };
-                };
-                text: string;
-                activate: () => void;
-              }> = [];
-              const directUriRegex = /editor:\/\/[^\s)]+/g;
-              let match: RegExpExecArray | null;
-              while ((match = directUriRegex.exec(text)) !== null) {
-                const uri = match[0];
-                const startX = match.index + 1;
-                const endX = startX + uri.length;
-                links.push({
-                  range: {
-                    start: { x: startX, y: bufferLineNumber },
-                    end: { x: endX, y: bufferLineNumber }
-                  },
-                  text: uri,
-                  activate: () => {
-                    onLinkActivateRef.current?.(uri);
-                  }
-                });
-              }
-
-              const locationLabelRegex = /\[line\s+(\d+),\s*col\s+(\d+)\]/gi;
-              while ((match = locationLabelRegex.exec(text)) !== null) {
-                const lineNumber = Number(match[1]);
-                const columnNumber = Number(match[2]);
-                if (!Number.isFinite(lineNumber) || lineNumber < 1 || !Number.isFinite(columnNumber) || columnNumber < 1) {
-                  continue;
+              const links = findEditorLinks(terminal.buffer.active, bufferLineNumber).map((link) => ({
+                range: link.range,
+                text: link.text,
+                activate: () => {
+                  onLinkActivateRef.current?.(link.uri);
                 }
-                const uri = `editor://open?line=${lineNumber}&column=${columnNumber}`;
-                const startX = match.index + 1;
-                const endX = startX + match[0].length;
-                links.push({
-                  range: {
-                    start: { x: startX, y: bufferLineNumber },
-                    end: { x: endX, y: bufferLineNumber }
-                  },
-                  text: match[0],
-                  activate: () => {
-                    onLinkActivateRef.current?.(uri);
-                  }
-                });
-              }
-              callback(links);
+              }));
+              callback(links.length > 0 ? links : undefined);
             }
           })
         : null;

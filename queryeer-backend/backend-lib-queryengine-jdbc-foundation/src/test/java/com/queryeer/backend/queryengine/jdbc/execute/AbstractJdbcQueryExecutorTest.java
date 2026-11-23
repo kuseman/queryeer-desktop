@@ -536,4 +536,28 @@ class AbstractJdbcQueryExecutorTest
         {
         }
     }
+
+    @Test
+    void locateStatements_findsTrimmedStatementsInOrder()
+    {
+        String sql = "\n  SELECT 1;\nSELECT 1;\n\n SELECT 2 ";
+
+        List<AbstractJdbcQueryExecutor.LocatedStatement> located = AbstractJdbcQueryExecutor.locateStatements(sql, List.of("SELECT 1", "SELECT 1", "SELECT 2"));
+
+        assertEquals(List.of(new AbstractJdbcQueryExecutor.LocatedStatement("SELECT 1", 3), new AbstractJdbcQueryExecutor.LocatedStatement("SELECT 1", 13),
+                new AbstractJdbcQueryExecutor.LocatedStatement("SELECT 2", 25)), located);
+    }
+
+    @Test
+    void locateStatements_statementNotInTextIsUnknownAndDoesNotMoveTheSearch()
+    {
+        String sql = "SELECT 1; SELECT 2";
+
+        List<AbstractJdbcQueryExecutor.LocatedStatement> located = AbstractJdbcQueryExecutor.locateStatements(sql, List.of("SELECT 1", "rewritten", "SELECT 2"));
+
+        assertEquals(10, located.get(2)
+                .offset());
+        assertNull(located.get(1)
+                .knownOffset());
+    }
 }

@@ -56,16 +56,28 @@ final class PostgresQueryExecutor extends AbstractJdbcQueryExecutor implements J
                 }
                 try (Statement statement = connection.createStatement())
                 {
-                    for (String sql : splitStatements(request.sql()))
+                    String explainPrefix = analyze ? "EXPLAIN (FORMAT JSON, ANALYZE) "
+                            : "EXPLAIN (FORMAT JSON) ";
+                    for (LocatedStatement located : splitLocatedStatements(request.sql()))
                     {
-                        String trimmed = sql.strip();
+                        String trimmed = located.sql()
+                                .strip();
                         if (trimmed.isEmpty())
                         {
                             continue;
                         }
-                        String explainSql = (analyze ? "EXPLAIN (FORMAT JSON, ANALYZE) "
-                                : "EXPLAIN (FORMAT JSON) ") + trimmed;
-                        runPlanStatement(statement, request.queryExecutionId(), explainSql, planJsonDocuments);
+                        try
+                        {
+                            runPlanStatement(statement, request.queryExecutionId(), explainPrefix + trimmed, planJsonDocuments);
+                        }
+                        catch (SQLException e)
+                        {
+                            // Positions Postgres reports include the EXPLAIN prefix; shift the offset back so they map to the user's text
+                            Integer offset = located.knownOffset() == null ? null
+                                    : located.offset() + located.sql()
+                                            .indexOf(trimmed) - explainPrefix.length();
+                            throw new AbstractJdbcQueryExecutor.JdbcQueryExecutionException(e.getMessage(), e, offset);
+                        }
                     }
                 }
                 forwardWarnings(connection.getWarnings(), eventListener);

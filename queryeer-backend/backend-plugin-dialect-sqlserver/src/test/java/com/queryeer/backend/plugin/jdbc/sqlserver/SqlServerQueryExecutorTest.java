@@ -3,6 +3,7 @@ package com.queryeer.backend.plugin.jdbc.sqlserver;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import com.queryeer.backend.contract.query.QueryExecuteOptions;
+import com.queryeer.backend.queryengine.jdbc.execute.AbstractJdbcQueryExecutor;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryEventListener;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryRequest;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryResult;
@@ -155,5 +157,38 @@ class SqlServerQueryExecutorTest
         Assertions.assertEquals(250L, result.rowCount());
         Assertions.assertFalse(rowsReadAtPublish.isEmpty());
         Assertions.assertEquals(100, rowsReadAtPublish.getFirst());
+    }
+
+    @Test
+    void executeFailureInLaterGoBatchCarriesThatBatchsOffsetInTheText() throws Exception
+    {
+        String sql = "\n\nSELECT 1\nGO\n\nSELECT bad\n";
+        Connection connection = Mockito.mock(Connection.class);
+        Statement statement = Mockito.mock(Statement.class);
+        Mockito.when(connection.createStatement())
+                .thenReturn(statement);
+        Mockito.when(statement.execute("SELECT 1"))
+                .thenReturn(false);
+        Mockito.when(statement.execute("SELECT bad"))
+                .thenThrow(new SQLException("Invalid column name 'bad'."));
+        Mockito.when(statement.getUpdateCount())
+                .thenReturn(-1);
+        JdbcQueryEventListener listener = new JdbcQueryEventListener()
+        {
+            @Override
+            public void onResultSetStart(List<JdbcResultColumn> columns)
+            {
+            }
+
+            @Override
+            public void onRows(List<List<Object>> rows)
+            {
+            }
+        };
+        JdbcQueryRequest request = new JdbcQueryRequest("query-1", "file-1", sql, "connection-1", null, connection, null, null, null);
+
+        AbstractJdbcQueryExecutor.JdbcQueryExecutionException e = Assertions.assertThrows(AbstractJdbcQueryExecutor.JdbcQueryExecutionException.class, () -> executor.execute(request, listener));
+
+        Assertions.assertEquals(sql.indexOf("SELECT bad"), e.statementOffset());
     }
 }

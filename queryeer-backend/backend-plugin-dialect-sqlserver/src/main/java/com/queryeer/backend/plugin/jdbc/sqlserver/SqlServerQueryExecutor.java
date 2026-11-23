@@ -85,9 +85,16 @@ final class SqlServerQueryExecutor extends AbstractJdbcQueryExecutor implements 
                 {
                     statement.execute(estimated ? "SET SHOWPLAN_XML ON"
                             : "SET STATISTICS XML ON");
-                    for (String sql : splitStatements(request.sql()))
+                    for (LocatedStatement located : splitLocatedStatements(request.sql()))
                     {
-                        rowCount += runPlanStatement(statement, request.queryExecutionId(), sql, eventListener, planXmlDocuments, includeRawXml);
+                        try
+                        {
+                            rowCount += runPlanStatement(statement, request.queryExecutionId(), located.sql(), eventListener, planXmlDocuments, includeRawXml);
+                        }
+                        catch (SQLException e)
+                        {
+                            throw new AbstractJdbcQueryExecutor.JdbcQueryExecutionException(e.getMessage(), e, located.knownOffset());
+                        }
                     }
                 }
                 finally
