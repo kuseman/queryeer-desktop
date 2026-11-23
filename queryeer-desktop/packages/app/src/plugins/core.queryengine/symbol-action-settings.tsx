@@ -6,6 +6,7 @@ import {
 import { InlineMonacoEditor, WhenExpressionEditor } from "../core.commands/WhenExpressionEditor";
 import type { SymbolAction } from "./symbol-action-types";
 import { getSymbolActionRegistry } from "./symbol-action-registry";
+import { getOutputRegistry } from "./output/OutputRegistry";
 import {
   listSymbolActionTemplates,
   subscribeSymbolActionTemplates,
@@ -191,18 +192,21 @@ export function SymbolActionsSettingsEditor({ value, readonly, setValue }: Props
             />
           </div>
           <div className="settings-field">
-            <label className="settings-field-label">Output ID</label>
-            <input
+            <label className="settings-field-label">Output</label>
+            <select
               className="settings-field-input"
-              type="text"
               value={action.outputId ?? ""}
               disabled={readonly}
-              placeholder="(optional, leave empty for default output)"
               onChange={(e) => {
                 const v = e.target.value.trim();
                 updateField(action.id, { outputId: v === "" ? undefined : v });
               }}
-            />
+            >
+              <option value="">(default output)</option>
+              {getOutputRegistry().getSelectablePrimaryContributors().map((c) => (
+                <option key={c.id} value={c.id}>{c.title}</option>
+              ))}
+            </select>
           </div>
         </div>
       );

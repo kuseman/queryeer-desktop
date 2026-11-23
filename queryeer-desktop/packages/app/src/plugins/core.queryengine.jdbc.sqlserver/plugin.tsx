@@ -78,24 +78,37 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
     context.symbolActions.registerTemplate({
       id: "core.queryengine.jdbc.symbolAction.sqlserverDescribe",
       title: "SQLServer Describe",
-      description: "Describe a table or view in SQL Server",
+      description: "Describe a table, view or procedure in SQL Server",
       order: 10,
       action: {
         label: "Describe",
-        when: `activeFile.mimeType == 'application/sql' && ${SQLSERVER_FILE_DIALECT_WHEN} && (symbol.kind == 'table' || symbol.kind == 'view')`,
+        when: `activeFile.mimeType == 'application/sql' && ${SQLSERVER_FILE_DIALECT_WHEN} && (symbol.kind == 'table' || symbol.kind == 'view' || symbol.kind == 'procedure')`,
         query: "${symbol.attributes.database ? `exec ${fn.sqlserver.identifier(symbol.attributes.database)}.sys.sp_help ${fn.sql.literal(symbol.name)}` : `exec sp_help ${fn.sql.literal(symbol.name)}`}"
+      }
+    });
+
+    context.symbolActions.registerTemplate({
+      id: "core.queryengine.jdbc.symbolAction.sqlserverHelptext",
+      title: "SQLServer Procedure Definition",
+      description: "Show a procedure's full source (sys.sql_modules, no 255-char line splitting like sp_helptext) in the text output",
+      order: 11,
+      action: {
+        label: "Definition",
+        when: `activeFile.mimeType == 'application/sql' && ${SQLSERVER_FILE_DIALECT_WHEN} && symbol.kind == 'procedure'`,
+        query: "${symbol.attributes.database && symbol.attributes.name ? `select definition from ${fn.sqlserver.identifier(symbol.attributes.database)}.sys.sql_modules where object_id = object_id(${fn.sql.literal(fn.sqlserver.identifier(symbol.attributes.database) + '.' + (symbol.attributes.schema ? fn.sqlserver.identifier(symbol.attributes.schema) : '') + '.' + fn.sqlserver.identifier(symbol.attributes.name))})` : `select object_definition(object_id(${fn.sql.literal(symbol.fullName)})) as definition`}",
+        outputId: "core.queryengine.output.text"
       }
     });
 
     context.jdbcTreeActions.registerTemplate({
       id: "core.queryengine.jdbc.treeAction.sqlserver.spHelptext",
       title: "SQL Server: Procedure Definition to Text",
-      description: "Run sp_helptext and show results in text output",
+      description: "Show the procedure's full source (object_definition) in text output",
       order: 10,
       action: {
         label: "Definition to Text",
         when: `${SQLSERVER_NODE_DIALECT_WHEN} && node.kind == 'procedure'`,
-        query: "exec sp_helptext '${node.fullName}'",
+        query: "select object_definition(object_id(${fn.sql.literal(node.fullName)})) as definition",
         mode: "execute",
         outputTarget: "output",
         outputId: "core.queryengine.output.text"
@@ -105,12 +118,12 @@ export const coreQueryEngineJdbcSqlServerPlugin: Plugin = {
     context.jdbcTreeActions.registerTemplate({
       id: "core.queryengine.jdbc.treeAction.sqlserver.spHelptextNewQuery",
       title: "SQL Server: Procedure Definition to New Query",
-      description: "Run sp_helptext and open results in a new query file",
+      description: "Open the procedure's full source (object_definition) in a new query file",
       order: 11,
       action: {
         label: "Definition to New Query",
         when: `${SQLSERVER_NODE_DIALECT_WHEN} && node.kind == 'procedure'`,
-        query: "exec sp_helptext '${node.fullName}'",
+        query: "select object_definition(object_id(${fn.sql.literal(node.fullName)})) as definition",
         mode: "execute",
         outputTarget: "newQuery"
       }

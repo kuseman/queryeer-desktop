@@ -11,7 +11,7 @@ type SymbolActionProviderDeps = {
   getFile: (fileId: string) => FileEntity | undefined;
   getModelContent: (fileId: string, uri: string) => string | undefined;
   isQueryRunning: (fileId: string) => boolean;
-  executeQuery: (fileId: string, query: string) => Promise<void>;
+  executeQuery: (fileId: string, query: string, outputId?: string) => Promise<void>;
 };
 
 function createSymbolContext(symbol: SymbolAtPositionResult) {
@@ -101,7 +101,7 @@ export class SymbolActionProvider implements ContextMenuProvider {
       mode: "template",
       source: `symbol-action:${action.id}:query`
     });
-    await this.deps.executeQuery(fileId, query);
+    await this.deps.executeQuery(fileId, query, action.outputId);
   }
 }
 
@@ -116,8 +116,8 @@ export function createSymbolActionProvider(
       const file = filesRegistry.getFile(fileId);
       return file?.metadata?.["core.queryengine.tabState"] === "running";
     },
-    executeQuery: async (_fileId, query) => {
-      getQueryEngineService().requestExecute({ textOverride: query });
+    executeQuery: async (_fileId, query, outputId) => {
+      getQueryEngineService().requestExecute({ textOverride: query, outputIdOverride: outputId });
     }
   });
 }
