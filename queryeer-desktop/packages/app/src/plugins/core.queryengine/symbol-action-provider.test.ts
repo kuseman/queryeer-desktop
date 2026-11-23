@@ -101,7 +101,47 @@ describe("SymbolActionProvider", () => {
 
     expect(executeQuery).toHaveBeenCalledWith(
       "file-1",
-      "select 'sa]les.dbo.orders' /* sa]les.orders */"
+      "select 'sa]les.dbo.orders' /* sa]les.orders */",
+      undefined
+    );
+  });
+
+  it("passes the action's output id to query execution", async () => {
+    const executeQuery = vi.fn(async () => {});
+    const provider = new SymbolActionProvider({
+      getFile: () => file,
+      getModelContent: () => "exec dbo.myProc",
+      isQueryRunning: () => false,
+      executeQuery
+    });
+    mocks.resolveSymbolAtPositionMock.mockResolvedValue({
+      kind: "procedure",
+      name: "dbo.myProc",
+      fullName: "dbo.myProc"
+    });
+    mocks.actions.push({
+      id: "definition",
+      label: "Definition",
+      when: "symbol.kind == 'procedure'",
+      query: "exec sp_helptext '${symbol.fullName}'",
+      outputId: "core.queryengine.output.text"
+    });
+
+    const items = await provider.getItems({
+      fileId: "file-1",
+      mimeType: "application/sql",
+      selection: null,
+      position: { lineNumber: 1, column: 10 }
+    });
+
+    expect(items).toHaveLength(1);
+    items[0]?.run();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(executeQuery).toHaveBeenCalledWith(
+      "file-1",
+      "exec sp_helptext 'dbo.myProc'",
+      "core.queryengine.output.text"
     );
   });
 });

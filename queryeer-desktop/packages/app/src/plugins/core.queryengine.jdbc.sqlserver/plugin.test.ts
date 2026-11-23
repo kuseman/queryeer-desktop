@@ -199,6 +199,37 @@ describe("coreQueryEngineJdbcSqlServerPlugin", () => {
     );
   });
 
+  it("registers symbol action template for SQL Server procedure definition from sys.sql_modules in text output", () => {
+    const context = createContext();
+    coreQueryEngineJdbcSqlServerPlugin.activate(context);
+
+    expect(mocks.registerSymbolActionTemplateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "core.queryengine.jdbc.symbolAction.sqlserverHelptext",
+        action: expect.objectContaining({
+          when: expect.stringContaining("symbol.kind == 'procedure'"),
+          query: expect.stringContaining("sys.sql_modules"),
+          outputId: "core.queryengine.output.text"
+        })
+      })
+    );
+  });
+
+  it("registers procedure definition tree actions using object_definition instead of sp_helptext", () => {
+    const context = createContext();
+    coreQueryEngineJdbcSqlServerPlugin.activate(context);
+
+    const registered = (context.jdbcTreeActions.registerTemplate as ReturnType<typeof vi.fn>).mock.calls
+      .map(([template]) => template as { id: string; action: { query: string } })
+      .filter((template) => template.id.startsWith("core.queryengine.jdbc.treeAction.sqlserver.spHelptext"));
+
+    expect(registered).toHaveLength(2);
+    for (const template of registered) {
+      expect(template.action.query).toContain("object_definition(object_id(${fn.sql.literal(node.fullName)}))");
+      expect(template.action.query).not.toContain("sp_helptext");
+    }
+  });
+
   it("registers SQL Server expression helpers from the dialect", () => {
     const context = createContext();
 
