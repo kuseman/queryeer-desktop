@@ -5,6 +5,7 @@ import static com.queryeer.backend.api.PayloadUtils.stringValue;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +14,7 @@ import java.util.Properties;
 
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryExecutor;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryPlanExecutor;
+import com.queryeer.backend.queryengine.jdbc.execute.JdbcStatementScope;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcDeepSchemaResolver;
 import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaResolver;
 import com.queryeer.backend.queryengine.jdbc.setup.JdbcConnectionSetupDefinition;
@@ -103,6 +105,18 @@ public interface JdbcDialect
     default String resolveSessionId(Connection connection) throws SQLException
     {
         return "";
+    }
+
+    /**
+     * Called before each statement of a query runs, with the statement it runs on (its fetch size already set). A dialect whose driver reads a whole result into memory unless the connection is set up
+     * for streaming does that here: PostgreSQL's streams only outside autocommit. Return what undoes it, called once the statement's results are read, also when it failed or was cancelled. Default:
+     * nothing.
+     *
+     * @param sql the statement's text
+     */
+    default JdbcStatementScope beginStatement(Connection connection, Statement statement, String sql) throws SQLException
+    {
+        return JdbcStatementScope.NONE;
     }
 
     /**

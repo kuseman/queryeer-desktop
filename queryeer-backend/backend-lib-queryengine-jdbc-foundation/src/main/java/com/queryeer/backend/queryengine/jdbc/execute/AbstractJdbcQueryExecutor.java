@@ -48,6 +48,11 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
 {
     protected final int rowChunkSize;
     private final Map<String, Statement> activeStatements = new ConcurrentHashMap<>();
+    /**
+     * Executions cancelled while they run. Some drivers ignore {@link Statement#cancel()} while a result is fetched in batches (pgJDBC once it streams), so the row loop and the statement loop also
+     * stop on this.
+     */
+    private final Set<String> cancelledExecutions = ConcurrentHashMap.newKeySet();
 
     protected AbstractJdbcQueryExecutor()
     {
@@ -246,6 +251,7 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
         finally
         {
             activeStatements.remove(request.queryExecutionId());
+            cancelledExecutions.remove(request.queryExecutionId());
         }
 
         Map<String, Object> engineState = new LinkedHashMap<>();
@@ -265,15 +271,68 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
         long count = 0L;
         for (LocatedStatement located : statements)
         {
+            throwIfCancelled(request.queryExecutionId());
             try (Statement statement = connection.createStatement())
             {
-                count += runStatement(located.sql(), request.queryExecutionId(), eventListener, statement);
+                setFetchSize(statement);
+                JdbcStatementScope scope = request.dialect() == null ? JdbcStatementScope.NONE
+                        : request.dialect()
+                                .beginStatement(connection, statement, located.sql());
+                count += runInScope(scope, () -> runStatement(located.sql(), request.queryExecutionId(), eventListener, statement));
             }
             catch (SQLException e)
             {
                 throw new JdbcQueryExecutionException(e.getMessage(), e, located.knownOffset());
             }
         }
+        return count;
+    }
+
+    /**
+     * Rows a driver fetches at a time. Without one, some drivers (PostgreSQL's, MySQL's with cursor fetch) read a whole result into memory before returning its first row, which a large result can't
+     * fit.
+     */
+    static final int FETCH_SIZE = 1000;
+
+    private static void setFetchSize(Statement statement)
+    {
+        try
+        {
+            statement.setFetchSize(FETCH_SIZE);
+        }
+        catch (SQLException | UnsupportedOperationException e)
+        {
+            // A hint; a driver that doesn't support it reads results its own way
+        }
+    }
+
+    @FunctionalInterface
+    private interface StatementRun
+    {
+        long run() throws SQLException;
+    }
+
+    /** Runs the statement, then ends the dialect's scope: with false when the statement failed, keeping the statement's failure as the one thrown. */
+    private static long runInScope(JdbcStatementScope scope, StatementRun run) throws SQLException
+    {
+        long count;
+        try
+        {
+            count = run.run();
+        }
+        catch (SQLException | RuntimeException | Error e)
+        {
+            try
+            {
+                scope.end(false);
+            }
+            catch (SQLException | RuntimeException endFailure)
+            {
+                e.addSuppressed(endFailure);
+            }
+            throw e;
+        }
+        scope.end(true);
         return count;
     }
 
@@ -350,6 +409,7 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
     @Override
     public void cancel(String queryExecutionId)
     {
+        cancelledExecutions.add(queryExecutionId);
         Statement statement = activeStatements.get(queryExecutionId);
         if (statement == null)
         {
@@ -387,7 +447,7 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
                 {
                     try (ResultSet resultSet = statement.getResultSet())
                     {
-                        rowCount += publishResultSet(resultSet, eventListener);
+                        rowCount += publishResultSet(queryExecutionId, resultSet, eventListener);
                     }
                 }
                 else
@@ -424,7 +484,16 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
         return rowCount;
     }
 
-    private long publishResultSet(ResultSet resultSet, JdbcQueryEventListener eventListener) throws SQLException
+    private void throwIfCancelled(String queryExecutionId) throws SQLException
+    {
+        if (cancelledExecutions.contains(queryExecutionId))
+        {
+            // SQLSTATE 57014: query_canceled
+            throw new SQLException("Query cancelled", "57014");
+        }
+    }
+
+    private long publishResultSet(String queryExecutionId, ResultSet resultSet, JdbcQueryEventListener eventListener) throws SQLException
     {
         if (resultSet == null)
         {
@@ -448,6 +517,7 @@ public abstract class AbstractJdbcQueryExecutor implements CancellableJdbcQueryE
         List<List<Object>> batch = new ArrayList<>(rowChunkSize);
         while (resultSet.next())
         {
+            throwIfCancelled(queryExecutionId);
             List<Object> row = new ArrayList<>(columnCount);
             for (int i = 1; i <= columnCount; i++)
             {
