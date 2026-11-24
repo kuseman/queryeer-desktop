@@ -34,7 +34,6 @@ import { requestMessageDialog } from "../../plugins/core.dialog/message-dialog-s
 import { getRegisteredQueryExecutableEngines } from "../../plugins/core.queryengine/engine-registration";
 import { hasActiveQueryPlanDialect } from "../../plugins/core.queryengine/query-plan/supported-dialects";
 import { getCoreSettingsService, runPendingCoreSettingsTasks } from "../../plugins/core.settings/service";
-import { JDBC_CONNECTIONS_SETTING_ID } from "../../plugins/core.queryengine.jdbc/jdbc-settings";
 import {
   getJdbcDriverManagementService,
   JDBC_DRIVERS_SETTING_ID,
@@ -334,7 +333,6 @@ export async function bootstrapShell() {
       return result.action === "confirm";
     },
     updateChecksEnabled: () => settings?.getValue(JDBC_DRIVER_UPDATE_CHECK_SETTING_ID) !== false,
-    persistedConnections: () => settings?.getValue(JDBC_CONNECTIONS_SETTING_ID),
     storage: window.localStorage,
     windowTarget: window,
     documentTarget: document

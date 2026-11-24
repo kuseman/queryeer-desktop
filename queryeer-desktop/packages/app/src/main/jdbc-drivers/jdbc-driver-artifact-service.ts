@@ -152,17 +152,18 @@ const BUILTIN_CONTRIBUTIONS: readonly RegisteredJdbcManagedDriverContribution[] 
       expectedFileExtension: ".dll",
       versionLockedToDriver: true
     }]
-  },
-  {
-    ownerPluginId: "core.queryengine.jdbc.sqlite",
-    dialectId: "sqlite",
-    groupId: "org.xerial",
-    artifactId: "sqlite-jdbc",
-    driverClassName: "org.sqlite.JDBC",
-    displayName: "SQLite JDBC Driver",
-    downloadPageUrl: "https://github.com/xerial/sqlite-jdbc/releases"
   }
 ];
+
+/**
+ * Built-in dialects that moved out of core into a plugin, old owner id → the plugin's id. The driver a user installed
+ * while the dialect was built in, and its retained sets, are re-keyed to the plugin when the inventory is read. Once the
+ * user approves the plugin's driver, it adopts that jar instead of refusing to install over it, and startup does not set
+ * it aside as unowned.
+ */
+const MOVED_BUILTIN_DRIVER_OWNERS: Readonly<Record<string, string>> = {
+  "core.queryengine.jdbc.sqlite": "com.queryeer.jdbc.sqlite"
+};
 
 export function defaultJdbcDriverInventoryPath(settingsDir: string): string {
   return join(settingsDir, "jdbc-drivers.json");
@@ -1654,10 +1655,10 @@ export class JdbcDriverArtifactService {
           }
         }) : [];
         const { approved: _ignored, ...rest } = parsed;
-        return approved.length > 0 ? { ...rest, approved } : rest;
+        return migrateMovedBuiltinOwners(approved.length > 0 ? { ...rest, approved } : rest);
       }
       if (parsed.version === 1 && Array.isArray(parsed.drivers)) {
-        return { version: INVENTORY_VERSION, drivers: parsed.drivers, disabledSets: [] };
+        return migrateMovedBuiltinOwners({ version: INVENTORY_VERSION, drivers: parsed.drivers, disabledSets: [] });
       }
     } catch {
       // Missing or invalid inventory starts empty.
@@ -1966,4 +1967,17 @@ function errorMessage(error: unknown): string {
 
 async function fileSha256(path: string): Promise<string> {
   return createHash("sha256").update(await readFile(path)).digest("hex");
+}
+
+/** Re-keys what a moved built-in dialect owned to its plugin (MOVED_BUILTIN_DRIVER_OWNERS), unless the plugin owns one already. */
+function migrateMovedBuiltinOwners(inventory: InventoryDocument): InventoryDocument {
+  const owner = (ownerPluginId: string, dialectId: string, owned: Array<{ ownerPluginId: string; dialectId: string }>): string => {
+    const moved = MOVED_BUILTIN_DRIVER_OWNERS[ownerPluginId];
+    return moved && !owned.some((entry) => entry.ownerPluginId === moved && entry.dialectId === dialectId) ? moved : ownerPluginId;
+  };
+  return {
+    ...inventory,
+    drivers: inventory.drivers.map((entry) => ({ ...entry, ownerPluginId: owner(entry.ownerPluginId, entry.dialectId, inventory.drivers) })),
+    disabledSets: inventory.disabledSets.map((set) => ({ ...set, ownerPluginId: owner(set.ownerPluginId, set.dialectId, []) }))
+  };
 }

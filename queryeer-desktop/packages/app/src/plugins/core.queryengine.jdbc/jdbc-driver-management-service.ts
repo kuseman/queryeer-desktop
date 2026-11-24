@@ -7,7 +7,6 @@ import type {
   RegisteredJdbcManagedDriverContribution
 } from "@queryeer/api/queryengine/JdbcDriverExtension";
 import type { ShellApi } from "@queryeer/api/shell/Api";
-import { parseJdbcConnectionDefinitions } from "./jdbc-settings";
 
 export const JDBC_DRIVER_UPDATE_CHECK_SETTING_ID = "core.queryengine.jdbc.driverUpdateCheck.enabled";
 export const JDBC_DRIVERS_SETTING_ID = "core.queryengine.jdbc.drivers";
@@ -15,7 +14,6 @@ export const JDBC_DRIVER_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 const LAST_CHECK_STORAGE_KEY = "queryeer.jdbcDrivers.lastCheck";
 const UPDATE_NOTICE_SUPPRESSION_STORAGE_PREFIX = "queryeer.jdbcDrivers.suppressedUpdate.v2.";
-const SQLITE_MIGRATION_NOTICE_STORAGE_KEY = "queryeer.jdbcDrivers.sqliteMigrationNotice.v1";
 
 type DriverShell = Pick<ShellApi,
   | "listJdbcDrivers"
@@ -41,7 +39,6 @@ export type JdbcDriverManagementOptions = {
     artifact: JdbcDriverArtifactStatus
   ) => Promise<boolean>;
   updateChecksEnabled: () => boolean;
-  persistedConnections: () => unknown;
   now?: () => number;
   storage?: Storage;
   windowTarget?: Pick<Window, "addEventListener" | "removeEventListener">;
@@ -72,7 +69,6 @@ export class JdbcDriverManagementService {
     options.windowTarget?.addEventListener("online", this.handleOnline);
     options.documentTarget?.addEventListener("visibilitychange", this.handleVisibilityChange);
     await this.refresh();
-    this.notifySqliteMigrationIfNeeded();
     if (options.updateChecksEnabled()) {
       void this.checkNow().finally(() => this.scheduleNextCheck());
     }
@@ -367,22 +363,6 @@ export class JdbcDriverManagementService {
     }
     await this.refresh();
     return true;
-  }
-
-  private notifySqliteMigrationIfNeeded(): void {
-    const options = this.requireOptions();
-    if (options.storage?.getItem(SQLITE_MIGRATION_NOTICE_STORAGE_KEY)) return;
-    const hasSqliteConnection = parseJdbcConnectionDefinitions(options.persistedConnections())
-      .some((connection) => connection.dialectId === "sqlite");
-    const sqliteStatus = this.statuses.find((status) => status.contribution.dialectId === "sqlite");
-    if (!hasSqliteConnection || sqliteStatus?.source !== "missing") return;
-    options.storage?.setItem(SQLITE_MIGRATION_NOTICE_STORAGE_KEY, "1");
-    options.notifications.notify({
-      title: "SQLite database driver required",
-      message: "SQLite is no longer bundled. Install it from Database Drivers settings before using SQLite connections.",
-      severity: "info",
-      actions: [{ id: "core.queryengine.jdbc.openDrivers", label: "Open Database Drivers", run: options.openSettings }]
-    });
   }
 
   private async checkIfStale(): Promise<void> {

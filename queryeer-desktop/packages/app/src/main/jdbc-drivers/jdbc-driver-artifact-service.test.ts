@@ -180,7 +180,6 @@ describe("JdbcDriverArtifactService", () => {
     expect(service.managedDriverClassNames()).toEqual(expect.arrayContaining([
       "org.postgresql.Driver",
       "com.microsoft.sqlserver.jdbc.SQLServerDriver",
-      "org.sqlite.JDBC",
       mariadb.driverClassName
     ]));
 
@@ -197,6 +196,45 @@ describe("JdbcDriverArtifactService", () => {
     await restarted.applyPending();
     expect(readdirSync(join(appDir, "libShared")).filter((name) => name.startsWith("000-"))).toEqual([]);
     expect((await restarted.install(mariadb)).accepted).toBe(true);
+  });
+
+  it("hands a moved built-in dialect's installed driver to its plugin once the plugin's driver is approved", async () => {
+    const sqlite: RegisteredJdbcManagedDriverContribution = {
+      ownerPluginId: "com.queryeer.jdbc.sqlite",
+      dialectId: "sqlite",
+      displayName: "SQLite JDBC Driver",
+      groupId: "org.xerial",
+      artifactId: "sqlite-jdbc",
+      driverClassName: "org.sqlite.JDBC"
+    };
+    // Installed while SQLite was built in: the inventory names core's old plugin id
+    const jar = await driverJar(sqlite.driverClassName, "3.49.1.0");
+    const managedFile = join(appDir, "libShared", "000-queryeer-managed-sqlite-jdbc-3.49.1.0.jar");
+    mkdirSync(join(appDir, "libShared"), { recursive: true });
+    mkdirSync(settingsDir, { recursive: true });
+    writeFileSync(managedFile, jar);
+    writeFileSync(defaultJdbcDriverInventoryPath(settingsDir), JSON.stringify({
+      version: 2,
+      drivers: [{
+        ownerPluginId: "core.queryengine.jdbc.sqlite",
+        dialectId: "sqlite",
+        installedVersion: "3.49.1.0",
+        installedSha256: createHash("sha256").update(jar).digest("hex"),
+        managedFile
+      }],
+      disabledSets: []
+    }));
+
+    const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: mavenFetch(["3.49.1.0"], jar) });
+    await service.initialize();
+    expect((await service.list([sqlite]))[0]).toMatchObject({ approvalRequired: true, installedVersion: "3.49.1.0" });
+    expect((await service.approve(sqlite)).accepted).toBe(true);
+
+    const restarted = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: mavenFetch(["3.49.1.0"], jar) });
+    await restarted.initialize();
+    expect(existsSync(managedFile)).toBe(true);
+    expect((await restarted.list([sqlite]))[0]).toMatchObject({ source: "managed", installedVersion: "3.49.1.0" });
+    expect(restarted.managedDriverClassNames()).toContain(sqlite.driverClassName);
   });
 
   it("needs a new approval when a plugin changes what its driver downloads", async () => {
