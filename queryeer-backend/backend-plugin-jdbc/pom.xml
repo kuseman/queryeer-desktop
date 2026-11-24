@@ -15,7 +15,6 @@
     <properties>
         <skipPublishing>true</skipPublishing>
         <queryeer.plugin.id>queryengine.jdbc</queryeer.plugin.id>
-        <h2.version>2.3.232</h2.version>
     </properties>
 
     <dependencies>
