@@ -9,6 +9,8 @@ export type BackendErrorCode =
   | "TIMEOUT"
   | "CANCELLED"
   | "SECURITY_SESSION_CLOSED"
+  /** The backend stopped while the query ran; set by the desktop, not sent by the backend. */
+  | "BACKEND_RESTARTED"
   | "INTERNAL";
 
 export type BackendError = {

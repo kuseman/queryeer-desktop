@@ -3,6 +3,7 @@ import {
   BACKEND_DEFAULT_REQUESTED_CAPABILITIES,
   BACKEND_PROTOCOL_VERSION,
   type BackendEnvelope,
+  type BackendErrorCode,
   type BackendGatewayStatus,
   type BackendNotificationEnvelope,
   type BackendRequestEnvelope,
@@ -55,6 +56,8 @@ class BackendResponseError extends Error {
 
 type GatewayLogLevel = "trace" | "debug" | "info" | "warn" | "error";
 
+const BACKEND_STOPPED_MESSAGE = "The backend stopped while the query ran";
+
 const REQUIRED_SECURITY_CAPABILITIES = [
   "security.session.open",
   "security.session.close",
@@ -78,6 +81,8 @@ export class BackendGateway {
   private rendererSink: ((method: string, params: unknown) => void) | null = null;
   private statusChangedSink: ((status: BackendGatewayStatus) => void) | null = null;
   private transportDiedHook: (() => void | Promise<void>) | null = null;
+  /** Executions whose execute request hasn't been answered yet. */
+  private readonly executeRequestsInFlight = new Set<string>();
   private intentionalRestartPromise: Promise<void> | null = null;
   private tracePayloads = false;
   private logFlowEnabled = true;
@@ -126,6 +131,8 @@ export class BackendGateway {
       },
       () => this.doRestartSequence(),
       () => {
+        // Their completion can't come any more, and the watchdog may never get a new process going
+        this.failActiveExecutions(BACKEND_STOPPED_MESSAGE);
         void this.transportDiedHook?.();
       }
     );
@@ -229,6 +236,10 @@ export class BackendGateway {
   }
 
   public async restart(beforeStart?: () => void | Promise<void>): Promise<BackendRestartResult> {
+    if (this.statusStore.get().state === "unavailable") {
+      // An unhealthy backend won't finish them; waiting for it would defer the restart that can fix it for good
+      this.failActiveExecutions(BACKEND_STOPPED_MESSAGE);
+    }
     const activeExecutionIds = this.executionStore.getActiveExecutionIds();
     if (activeExecutionIds.length > 0) {
       return {
@@ -268,9 +279,23 @@ export class BackendGateway {
     if (this.tracePayloads) {
       this.appendLog("trace", "gateway", `  payload: ${JSON.stringify(envelope)}`);
     }
-    const response = await this.sendRequest(envelope);
-    if (!response.result) {
-      throw new Error("queryengine.execute failed: missing result");
+    let response: BackendResponseEnvelope;
+    this.executeRequestsInFlight.add(resolvedParams.queryExecutionId);
+    try {
+      response = await this.sendRequest(envelope);
+      if (!response.result) {
+        throw new Error("queryengine.execute failed: missing result");
+      }
+    } catch (error) {
+      // Never accepted, so no completion will come. The caller reports the failure to the editor
+      this.executionStore.onFailed({
+        queryExecutionId: resolvedParams.queryExecutionId,
+        error: { code: "EXECUTE_ERROR", message: error instanceof Error ? error.message : String(error) }
+      });
+      this.syncExecutionSnapshot();
+      throw error;
+    } finally {
+      this.executeRequestsInFlight.delete(resolvedParams.queryExecutionId);
     }
     return response.result as QueryExecuteResult;
   }
@@ -504,6 +529,7 @@ export class BackendGateway {
         this.pingIntervalHandle = null;
       }
       this.pending.rejectAll(new Error("Backend restarted"));
+      this.failActiveExecutions(BACKEND_STOPPED_MESSAGE);
 
       try {
         await this.performHandshake();
@@ -804,6 +830,23 @@ export class BackendGateway {
       this.executionStore.onFailed(params);
       this.syncExecutionSnapshot();
       this.rendererSink?.(envelope.method, envelope.params);
+    }
+  }
+
+  /**
+   * Fails the executions the backend was running when it stopped: their completion never comes. Without this they stay
+   * active and defer every intentional restart, e.g. after a driver install.
+   */
+  private failActiveExecutions(message: string): void {
+    // One whose execute request is still waiting fails there, and its caller reports it
+    const activeExecutionIds = this.executionStore.getActiveExecutionIds().filter((id) => !this.executeRequestsInFlight.has(id));
+    for (const queryExecutionId of activeExecutionIds) {
+      const params = { queryExecutionId, error: { code: "BACKEND_RESTARTED" satisfies BackendErrorCode, message } };
+      this.executionStore.onFailed(params);
+      this.rendererSink?.("queryengine.failed", params);
+    }
+    if (activeExecutionIds.length > 0) {
+      this.syncExecutionSnapshot();
     }
   }
 

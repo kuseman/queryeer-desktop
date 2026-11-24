@@ -1727,6 +1727,10 @@ Backend:
 - **JDBC connections are a documented setting** (§7.12.1, "JDBC connections"): a plugin can create one with `context.settings`, as the SQLite plugin does for an opened database file, until `@queryeer/jdbc-api` exists.
 - **The JDBC engine's `jdbc.file.probe` action is gone.** It told whether a file was a SQLite database, and nothing called it.
 
+Frontend:
+
+- **A query can fail with the code `BACKEND_RESTARTED`** (`BackendErrorCode`): the backend stopped while it ran, and Queryeer reports the failure in its place. A plugin that switches over the codes exhaustively has one more to handle.
+
 Payloadbuilder:
 
 - **A password set by a query** (`use es.authpassword = '...'`) reaches the Elasticsearch catalog and the Kafka catalog's schema registry. Until payloadbuilder 1.18 their password lookup ignored the string type a query's `use` stores.
