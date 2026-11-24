@@ -23,7 +23,7 @@ Write and execute queries in **SQL** and **Payloadbuilder** — a powerful cross
 > ![SQL Editor](documentation/screenshots/sql-editor.png)
 
 ###  Connect to Any Database
-Built-in **JDBC support** for SQL Server, PostgreSQL, MySQL, H2, and generic JDBC connections. Manage connections, browse database schemas (tables, columns, indexes, procedures), and execute queries with dialect-aware features.
+Built-in **JDBC support** for SQL Server, H2, and generic JDBC connections, with PostgreSQL, MySQL and SQLite as plugins. Manage connections, browse database schemas (tables, columns, indexes, procedures), and execute queries with dialect-aware features.
 
 - SQL Server dialect with ShowPlan XML-to-graph conversion
 - Windows Integrated Authentication support

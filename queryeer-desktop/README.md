@@ -26,7 +26,7 @@ Electron's user-data directory is passed to the backend as `QUERYEER_APP_DIR`. B
 - `libShared/`
 - `jdbc-schema-cache/`
 
-PostgreSQL and SQL Server JDBC drivers, and those of dialect plugins such as SQLite, can be installed from **Settings > Query Engine > JDBC > JDBC Drivers**. Queryeer stores managed drivers in `libShared/`; activating a driver change restarts only the Java backend.
+The SQL Server JDBC driver, and those of dialect plugins such as PostgreSQL and SQLite, can be installed from **Settings > Query Engine > JDBC > JDBC Drivers**. Queryeer stores managed drivers in `libShared/`; activating a driver change restarts only the Java backend.
 
 If a file like `jdbc-schema-cache/` appears in the repository root, that usually means backend app-dir propagation regressed.
 

@@ -1148,7 +1148,7 @@ Execution-context providers and query-event listeners are filtered by the suppli
 
 JDBC dialect frontend plugins can register driver metadata through `jdbcDrivers.registerDriver(contribution)`. The common JDBC settings UI handles status, periodic update checks, notifications, and managed installation. The plugin host records the activating plugin as the contribution owner.
 
-The primary artifact uses Maven Central coordinates. Contributions may add typed, platform-constrained native companion archive declarations. Set `versionLockedToDriver: true` when an applicable companion must share the primary driver's lifecycle and derived release version; the UI keeps separate status rows but exposes one package action. Core manages any plugin's driver, after the user confirms its first install: until then its status has `approvalRequired: true`, and the settings UI shows an approval dialog with the plugin, the Maven coordinates, the companions' sources and the `downloadPageUrl`, so set that to the driver's licence or download page. Changing what the declaration downloads asks again. Builtin PostgreSQL and SQL Server contributions need no confirmation, and the main process replaces their metadata with canonical descriptors. For approved providers, duplicate runtime files are moved to recoverable provider-specific `disabled` folders before Java starts; retained version sets are exposed through `JdbcDriverStatus.disabledSets` and can be restored through the common settings UI. A native companion installs under its archive entry's file name. See [`documentation/JDBC_DRIVER_MANAGEMENT.md`](./documentation/JDBC_DRIVER_MANAGEMENT.md).
+The primary artifact uses Maven Central coordinates. Contributions may add typed, platform-constrained native companion archive declarations. Set `versionLockedToDriver: true` when an applicable companion must share the primary driver's lifecycle and derived release version; the UI keeps separate status rows but exposes one package action. Core manages any plugin's driver, after the user confirms its first install: until then its status has `approvalRequired: true`, and the settings UI shows an approval dialog with the plugin, the Maven coordinates, the companions' sources and the `downloadPageUrl`, so set that to the driver's licence or download page. Changing what the declaration downloads asks again. The builtin SQL Server contribution needs no confirmation, and the main process replaces its metadata with a canonical descriptor. For approved providers, duplicate runtime files are moved to recoverable provider-specific `disabled` folders before Java starts; retained version sets are exposed through `JdbcDriverStatus.disabledSets` and can be restored through the common settings UI. A native companion installs under its archive entry's file name. See [`documentation/JDBC_DRIVER_MANAGEMENT.md`](./documentation/JDBC_DRIVER_MANAGEMENT.md).
 
 ### 7.12.1 JDBC Dialects
 
@@ -1186,7 +1186,7 @@ public Optional<JdbcConnectionSetupDefinition> connectionSetup()
 | `validate(properties)` | Problems; any problem marks the connection invalid |
 | `supportsQueryPlan` | The backend dialect implements `queryPlanExecutor()`. Turns on Estimated Plan and the Actual Plan toggle for the dialect's files; core then runs the query with the intent `plan.estimated` or `plan.actual` and asks for a plan graph (`{ capability: "plan", kind: "graph" }`), and the backend routes it to `queryPlanExecutor()` |
 
-The built-in dialects, PostgreSQL and SQL Server, use the fields only (SQL Server's in `SqlServerConnectionSetup`, with `visibleWhen` and a Windows-only option). So does the SQLite plugin, which moved out of core in 0.24: its file is a `FILE_PATH` field.
+The built-in SQL Server dialect uses the fields only (in `SqlServerConnectionSetup`, with `visibleWhen` and a Windows-only option). So do the PostgreSQL and SQLite plugins, which moved out of core in 0.24; SQLite's file is a `FILE_PATH` field.
 
 **JDBC connections.** The connections are the setting `core.queryengine.jdbc.connections`, which a plugin reads and writes with `context.settings.getValue` and `setValue`. Until the JDBC frontend has its own API package (`@queryeer/jdbc-api`), this setting is the contract for a plugin that creates a connection, e.g. the SQLite plugin's screen for an opened database file. Its value is an array of:
 
@@ -1716,12 +1716,13 @@ Frontend:
 
 ## 15. Upgrading Plugins to 0.24.0
 
-Nothing a 0.23 plugin has to change, unless it depends on the built-in SQLite dialect (below).
+Nothing a 0.23 plugin has to change, unless it depends on the built-in SQLite or PostgreSQL dialect (below).
 
 Backend:
 
 - **`PayloadbuilderCatalogProviderContributor.retryAfterFailure`** (§10.1): a catalog can run a failed query once more with changed input properties, e.g. the connection whose endpoint the query set. The default changes nothing.
 - **The SQLite dialect is a plugin** (`com.queryeer.jdbc.sqlite`, from the plugins repository), no longer built in. The built-in plugin id `queryengine.jdbc.dialect.sqlite` is gone: depend on the plugin `com.queryeer.jdbc.sqlite` instead, or require the capability `queryengine.jdbc.dialect.sqlite`, which the plugin provides under the same name. A SQLite driver installed before 0.24 is handed to the plugin once its driver is approved, not downloaded again.
+- **The PostgreSQL dialect is a plugin** (`com.queryeer.jdbc.postgres`), the same way: the built-in plugin id `queryengine.jdbc.dialect.postgres` is gone, the plugin provides the capability `queryengine.jdbc.dialect.postgres`, the dialect id stays `postgres`, and an installed pgJDBC is handed to the plugin once its driver is approved. Its query plans use the public `supportsQueryPlan` and `JdbcDialect.queryPlanExecutor()`.
 - **JDBC connections are a documented setting** (§7.12.1, "JDBC connections"): a plugin can create one with `context.settings`, as the SQLite plugin does for an opened database file, until `@queryeer/jdbc-api` exists.
 - **The JDBC engine's `jdbc.file.probe` action is gone.** It told whether a file was a SQLite database, and nothing called it.
 

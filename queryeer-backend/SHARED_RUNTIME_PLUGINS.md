@@ -43,7 +43,7 @@ Built-in plugins declare their shared-runtime contributions in `runtime.shared` 
 
 Current builtin plugins that contribute to the shared runtime:
 
-- `queryengine.jdbc.dialect.postgres`, `.sqlserver` (their drivers' packages, parent-first; SQL Server also its auth DLL)
+- `queryengine.jdbc.dialect.sqlserver` (its driver's packages, parent-first, and its auth DLL)
 
 **Class sharing between plugins is not a shared-runtime concern any more** (since 0.20). The JDBC foundation and the SQL parser used to be shared-runtime plugins (`queryengine.runtime.jdbc-foundation`, `queryengine.runtime.sql-parser`) whose packages every plugin saw. They are now exported (`backend.exports`) by plugins that bundle them, and only plugins that declare a dependency see them: the JDBC foundation by `queryengine.jdbc`, the parser by `queryengine.sql.parser` (by `queryengine.jdbc` in 0.20). The payloadbuilder foundation (`queryengine.runtime.payloadbuilder-foundation`, with `se.kuseman.payloadbuilder.api.` parent-first) followed in 0.21: `queryengine.payloadbuilder` bundles and exports it. See `DEVELOPMENT-PLUGIN.md` §3.3.1. The shared layer is kept for what is process-wide by nature: JDBC drivers (`libShared`, installed by the desktop's driver service) and native libraries.
 
@@ -128,10 +128,9 @@ And URL generation for native auth should remain explicit:
 
 ## JDBC Dialect Driver Profiles
 
-Builtin JDBC dialect plugins delegate their driver packages to `libShared`:
+The builtin JDBC dialect plugin delegates its driver packages to `libShared`:
 
 - SQL Server: `com.microsoft.sqlserver.jdbc.` / `mssql-jdbc-*.jar`
-- PostgreSQL: `org.postgresql.` / `postgresql-*.jar`
 
 The dialect plugins do not package these drivers. Electron owns managed download/update state and restarts the backend after staging changes; the runner only loads the resulting shared JARs and applies the parent-first package rules.
 

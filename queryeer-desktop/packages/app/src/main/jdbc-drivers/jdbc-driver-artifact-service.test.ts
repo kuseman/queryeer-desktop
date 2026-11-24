@@ -14,8 +14,9 @@ import {
   JdbcDriverArtifactService
 } from "./jdbc-driver-artifact-service.js";
 
+// A plugin's driver (PostgreSQL moved out of core in 0.24): installing it needs the user's approval first
 const postgres: RegisteredJdbcManagedDriverContribution = {
-  ownerPluginId: "core.queryengine.jdbc.postgres",
+  ownerPluginId: "com.queryeer.jdbc.postgres",
   dialectId: "postgres",
   displayName: "PostgreSQL JDBC Driver",
   groupId: "org.postgresql",
@@ -157,8 +158,8 @@ describe("JdbcDriverArtifactService", () => {
     const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: vi.fn() as unknown as typeof fetch });
     await service.initialize();
 
-    expect((await service.list([postgres]))[0].approvalRequired).toBeUndefined();
-    expect((await service.approve(postgres)).accepted).toBe(true);
+    expect((await service.list([sqlServer]))[0].approvalRequired).toBeUndefined();
+    expect((await service.approve(sqlServer)).accepted).toBe(true);
     // Nothing to record: the inventory is not even written
     expect(existsSync(defaultJdbcDriverInventoryPath(settingsDir))).toBe(false);
   });
@@ -178,7 +179,6 @@ describe("JdbcDriverArtifactService", () => {
     expect((await service.list([mariadb]))[0]).toMatchObject({ source: "managed", installedVersion: "3.5.6" });
     expect((await service.list([mariadb]))[0].approvalRequired).toBeUndefined();
     expect(service.managedDriverClassNames()).toEqual(expect.arrayContaining([
-      "org.postgresql.Driver",
       "com.microsoft.sqlserver.jdbc.SQLServerDriver",
       mariadb.driverClassName
     ]));
@@ -198,43 +198,49 @@ describe("JdbcDriverArtifactService", () => {
     expect((await restarted.install(mariadb)).accepted).toBe(true);
   });
 
-  it("hands a moved built-in dialect's installed driver to its plugin once the plugin's driver is approved", async () => {
-    const sqlite: RegisteredJdbcManagedDriverContribution = {
-      ownerPluginId: "com.queryeer.jdbc.sqlite",
-      dialectId: "sqlite",
-      displayName: "SQLite JDBC Driver",
-      groupId: "org.xerial",
-      artifactId: "sqlite-jdbc",
-      driverClassName: "org.sqlite.JDBC"
-    };
-    // Installed while SQLite was built in: the inventory names core's old plugin id
-    const jar = await driverJar(sqlite.driverClassName, "3.49.1.0");
-    const managedFile = join(appDir, "libShared", "000-queryeer-managed-sqlite-jdbc-3.49.1.0.jar");
+  it.each([
+    {
+      oldOwner: "core.queryengine.jdbc.sqlite",
+      version: "3.49.1.0",
+      contribution: {
+        ownerPluginId: "com.queryeer.jdbc.sqlite",
+        dialectId: "sqlite",
+        displayName: "SQLite JDBC Driver",
+        groupId: "org.xerial",
+        artifactId: "sqlite-jdbc",
+        driverClassName: "org.sqlite.JDBC"
+      }
+    },
+    { oldOwner: "core.queryengine.jdbc.postgres", version: "42.7.7", contribution: postgres }
+  ])("hands $oldOwner's installed driver to its plugin once the plugin's driver is approved", async ({ oldOwner, version, contribution }) => {
+    // Installed while the dialect was built in: the inventory names core's old plugin id
+    const jar = await driverJar(contribution.driverClassName, version);
+    const managedFile = join(appDir, "libShared", `000-queryeer-managed-${contribution.artifactId}-${version}.jar`);
     mkdirSync(join(appDir, "libShared"), { recursive: true });
     mkdirSync(settingsDir, { recursive: true });
     writeFileSync(managedFile, jar);
     writeFileSync(defaultJdbcDriverInventoryPath(settingsDir), JSON.stringify({
       version: 2,
       drivers: [{
-        ownerPluginId: "core.queryengine.jdbc.sqlite",
-        dialectId: "sqlite",
-        installedVersion: "3.49.1.0",
+        ownerPluginId: oldOwner,
+        dialectId: contribution.dialectId,
+        installedVersion: version,
         installedSha256: createHash("sha256").update(jar).digest("hex"),
         managedFile
       }],
       disabledSets: []
     }));
 
-    const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: mavenFetch(["3.49.1.0"], jar) });
+    const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: mavenFetch([version], jar) });
     await service.initialize();
-    expect((await service.list([sqlite]))[0]).toMatchObject({ approvalRequired: true, installedVersion: "3.49.1.0" });
-    expect((await service.approve(sqlite)).accepted).toBe(true);
+    expect((await service.list([contribution]))[0]).toMatchObject({ approvalRequired: true, installedVersion: version });
+    expect((await service.approve(contribution)).accepted).toBe(true);
 
-    const restarted = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: mavenFetch(["3.49.1.0"], jar) });
+    const restarted = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: mavenFetch([version], jar) });
     await restarted.initialize();
     expect(existsSync(managedFile)).toBe(true);
-    expect((await restarted.list([sqlite]))[0]).toMatchObject({ source: "managed", installedVersion: "3.49.1.0" });
-    expect(restarted.managedDriverClassNames()).toContain(sqlite.driverClassName);
+    expect((await restarted.list([contribution]))[0]).toMatchObject({ source: "managed", installedVersion: version });
+    expect(restarted.managedDriverClassNames()).toContain(contribution.driverClassName);
   });
 
   it("needs a new approval when a plugin changes what its driver downloads", async () => {
@@ -358,8 +364,8 @@ describe("JdbcDriverArtifactService", () => {
     const fetchMock = vi.fn() as unknown as typeof fetch;
     const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: fetchMock, platform: "win32", arch: "x64" });
     await service.initialize();
-    const sharedClass = { ...postgres, ownerPluginId: "example.redshift", dialectId: "redshift", displayName: "Redshift via pgJDBC" };
-    const spoofed = { ...postgres, groupId: "com.example.evil" };
+    const sharedClass = { ...sqlServer, ownerPluginId: "example.sybase", dialectId: "sybase", displayName: "Sybase via mssql-jdbc" };
+    const spoofed = { ...sqlServer, groupId: "com.example.evil" };
     const sqlServerCompanion = (await service.list([sqlServer]))[0].contribution.companionArtifacts![0];
     const overlapping: RegisteredJdbcManagedDriverContribution = {
       ...mariadb,
@@ -371,7 +377,7 @@ describe("JdbcDriverArtifactService", () => {
     };
 
     for (const [contribution, reason] of [
-      [sharedClass, "already managed for core.queryengine.jdbc.postgres"],
+      [sharedClass, "already managed for core.queryengine.jdbc.sqlserver"],
       [spoofed, "uses the plugin ID of the built-in"],
       [overlapping, "overlap"]
     ] as const) {
@@ -396,18 +402,20 @@ describe("JdbcDriverArtifactService", () => {
   });
 
   it("uses the main-owned compatibility policy for trusted contributions", async () => {
-    const jar = await driverJar(postgres.driverClassName);
+    const jar = await driverJar(sqlServer.driverClassName);
     const service = new JdbcDriverArtifactService({
       appDir,
       settingsDir,
-      fetch: mavenFetch(["42.6.0", "42.7.7"], jar)
+      fetch: mavenFetch(["13.2.1.jre8", "13.4.0.jre11", "13.4.0.jre8"], jar),
+      platform: "linux",
+      arch: "x64"
     });
     await service.initialize();
 
-    const [status] = await service.check([{ ...postgres, compatibleVersionRegex: "^42\\.6\\." }]);
+    const [status] = await service.check([{ ...sqlServer, compatibleVersionRegex: "\\.jre8$" }]);
 
-    expect(status.latestVersion).toBe("42.7.7");
-    expect(status.contribution.compatibleVersionRegex).toBeUndefined();
+    expect(status.latestVersion).toBe("13.4.0.jre11");
+    expect(status.contribution.compatibleVersionRegex).toBe("\\.jre11$");
   });
 
   it("cleans staging and rejects a checksum mismatch", async () => {
@@ -418,6 +426,7 @@ describe("JdbcDriverArtifactService", () => {
       fetch: mavenFetch(["42.7.7"], jar, "0".repeat(64))
     });
     await service.initialize();
+    await service.approve(postgres);
 
     const result = await service.install(postgres);
 
@@ -442,6 +451,7 @@ describe("JdbcDriverArtifactService", () => {
     }) as typeof fetch;
     const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: fetchMock });
     await service.initialize();
+    await service.approve(postgres);
 
     const result = await service.install(postgres);
 
@@ -457,6 +467,7 @@ describe("JdbcDriverArtifactService", () => {
       fetch: mavenFetch(["42.7.7"], jar)
     });
     await service.initialize();
+    await service.approve(postgres);
     const manualPath = join(appDir, "libShared", "unrelated.jar");
     writeFileSync(manualPath, "manual");
 
@@ -498,6 +509,7 @@ describe("JdbcDriverArtifactService", () => {
       fetch: mavenFetch(["42.7.7"], jar)
     });
     await service.initialize();
+    await service.approve(postgres);
     await service.install(postgres);
     const inventoryPath = defaultJdbcDriverInventoryPath(settingsDir);
     const pending = JSON.parse(readFileSync(inventoryPath, "utf8")).drivers[0].pending;

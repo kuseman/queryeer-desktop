@@ -115,15 +115,6 @@ type ActiveArtifactCandidate = {
  */
 const BUILTIN_CONTRIBUTIONS: readonly RegisteredJdbcManagedDriverContribution[] = [
   {
-    ownerPluginId: "core.queryengine.jdbc.postgres",
-    dialectId: "postgres",
-    groupId: "org.postgresql",
-    artifactId: "postgresql",
-    driverClassName: "org.postgresql.Driver",
-    displayName: "PostgreSQL JDBC Driver",
-    downloadPageUrl: "https://jdbc.postgresql.org/download/"
-  },
-  {
     ownerPluginId: "core.queryengine.jdbc.sqlserver",
     dialectId: "sqlserver",
     groupId: "com.microsoft.sqlserver",
@@ -162,7 +153,8 @@ const BUILTIN_CONTRIBUTIONS: readonly RegisteredJdbcManagedDriverContribution[] 
  * it aside as unowned.
  */
 const MOVED_BUILTIN_DRIVER_OWNERS: Readonly<Record<string, string>> = {
-  "core.queryengine.jdbc.sqlite": "com.queryeer.jdbc.sqlite"
+  "core.queryengine.jdbc.sqlite": "com.queryeer.jdbc.sqlite",
+  "core.queryengine.jdbc.postgres": "com.queryeer.jdbc.postgres"
 };
 
 export function defaultJdbcDriverInventoryPath(settingsDir: string): string {
