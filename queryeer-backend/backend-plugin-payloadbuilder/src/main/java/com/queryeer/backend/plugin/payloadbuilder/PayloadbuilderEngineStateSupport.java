@@ -151,6 +151,62 @@ final class PayloadbuilderEngineStateSupport
         return root;
     }
 
+    /** {@code state} with {@code changes} merged over the properties of the catalog instance {@code alias}. */
+    static PayloadbuilderCatalogState withProperties(PayloadbuilderCatalogState state, String alias, Map<String, Object> changes)
+    {
+        PayloadbuilderCatalogState.Instance instance = state.instancesByAlias()
+                .get(alias);
+        if (instance == null)
+        {
+            throw new IllegalArgumentException("No catalog with alias '" + alias + "'");
+        }
+        Map<String, Object> properties = new LinkedHashMap<>(instance.properties());
+        properties.putAll(changes);
+        Map<String, PayloadbuilderCatalogState.Instance> instances = new LinkedHashMap<>(state.instancesByAlias());
+        instances.put(alias, new PayloadbuilderCatalogState.Instance(alias, instance.catalogId(), properties));
+        return new PayloadbuilderCatalogState(state.defaultCatalogAlias(), state.selectedEnvironmentId(), instances);
+    }
+
+    /** An engine state patch that only changes the properties of one catalog instance, e.g. for a failed run's retry the panel should take. */
+    static Object buildCatalogPropertiesPatch(String alias, String catalogId, Map<String, Object> properties, String sessionId)
+    {
+        Map<String, Object> root = new LinkedHashMap<>();
+        Map<String, Object> payloadbuilderPatch = new LinkedHashMap<>();
+        if (sessionId != null)
+        {
+            payloadbuilderPatch.put("sessionId", sessionId);
+        }
+        root.put(KEY_PAYLOADBUILDER, payloadbuilderPatch);
+        mergeCatalogProperties(root, alias, catalogId, properties);
+        return root;
+    }
+
+    /**
+     * Adds {@code properties} to {@code patch}'s catalog instance {@code alias}, keeping what the patch already says about a property, also a null. The patch's maps are copied as they're changed,
+     * since a provider's {@code buildCatalogPatch} may return an immutable map.
+     */
+    @SuppressWarnings("unchecked")
+    static void mergeCatalogProperties(Object patch, String alias, String catalogId, Map<String, Object> properties)
+    {
+        Map<String, Object> root = (Map<String, Object>) patch;
+        Map<String, Object> payloadbuilderPatch = new LinkedHashMap<>((Map<String, Object>) root.getOrDefault(KEY_PAYLOADBUILDER, Map.of()));
+        Map<String, Object> catalogs = new LinkedHashMap<>((Map<String, Object>) payloadbuilderPatch.getOrDefault(KEY_CATALOGS, Map.of()));
+        Map<String, Object> instance = new LinkedHashMap<>((Map<String, Object>) catalogs.getOrDefault(alias, Map.of()));
+        instance.putIfAbsent(KEY_CATALOG_ID, catalogId);
+        Map<String, Object> instanceProperties = new LinkedHashMap<>((Map<String, Object>) instance.getOrDefault(KEY_PROPERTIES, Map.of()));
+        for (Map.Entry<String, Object> entry : properties.entrySet())
+        {
+            if (!instanceProperties.containsKey(entry.getKey()))
+            {
+                instanceProperties.put(entry.getKey(), entry.getValue());
+            }
+        }
+        instance.put(KEY_PROPERTIES, instanceProperties);
+        catalogs.put(alias, instance);
+        payloadbuilderPatch.put(KEY_CATALOGS, catalogs);
+        root.put(KEY_PAYLOADBUILDER, payloadbuilderPatch);
+    }
+
     record PayloadbuilderCatalogState(String defaultCatalogAlias, String selectedEnvironmentId, Map<String, Instance> instancesByAlias)
     {
         record Instance(String alias, String catalogId, Map<String, Object> properties)

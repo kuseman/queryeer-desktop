@@ -261,7 +261,7 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
     });
 
     context.queryEngines.onQueryEvent("payloadbuilder", (event, executeContext) => {
-      if (event.method !== "queryengine.completed") {
+      if (event.method !== "queryengine.completed" && event.method !== "queryengine.failed") {
         return;
       }
       if (!executeContext.fileId) {
@@ -271,16 +271,21 @@ export const coreQueryEnginePayloadbuilderPlugin: Plugin = {
       if (!file || file.mimeType !== "application/plbsql") {
         return;
       }
-      const params = event.params as { engineState?: unknown };
-      if (!params.engineState) {
+      // A completed run's patch, or a failed run's: a catalog changed to match the query, which couldn't run again
+      // because it had already published results (BACKEND_PROTOCOL §5.3)
+      const engineState =
+        event.method === "queryengine.completed"
+          ? (event.params as { engineState?: unknown }).engineState
+          : (event.params as { error?: { details?: { engineState?: unknown } } }).error?.details?.engineState;
+      if (!engineState) {
         return;
       }
       const catalogStore = getPayloadbuilderCatalogStore();
-      const payloadbuilderState = params.engineState as PayloadbuilderEngineState;
+      const payloadbuilderState = engineState as PayloadbuilderEngineState;
       const sessionId = payloadbuilderState.payloadbuilder?.sessionId;
       const applied = catalogStore.applyEngineStatePatch(
         executeContext.fileId,
-        params.engineState,
+        engineState,
         executeContext.engineState
       );
       if (applied) {

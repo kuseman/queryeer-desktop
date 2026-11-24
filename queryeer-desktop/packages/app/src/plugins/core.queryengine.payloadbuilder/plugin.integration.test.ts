@@ -1003,6 +1003,37 @@ describe("core.queryengine.payloadbuilder plugin integration", () => {
     expect(mocks.applyEngineStatePatchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("applies a failed run's catalog patch, for a catalog changed to match the query", () => {
+    const context = createContext();
+    coreQueryEnginePayloadbuilderPlugin.activate(context);
+    const listener = mocks.onQueryEventMock.mock.calls[0]?.[1] as
+      | ((
+          event: { method: string; params?: unknown },
+          executeContext?: { engineId?: string; fileId?: string; engineState?: unknown }
+        ) => void)
+      | undefined;
+    const patch = {
+      payloadbuilder: { sessionId: "3", catalogs: { es: { catalogId: "elasticsearch", properties: { connectionId: "prod" } } } }
+    };
+    const submitted = { payloadbuilder: { catalogs: { es: { catalogId: "elasticsearch", properties: { connectionId: "test" } } } } };
+
+    listener?.(
+      {
+        method: "queryengine.failed",
+        params: { error: { code: "INTERNAL", message: "Invalid username/password", details: { engineState: patch } } }
+      },
+      { engineId: "payloadbuilder", fileId: "file-1", engineState: submitted }
+    );
+    // A failure without a patch changes nothing
+    listener?.(
+      { method: "queryengine.failed", params: { error: { code: "INTERNAL", message: "Boom" } } },
+      { engineId: "payloadbuilder", fileId: "file-1", engineState: submitted }
+    );
+
+    expect(mocks.applyEngineStatePatchMock).toHaveBeenCalledTimes(1);
+    expect(mocks.applyEngineStatePatchMock).toHaveBeenCalledWith("file-1", patch, submitted);
+  });
+
   it("ignores completed payloadbuilder engineState for non-plbsql files", () => {
     const context = createContext();
     coreQueryEnginePayloadbuilderPlugin.activate(context);

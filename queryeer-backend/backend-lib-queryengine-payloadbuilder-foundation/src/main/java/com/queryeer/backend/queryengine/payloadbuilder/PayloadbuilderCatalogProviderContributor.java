@@ -6,6 +6,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
+import se.kuseman.payloadbuilder.api.catalog.CatalogException;
 import se.kuseman.payloadbuilder.api.execution.Decimal;
 import se.kuseman.payloadbuilder.api.execution.EpochDateTime;
 import se.kuseman.payloadbuilder.api.execution.EpochDateTimeOffset;
@@ -85,6 +86,33 @@ public interface PayloadbuilderCatalogProviderContributor
     default Map<String, Object> buildCatalogPatch(IQuerySession session, String alias, Map<String, Object> inputProperties)
     {
         return compareInputProperties(session, alias, inputProperties);
+    }
+
+    /**
+     * A run failed with {@code exception}, which this catalog threw for {@code alias}. Whether to run the query once more with changed input properties, as Queryeer's Swing version did: e.g. on
+     * payloadbuilder's {@code CredentialsException}, when the query set its own endpoint ({@code use es.endpoint = '...'}) and that is another configured connection than the one selected, return that
+     * connection's {@code connectionId}. Null fails the run as before, which is the default.
+     *
+     * <p>
+     * Called after the failed run and before its properties are cleared, so {@code session} still holds what the query set. The engine runs again at most once, and only when the failed run published
+     * nothing (no rows, no messages) and created or replaced no temp table, so a retry never shows results twice. The changed properties reach the file's catalog panel in every case: with the
+     * completed run's catalog patch, or with the failure ({@code error.details.engineState}), so the next run uses them. An exception from this method is added to the run's error as suppressed, and
+     * the run fails as before; a {@code SecuritySessionClosedException} is thrown on, so the frontend asks to unlock the vault.
+     * </p>
+     *
+     * <p>
+     * {@code CredentialsException} is in {@code payloadbuilder-catalog-common}, which each plugin bundles: check for it with the plugin's own copy, the one its catalog throws.
+     * </p>
+     *
+     * @param session the query session after the failed run
+     * @param alias the catalog alias the exception names
+     * @param inputProperties the properties the file's catalog panel submitted
+     * @param exception the failure, found in the run's exception or its causes
+     * @since 0.24.0
+     */
+    default PayloadbuilderCatalogRetry retryAfterFailure(IQuerySession session, String alias, Map<String, Object> inputProperties, CatalogException exception)
+    {
+        return null;
     }
 
     /**
