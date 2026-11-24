@@ -21,7 +21,7 @@ Some libraries must be treated as process-wide/runtime-shared instead of plugin-
 
 - JDBC drivers with native dependencies (for example `mssql-jdbc` + `mssql-jdbc_auth*.dll`).
 
-The runner inspects known PostgreSQL, SQL Server, and SQLite driver classes while building the shared classpath. It includes at most one JAR for each known provider, preferring a Queryeer-managed JAR and otherwise the newest identifiable implementation version. This is a final safety net for unexpected backend restarts; the desktop artifact service normally moves conflicting files into provider-specific `disabled` folders before Java starts.
+The runner inspects the registered drivers' classes while building the shared classpath. It includes at most one JAR for each known provider, preferring a Queryeer-managed JAR and otherwise the newest identifiable implementation version. This is a final safety net for unexpected backend restarts; the desktop artifact service normally moves conflicting files into provider-specific `disabled` folders before Java starts.
 - Libraries where class identity must be shared across plugins.
 - Packages that must resolve from the shared/parent loader to avoid split runtime state.
 
@@ -43,7 +43,7 @@ Built-in plugins declare their shared-runtime contributions in `runtime.shared` 
 
 Current builtin plugins that contribute to the shared runtime:
 
-- `queryengine.jdbc.dialect.postgres`, `.sqlite`, `.sqlserver` (their drivers' packages, parent-first; SQL Server also its auth DLL)
+- `queryengine.jdbc.dialect.postgres`, `.sqlserver` (their drivers' packages, parent-first; SQL Server also its auth DLL)
 
 **Class sharing between plugins is not a shared-runtime concern any more** (since 0.20). The JDBC foundation and the SQL parser used to be shared-runtime plugins (`queryengine.runtime.jdbc-foundation`, `queryengine.runtime.sql-parser`) whose packages every plugin saw. They are now exported (`backend.exports`) by plugins that bundle them, and only plugins that declare a dependency see them: the JDBC foundation by `queryengine.jdbc`, the parser by `queryengine.sql.parser` (by `queryengine.jdbc` in 0.20). The payloadbuilder foundation (`queryengine.runtime.payloadbuilder-foundation`, with `se.kuseman.payloadbuilder.api.` parent-first) followed in 0.21: `queryengine.payloadbuilder` bundles and exports it. See `DEVELOPMENT-PLUGIN.md` §3.3.1. The shared layer is kept for what is process-wide by nature: JDBC drivers (`libShared`, installed by the desktop's driver service) and native libraries.
 
@@ -132,7 +132,6 @@ Builtin JDBC dialect plugins delegate their driver packages to `libShared`:
 
 - SQL Server: `com.microsoft.sqlserver.jdbc.` / `mssql-jdbc-*.jar`
 - PostgreSQL: `org.postgresql.` / `postgresql-*.jar`
-- SQLite: `org.sqlite.` / `sqlite-jdbc-*.jar`
 
 The dialect plugins do not package these drivers. Electron owns managed download/update state and restarts the backend after staging changes; the runner only loads the resulting shared JARs and applies the parent-first package rules.
 

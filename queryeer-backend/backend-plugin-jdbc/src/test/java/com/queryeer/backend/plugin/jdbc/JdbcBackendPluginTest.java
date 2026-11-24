@@ -133,8 +133,7 @@ class JdbcBackendPluginTest
                 "sql.parse.snapshot",
                 "sql.complete",
                 "sql.symbolAtPosition",
-                "sql.hover",
-                "jdbc.file.probe"), map.get("actions"));
+                "sql.hover"), map.get("actions"));
         //@formatter:on
     }
 

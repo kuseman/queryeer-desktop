@@ -53,8 +53,7 @@ describe("JdbcDriversSettingsEditor", () => {
       notifications: notificationStub,
       openSettings: vi.fn(),
       confirmOperation: vi.fn(async () => true),
-      updateChecksEnabled: () => false,
-      persistedConnections: () => []
+      updateChecksEnabled: () => false
     });
   });
 
@@ -124,8 +123,7 @@ describe("JdbcDriversSettingsEditor", () => {
       notifications: { notify: vi.fn(() => ({ id: "notice" })) } as unknown as NotificationService,
       openSettings: vi.fn(),
       confirmOperation: vi.fn(async () => true),
-      updateChecksEnabled: () => false,
-      persistedConnections: () => []
+      updateChecksEnabled: () => false
     });
     await act(async () => root.render(<JdbcDriversSettingsEditor readonly={false} />));
 
@@ -186,8 +184,7 @@ describe("JdbcDriversSettingsEditor", () => {
       notifications: { notify: vi.fn(() => ({ id: "notice" })) } as unknown as NotificationService,
       openSettings: vi.fn(),
       confirmOperation: vi.fn(async () => true),
-      updateChecksEnabled: () => false,
-      persistedConnections: () => []
+      updateChecksEnabled: () => false
     });
     await act(async () => root.render(<JdbcDriversSettingsEditor readonly={false} />));
 
@@ -236,8 +233,7 @@ describe("JdbcDriversSettingsEditor", () => {
       notifications: { notify: vi.fn(() => ({ id: "notice" })) } as unknown as NotificationService,
       openSettings: vi.fn(),
       confirmOperation: vi.fn(async () => true),
-      updateChecksEnabled: () => false,
-      persistedConnections: () => []
+      updateChecksEnabled: () => false
     });
     await act(async () => root.render(<JdbcDriversSettingsEditor readonly={false} />));
 

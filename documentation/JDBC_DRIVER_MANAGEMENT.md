@@ -1,6 +1,6 @@
 # JDBC Driver Management
 
-Queryeer loads JDBC driver JARs from `libShared` and managed native companion libraries from `libNative` in the application user-data directory. PostgreSQL, SQL Server, and SQLite drivers are not bundled with their dialect plugins.
+Queryeer loads JDBC driver JARs from `libShared` and managed native companion libraries from `libNative` in the application user-data directory. No dialect bundles its driver: not the built-in PostgreSQL and SQL Server dialects, and not dialect plugins such as SQLite (moved out of core in 0.24) and MySQL.
 
 ## User Workflow
 
@@ -21,8 +21,6 @@ Driver update checks run after application startup and every 24 hours while the 
 An available-version notification is shown at most once per application session by default and can return after restart if it was merely closed. Choosing `Don't show again for this version` persists suppression for that specific driver, artifact, and release; a later release or different companion can still produce a notification.
 
 The backend restart is deferred while queries are active. Restarting the backend preserves the desktop window and open editors, but locks the security vault. Unlock the vault again before using credentials stored as secret references.
-
-SQLite was previously bundled. When a saved SQLite connection exists but no SQLite driver is detected, Queryeer shows a one-time notice directing the user to JDBC Drivers settings. It does not silently download the driver.
 
 ## Storage And Integrity
 
@@ -69,7 +67,7 @@ The host associates the contribution with the activating plugin ID; plugins cann
 
 Core manages any registered driver. Because JARs and native libraries execute inside the Java backend, the first install of a plugin's driver needs the user's consent:
 
-- Queryeer's built-in PostgreSQL, SQL Server, and SQLite contributions are approved without asking. The main process owns and overrides their metadata, including SQL Server companion metadata, so a plugin cannot change their compatibility filter or companions.
+- Queryeer's built-in PostgreSQL and SQL Server contributions are approved without asking; a plugin's, such as SQLite's since it moved out of core in 0.24, is approved by the user. A driver installed while SQLite was built in is re-keyed to the plugin when the inventory is read (`MOVED_BUILTIN_DRIVER_OWNERS`), so approving the plugin's driver adopts it. The main process owns and overrides their metadata, including SQL Server companion metadata, so a plugin cannot change their compatibility filter or companions.
 - Any other contribution reports `approvalRequired: true` until the user approves it. Before its first install or update, the settings UI shows an approval dialog (`core.dialog`) in place of the usual confirmation. It names the owning plugin, the driver class, the Maven Central coordinates and compatibility filter, every companion's GitHub repository and asset, and the licence or download page. On confirm, the renderer calls `approveJdbcDriver`, and the main process records the approval; install and update refuse a contribution without one.
 - The approval is consent, not a security boundary: plugin frontends run in the same renderer, which can already reach the main process through `window.appShell`. The main process still owns the approvals, the refusal of unapproved drivers and every download check.
 - An approval is stored in `settings/jdbc-drivers.json` with the declaration as it was approved. A later declaration that changes what is downloaded (coordinates, driver class, compatibility filter or companion source) asks again; a changed display name or download page does not.

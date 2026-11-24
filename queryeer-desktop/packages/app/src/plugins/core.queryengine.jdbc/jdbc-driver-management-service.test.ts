@@ -11,7 +11,7 @@ import {
 } from "./jdbc-driver-management-service";
 
 const sqlite: RegisteredJdbcManagedDriverContribution = {
-  ownerPluginId: "core.queryengine.jdbc.sqlite",
+  ownerPluginId: "com.queryeer.jdbc.sqlite",
   dialectId: "sqlite",
   displayName: "SQLite JDBC Driver",
   groupId: "org.xerial",
@@ -70,7 +70,6 @@ function options(overrides: Partial<JdbcDriverManagementOptions> = {}): JdbcDriv
     openSettings: vi.fn(),
     confirmOperation: vi.fn(async () => true),
     updateChecksEnabled: () => true,
-    persistedConnections: () => [],
     storage: localStorage,
     windowTarget: window,
     documentTarget: document,
@@ -224,25 +223,6 @@ describe("JdbcDriverManagementService", () => {
     expect(setup.notifications.notify).toHaveBeenCalledWith(expect.objectContaining({
       title: "Backend restarted"
     }));
-  });
-
-  it("shows the SQLite migration notice once and only for persisted SQLite connections", async () => {
-    const setup = options({
-      updateChecksEnabled: () => false,
-      persistedConnections: () => [{ connectionId: "sqlite-1", dialectId: "sqlite", properties: { file: "db.sqlite" } }]
-    });
-    await service.initialize(setup);
-    service.reset();
-    await service.initialize(setup);
-
-    expect(setup.notifications.notify).toHaveBeenCalledTimes(1);
-    expect(setup.notifications.notify).toHaveBeenCalledWith(expect.objectContaining({ title: "SQLite database driver required" }));
-
-    localStorage.clear();
-    const withoutSqlite = options({ updateChecksEnabled: () => false });
-    service.reset();
-    await service.initialize(withoutSqlite);
-    expect(withoutSqlite.notifications.notify).not.toHaveBeenCalled();
   });
 
   it("warns with the reason when active queries defer restart", async () => {
