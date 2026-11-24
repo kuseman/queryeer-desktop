@@ -1188,6 +1188,21 @@ public Optional<JdbcConnectionSetupDefinition> connectionSetup()
 
 The built-in dialects, PostgreSQL and SQL Server, use the fields only (SQL Server's in `SqlServerConnectionSetup`, with `visibleWhen` and a Windows-only option). So does the SQLite plugin, which moved out of core in 0.24: its file is a `FILE_PATH` field.
 
+**JDBC connections.** The connections are the setting `core.queryengine.jdbc.connections`, which a plugin reads and writes with `context.settings.getValue` and `setValue`. Until the JDBC frontend has its own API package (`@queryeer/jdbc-api`), this setting is the contract for a plugin that creates a connection, e.g. the SQLite plugin's screen for an opened database file. Its value is an array of:
+
+| Field | Description |
+|-------|-------------|
+| `connectionId` | Unique id; a new connection takes `crypto.randomUUID()` |
+| `title` | Optional name shown in the connections list and selector |
+| `dialectId` | The backend dialect's id |
+| `properties` | The dialect's field values by field id (`connectionSetup()`), without the `SECRET` field |
+| `password` | Optional secret reference (`{ secretRef }`), the `SECRET` field's value; leave it out rather than writing a plain password |
+| `enabled` | `false` hides the connection from selectors |
+| `url`, `username` | Only for the generic JDBC dialect |
+| `color` | Optional color the connection's name is shown in |
+
+Write the whole array back with the other connections unchanged, including fields this table doesn't list. To open a query file on a connection, create it with `fileMediator.createUntitledFile({ mimeType: "application/sql", extension: "sql" })` and bind it with `fileMediator.bindEngine(fileId, "jdbc", connectionId)`.
+
 ### 7.12.2 Action templates
 
 Users define their own query actions in settings: **Tree Actions** run on a node in the SQL Databases tree, **Symbol Actions** on a symbol under the cursor in the editor. A plugin offers ready-made ones as templates; the user creates an action from a template, and nothing runs until they do.
@@ -1707,6 +1722,7 @@ Backend:
 
 - **`PayloadbuilderCatalogProviderContributor.retryAfterFailure`** (§10.1): a catalog can run a failed query once more with changed input properties, e.g. the connection whose endpoint the query set. The default changes nothing.
 - **The SQLite dialect is a plugin** (`com.queryeer.jdbc.sqlite`, from the plugins repository), no longer built in. The built-in plugin id `queryengine.jdbc.dialect.sqlite` is gone: depend on the plugin `com.queryeer.jdbc.sqlite` instead, or require the capability `queryengine.jdbc.dialect.sqlite`, which the plugin provides under the same name. A SQLite driver installed before 0.24 is handed to the plugin once its driver is approved, not downloaded again.
+- **JDBC connections are a documented setting** (§7.12.1, "JDBC connections"): a plugin can create one with `context.settings`, as the SQLite plugin does for an opened database file, until `@queryeer/jdbc-api` exists.
 - **The JDBC engine's `jdbc.file.probe` action is gone.** It told whether a file was a SQLite database, and nothing called it.
 
 Payloadbuilder:
