@@ -36,10 +36,14 @@ import com.queryeer.backend.api.SecuritySessionClosedException;
 import com.queryeer.backend.api.SettingsModule;
 import com.queryeer.backend.api.parse.IncrementalParseFunction;
 import com.queryeer.backend.api.parse.IncrementalParseSessionService;
+import com.queryeer.backend.contract.query.QueryOutputArtifact;
 import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
+import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogRetry;
 import com.queryeer.backend.queryengine.sql.parser.TreeSitterSqlParseFunction;
 
+import se.kuseman.payloadbuilder.api.QualifiedName;
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
+import se.kuseman.payloadbuilder.api.catalog.CatalogException;
 import se.kuseman.payloadbuilder.api.catalog.Column;
 import se.kuseman.payloadbuilder.api.catalog.ResolvedType;
 import se.kuseman.payloadbuilder.api.catalog.Schema;
@@ -57,6 +61,7 @@ import se.kuseman.payloadbuilder.core.cache.InMemoryGenericCache;
 import se.kuseman.payloadbuilder.core.catalog.CatalogRegistry;
 import se.kuseman.payloadbuilder.core.catalog.CoreColumn;
 import se.kuseman.payloadbuilder.core.execution.QuerySession;
+import se.kuseman.payloadbuilder.core.execution.TemporaryTable;
 import se.kuseman.payloadbuilder.core.parser.Location;
 import se.kuseman.payloadbuilder.core.parser.ParseException;
 
@@ -136,7 +141,7 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
     }
 
     @Override
-    public void execute(String queryExecutionId, String fileId, String text, Object engineState, QueryPublisher publisher)
+    public void execute(String queryExecutionId, String fileId, String text, Object engineState, QueryPublisher target)
     {
         long startMs = System.currentTimeMillis();
         QuerySession session = null;
@@ -144,6 +149,8 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
         FileSessionHolder fileSessionHolder = null;
         boolean fileSessionLocked = false;
         AccumulatingOutputWriter outputWriter = new AccumulatingOutputWriter();
+        // Knows whether anything went out, so a run that published nothing may run again, and carries a retry's patch with a failure
+        RunPublisher publisher = new RunPublisher(target);
         PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState catalogState = null;
         Map<String, ValueVector> previousEnvironmentVariables = Map.of();
         try
@@ -154,6 +161,8 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
                 throw new IllegalArgumentException("Engine state is required");
             }
             catalogState = PayloadbuilderEngineStateSupport.parse(typedState);
+            // What the file's catalog panel shows: the completion patch is relative to it, also after a retry changed catalogState
+            final PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState submittedState = catalogState;
             fileSessionHolder = sessionByFileId.computeIfAbsent(fileId, _ -> new FileSessionHolder());
             fileSessionHolder.lock.lock();
             fileSessionLocked = true;
@@ -162,63 +171,73 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
             sessionId = holder.sessionId;
 
             previousEnvironmentVariables = injectEnvironmentVariables(session, catalogState.selectedEnvironmentId());
-            injectCatalogProperties(session, catalogState);
 
             session.setAbortSupplier(() -> cancelledExecutionIds.contains(queryExecutionId));
             sessionByExecutionId.put(queryExecutionId, holder);
 
-            PayloadbuilderEngineStateSupport.applyToSession(session, catalogState);
-
             session.setPrintWriter(outputWriter);
             session.setExceptionHandler(e -> outputWriter.addError(ErrorMessages.buildFailureMessage(e)));
 
-            RawQueryResult result = Payloadbuilder.compile(session, text)
-                    .executeRaw(session);
-
-            long rowCount = 0;
-            while (result.hasMoreResults())
+            // The temp tables before the run: a run that changed them can't run again, or it would repeat that (a second
+            // "select ... into #t" fails)
+            SessionStateSnapshot before = SessionStateSnapshot.of(session);
+            CatalogRetry retried = null;
+            long rowCount;
+            while (true)
             {
-                RowCountCollector rowCounter = new RowCountCollector();
-                result.consumeResult(new RawQueryResult.ResultConsumer()
+                injectCatalogProperties(session, catalogState);
+                PayloadbuilderEngineStateSupport.applyToSession(session, catalogState);
+                try
                 {
-                    private boolean started;
-
-                    @Override
-                    public void schema(Schema schema)
+                    rowCount = runQuery(session, text, publisher, outputWriter, queryExecutionId);
+                    break;
+                }
+                catch (RuntimeException e)
+                {
+                    if (retried != null)
                     {
+                        // The run with the catalog's change failed too: the panel still takes the change, which is what the query needs
+                        publisher.attachRetryPatch(PayloadbuilderEngineStateSupport.buildCatalogPropertiesPatch(retried.alias(), retried.catalogId(), retried.retry()
+                                .properties(), sessionId), "Catalog '" + retried.alias() + "' was changed to match the query.");
+                        throw e;
                     }
-
-                    @Override
-                    public boolean consume(TupleVector tupleVector)
+                    CatalogRetry retry = !cancelledExecutionIds.contains(queryExecutionId) ? findCatalogRetry(session, catalogState, e)
+                            : null;
+                    if (retry == null)
                     {
-                        // Flush any accumulated messages (from print statements, etc.)
-                        // before processing the next batch of rows
-                        outputWriter.flushMessages(publisher);
-
-                        // Always use the runtime schema here
-                        if (!started)
-                        {
-                            started = true;
-                            Map<String, String> metadata = Map.of(METADATA_KEY_EXECUTION_TIME, LocalDateTime.now()
-                                    .toString());
-                            Schema schema = tupleVector.getSchema();
-                            publisher.resultSetStart(toColumnNames(schema), toColumnTypes(schema), metadata);
-                        }
-
-                        if (tupleVector == null
-                                || tupleVector.getRowCount() == 0)
-                        {
-                            return true;
-                        }
-                        rowCounter.value += publishTupleVectorInChunks(publisher, tupleVector, ROW_CHUNK_SIZE, largeValueStore, queryExecutionId);
-                        return !cancelledExecutionIds.contains(queryExecutionId);
+                        throw e;
                     }
-                });
-                rowCount += rowCounter.value;
+                    if (publisher.published()
+                            || !before.equals(SessionStateSnapshot.of(session)))
+                    {
+                        // Running again would show results twice, or repeat what the run did to the session: fail, and let the
+                        // panel take the change for the next run
+                        publisher.attachRetryPatch(PayloadbuilderEngineStateSupport.buildCatalogPropertiesPatch(retry.alias(), retry.catalogId(), retry.retry()
+                                .properties(), sessionId), "Catalog '" + retry.alias() + "' was changed to match the query: run it again.");
+                        throw e;
+                    }
+                    clearExecutionCatalogProperties(session, catalogState);
+                    catalogState = PayloadbuilderEngineStateSupport.withProperties(catalogState, retry.alias(), retry.retry()
+                            .properties());
+                    // What the failed run printed but didn't publish is printed again by the next run
+                    outputWriter.discard();
+                    if (retry.retry()
+                            .message() != null)
+                    {
+                        outputWriter.addInfo(retry.retry()
+                                .message());
+                    }
+                    retried = retry;
+                }
             }
             outputWriter.flushMessages(publisher);
             Map<String, PayloadbuilderCatalogProviderContributor> providersByAlias = buildProvidersByAlias(catalogState);
-            Object engineStatePatch = PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, catalogState, providersByAlias, sessionId);
+            Object engineStatePatch = PayloadbuilderEngineStateSupport.buildEngineStatePatch(session, submittedState, providersByAlias, sessionId);
+            if (retried != null)
+            {
+                PayloadbuilderEngineStateSupport.mergeCatalogProperties(engineStatePatch, retried.alias(), retried.catalogId(), retried.retry()
+                        .properties());
+            }
             long total = System.currentTimeMillis() - startMs;
             publisher.completed(total, rowCount, engineStatePatch);
         }
@@ -288,6 +307,116 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
                 }
             }
         }
+    }
+
+    /** Compiles and runs the query, publishing its result sets. Returns the number of rows. */
+    private long runQuery(QuerySession session, String text, QueryPublisher publisher, AccumulatingOutputWriter outputWriter, String queryExecutionId)
+    {
+        RawQueryResult result = Payloadbuilder.compile(session, text)
+                .executeRaw(session);
+
+        long rowCount = 0;
+        while (result.hasMoreResults())
+        {
+            RowCountCollector rowCounter = new RowCountCollector();
+            result.consumeResult(new RawQueryResult.ResultConsumer()
+            {
+                private boolean started;
+
+                @Override
+                public void schema(Schema schema)
+                {
+                }
+
+                @Override
+                public boolean consume(TupleVector tupleVector)
+                {
+                    // Flush any accumulated messages (from print statements, etc.)
+                    // before processing the next batch of rows
+                    outputWriter.flushMessages(publisher);
+
+                    // Always use the runtime schema here
+                    if (!started)
+                    {
+                        started = true;
+                        Map<String, String> metadata = Map.of(METADATA_KEY_EXECUTION_TIME, LocalDateTime.now()
+                                .toString());
+                        Schema schema = tupleVector.getSchema();
+                        publisher.resultSetStart(toColumnNames(schema), toColumnTypes(schema), metadata);
+                    }
+
+                    if (tupleVector == null
+                            || tupleVector.getRowCount() == 0)
+                    {
+                        return true;
+                    }
+                    rowCounter.value += publishTupleVectorInChunks(publisher, tupleVector, ROW_CHUNK_SIZE, largeValueStore, queryExecutionId);
+                    return !cancelledExecutionIds.contains(queryExecutionId);
+                }
+            });
+            rowCount += rowCounter.value;
+        }
+        return rowCount;
+    }
+
+    /**
+     * The retry the catalog asks for after the run failed with {@code error}: when the error, or one of its causes, is a {@link CatalogException} of a catalog alias whose provider returns one. A
+     * provider that throws adds its exception to {@code error} as suppressed and gets no retry.
+     */
+    private CatalogRetry findCatalogRetry(QuerySession session, PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState state, RuntimeException error)
+    {
+        CatalogException catalogException = findCatalogException(error);
+        if (catalogException == null
+                || catalogException.getCatalogAlias() == null)
+        {
+            return null;
+        }
+        // Payloadbuilder's catalog registry ignores the alias' case
+        PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState.Instance instance = state.instancesByAlias()
+                .values()
+                .stream()
+                .filter(candidate -> candidate.alias()
+                        .equalsIgnoreCase(catalogException.getCatalogAlias()))
+                .findFirst()
+                .orElse(null);
+        PayloadbuilderCatalogProviderContributor provider = instance == null ? null
+                : catalogProviders.getCatalogProvider(instance.catalogId());
+        if (provider == null)
+        {
+            return null;
+        }
+        try
+        {
+            PayloadbuilderCatalogRetry retry = provider.retryAfterFailure(session, instance.alias(), instance.properties(), catalogException);
+            return retry == null ? null
+                    : new CatalogRetry(instance.alias(), instance.catalogId(), retry);
+        }
+        catch (SecuritySessionClosedException e)
+        {
+            // As everywhere: the frontend asks to unlock the vault and runs the query again
+            throw e;
+        }
+        catch (RuntimeException e)
+        {
+            error.addSuppressed(e);
+            return null;
+        }
+    }
+
+    private static CatalogException findCatalogException(Throwable error)
+    {
+        Throwable current = error;
+        // Bounded, in case of a cause cycle
+        for (int depth = 0; current != null
+                && depth < 20; depth++)
+        {
+            if (current instanceof CatalogException catalogException)
+            {
+                return catalogException;
+            }
+            current = current.getCause();
+        }
+        return null;
     }
 
     private SessionHolder getOrCreateSessionHolder(FileSessionHolder fileSessionHolder, PayloadbuilderEngineStateSupport.PayloadbuilderCatalogState catalogState)
@@ -1230,6 +1359,18 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
             messages.add(new OutputEvent(OutputSeverity.ERROR, message));
         }
 
+        void addInfo(String message)
+        {
+            messages.add(new OutputEvent(OutputSeverity.INFO, message));
+        }
+
+        /** Drops what was written but not published yet. */
+        void discard()
+        {
+            buffer.setLength(0);
+            messages.clear();
+        }
+
         void flushMessages(QueryPublisher publisher)
         {
             flushLines();
@@ -1257,6 +1398,161 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
             }
             buffer.setLength(0);
             buffer.append(content);
+        }
+    }
+
+    /**
+     * The session's temp tables, by reference: whether a run changed what a rerun would repeat. A query's variables need no snapshot: each run copies the session's variables into its own execution
+     * context and sets them there, so a rerun starts from the same values.
+     */
+    record SessionStateSnapshot(Map<QualifiedName, TemporaryTable> temporaryTables)
+    {
+        static SessionStateSnapshot of(QuerySession session)
+        {
+            Map<QualifiedName, TemporaryTable> temporaryTables = new HashMap<>();
+            for (Map.Entry<QualifiedName, TemporaryTable> entry : session.getTemporaryTables())
+            {
+                temporaryTables.put(entry.getKey(), entry.getValue());
+            }
+            return new SessionStateSnapshot(temporaryTables);
+        }
+
+        @Override
+        public boolean equals(Object other)
+        {
+            if (!(other instanceof SessionStateSnapshot snapshot)
+                    || !temporaryTables.keySet()
+                            .equals(snapshot.temporaryTables.keySet()))
+            {
+                return false;
+            }
+            for (Map.Entry<QualifiedName, TemporaryTable> entry : temporaryTables.entrySet())
+            {
+                // A temp table that was replaced is another instance
+                if (entry.getValue() != snapshot.temporaryTables.get(entry.getKey()))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        @Override
+        public int hashCode()
+        {
+            return temporaryTables.keySet()
+                    .hashCode();
+        }
+    }
+
+    /** A retry a catalog asked for after a failed run: its alias, catalog id, and the properties to change. */
+    private record CatalogRetry(String alias, String catalogId, PayloadbuilderCatalogRetry retry)
+    {
+    }
+
+    /**
+     * The query's publisher, which also knows whether anything was published (so a failed run may run again without showing anything twice), and adds a retry's catalog patch to a failure as
+     * {@code details.engineState}.
+     */
+    static final class RunPublisher implements QueryPublisher
+    {
+        private final QueryPublisher target;
+        private boolean published;
+        private Object retryPatch;
+        private String retryNote;
+
+        RunPublisher(QueryPublisher target)
+        {
+            this.target = target;
+        }
+
+        boolean published()
+        {
+            return published;
+        }
+
+        /** The failure that follows carries {@code patch}, and adds {@code note} to its message. */
+        void attachRetryPatch(Object patch, String note)
+        {
+            this.retryPatch = patch;
+            this.retryNote = note;
+        }
+
+        @Override
+        public void progress(int percent, String message)
+        {
+            target.progress(percent, message);
+        }
+
+        @Override
+        public void resultSetStart(List<String> columnNames, List<String> columnTypes)
+        {
+            published = true;
+            target.resultSetStart(columnNames, columnTypes);
+        }
+
+        @Override
+        public void resultSetStart(List<String> columnNames, List<String> columnTypes, Map<String, String> metadata)
+        {
+            published = true;
+            target.resultSetStart(columnNames, columnTypes, metadata);
+        }
+
+        @Override
+        public void resultSetRows(List<List<Object>> rows)
+        {
+            published = true;
+            target.resultSetRows(rows);
+        }
+
+        @Override
+        public void resultSetRows(List<List<Object>> rows, List<OutputEvent> messages)
+        {
+            published = true;
+            target.resultSetRows(rows, messages);
+        }
+
+        @Override
+        public void completed(long durationMs, long rowCount)
+        {
+            target.completed(durationMs, rowCount);
+        }
+
+        @Override
+        public void completed(long durationMs, long rowCount, Object engineState)
+        {
+            target.completed(durationMs, rowCount, engineState);
+        }
+
+        @Override
+        public void completed(long durationMs, long rowCount, List<String> features, List<QueryOutputArtifact> artifacts, Object engineState)
+        {
+            target.completed(durationMs, rowCount, features, artifacts, engineState);
+        }
+
+        @Override
+        public void failed(String errorCode, String errorMessage)
+        {
+            if (retryPatch == null)
+            {
+                target.failed(errorCode, errorMessage);
+                return;
+            }
+            failed(errorCode, errorMessage, null);
+        }
+
+        @Override
+        public void failed(String errorCode, String errorMessage, Map<String, Object> details)
+        {
+            if (retryPatch == null)
+            {
+                target.failed(errorCode, errorMessage, details);
+                return;
+            }
+            Map<String, Object> withPatch = details == null ? new LinkedHashMap<>()
+                    : new LinkedHashMap<>(details);
+            withPatch.put("engineState", retryPatch);
+            target.failed(errorCode, errorMessage + "\n" + retryNote, withPatch);
         }
     }
 

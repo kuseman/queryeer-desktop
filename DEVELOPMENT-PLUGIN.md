@@ -1521,6 +1521,14 @@ On the backend, a catalog plugin implements `PayloadbuilderCatalogProviderContri
 
 **What a run changes** (since 0.22). After a run, `buildCatalogPatch` says which of the alias's properties the file's catalog panel should now show, for example after `use alias.database = 'x'`. The default reports each input property the query changed. Override it to map changed native properties back to input properties as well, e.g. a connection string back to the `connectionId` of the matching connection. In 0.21 the default reported nothing.
 
+**Running again after a failure** (since 0.24). When a run fails with a `CatalogException` (also as a cause) for an alias, the engine asks that alias's contributor `retryAfterFailure(session, alias, inputProperties, exception)`. Returning a `PayloadbuilderCatalogRetry` with input properties to change runs the query once more with them, and shows its message in the output. The default returns null, which fails the run as before. The typical case is a query that sets its own endpoint (`use es.endpoint = '...'`) while another connection is selected: payloadbuilder's `CredentialsException` then names the alias, and the contributor returns the `connectionId` of the connection with that endpoint.
+
+- **At most one retry,** and only when the failed run published nothing (no rows, no messages) and created or replaced no temp table. A rerun would show those results twice, or fail on `#t already exists`. A query's variables don't stop a retry: each run starts from the session's variables. Otherwise the run fails, its error says to run the query again, and it carries the change as `error.details.engineState`.
+- **The panel takes the change in every case:** in the completed run's catalog patch, or from the failure, also when the rerun itself failed.
+- **What a rerun can't undo:** writes the failed run made outside the session before it failed, such as an insert into another catalog. A catalog that can't fail before writing shouldn't ask for a retry.
+- **The session still holds what the query set** when `retryAfterFailure` is called, so it can read the query's endpoint.
+- **`CredentialsException` is in `payloadbuilder-catalog-common`,** which each plugin bundles. Check for it with the plugin's own copy, the one its catalog throws.
+
 **Taking over a built-in catalog** (since 0.21). A plugin can register a catalog with the id of one of Queryeer's built-in catalogs (`elasticsearch`, `kafka`, `mongodb`, `filesystem`, `http`), for example to serve it from its own connections. Its contribution replaces the built-in one: on the backend for the rest of the run, with the built-in's actions; on the frontend until the plugin's registration is disposed, which brings the built-in back.
 
 - **Replace both halves.** The built-in frontend panel stores properties for the built-in backend (its `connectionId`s) and calls its actions. A plugin that replaces only the backend half, or whose frontend half is skipped or fails, leaves that panel talking to the plugin's backend: a removed action fails with "No payloadbuilder catalog provides the action …".
@@ -1690,6 +1698,18 @@ Frontend:
 
 - **An `async` provider can return `null` or `undefined` for "nothing"** (`ProviderResult`). In 0.22 only a provider that wasn't `async` could, so the `async` completion example in §7.2.1 didn't compile against 0.22's types. A plugin that supports 0.22 returns an empty result from an `async` provider instead: `{ suggestions: [] }` for completion, `{ contents: [] }` for a hover (shown as none).
 - **`context.settings.copySecrets(value)`** copies a setting's secrets for a clone (§7.7). A settings editor that clones rows with secrets should use it instead of copying the `{ secretRef }`. A plugin that builds a whole `PluginContext` in its tests needs it in its `settings` mock.
+
+## 15. Upgrading Plugins to 0.24.0
+
+Nothing a 0.23 plugin has to change.
+
+Backend:
+
+- **`PayloadbuilderCatalogProviderContributor.retryAfterFailure`** (§10.1): a catalog can run a failed query once more with changed input properties, e.g. the connection whose endpoint the query set. The default changes nothing.
+
+Payloadbuilder:
+
+- **A password set by a query** (`use es.authpassword = '...'`) reaches the Elasticsearch catalog and the Kafka catalog's schema registry. Until payloadbuilder 1.18 their password lookup ignored the string type a query's `use` stores.
 
 ## Reference: Example Plugins
 
