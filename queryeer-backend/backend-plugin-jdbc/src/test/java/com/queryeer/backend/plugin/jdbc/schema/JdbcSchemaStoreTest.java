@@ -4,8 +4,14 @@ import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -16,6 +22,54 @@ import com.queryeer.backend.queryengine.jdbc.schema.JdbcSchemaObject;
 
 class JdbcSchemaStoreTest
 {
+    @Test
+    void firstConcurrentRequestsForANewConnectionAllSucceed(@TempDir Path tempDir) throws Exception
+    {
+        JdbcSchemaStore store = new JdbcSchemaStore(tempDir.resolve("cache"), new JacksonPayloadMapper());
+        JdbcSchemaObject schema = new JdbcSchemaObject("schema:main", "main", "schema", List.of(), Map.of());
+        ExecutorService executor = Executors.newFixedThreadPool(8);
+        try
+        {
+            // Several new connections, each opened by readers and a writer at once, as the tree and the first crawl do
+            for (int connection = 0; connection < 5; connection++)
+            {
+                String connectionId = "new-" + connection;
+                CountDownLatch start = new CountDownLatch(1);
+                List<Future<?>> requests = new ArrayList<>();
+                for (int request = 0; request < 8; request++)
+                {
+                    boolean write = request == 0;
+                    requests.add(executor.submit(() ->
+                    {
+                        start.await();
+                        if (write)
+                        {
+                            store.persistSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP, List.of(schema));
+                        }
+                        else
+                        {
+                            store.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP);
+                        }
+                        return null;
+                    }));
+                }
+                start.countDown();
+                for (Future<?> request : requests)
+                {
+                    request.get(30, TimeUnit.SECONDS);
+                }
+                Assertions.assertEquals(List.of("main"), store.latestSnapshot(connectionId, JdbcSchemaCrawlScope.DEEP)
+                        .stream()
+                        .map(JdbcSchemaObject::name)
+                        .toList());
+            }
+        }
+        finally
+        {
+            executor.shutdownNow();
+        }
+    }
+
     @Test
     void persistsAndLoadsLatestSnapshot(@TempDir Path tempDir)
     {
