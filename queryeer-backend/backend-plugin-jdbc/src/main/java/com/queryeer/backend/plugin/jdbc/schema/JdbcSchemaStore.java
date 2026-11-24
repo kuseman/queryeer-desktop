@@ -35,6 +35,11 @@ public final class JdbcSchemaStore
     private static final long CONNECTION_TIMEOUT_MS = 10_000L;
     private static final long MAX_FILE_SIZE_BYTES = 100L * 1024L * 1024L;
     private static final Set<Path> CORRUPTED_FILES = ConcurrentHashMap.newKeySet();
+    /**
+     * One lock per cache file for its DDL, which runs on every open. H2's {@code if not exists} is not atomic across sessions: the first requests for a new connection (the tree's snapshot and the
+     * crawl) both created the same index, and one failed with "object already exists". Running it on every open, rather than once per file, keeps a file that was deleted and recreated in use.
+     */
+    private final Map<Path, Object> migrationLocks = new ConcurrentHashMap<>();
     private final Path baseDir;
     private final PayloadMapper mapper;
 
@@ -303,7 +308,7 @@ public final class JdbcSchemaStore
         try
         {
             Connection connection = connectWithTimeout(url, CONNECTION_TIMEOUT_MS);
-            migrate(connection);
+            migrateLocked(dbPath, connection);
             return connection;
         }
         catch (Exception e)
@@ -315,7 +320,7 @@ public final class JdbcSchemaStore
                 try
                 {
                     Connection connection = connectWithTimeout(url, CONNECTION_TIMEOUT_MS);
-                    migrate(connection);
+                    migrateLocked(dbPath, connection);
                     return connection;
                 }
                 catch (Exception e2)
@@ -481,6 +486,30 @@ public final class JdbcSchemaStore
         catch (ClassNotFoundException e)
         {
             throw new IllegalStateException("H2 JDBC driver is not available on classpath", e);
+        }
+    }
+
+    /** Runs the DDL one thread at a time per file; closes the connection when it fails. */
+    private void migrateLocked(Path dbPath, Connection connection) throws SQLException
+    {
+        try
+        {
+            synchronized (migrationLocks.computeIfAbsent(dbPath, path -> new Object()))
+            {
+                migrate(connection);
+            }
+        }
+        catch (SQLException | RuntimeException e)
+        {
+            try
+            {
+                connection.close();
+            }
+            catch (SQLException closeFailure)
+            {
+                e.addSuppressed(closeFailure);
+            }
+            throw e;
         }
     }
 
