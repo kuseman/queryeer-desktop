@@ -38,6 +38,19 @@ describe("BackendExecutionStore", () => {
     vi.useRealTimers();
   });
 
+  it("keeps a finished execution finished when a late progress or result arrives", () => {
+    const store = new BackendExecutionStore();
+    store.markAccepted("exec-late", "jdbc");
+    store.onFailed({ queryExecutionId: "exec-late", error: { code: "TIMEOUT", message: "Request timeout" } });
+
+    store.onProgress({ queryExecutionId: "exec-late", percent: 10 });
+    store.onResultChunk({ queryExecutionId: "exec-late", rows: [[1]] });
+    store.onCompleted({ queryExecutionId: "exec-late" });
+
+    expect(store.getActiveExecutionIds()).toEqual([]);
+    expect(store.getRecentExecutions(1)[0]).toMatchObject({ state: "failed", rows: 0, error: "Request timeout" });
+  });
+
   it("clears active executions while retaining completed history", () => {
     const store = new BackendExecutionStore();
     store.markAccepted("exec-active", "payloadbuilder");

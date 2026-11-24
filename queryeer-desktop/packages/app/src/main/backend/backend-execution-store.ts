@@ -103,7 +103,9 @@ export class BackendExecutionStore {
     updater: (current: QueryExecutionStatus) => QueryExecutionStatus
   ): void {
     const current = this.executionStatuses.get(queryExecutionId);
-    if (!current) {
+    // A finished execution stays finished: a late progress or result for one marked failed (e.g. an execute request
+    // that timed out but was accepted after all) must not make it active again
+    if (!current || !this.isActiveState(current)) {
       return;
     }
     this.executionStatuses.set(queryExecutionId, updater(current));

@@ -359,6 +359,88 @@ describe("BackendGateway", () => {
     await gateway.stop();
   });
 
+  it("fails the queries the backend was running when it stopped, so they no longer defer a restart", async () => {
+    vi.useFakeTimers();
+    const { gateway, transport } = createGatewayWithTestTransport();
+    const rendererSink = vi.fn();
+    gateway.setRendererSink(rendererSink);
+    await gateway.start();
+    await gateway.executeQuery({ queryExecutionId: "exec-running", engineId: "jdbc", fileId: "file-1", text: "select 1" });
+    expect(gateway.getStatus().activeExecutionIds).toEqual(["exec-running"]);
+
+    transport.emitDied();
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(1100);
+    await Promise.resolve();
+
+    expect(gateway.getStatus().state).toBe("healthy");
+    expect(gateway.getStatus().activeExecutionIds).toEqual([]);
+    expect(gateway.getStatus().recentExecutions[0]).toMatchObject({ queryExecutionId: "exec-running", state: "failed" });
+    expect(rendererSink).toHaveBeenCalledWith("queryengine.failed", {
+      queryExecutionId: "exec-running",
+      error: { code: "BACKEND_RESTARTED", message: expect.stringContaining("backend stopped") }
+    });
+    expect((await gateway.restart()).accepted).toBe(true);
+
+    vi.useRealTimers();
+    await gateway.stop();
+  });
+
+  it("fails the running queries as soon as the backend dies, even if it never comes back", async () => {
+    vi.useFakeTimers();
+    const { gateway, transport } = createGatewayWithTestTransport();
+    const rendererSink = vi.fn();
+    gateway.setRendererSink(rendererSink);
+    await gateway.start();
+    await gateway.executeQuery({ queryExecutionId: "exec-running", engineId: "jdbc", fileId: "file-1", text: "select 1" });
+
+    (transport.start as Mock<() => Promise<void>>).mockImplementation(async () => {
+      throw new Error("JVM failed to start");
+    });
+    transport.emitDied();
+
+    expect(gateway.getStatus().activeExecutionIds).toEqual([]);
+    expect(rendererSink).toHaveBeenCalledWith("queryengine.failed", expect.objectContaining({ queryExecutionId: "exec-running" }));
+
+    vi.useRealTimers();
+    await gateway.stop();
+  });
+
+  it("leaves a query whose execute request is still waiting to that request when the backend dies", async () => {
+    vi.useFakeTimers();
+    const { gateway, transport } = createGatewayWithTestTransport({ dropExecute: true });
+    const rendererSink = vi.fn();
+    gateway.setRendererSink(rendererSink);
+    await gateway.start();
+    const execute = gateway.executeQuery({ queryExecutionId: "exec-sending", engineId: "jdbc", fileId: "file-1", text: "select 1" });
+    const rejected = expect(execute).rejects.toThrow();
+
+    transport.emitDied();
+    await vi.advanceTimersByTimeAsync(1100);
+    await rejected;
+
+    expect(rendererSink).not.toHaveBeenCalledWith("queryengine.failed", expect.anything());
+    expect(gateway.getStatus().activeExecutionIds).toEqual([]);
+    expect(gateway.getStatus().recentExecutions[0]).toMatchObject({ queryExecutionId: "exec-sending", state: "failed" });
+
+    vi.useRealTimers();
+    await gateway.stop();
+  });
+
+  it("restarts an unavailable backend without waiting for the queries it can't finish", async () => {
+    const { gateway, transport } = createGatewayWithTestTransport();
+    await gateway.start();
+    await gateway.executeQuery({ queryExecutionId: "exec-stuck", engineId: "jdbc", fileId: "file-1", text: "select 1" });
+    transport.emitDiagnostic({ level: "error", source: "transport", message: "Ping loop failed" });
+    expect(gateway.getStatus().state).toBe("unavailable");
+
+    const result = await gateway.restart();
+
+    expect(result).toEqual({ accepted: true });
+    expect(gateway.getStatus().recentExecutions.find((execution) => execution.queryExecutionId === "exec-stuck")?.state).toBe("failed");
+    await gateway.stop();
+  });
+
   it("defers intentional restart while a query is active", async () => {
     const { gateway, transport } = createGatewayWithTestTransport();
     await gateway.start();
@@ -846,6 +928,7 @@ describe("BackendGateway", () => {
 
     const status = gateway.getStatus();
     expect(status.state).toBe("unavailable");
+    expect(status.activeExecutionIds).toEqual([]);
 
     await gateway.stop();
   });
@@ -866,6 +949,7 @@ describe("BackendGateway", () => {
 
     await vi.advanceTimersByTimeAsync(10_001);
     await assertion;
+    expect(gateway.getStatus().activeExecutionIds).toEqual([]);
 
     await gateway.stop();
     vi.useRealTimers();
