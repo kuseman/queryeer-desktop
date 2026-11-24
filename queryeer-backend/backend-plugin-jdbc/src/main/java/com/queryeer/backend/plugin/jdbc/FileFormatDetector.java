@@ -1,4 +1,4 @@
-package com.queryeer.backend.queryengine.jdbc;
+package com.queryeer.backend.plugin.jdbc;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -9,7 +9,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Optional;
 
-public final class FileFormatDetector
+final class FileFormatDetector
 {
     private static final byte[] SQLITE_HEADER = "SQLite format 3\0".getBytes(StandardCharsets.US_ASCII);
 

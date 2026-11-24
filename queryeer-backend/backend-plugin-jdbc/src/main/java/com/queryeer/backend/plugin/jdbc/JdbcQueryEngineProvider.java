@@ -41,7 +41,6 @@ import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaNavigator;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaRouter;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaStore;
 import com.queryeer.backend.queryengine.jdbc.CancellableJdbcQueryExecutor;
-import com.queryeer.backend.queryengine.jdbc.FileFormatDetector;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialect;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectMetadata;

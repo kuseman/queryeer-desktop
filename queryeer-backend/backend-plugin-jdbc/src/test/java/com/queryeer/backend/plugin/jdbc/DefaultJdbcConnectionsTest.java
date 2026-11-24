@@ -22,7 +22,6 @@ import com.queryeer.backend.api.ConfigService;
 import com.queryeer.backend.api.PayloadMapper;
 import com.queryeer.backend.api.SettingsModule;
 import com.queryeer.backend.core.JacksonPayloadMapper;
-import com.queryeer.backend.queryengine.jdbc.DefaultJdbcDialectRegistry;
 import com.queryeer.backend.queryengine.jdbc.JdbcConnection;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
 
