@@ -1,11 +1,15 @@
-package com.queryeer.backend.queryengine.jdbc;
+package com.queryeer.backend.plugin.jdbc;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-public final class DefaultJdbcDialectRegistry implements JdbcDialectRegistry
+import com.queryeer.backend.queryengine.jdbc.JdbcDialect;
+import com.queryeer.backend.queryengine.jdbc.JdbcDialectMetadata;
+import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
+
+final class DefaultJdbcDialectRegistry implements JdbcDialectRegistry
 {
     private final Map<String, JdbcDialect> dialectsById = new ConcurrentHashMap<>();
 

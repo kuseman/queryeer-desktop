@@ -17,8 +17,6 @@ import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawlPolicy;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaCrawler;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaRouter;
 import com.queryeer.backend.plugin.jdbc.schema.JdbcSchemaStore;
-import com.queryeer.backend.queryengine.jdbc.DefaultJdbcDialectRegistry;
-import com.queryeer.backend.queryengine.jdbc.DefaultJdbcRuntimeService;
 import com.queryeer.backend.queryengine.jdbc.JdbcDialectRegistry;
 import com.queryeer.backend.queryengine.jdbc.JdbcRuntimeService;
 import com.queryeer.backend.queryengine.jdbc.JdbcSqlEditorServices;

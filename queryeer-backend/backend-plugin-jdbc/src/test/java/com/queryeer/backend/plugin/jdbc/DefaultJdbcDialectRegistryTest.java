@@ -1,4 +1,4 @@
-package com.queryeer.backend.queryengine.jdbc;
+package com.queryeer.backend.plugin.jdbc;
 
 import java.util.List;
 import java.util.Map;
@@ -6,6 +6,8 @@ import java.util.Map;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import com.queryeer.backend.queryengine.jdbc.JdbcDialect;
+import com.queryeer.backend.queryengine.jdbc.JdbcDialectMetadata;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryExecutor;
 import com.queryeer.backend.queryengine.jdbc.execute.JdbcQueryResult;
 
