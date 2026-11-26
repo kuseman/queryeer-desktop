@@ -175,7 +175,7 @@
     },
     "runtime": {
       "type": "object",
-      "description": "Trusted shared-runtime declaration for built-in plugins. External plugins must provide backend and/or frontend entrypoints; runtime-only external packages are not loaded.",
+      "description": "What the plugin needs from the backend's shared layer, where JDBC drivers live: packages that load parent-first from it, and native libraries to preload. Applies to installed plugins since Queryeer 0.24, before only to built-in ones. An installed plugin still needs a backend or frontend entrypoint; a runtime-only package is not loaded.",
       "additionalProperties": false,
       "required": ["shared"],
       "properties": {

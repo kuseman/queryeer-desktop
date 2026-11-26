@@ -1166,7 +1166,7 @@ When `mode: "execute"`, the query runs against the tree node's connection:
 
 ### 14.9 Dialect template contributions
 
-Dialect plugins (e.g., `core.queryengine.jdbc.sqlserver`) register pre-built action templates:
+Dialect plugins (e.g., the SQL Server plugin, `com.queryeer.jdbc.sqlserver`) register pre-built action templates:
 
 ```typescript
 registerTreeActionTemplate({

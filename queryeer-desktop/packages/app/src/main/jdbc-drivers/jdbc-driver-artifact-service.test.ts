@@ -24,14 +24,34 @@ const postgres: RegisteredJdbcManagedDriverContribution = {
   driverClassName: "org.postgresql.Driver"
 };
 
+// The SQL Server plugin's driver (moved out of core in 0.24), with its Windows native authentication companion.
+// Approved in beforeEach, as most tests are about installing it.
 const sqlServer: RegisteredJdbcManagedDriverContribution = {
-  ownerPluginId: "core.queryengine.jdbc.sqlserver",
+  ownerPluginId: "com.queryeer.jdbc.sqlserver",
   dialectId: "sqlserver",
   displayName: "Microsoft JDBC Driver for SQL Server",
   groupId: "com.microsoft.sqlserver",
   artifactId: "mssql-jdbc",
   driverClassName: "com.microsoft.sqlserver.jdbc.SQLServerDriver",
-  compatibleVersionRegex: "\\.jre11$"
+  compatibleVersionRegex: "\\.jre11$",
+  downloadPageUrl: "https://learn.microsoft.com/sql/connect/jdbc/download-microsoft-jdbc-driver-for-sql-server",
+  companionArtifacts: [{
+    id: "native-auth",
+    displayName: "Windows Native Authentication",
+    kind: "nativeLibrary",
+    platforms: [{ os: "windows", arch: "x64" }, { os: "windows", arch: "x86" }],
+    source: {
+      type: "githubReleaseArchive",
+      repository: "microsoft/mssql-jdbc",
+      releaseTagTemplate: "v{releaseVersion}",
+      assetName: "mssql-jdbc_auth.zip",
+      driverVersionToReleaseVersion: { pattern: "^([0-9]+\\.[0-9]+\\.[0-9]+)\\.jre[0-9]+$", replacement: "$1" },
+      archiveEntryTemplate: "{arch}/mssql-jdbc_auth-{releaseVersion}.{arch}.dll"
+    },
+    targetDirectory: "libNative",
+    expectedFileExtension: ".dll",
+    versionLockedToDriver: true
+  }]
 };
 
 const mariadb: RegisteredJdbcManagedDriverContribution = {
@@ -52,6 +72,8 @@ beforeEach(() => {
   workDir = mkdtempSync(join(tmpdir(), "queryeer-jdbc-drivers-"));
   appDir = join(workDir, "app");
   settingsDir = join(workDir, "settings");
+  mkdirSync(settingsDir, { recursive: true });
+  writeFileSync(defaultJdbcDriverInventoryPath(settingsDir), JSON.stringify({ version: 2, drivers: [], disabledSets: [], approved: [sqlServer] }));
 });
 
 afterEach(() => {
@@ -154,17 +176,7 @@ describe("JdbcDriverArtifactService", () => {
     expect(service.managedDriverClassNames()).not.toContain(mariadb.driverClassName);
   });
 
-  it("needs no approval for a built-in driver", async () => {
-    const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: vi.fn() as unknown as typeof fetch });
-    await service.initialize();
-
-    expect((await service.list([sqlServer]))[0].approvalRequired).toBeUndefined();
-    expect((await service.approve(sqlServer)).accepted).toBe(true);
-    // Nothing to record: the inventory is not even written
-    expect(existsSync(defaultJdbcDriverInventoryPath(settingsDir))).toBe(false);
-  });
-
-  it("manages an approved plugin driver like a built-in one", async () => {
+  it("manages an approved plugin driver", async () => {
     const jar = await driverJar(mariadb.driverClassName, "3.5.6");
     const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: mavenFetch(["3.5.6"], jar) });
     await service.initialize();
@@ -183,7 +195,7 @@ describe("JdbcDriverArtifactService", () => {
       mariadb.driverClassName
     ]));
 
-    // A manual copy of an approved driver is retained at startup, as for built-in drivers.
+    // A manual copy of an approved driver is retained at startup.
     const manual = join(appDir, "libShared", "mariadb-java-client-3.4.1.jar");
     writeFileSync(manual, await driverJar(mariadb.driverClassName, "3.4.1"));
     // The approval survives a restart: the approved driver is still managed and installs without a new approval.
@@ -211,7 +223,8 @@ describe("JdbcDriverArtifactService", () => {
         driverClassName: "org.sqlite.JDBC"
       }
     },
-    { oldOwner: "core.queryengine.jdbc.postgres", version: "42.7.7", contribution: postgres }
+    { oldOwner: "core.queryengine.jdbc.postgres", version: "42.7.7", contribution: postgres },
+    { oldOwner: "core.queryengine.jdbc.sqlserver", version: "13.4.0.jre11", contribution: sqlServer }
   ])("hands $oldOwner's installed driver to its plugin once the plugin's driver is approved", async ({ oldOwner, version, contribution }) => {
     // Installed while the dialect was built in: the inventory names core's old plugin id
     const jar = await driverJar(contribution.driverClassName, version);
@@ -241,6 +254,50 @@ describe("JdbcDriverArtifactService", () => {
     expect(existsSync(managedFile)).toBe(true);
     expect((await restarted.list([contribution]))[0]).toMatchObject({ source: "managed", installedVersion: version });
     expect(restarted.managedDriverClassNames()).toContain(contribution.driverClassName);
+  });
+
+  it("hands SQL Server's native authentication library to the plugin with its driver", async () => {
+    const version = "13.4.0.jre11";
+    const jar = await driverJar(sqlServer.driverClassName, version);
+    const native = Buffer.from([0x4d, 0x5a, 0x05]);
+    const jarPath = join(appDir, "libShared", `000-queryeer-managed-mssql-jdbc-${version}.jar`);
+    const nativePath = join(appDir, "libNative", "mssql-jdbc_auth-13.4.0.x64.dll");
+    mkdirSync(join(appDir, "libShared"), { recursive: true });
+    mkdirSync(join(appDir, "libNative"), { recursive: true });
+    writeFileSync(jarPath, jar);
+    writeFileSync(nativePath, native);
+    writeFileSync(defaultJdbcDriverInventoryPath(settingsDir), JSON.stringify({
+      version: 2,
+      drivers: [{
+        ownerPluginId: "core.queryengine.jdbc.sqlserver",
+        dialectId: "sqlserver",
+        installedVersion: version,
+        installedSha256: createHash("sha256").update(jar).digest("hex"),
+        managedFile: jarPath,
+        companions: [{
+          id: "native-auth",
+          installedVersion: "13.4.0",
+          installedSha256: createHash("sha256").update(native).digest("hex"),
+          managedFile: nativePath
+        }]
+      }],
+      disabledSets: []
+    }));
+    const options = { appDir, settingsDir, fetch: sqlServerFetch(await nativeArchive(), jar), platform: "win32" as const, arch: "x64" };
+
+    const service = new JdbcDriverArtifactService(options);
+    await service.initialize();
+    expect((await service.approve(sqlServer)).accepted).toBe(true);
+    const restarted = new JdbcDriverArtifactService(options);
+    await restarted.initialize();
+
+    expect(existsSync(jarPath)).toBe(true);
+    expect(existsSync(nativePath)).toBe(true);
+    const [status] = await restarted.list([sqlServer]);
+    expect(status).toMatchObject({ source: "managed", installedVersion: version });
+    expect(status.artifacts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "native-auth", source: "managed", installedVersion: "13.4.0" })
+    ]));
   });
 
   it("needs a new approval when a plugin changes what its driver downloads", async () => {
@@ -365,7 +422,6 @@ describe("JdbcDriverArtifactService", () => {
     const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: fetchMock, platform: "win32", arch: "x64" });
     await service.initialize();
     const sharedClass = { ...sqlServer, ownerPluginId: "example.sybase", dialectId: "sybase", displayName: "Sybase via mssql-jdbc" };
-    const spoofed = { ...sqlServer, groupId: "com.example.evil" };
     const sqlServerCompanion = (await service.list([sqlServer]))[0].contribution.companionArtifacts![0];
     const overlapping: RegisteredJdbcManagedDriverContribution = {
       ...mariadb,
@@ -377,8 +433,7 @@ describe("JdbcDriverArtifactService", () => {
     };
 
     for (const [contribution, reason] of [
-      [sharedClass, "already managed for core.queryengine.jdbc.sqlserver"],
-      [spoofed, "uses the plugin ID of the built-in"],
+      [sharedClass, "already managed for com.queryeer.jdbc.sqlserver"],
       [overlapping, "overlap"]
     ] as const) {
       const [status] = await service.list([contribution]);
@@ -393,29 +448,12 @@ describe("JdbcDriverArtifactService", () => {
       expect(result.reason).toContain(reason);
       expect((await service.remove(contribution)).accepted).toBe(false);
     }
-    await service.check([spoofed, sharedClass]);
+    await service.check([sharedClass]);
 
     expect(fetchMock).not.toHaveBeenCalled();
     const inventory = JSON.parse(readFileSync(defaultJdbcDriverInventoryPath(settingsDir), "utf8"));
     expect(inventory.drivers).toEqual([]);
-    expect(inventory.approved).toBeUndefined();
-  });
-
-  it("uses the main-owned compatibility policy for trusted contributions", async () => {
-    const jar = await driverJar(sqlServer.driverClassName);
-    const service = new JdbcDriverArtifactService({
-      appDir,
-      settingsDir,
-      fetch: mavenFetch(["13.2.1.jre8", "13.4.0.jre11", "13.4.0.jre8"], jar),
-      platform: "linux",
-      arch: "x64"
-    });
-    await service.initialize();
-
-    const [status] = await service.check([{ ...sqlServer, compatibleVersionRegex: "\\.jre8$" }]);
-
-    expect(status.latestVersion).toBe("13.4.0.jre11");
-    expect(status.contribution.compatibleVersionRegex).toBe("\\.jre11$");
+    expect(inventory.approved).toEqual([sqlServer]);
   });
 
   it("cleans staging and rejects a checksum mismatch", async () => {
@@ -696,6 +734,7 @@ describe("JdbcDriverArtifactService", () => {
           managedFile: legacyNativePath
         }]
       }],
+      approved: [sqlServer],
       disabledSets: [{
         id: "broken-native",
         ownerPluginId: sqlServer.ownerPluginId,
@@ -1096,6 +1135,7 @@ describe("JdbcDriverArtifactService", () => {
       arch: "x64"
     });
     await missingEntryService.initialize();
+    await missingEntryService.approve(sqlServer);
     expect((await missingEntryService.install(sqlServer, "native-auth")).reason).toContain("archive entry");
   });
 

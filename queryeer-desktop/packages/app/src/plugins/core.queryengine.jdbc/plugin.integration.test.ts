@@ -236,6 +236,7 @@ function createContext(): PluginContext {
       registerTemplates: vi.fn(() => ({ dispose: vi.fn() })),
       registerVariables: vi.fn(() => ({ dispose: vi.fn() }))
     },
+    expressions: { registerNamespace: vi.fn(() => ({ dispose: vi.fn() })) },
     graphNodeTypes: { registerNodeType: vi.fn(), unregisterNodeType: vi.fn(), getComponent: vi.fn(), getAll: vi.fn(() => new Map()) },
     outline: {
       registerOutlineProvider: vi.fn(),

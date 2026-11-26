@@ -238,6 +238,7 @@ function createContext(args: {
       registerTemplates: vi.fn(() => ({ dispose: vi.fn() })),
       registerVariables: vi.fn(() => ({ dispose: vi.fn() }))
     },
+    expressions: { registerNamespace: vi.fn(() => ({ dispose: vi.fn() })) },
     outline: {
       registerOutlineProvider: vi.fn(),
       registerSupplementaryOutlineProvider: vi.fn(),

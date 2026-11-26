@@ -1,13 +1,18 @@
 package com.queryeer.backend.runner;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class BackendRunnerModuleTest
 {
@@ -152,6 +157,57 @@ class BackendRunnerModuleTest
 
         Assertions.assertEquals(List.of(Path.of("first"), Path.of("second")), BackendRunnerModule.parseDevPluginDirs(value));
         Assertions.assertEquals(List.of(), BackendRunnerModule.parseDevPluginDirs(null));
+    }
+
+    @Test
+    void runtimeManifestsFollowDiscoverysRulesForWhichPluginsLoad(@TempDir Path tempDir) throws IOException
+    {
+        Path builtins = tempDir.resolve("builtins");
+        Path installed = tempDir.resolve("plugins");
+        Path developer = tempDir.resolve("dev");
+        Path builtin = writeManifest(builtins.resolve("builtin"), "builtin.one");
+        Path sqlServer = writeManifest(installed.resolve("sqlserver"), "com.example.sqlserver");
+        writeManifest(installed.resolve("disabled"), "com.example.disabled");
+        writeManifest(installed.resolve("replaced"), "com.example.replaced");
+        Files.createDirectories(installed.resolve("broken"));
+        Files.writeString(installed.resolve("broken")
+                .resolve("plugin.json"), "{", StandardCharsets.UTF_8);
+        Path replacement = writeManifest(developer.resolve("replaced"), "com.example.replaced");
+        Path clash = writeManifest(developer.resolve("clash"), "builtin.one");
+        Map<String, String> config = Map.of("queryeer.plugins.dir", installed.toString(), "queryeer.plugins.disabledIds", "com.example.disabled", "queryeer.plugins.devDirs",
+                String.join(java.io.File.pathSeparator, replacement.toString(), clash.toString()));
+
+        List<PluginRuntimeContributionCollector.ManifestSource> manifests = BackendRunnerModule.loadRuntimeManifests(builtins, config);
+        Assertions.assertEquals(List.of(builtin, replacement, sqlServer), manifests.stream()
+                .map(PluginRuntimeContributionCollector.ManifestSource::source)
+                .toList());
+        // Only a built-in's required native library may stop startup
+        Assertions.assertEquals(List.of(true, false, false), manifests.stream()
+                .map(PluginRuntimeContributionCollector.ManifestSource::builtin)
+                .toList());
+
+        Map<String, String> safeMode = new HashMap<>(config);
+        safeMode.put("queryeer.plugins.safeMode", "true");
+        Assertions.assertEquals(List.of(builtin), BackendRunnerModule.loadRuntimeManifests(builtins, safeMode)
+                .stream()
+                .map(PluginRuntimeContributionCollector.ManifestSource::source)
+                .toList());
+    }
+
+    private static Path writeManifest(Path folder, String pluginId) throws IOException
+    {
+        Files.createDirectories(folder);
+        Files.writeString(folder.resolve("plugin.json"), """
+                {
+                  "schemaVersion": 1,
+                  "id": "%s",
+                  "name": "%s",
+                  "version": "1.0.0",
+                  "backend": { "entrypointClass": "com.example.Plugin" },
+                  "runtime": { "shared": { "parentFirstPackagePrefixes": ["com.example.driver."] } }
+                }
+                """.formatted(pluginId, pluginId), StandardCharsets.UTF_8);
+        return folder;
     }
 
     private DiscoveredPlugin discovered(String pluginId, Path source)

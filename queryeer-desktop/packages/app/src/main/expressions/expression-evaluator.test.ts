@@ -70,6 +70,18 @@ describe("expression evaluator IPC", () => {
     expect(result).toBe(5);
   });
 
+  it("fails only the calls of a function that doesn't load, e.g. a plugin's method shorthand", async () => {
+    const evaluate = createHandler();
+    const functions = {
+      math: { add: "(a, b) => a + b" },
+      plugin: { quote: "quote(value) { return value; }" }
+    };
+
+    await expect(evaluate(null, { expression: "fn.math.add(2, 3)", context: {}, functions, timeoutMs: 100 })).resolves.toBe(5);
+    await expect(evaluate(null, { expression: "fn.plugin.quote('x')", context: {}, functions, timeoutMs: 100 }))
+      .rejects.toThrow("Expression function 'fn.plugin.quote' can't be loaded");
+  });
+
   it("blocks direct access to eval and Function", async () => {
     const evaluate = createHandler();
     const result = await evaluate(null, {

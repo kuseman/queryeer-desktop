@@ -34,7 +34,7 @@ final class PluginRuntimeContributionCollector
             {
                 for (PluginManifest.NativeLibrary nativeLibrary : shared.nativeLibraries())
                 {
-                    nativeLibraries.add(new NativeLibraryPreloader.Request(manifest.id(), nativeLibrary));
+                    nativeLibraries.add(new NativeLibraryPreloader.Request(manifest.id(), nativeLibrary, source.builtin()));
                 }
             }
         }
@@ -42,11 +42,16 @@ final class PluginRuntimeContributionCollector
         return new PluginRuntimeContributions(List.copyOf(parentFirstPrefixes), List.copyOf(nativeLibraries));
     }
 
-    record ManifestSource(PluginManifest manifest, Path source)
+    /** @param builtin whether it is a built-in plugin's manifest, not an installed plugin's or a developer folder's */
+    record ManifestSource(PluginManifest manifest, Path source, boolean builtin)
     {
+        ManifestSource(PluginManifest manifest, Path source)
+        {
+            this(manifest, source, true);
+        }
     }
 
-    /** What built-in plugins contribute to the shared layer. Never a plugin's own classpath: plugins share classes through exports (0.21 removed the last plugin that did otherwise). */
+    /** What plugins contribute to the shared layer. Never a plugin's own classpath: plugins share classes through exports (0.21 removed the last plugin that did otherwise). */
     record PluginRuntimeContributions(List<String> parentFirstPrefixes, List<NativeLibraryPreloader.Request> nativeLibraries)
     {
     }

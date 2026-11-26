@@ -157,6 +157,12 @@ export function getExpressionRuntime(): ExpressionRuntimeService {
         return `'${String(value).replace(/'/g, "''")}'`;
       }
     });
+    // The SQL Server plugin's templates use it, and so do the actions users made from them. It stayed in core when SQL
+    // Server moved to a plugin. While core registers it, the plugin can't (a name registers once); moving it means
+    // removing it here in the same release as a plugin version that registers it with `context.expressions`.
+    runtimeInstance.getFunctionRegistry().registerNamespace("sqlserver", {
+      identifier: (value: unknown) => `[${String(value).replace(/]/g, "]]")}]`
+    });
   }
   return runtimeInstance;
 }

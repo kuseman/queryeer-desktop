@@ -33,7 +33,7 @@ final class NativeLibraryPreloader
         if (matches.isEmpty())
         {
             String message = "Native library preload skipped for " + request.pluginId() + " (no matching files: " + library.filePatterns() + ")";
-            if (library.required())
+            if (request.required())
             {
                 throw new PluginDiscoveryException(message);
             }
@@ -53,9 +53,18 @@ final class NativeLibraryPreloader
             {
                 logger.warn("Native library preload failed for " + request.pluginId() + " at " + match.toAbsolutePath() + ": " + e.getMessage());
             }
+            catch (PluginDiscoveryException e)
+            {
+                // E.g. a loader class the shared class loader doesn't have
+                if (request.required())
+                {
+                    throw e;
+                }
+                logger.warn("Native library preload failed for " + request.pluginId() + " at " + match.toAbsolutePath() + ": " + e.getMessage());
+            }
         }
 
-        if (library.required())
+        if (request.required())
         {
             throw new PluginDiscoveryException("Required native library preload failed for " + request.pluginId() + ": " + library.filePatterns());
         }
@@ -205,7 +214,18 @@ final class NativeLibraryPreloader
         return "x64";
     }
 
-    record Request(String pluginId, PluginManifest.NativeLibrary library)
+    /** @param builtin whether a built-in plugin asks: only a built-in's {@code required} library stops startup when it doesn't load */
+    record Request(String pluginId, PluginManifest.NativeLibrary library, boolean builtin)
     {
+        Request(String pluginId, PluginManifest.NativeLibrary library)
+        {
+            this(pluginId, library, true);
+        }
+
+        boolean required()
+        {
+            return builtin
+                    && library.required();
+        }
     }
 }
