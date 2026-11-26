@@ -17,6 +17,7 @@ import { MenuService } from "./menu/menu-service.js";
 import { discoverExternalFrontendPlugins, discoverFrontendPluginFolders } from "./plugins/frontend-plugin-discovery.js";
 import { checkFrontendCompatibility } from "./plugins/frontend-compatibility.js";
 import { isReleaseBuild } from "./release-build.js";
+import { type BundledPluginOutcome, resolveBundledPluginsDir } from "./plugins/bundled-plugins.js";
 import {
   DEV_PLUGINS_ENV,
   DevPluginShadowCopier,
@@ -117,6 +118,8 @@ let queryExportStore: QueryExportStore | null = null;
 let recentFilesStore: RecentFilesStore | null = null;
 let securityService: SecurityService | null = null;
 let pluginInventoryService: PluginInventoryService | null = null;
+/** What this start did with the bundled plugins; the post-upgrade notification reports the failures. */
+let bundledPluginOutcomes: BundledPluginOutcome[] = [];
 let jdbcDriverArtifactService: JdbcDriverArtifactService | null = null;
 let windowStateStore: WindowStateStore | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -500,6 +503,18 @@ app.whenReady().then(async () => {
     isSafeMode: isPluginSafeMode
   });
   await pluginInventoryService.initialize();
+  // Before the backend starts and the frontends load, so the bundled versions are the ones that run
+  try {
+    const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+    bundledPluginOutcomes = await pluginInventoryService.installBundled(resolveBundledPluginsDir(resourcesPath, app.isPackaged));
+    for (const outcome of bundledPluginOutcomes) {
+      if (outcome.result === "failed") {
+        console.warn(`[plugins] Bundled plugin ${outcome.id} ${outcome.version} was not installed: ${outcome.reason}`);
+      }
+    }
+  } catch (error) {
+    console.error("[plugins] Installing the bundled plugins failed", error);
+  }
   ipcMain.handle("plugins:get-inventory", async () => ({
     ...(await pluginInventoryService!.getInventory()),
     developmentPlugins: describeDevPluginFolders(devPluginFolders)
