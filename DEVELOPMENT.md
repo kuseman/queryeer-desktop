@@ -140,6 +140,17 @@ Queryeer always loads builtin plugins first and then per-user external plugins f
 
 Use `--safe-mode` to start with external plugin activation disabled. Safe mode still starts builtin plugins so the application can recover from a broken external plugin without losing core functionality.
 
+**Bundled plugins** (since 0.24) are verified plugins that ship with a release, in `resources/plugins/bundled/`: their ZIPs and `bundled-plugins.lock.json` (`{ "schemaVersion": 1, "plugins": [{ "id", "version", "file", "sha256", "url" }] }`). They are not built-ins. On the first start of a new app version, before the backend starts, Queryeer installs each one into the managed `plugins/` directory like a ZIP the user installed, so a newer version from the catalog can replace it later:
+
+- a plugin that isn't installed is installed, and an older one is upgraded; enabled or disabled stays as it was;
+- the same or a newer version is left as it is (never a downgrade);
+- a plugin the user uninstalled stays uninstalled (`uninstalledIds` in `settings/plugins-lock.json`), until the user installs it by hand again;
+- a ZIP that doesn't match its sha256, or holds another plugin or version than the lock says, isn't installed;
+- each bundled version of a plugin is applied once (`bundledApplied`), so a plugin the user changes afterwards stays as they left it. A failure, or an install that has to wait because its files are in use, is tried again on the next start, and one plugin failing doesn't stop the others;
+- nothing is installed in safe mode, and a developer plugin folder still replaces an installed plugin.
+
+To try a bundle in a development run, set `QUERYEER_BUNDLED_PLUGINS_DIR` to a folder with the lock and the ZIPs, e.g. ones built with `npm run <plugin>:package` in the plugins repository.
+
 ### Release Flow
 
 Release builds are local-first: the same `queryeer-desktop` scripts used by GitHub Actions can be run on a workstation before creating a real release.

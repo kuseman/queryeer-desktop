@@ -10,6 +10,14 @@ import type {
   ManagedPluginSourceType,
   ManagedPluginUninstallResult
 } from "@queryeer/api/plugin/PluginInventory.js";
+import {
+  BUNDLED_PLUGINS_LOCK_FILE,
+  type BundledPluginEntry,
+  type BundledPluginOutcome,
+  type BundledPluginsLock,
+  parseBundledPluginsLock,
+  planBundledPlugin
+} from "./bundled-plugins.js";
 
 type PluginManifestV1 = {
   schemaVersion?: number;
@@ -23,6 +31,14 @@ type PluginManifestV1 = {
 type PluginLockDocument = {
   version: 1;
   plugins: PluginLockEntry[];
+  /** Plugins the user uninstalled: a bundled copy never installs them again (`installBundled`). Installing one by hand removes it. */
+  uninstalledIds?: string[];
+  /**
+   * The bundled version of each plugin last applied (installed, or deliberately left as it was), by id: a bundled
+   * version is applied once, so a plugin the user changes afterwards stays as they left it. A failure isn't recorded,
+   * so it is tried again on the next start.
+   */
+  bundledApplied?: Record<string, string>;
 };
 
 type PluginLockEntry = {
@@ -248,6 +264,17 @@ export class PluginInventoryService {
         installedAt: this.now().toISOString()
       };
       lockEntry.restartRequired = true;
+      // Installed again before the restart that would apply an uninstall: keep it, enabled
+      if (lockEntry.uninstallPending) {
+        delete lockEntry.uninstallPending;
+        lockEntry.enabled = true;
+      }
+      // An install still waiting from before would overwrite this one at the next start
+      if (lockEntry.installPending) {
+        rmSync(lockEntry.installPending.stagingDir, { recursive: true, force: true });
+        delete lockEntry.installPending;
+      }
+      this.forgetUninstall(pluginId);
       this.writeLockDocument();
       await this.refresh();
     }
@@ -291,6 +318,10 @@ export class PluginInventoryService {
       };
       lockEntry.restartRequired = true;
       lockEntry.installPending = { stagingDir };
+      if (lockEntry.uninstallPending) {
+        delete lockEntry.uninstallPending;
+        lockEntry.enabled = true;
+      }
     } else {
       this.lockDocument.plugins.push({
         id: pluginId,
@@ -308,6 +339,7 @@ export class PluginInventoryService {
         installPending: { stagingDir }
       });
     }
+    this.forgetUninstall(pluginId);
 
     this.writeLockDocument();
     await this.refresh();
@@ -333,6 +365,8 @@ export class PluginInventoryService {
     lockEntry.enabled = false;
     lockEntry.uninstallPending = true;
     lockEntry.restartRequired = true;
+    // An intentional uninstall: a later app version's bundled copy doesn't bring it back
+    this.lockDocument.uninstalledIds = [...new Set([...(this.lockDocument.uninstalledIds ?? []), pluginId])];
     this.writeLockDocument();
     await this.refresh();
 
@@ -344,6 +378,106 @@ export class PluginInventoryService {
       removedPluginId: pluginId,
       reason: stillPresent ? "Uninstall scheduled for restart because plugin files are in use" : undefined
     };
+  }
+
+  /**
+   * Installs the plugins this app version bundles (`<resources>/plugins/bundled`) as ordinary installed plugins, so a
+   * later version from the catalog can replace them. Runs at startup, before the backend starts and the frontends load.
+   * A missing or older plugin is installed; a newer one, one the user uninstalled, and enabled/disabled are left as they
+   * are. Each bundled version of a plugin is applied once (`bundledApplied`); a failure is tried again on the next
+   * start. One plugin failing doesn't stop the others. Nothing in safe mode.
+   */
+  public async installBundled(bundledDir: string | undefined): Promise<BundledPluginOutcome[]> {
+    if (!bundledDir || this.options.isSafeMode()) {
+      return [];
+    }
+    const lockPath = join(bundledDir, BUNDLED_PLUGINS_LOCK_FILE);
+    if (!existsSync(lockPath)) {
+      return [];
+    }
+    let lock: BundledPluginsLock;
+    try {
+      lock = parseBundledPluginsLock(readFileSync(lockPath, "utf8"));
+    } catch (error) {
+      return [{ id: BUNDLED_PLUGINS_LOCK_FILE, version: "", result: "failed", reason: errorMessage(error) }];
+    }
+    await this.refresh();
+
+    const outcomes: BundledPluginOutcome[] = [];
+    const applied: Record<string, string> = {};
+    for (const entry of lock.plugins) {
+      if (this.lockDocument.bundledApplied?.[entry.id] === entry.version) {
+        continue;
+      }
+      const outcome = await this.installBundledPlugin(bundledDir, entry);
+      outcomes.push(outcome);
+      if (outcome.result !== "failed" && outcome.result !== "pending") {
+        applied[entry.id] = entry.version;
+      }
+    }
+    if (outcomes.length === 0) {
+      return [];
+    }
+
+    // Installed before anything loaded: no restart is needed. This also retries an install that had to wait.
+    await this.refresh({ clearRestartRequired: true });
+    for (const outcome of outcomes) {
+      const lockEntry = this.lockDocument.plugins.find((plugin) => plugin.id === outcome.id);
+      if (outcome.result === "pending" && !lockEntry?.installPending) {
+        outcome.result = outcome.previousVersion ? "upgraded" : "installed";
+        delete outcome.reason;
+        applied[outcome.id] = outcome.version;
+      }
+    }
+    if (Object.keys(applied).length > 0) {
+      this.lockDocument.bundledApplied = { ...(this.lockDocument.bundledApplied ?? {}), ...applied };
+      this.writeLockDocument();
+    }
+    return outcomes;
+  }
+
+  private async installBundledPlugin(bundledDir: string, entry: BundledPluginEntry): Promise<BundledPluginOutcome> {
+    // A plugin whose files are gone counts as not installed
+    const installed = this.inventory.plugins.find((plugin) => plugin.id === entry.id && plugin.status !== "missing");
+    const uninstalledByUser = (this.lockDocument.uninstalledIds ?? []).includes(entry.id);
+    const plan = planBundledPlugin(entry, installed && { version: installed.version, uninstallPending: installed.uninstallPending === true }, uninstalledByUser);
+    if (plan !== "install" && plan !== "upgrade") {
+      return plan;
+    }
+    const base = { id: entry.id, version: entry.version, ...(installed ? { previousVersion: installed.version } : {}) };
+    try {
+      const zipPath = join(bundledDir, entry.file);
+      const bytes = readFileSync(zipPath);
+      if (sha256(bytes) !== entry.sha256.toLowerCase()) {
+        return { ...base, result: "failed", reason: `${entry.file} doesn't match its sha256 in ${BUNDLED_PLUGINS_LOCK_FILE}` };
+      }
+      // Checked before installing, so a wrong ZIP never replaces anything
+      const manifestFile = (await JSZip.loadAsync(bytes)).file(MANIFEST_FILE);
+      const manifest = manifestFile ? (JSON.parse(await manifestFile.async("string")) as PluginManifestV1) : undefined;
+      if (manifest?.id !== entry.id || manifest.version !== entry.version) {
+        return {
+          ...base,
+          result: "failed",
+          reason: `${entry.file} holds ${manifest?.id ?? "no plugin.json"} ${manifest?.version ?? ""}`.trimEnd() + `, not ${entry.id} ${entry.version}`
+        };
+      }
+      const result = await this.installFromZip(zipPath);
+      if (!result.accepted) {
+        return { ...base, result: "failed", reason: result.reason ?? "The install was refused" };
+      }
+      if (this.lockDocument.plugins.find((plugin) => plugin.id === entry.id)?.installPending) {
+        return { ...base, result: "pending", reason: "Its files are in use; it is installed on the next start" };
+      }
+      return { ...base, result: plan === "install" ? "installed" : "upgraded" };
+    } catch (error) {
+      return { ...base, result: "failed", reason: errorMessage(error) };
+    }
+  }
+
+  private forgetUninstall(pluginId: string): void {
+    if (this.lockDocument.uninstalledIds?.includes(pluginId)) {
+      this.lockDocument.uninstalledIds = this.lockDocument.uninstalledIds.filter((id) => id !== pluginId);
+    }
   }
 
   private processPendingInstalls(): void {
@@ -533,7 +667,11 @@ export class PluginInventoryService {
       }
       return {
         version: LOCKFILE_VERSION,
-        plugins: parsed.plugins.filter(isLockEntry)
+        plugins: parsed.plugins.filter(isLockEntry),
+        ...(Array.isArray(parsed.uninstalledIds)
+          ? { uninstalledIds: parsed.uninstalledIds.filter((id): id is string => typeof id === "string") }
+          : {}),
+        ...(isStringRecord(parsed.bundledApplied) ? { bundledApplied: parsed.bundledApplied } : {})
       };
     } catch {
       return { version: LOCKFILE_VERSION, plugins: [] };
@@ -623,6 +761,14 @@ function isValidManifest(parsed: PluginManifestV1): parsed is Required<Pick<Plug
     parsed.version.length > 0 &&
     (parsed.frontend != null || parsed.backend != null)
   );
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return value !== null && typeof value === "object" && !Array.isArray(value) && Object.values(value).every((entry) => typeof entry === "string");
 }
 
 function isLockEntry(value: unknown): value is PluginLockEntry {
