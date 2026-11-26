@@ -65,11 +65,7 @@
             <groupId>se.kuseman.payloadbuilder</groupId>
             <artifactId>payloadbuilder-core</artifactId>
         </dependency>
-        <!-- The built-in catalogs; jdbc comes from queryengine.payloadbuilder.jdbc -->
-        <dependency>
-            <groupId>se.kuseman.payloadbuilder</groupId>
-            <artifactId>payloadbuilder-catalog-es</artifactId>
-        </dependency>
+        <!-- The built-in catalogs; jdbc comes from queryengine.payloadbuilder.jdbc, and since 0.24 elasticsearch, kafka and mongodb from their plugins -->
         <dependency>
             <groupId>se.kuseman.payloadbuilder</groupId>
             <artifactId>payloadbuilder-catalog-fs</artifactId>
@@ -77,37 +73,6 @@
         <dependency>
             <groupId>se.kuseman.payloadbuilder</groupId>
             <artifactId>payloadbuilder-catalog-http</artifactId>
-        </dependency>
-        <!-- Until the mongodb and kafka catalogs move to com.queryeer.mongodb and com.queryeer.kafka -->
-        <dependency>
-            <groupId>se.kuseman.payloadbuilder</groupId>
-            <artifactId>payloadbuilder-catalog-kafka</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>se.kuseman.payloadbuilder</groupId>
-            <artifactId>payloadbuilder-catalog-mongodb</artifactId>
-        </dependency>
-        <!--
-            payloadbuilder-catalog-kafka declares avro as an optional dependency. Optional deps are not pulled transitively, so we declare it explicitly
-            here to ensure the plugin assembly (which uses useTransitiveDependencies=true, scope=runtime) bundles avro-1.11.4.jar into lib/. The plugin
-            never references avro classes directly, so this is a packaging-only requirement. Marked optional so the avro jar is not propagated to
-            downstream consumers of this plugin.
-        -->
-        <dependency>
-            <groupId>org.apache.avro</groupId>
-            <artifactId>avro</artifactId>
-            <version>1.11.4</version>
-            <optional>true</optional>
-            <exclusions>
-                <exclusion>
-                    <groupId>tools.jackson.core</groupId>
-                    <artifactId>jackson-core</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.fasterxml.jackson.core</groupId>
-                    <artifactId>jackson-core</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
 
         <!-- TEST -->

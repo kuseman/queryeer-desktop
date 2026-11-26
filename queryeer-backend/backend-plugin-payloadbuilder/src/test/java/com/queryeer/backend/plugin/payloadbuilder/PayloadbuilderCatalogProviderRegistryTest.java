@@ -12,47 +12,56 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
-import com.queryeer.backend.api.ConfigService;
-import com.queryeer.backend.core.JacksonPayloadMapper;
 import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
 
 class PayloadbuilderCatalogProviderRegistryTest
 {
-    private static final ConfigService NOOP_CONFIG = _ -> null;
+    @Test
+    void theBuiltInsAreFilesystemAndHttp()
+    {
+        // elasticsearch, kafka and mongodb come from their plugins since 0.24
+        assertEquals(Set.of("filesystem", "http"), PayloadbuilderCatalogProviderRegistry.defaults()
+                .catalogIds());
+    }
 
     @Test
     void aPluginReplacesABuiltInCatalogWithItsActions()
     {
         List<String> log = new ArrayList<>();
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, new JacksonPayloadMapper(), log::add);
-        Set<String> builtinKafkaActions = registry.getCatalogProvider("kafka")
-                .actions();
-        assertFalse(builtinKafkaActions.isEmpty(), "the built-in kafka catalog has actions");
-        Contributor plugin = new Contributor("Kafka", Set.of("plugin.kafka.listTopics"));
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(log::add);
+        Contributor plugin = new Contributor("HTTP", Set.of("plugin.http.ping"));
 
         registry.registerContributor(plugin);
 
-        assertSame(plugin, registry.getCatalogProvider("kafka"));
+        assertSame(plugin, registry.getCatalogProvider("http"));
         assertEquals(1, registry.catalogIds()
                 .stream()
-                .filter("kafka"::equalsIgnoreCase)
+                .filter("http"::equalsIgnoreCase)
                 .count());
         assertTrue(registry.actions()
-                .contains("plugin.kafka.listTopics"));
-        for (String action : builtinKafkaActions)
+                .contains("plugin.http.ping"));
+        assertEquals(List.of("Payloadbuilder catalog 'http': " + Contributor.class.getName() + " replaces the built-in one"), log);
+    }
+
+    @Test
+    void aReplacedBuiltInsActionsGoWithIt()
+    {
+        Contributor builtin = new Contributor("weather", Set.of("weather.listStations"));
+        PayloadbuilderCatalogProviderRegistry registry = new PayloadbuilderCatalogProviderRegistry(List.of(builtin), message ->
         {
-            assertFalse(registry.actions()
-                    .contains(action), action);
-        }
-        assertEquals(List.of("Payloadbuilder catalog 'kafka': " + Contributor.class.getName() + " replaces the built-in one"), log);
+        });
+
+        registry.registerContributor(new Contributor("weather", Set.of("plugin.weather.listStations")));
+
+        assertEquals(Set.of("plugin.weather.listStations"), registry.actions());
     }
 
     @Test
     void aSecondPluginCantRegisterTheSameCatalog()
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, new JacksonPayloadMapper());
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults();
         registry.registerContributor(new Contributor("mongodb", Set.of()));
 
         IllegalStateException error = assertThrows(IllegalStateException.class, () -> registry.registerContributor(new Contributor("MONGODB", Set.of())));
@@ -64,12 +73,12 @@ class PayloadbuilderCatalogProviderRegistryTest
     @Test
     void theOtherBuiltInsStay()
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, new JacksonPayloadMapper());
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults();
 
-        registry.registerContributor(new Contributor("mongodb", Set.of()));
+        registry.registerContributor(new Contributor("http", Set.of()));
 
-        assertEquals(Set.of("elasticsearch", "kafka", "mongodb", "filesystem", "http"), registry.catalogIds());
-        assertFalse(registry.getCatalogProvider("elasticsearch") instanceof Contributor);
+        assertEquals(Set.of("filesystem", "http"), registry.catalogIds());
+        assertFalse(registry.getCatalogProvider("filesystem") instanceof Contributor);
     }
 
     private record Contributor(String catalogId, Set<String> actions) implements PayloadbuilderCatalogProviderContributor

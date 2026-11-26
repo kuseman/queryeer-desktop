@@ -36,9 +36,9 @@ export type PayloadbuilderCatalogContribution = {
 
 export type PayloadbuilderCatalogRegistry = {
   /**
-   * Adds a catalog. One with the id of a built-in catalog (`elasticsearch`, `kafka`, `mongodb`, `filesystem`, `http`)
-   * replaces it until disposed, which brings the built-in back (since 0.21); replace the backend half too. Throws when another plugin already
-   * registered that id.
+   * Adds a catalog. One with the id of a built-in catalog (`filesystem`, `http`; until 0.24 also `elasticsearch`,
+   * `kafka` and `mongodb`) replaces it until disposed, which brings the built-in back (since 0.21); replace the backend half
+   * too. Throws when another plugin already registered that id.
    */
   registerContribution(contribution: PayloadbuilderCatalogContribution): Disposable;
 };

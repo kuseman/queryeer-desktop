@@ -217,7 +217,7 @@ class PayloadbuilderCatalogRetryTest
 
     private static PayloadbuilderQueryEngineProvider provider(CredentialsProvider catalog)
     {
-        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults(NOOP_CONFIG, TEST_MAPPER);
+        PayloadbuilderCatalogProviderRegistry registry = PayloadbuilderCatalogProviderRegistry.defaults();
         registry.registerContributor(catalog);
         return new PayloadbuilderQueryEngineProvider(NOOP_CONFIG, TEST_MAPPER, registry, PARSE_SESSIONS, PARSE_FUNCTION);
     }

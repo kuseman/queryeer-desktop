@@ -1545,7 +1545,7 @@ context.payloadbuilderCatalog.registerContribution({
 
 On the backend, a catalog plugin implements `PayloadbuilderCatalogProviderContributor` and registers it with the `PayloadbuilderCatalogProviderRegistry` it gets from `context.services()`. It compiles against `backend-lib-queryengine-payloadbuilder-foundation` with `provided` scope, and declares `queryengine.payloadbuilder` in `plugin.json`, required or optional (§3.3). Since 0.21 `queryengine.payloadbuilder` exports that API and `se.kuseman.payloadbuilder.api.`; a plugin that doesn't declare the dependency doesn't see them.
 
-**Completion and hover** (since 0.22). `editorServices()` returns `PayloadbuilderCatalogSqlEditorServices.NONE` by default. A catalog that implements the `tables` and `columns` system tables (`sys#tables`, `sys#columns`) returns `PayloadbuilderCatalogSqlEditorServices.systemTables()` instead, as the built-in Elasticsearch, Kafka, MongoDB, filesystem and HTTP catalogs do: table and column completion, hover and symbols from those system tables, and functions from the catalog's `getFunctions()`.
+**Completion and hover** (since 0.22). `editorServices()` returns `PayloadbuilderCatalogSqlEditorServices.NONE` by default. A catalog that implements the `tables` and `columns` system tables (`sys#tables`, `sys#columns`) returns `PayloadbuilderCatalogSqlEditorServices.systemTables()` instead, as the built-in filesystem and HTTP catalogs and the Elasticsearch, Kafka and MongoDB plugins do: table and column completion, hover and symbols from those system tables, and functions from the catalog's `getFunctions()`.
 
 **What a run changes** (since 0.22). After a run, `buildCatalogPatch` says which of the alias's properties the file's catalog panel should now show, for example after `use alias.database = 'x'`. The default reports each input property the query changed. Override it to map changed native properties back to input properties as well, e.g. a connection string back to the `connectionId` of the matching connection. In 0.21 the default reported nothing.
 
@@ -1557,7 +1557,7 @@ On the backend, a catalog plugin implements `PayloadbuilderCatalogProviderContri
 - **The session still holds what the query set** when `retryAfterFailure` is called, so it can read the query's endpoint.
 - **`CredentialsException` is in `payloadbuilder-catalog-common`,** which each plugin bundles. Check for it with the plugin's own copy, the one its catalog throws.
 
-**Taking over a built-in catalog** (since 0.21). A plugin can register a catalog with the id of one of Queryeer's built-in catalogs (`elasticsearch`, `kafka`, `mongodb`, `filesystem`, `http`), for example to serve it from its own connections. Its contribution replaces the built-in one: on the backend for the rest of the run, with the built-in's actions; on the frontend until the plugin's registration is disposed, which brings the built-in back.
+**Taking over a built-in catalog** (since 0.21). A plugin can register a catalog with the id of one of Queryeer's built-in catalogs (`filesystem`, `http`; until 0.24 also `elasticsearch`, `kafka` and `mongodb`, which the verified plugins took over this way), for example to serve it from its own connections. Its contribution replaces the built-in one: on the backend for the rest of the run, with the built-in's actions; on the frontend until the plugin's registration is disposed, which brings the built-in back.
 
 - **Replace both halves.** The built-in frontend panel stores properties for the built-in backend (its `connectionId`s) and calls its actions. A plugin that replaces only the backend half, or whose frontend half is skipped or fails, leaves that panel talking to the plugin's backend: a removed action fails with "No payloadbuilder catalog provides the action …".
 - Use the built-in's id exactly (ids are matched ignoring case, and a different spelling is refused on the frontend). Files keep working as long as the plugin keeps the catalog id and the properties it stores, such as `connectionId`.
@@ -1729,7 +1729,7 @@ Frontend:
 
 ## 15. Upgrading Plugins to 0.24.0
 
-Nothing a 0.23 plugin has to change, unless it depends on the built-in SQL Server, SQLite or PostgreSQL dialect (below).
+Nothing a 0.23 plugin has to change, unless it depends on the built-in SQL Server, SQLite or PostgreSQL dialect, or on payloadbuilder's built-in Elasticsearch, Kafka or MongoDB catalog (below).
 
 Backend:
 
@@ -1749,7 +1749,8 @@ Frontend:
 
 Payloadbuilder:
 
-- **A password set by a query** (`use es.authpassword = '...'`) reaches the Elasticsearch catalog and the Kafka catalog's schema registry. Until payloadbuilder 1.18 their password lookup ignored the string type a query's `use` stores.
+- **The Elasticsearch, Kafka and MongoDB catalogs are plugins only** (`com.queryeer.elasticsearch`, `com.queryeer.kafka`, `com.queryeer.mongodb`). Since 0.21 each plugin replaced the built-in catalog with the same id; now core no longer ships them, with their connection settings (`core.queryengine.payloadbuilder.{elasticsearch,kafka,mongodb}`), the payloadbuilder actions `payloadbuilder.es.listIndices` and `payloadbuilder.kafka.listTopics`, or the `payloadbuilder-catalog-es`, `-kafka` and `-mongodb` jars. The built-in catalogs left are `filesystem` and `http`, and `jdbc` from `queryengine.payloadbuilder.jdbc`. Files keep their catalog ids. The Elasticsearch plugin copies the old connections once; Kafka's and MongoDB's are picked again.
+- **A password set by a query** (`use es.authpassword = '...'`) reaches the Elasticsearch catalog and the Kafka catalog's schema registry, in plugins that bundle payloadbuilder 1.18 or later. Before, their password lookup ignored the string type a query's `use` stores.
 
 ## Reference: Example Plugins
 
