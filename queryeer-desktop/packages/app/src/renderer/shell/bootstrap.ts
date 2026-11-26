@@ -40,6 +40,8 @@ import {
   JDBC_DRIVER_UPDATE_CHECK_SETTING_ID
 } from "../../plugins/core.queryengine.jdbc/jdbc-driver-management-service";
 import { describeJdbcDriverApproval } from "../../plugins/core.queryengine.jdbc/jdbc-driver-approval";
+import { watchPluginUpgrade } from "./plugin-upgrade-report";
+import type { NotificationRequest } from "@queryeer/api/extensions/NotificationExtension";
 
 export async function bootstrapShell() {
   const chain = createContextChain();
@@ -267,16 +269,24 @@ export async function bootstrapShell() {
     .map((plugin) => ({ pluginId: plugin.id, modulePath: plugin.modulePath, message: plugin.skipReason as string, skipped: true }));
   const externalManifests = externalFrontendPlugins.filter((plugin) => plugin.skipReason === undefined).map(toPluginManifestFile);
 
+  // This start's toasts about each plugin, so the post-upgrade report can close those it repeats
+  const pluginToasts = new Map<string, string[]>();
+  const notifyAboutPlugin = (pluginId: string, notification: NotificationRequest) => {
+    const record = getNotificationService()?.notify(notification);
+    if (record) {
+      pluginToasts.set(pluginId, [...(pluginToasts.get(pluginId) ?? []), record.id]);
+    }
+  };
   const discovery = await discoverPluginModules(externalManifests);
   for (const err of skipped) {
-    getNotificationService()?.notify({
+    notifyAboutPlugin(err.pluginId, {
       title: `Plugin skipped: ${err.pluginId}`,
       message: err.message,
       severity: "warning"
     });
   }
   for (const err of discovery.loadErrors) {
-    getNotificationService()?.notify({
+    notifyAboutPlugin(err.pluginId, {
       title: `Plugin failed to load: ${err.pluginId}`,
       message: err.message,
       severity: "error"
@@ -291,12 +301,33 @@ export async function bootstrapShell() {
   host.setExternalLoadErrors(discovery.loadErrors);
   for (const problem of host.getPluginProblems()) {
     if (problem.state !== "warning") {
-      getNotificationService()?.notify({
+      notifyAboutPlugin(problem.pluginId, {
         title: problem.state === "failed" ? `Plugin failed to activate: ${problem.pluginId}` : `Plugin skipped: ${problem.pluginId}`,
         message: problem.message,
         severity: "error"
       });
     }
+  }
+  // After the frontends loaded: on the first start of a new version, report the installed plugins it broke
+  if (window.appShell.recordPluginLoads) {
+    watchPluginUpgrade({
+      getStatus: () => window.appShell.getBackendStatus(),
+      onStatusChanged: (listener) => window.appShell.onBackendStatusChanged(listener),
+      getDiagnostics: () => host.getDiagnostics(),
+      recordPluginLoads: (observed) => window.appShell.recordPluginLoads(observed),
+      // The report says it again: its toast replaces these (they stay in the notification center)
+      onReport: (report) => {
+        for (const plugin of report.plugins) {
+          for (const toastId of pluginToasts.get(plugin.pluginId) ?? []) {
+            getNotificationService()?.dismissToast(toastId);
+          }
+        }
+      },
+      notify: (notification) => getNotificationService()?.notify(notification),
+      openObservability: () => {
+        host.executeCommand("core.observability.openPluginProblems").catch(() => undefined);
+      }
+    });
   }
 
   const settings = getCoreSettingsService();

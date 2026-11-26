@@ -67,3 +67,21 @@ export type ManagedPluginUninstallResult = {
   removedPluginId?: string;
   reason?: string;
 };
+
+/** What a start observed for one plugin: whether each half loaded, and why not. A half that wasn't seen is left out. */
+export type ObservedPluginLoad = {
+  pluginId: string;
+  frontend?: { loaded: boolean; reason?: string };
+  backend?: { loaded: boolean; reason?: string };
+};
+
+/**
+ * The installed plugins that don't load on the first start of a new Queryeer version but did on the version before
+ * (or that the new version bundled), and the bundled plugins it couldn't install. Since 0.24
+ */
+export type PluginUpgradeReport = {
+  appVersion: string;
+  /** Undefined when the version before didn't record which plugins loaded (before 0.24). */
+  previousVersion?: string;
+  plugins: { pluginId: string; name?: string; reason: string }[];
+};

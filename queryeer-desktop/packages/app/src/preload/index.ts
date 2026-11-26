@@ -27,7 +27,9 @@ import type {
   ManagedPluginInstallResult,
   ManagedPluginInventory,
   ManagedPluginSetEnabledResult,
-  ManagedPluginUninstallResult
+  ManagedPluginUninstallResult,
+  ObservedPluginLoad,
+  PluginUpgradeReport
 } from "@queryeer/api/plugin/PluginInventory.js";
 import type { WorkspaceSnapshot } from "@queryeer/api/workspace/WorkspaceSnapshot.js";
 import type { UserKeybindingsDocument } from "@queryeer/api/commands/Keybindings.js";
@@ -111,6 +113,7 @@ type AppShellApi = {
   setPluginEnabled: (params: { pluginId: string; enabled: boolean }) => Promise<ManagedPluginSetEnabledResult>;
   installPluginFromZip: (params: { zipFilePath: string }) => Promise<ManagedPluginInstallResult>;
   uninstallPlugin: (params: { pluginId: string }) => Promise<ManagedPluginUninstallResult>;
+  recordPluginLoads: (observed: ObservedPluginLoad[]) => Promise<PluginUpgradeReport | null>;
   listJdbcDrivers: (contributions: RegisteredJdbcManagedDriverContribution[]) => Promise<JdbcDriverStatus[]>;
   checkJdbcDrivers: (contributions: RegisteredJdbcManagedDriverContribution[]) => Promise<JdbcDriverStatus[]>;
   /** Records that the user approved core installing this plugin driver. Install and update refuse an unapproved one. */
@@ -308,6 +311,9 @@ const appShellApi: AppShellApi = {
   },
   uninstallPlugin: async (params) => {
     return ipcRenderer.invoke("plugins:uninstall", params);
+  },
+  recordPluginLoads: async (observed) => {
+    return ipcRenderer.invoke("plugins:record-loads", observed);
   },
   listJdbcDrivers: async (contributions) => {
     return ipcRenderer.invoke("jdbc-drivers:list", contributions);

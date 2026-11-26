@@ -148,6 +148,7 @@ describe("bootstrapShell diagnostics wiring", () => {
       setPluginEnabled: async () => ({ accepted: true, restartRequired: true }),
       installPluginFromZip: async () => ({ accepted: true, restartRequired: true }),
       uninstallPlugin: async () => ({ accepted: true, restartRequired: true }),
+      recordPluginLoads: async () => null,
       listJdbcDrivers: async () => [],
       checkJdbcDrivers: async () => [],
       approveJdbcDriver: async () => { throw new Error("Not implemented in this test"); },
