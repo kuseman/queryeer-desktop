@@ -18,6 +18,8 @@ import { discoverExternalFrontendPlugins, discoverFrontendPluginFolders } from "
 import { checkFrontendCompatibility } from "./plugins/frontend-compatibility.js";
 import { isReleaseBuild } from "./release-build.js";
 import { type BundledPluginOutcome, resolveBundledPluginsDir } from "./plugins/bundled-plugins.js";
+import { defaultPluginLoadHistoryPath, installedPluginLoads, recordPluginLoads } from "./plugins/plugin-load-history.js";
+import type { ObservedPluginLoad } from "@queryeer/api/plugin/PluginInventory.js";
 import {
   DEV_PLUGINS_ENV,
   DevPluginShadowCopier,
@@ -527,6 +529,22 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("plugins:uninstall", async (_event, params: { pluginId: string }) => {
     return pluginInventoryService!.uninstall(params.pluginId);
+  });
+  ipcMain.handle("plugins:record-loads", async (_event, observed: ObservedPluginLoad[]) => {
+    // Nothing installed loads in safe mode, so it would look like everything broke. A development run shares the app
+    // data with the installed app but reports the last release's version, so switching between them would look like
+    // upgrades; it records only when trying a bundle (QUERYEER_BUNDLED_PLUGINS_DIR).
+    if (isPluginSafeMode() || !Array.isArray(observed) || (!app.isPackaged && !process.env.QUERYEER_BUNDLED_PLUGINS_DIR)) {
+      return null;
+    }
+    const inventory = await pluginInventoryService!.getInventory();
+    const developmentIds = new Set(loadableDevPlugins(devPluginFolders).map((plugin) => plugin.id));
+    return recordPluginLoads({
+      historyPath: defaultPluginLoadHistoryPath(settingsDirPath),
+      appVersion: app.getVersion(),
+      loads: installedPluginLoads(inventory.plugins, observed, developmentIds),
+      bundled: bundledPluginOutcomes
+    });
   });
   ipcMain.handle("plugins:get-frontend-targets", async () => {
     if (isPluginSafeMode()) {

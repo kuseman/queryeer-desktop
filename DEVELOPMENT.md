@@ -149,6 +149,8 @@ Use `--safe-mode` to start with external plugin activation disabled. Safe mode s
 - each bundled version of a plugin is applied once (`bundledApplied`), so a plugin the user changes afterwards stays as they left it. A failure, or an install that has to wait because its files are in use, is tried again on the next start, and one plugin failing doesn't stop the others;
 - nothing is installed in safe mode, and a developer plugin folder still replaces an installed plugin.
 
+**After an upgrade** Queryeer reports what the new version broke, in one notification on its first start: installed plugins that loaded on the version before and don't now, bundled plugins that don't load, and bundled plugins it couldn't install. Each start records the app version and the installed plugins that loaded in `settings/plugin-load-history.json`, once the backend has reported its plugins. Disabled plugins, plugins changed since the start, developer folders and safe mode are left out, and so is a development run unless `QUERYEER_BUNDLED_PLUGINS_DIR` is set (it shares the app data with the installed app but reports the last release's version). A version before 0.24 recorded nothing, so the first 0.24 start reports every installed plugin that doesn't load. The report closes that start's own toasts about the same plugins; they stay in the notification center.
+
 To try a bundle in a development run, set `QUERYEER_BUNDLED_PLUGINS_DIR` to a folder with the lock and the ZIPs, e.g. ones built with `npm run <plugin>:package` in the plugins repository.
 
 ### Release Flow

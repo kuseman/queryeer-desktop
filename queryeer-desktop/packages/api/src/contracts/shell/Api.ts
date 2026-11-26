@@ -8,7 +8,9 @@ import type {
   ManagedPluginInstallResult,
   ManagedPluginInventory,
   ManagedPluginSetEnabledResult,
-  ManagedPluginUninstallResult
+  ManagedPluginUninstallResult,
+  ObservedPluginLoad,
+  PluginUpgradeReport
 } from "../plugin/PluginInventory.js";
 import type { FileWatcherEvent } from "../files/FileWatcher.js";
 import type {
@@ -57,6 +59,11 @@ export interface ShellApi {
   setPluginEnabled: (params: { pluginId: string; enabled: boolean }) => Promise<ManagedPluginSetEnabledResult>;
   installPluginFromZip: (params: { zipFilePath: string }) => Promise<ManagedPluginInstallResult>;
   uninstallPlugin: (params: { pluginId: string }) => Promise<ManagedPluginUninstallResult>;
+  /**
+   * Records which installed plugins loaded on this start. On the first start of a new Queryeer version, returns those
+   * that stopped loading with it, and the bundled plugins it couldn't install; otherwise null. Since 0.24
+   */
+  recordPluginLoads: (observed: ObservedPluginLoad[]) => Promise<PluginUpgradeReport | null>;
   listJdbcDrivers: (contributions: RegisteredJdbcManagedDriverContribution[]) => Promise<JdbcDriverStatus[]>;
   checkJdbcDrivers: (contributions: RegisteredJdbcManagedDriverContribution[]) => Promise<JdbcDriverStatus[]>;
   /** Records that the user approved core installing this plugin driver. Install and update refuse an unapproved one. */
