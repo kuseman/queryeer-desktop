@@ -31,7 +31,7 @@ Built-in **JDBC support** for H2 and generic JDBC connections, with SQL Server, 
 > ![JDBC Navigation Tree](documentation/screenshots/jdbc-tree.png)
 
 ###  Cross-Source Queries with [Payloadbuilder](https://github.com/kuseman/payloadbuilder)
-Query across **JDBC databases, Elasticsearch indices, HTTP APIs, and filesystem files** — all within a single query. Payloadbuilder catalogs let you configure and combine disparate data sources seamlessly.
+Query across **JDBC databases, Elasticsearch indices, HTTP APIs, and filesystem files** — all within a single query. Payloadbuilder catalogs let you configure and combine disparate data sources seamlessly. Elasticsearch, Kafka and MongoDB catalogs come from their plugins in the [plugin catalog](https://github.com/kuseman/queryeer-desktop-plugins).
 
 > ![Payloadbuilder](documentation/screenshots/payloadbuilder.png)
 

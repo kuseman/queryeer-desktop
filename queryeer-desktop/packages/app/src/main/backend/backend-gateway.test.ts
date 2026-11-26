@@ -752,7 +752,7 @@ describe("BackendGateway", () => {
 
     await gateway.invokeEngine({
       engineId: "payloadbuilder",
-      action: "payloadbuilder.es.listIndices",
+      action: "payloadbuilder.example.listItems",
       payload: {
         properties: {
           authPassword: {
@@ -772,7 +772,7 @@ describe("BackendGateway", () => {
     expect(invokeRequest).toBeDefined();
     expect(invokeRequest?.params).toEqual({
       engineId: "payloadbuilder",
-      action: "payloadbuilder.es.listIndices",
+      action: "payloadbuilder.example.listItems",
       payload: {
         properties: {
           authPassword: { secretRef: "secret-ref-2" }

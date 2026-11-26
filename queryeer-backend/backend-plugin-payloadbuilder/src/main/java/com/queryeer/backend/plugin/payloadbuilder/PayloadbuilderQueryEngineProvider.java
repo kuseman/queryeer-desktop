@@ -557,17 +557,30 @@ final class PayloadbuilderQueryEngineProvider implements QueryEngineProvider, Fi
                 if (usedByAlias
                         || usedAsDefault)
                 {
-                    return "Catalog '" + instance.catalogId()
-                           + "' (alias '"
-                           + instance.alias()
-                           + "') is not available: no loaded plugin provides it. "
-                           + ("jdbc".equalsIgnoreCase(instance.catalogId()) ? "It comes from queryengine.payloadbuilder.jdbc, which needs the JDBC engine. "
-                                   : "")
-                           + "Observability shows why a plugin didn't load.";
+                    return "Catalog '" + instance.catalogId() + "' (alias '" + instance.alias() + "') is not available: no loaded plugin provides it. " + unavailableCatalogHint(instance.catalogId());
                 }
             }
         }
         return null;
+    }
+
+    /** Where a catalog that isn't available comes from. The elasticsearch, kafka and mongodb catalogs were built in until 0.24. */
+    private static String unavailableCatalogHint(String catalogId)
+    {
+        String pluginId = switch (catalogId.toLowerCase(Locale.ROOT))
+        {
+            case "elasticsearch" -> "com.queryeer.elasticsearch";
+            case "kafka" -> "com.queryeer.kafka";
+            case "mongodb" -> "com.queryeer.mongodb";
+            default -> null;
+        };
+        if (pluginId != null)
+        {
+            return "It comes from the plugin " + pluginId + ": install it, or Observability shows why it didn't load.";
+        }
+        return ("jdbc".equalsIgnoreCase(catalogId) ? "It comes from queryengine.payloadbuilder.jdbc, which needs the JDBC engine. "
+                : "")
+               + "Observability shows why a plugin didn't load.";
     }
 
     /** The file's catalogs that a loaded plugin provides; the others are left out, and a query that uses one fails (see {@link #unavailableCatalogMessage}). */

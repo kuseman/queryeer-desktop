@@ -247,11 +247,6 @@
             <!-- One artifact per catalog; each brings payloadbuilder-catalog-common -->
             <dependency>
                 <groupId>se.kuseman.payloadbuilder</groupId>
-                <artifactId>payloadbuilder-catalog-es</artifactId>
-                <version>${payloadbuilder.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>se.kuseman.payloadbuilder</groupId>
                 <artifactId>payloadbuilder-catalog-fs</artifactId>
                 <version>${payloadbuilder.version}</version>
             </dependency>
@@ -263,16 +258,6 @@
             <dependency>
                 <groupId>se.kuseman.payloadbuilder</groupId>
                 <artifactId>payloadbuilder-catalog-jdbc</artifactId>
-                <version>${payloadbuilder.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>se.kuseman.payloadbuilder</groupId>
-                <artifactId>payloadbuilder-catalog-kafka</artifactId>
-                <version>${payloadbuilder.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>se.kuseman.payloadbuilder</groupId>
-                <artifactId>payloadbuilder-catalog-mongodb</artifactId>
                 <version>${payloadbuilder.version}</version>
             </dependency>
         </dependencies>

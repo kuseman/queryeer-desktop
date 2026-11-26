@@ -9,20 +9,16 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 
-import com.queryeer.backend.api.ConfigService;
-import com.queryeer.backend.api.PayloadMapper;
-import com.queryeer.backend.plugin.payloadbuilder.elasticsearch.ElasticsearchCatalogProvider;
 import com.queryeer.backend.plugin.payloadbuilder.filesystem.FilesystemCatalogProvider;
 import com.queryeer.backend.plugin.payloadbuilder.http.HttpCatalogProvider;
-import com.queryeer.backend.plugin.payloadbuilder.kafka.KafkaCatalogProvider;
-import com.queryeer.backend.plugin.payloadbuilder.mongodb.MongoCatalogProvider;
 import com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderContributor;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
 
 /**
- * Registry of catalog provider contributors. Implements the foundation SPI interface so external plugins can contribute catalog providers. Payloadbuilder's own catalogs are built-ins: a plugin that
- * registers a catalog with a built-in's id replaces it, so a plugin can take over a catalog (with its own connections) while Queryeer still ships the built-in.
+ * Registry of catalog provider contributors. Implements the foundation SPI interface so external plugins can contribute catalog providers. Payloadbuilder's own catalogs (filesystem, http) are
+ * built-ins: a plugin that registers a catalog with a built-in's id replaces it. Since 0.24 the elasticsearch, kafka and mongodb catalogs come only from plugins (com.queryeer.elasticsearch,
+ * com.queryeer.kafka, com.queryeer.mongodb).
  */
 final class PayloadbuilderCatalogProviderRegistry implements com.queryeer.backend.queryengine.payloadbuilder.PayloadbuilderCatalogProviderRegistry
 {
@@ -31,7 +27,8 @@ final class PayloadbuilderCatalogProviderRegistry implements com.queryeer.backen
     private final Map<String, PayloadbuilderCatalogProviderContributor> providersByAction = new LinkedHashMap<>();
     private final Consumer<String> log;
 
-    private PayloadbuilderCatalogProviderRegistry(List<PayloadbuilderCatalogProviderContributor> builtins, Consumer<String> log)
+    /** Visible for tests: today's built-ins have no actions. */
+    PayloadbuilderCatalogProviderRegistry(List<PayloadbuilderCatalogProviderContributor> builtins, Consumer<String> log)
     {
         this.log = log;
         for (PayloadbuilderCatalogProviderContributor builtin : builtins)
@@ -46,18 +43,17 @@ final class PayloadbuilderCatalogProviderRegistry implements com.queryeer.backen
     }
 
     /** Creates the default registry with the catalogs payloadbuilder holds itself. Others (jdbc, from queryengine.payloadbuilder.jdbc) are added with {@link #registerContributor}. */
-    static PayloadbuilderCatalogProviderRegistry defaults(ConfigService configService, PayloadMapper payloadMapper)
+    static PayloadbuilderCatalogProviderRegistry defaults()
     {
-        return defaults(configService, payloadMapper, message ->
+        return defaults(message ->
         {
         });
     }
 
-    /** Like {@link #defaults(ConfigService, PayloadMapper)}, telling {@code log} when a plugin replaces a built-in catalog. */
-    static PayloadbuilderCatalogProviderRegistry defaults(ConfigService configService, PayloadMapper payloadMapper, Consumer<String> log)
+    /** Like {@link #defaults()}, telling {@code log} when a plugin replaces a built-in catalog. */
+    static PayloadbuilderCatalogProviderRegistry defaults(Consumer<String> log)
     {
-        List<PayloadbuilderCatalogProviderContributor> builtins = List.<PayloadbuilderCatalogProviderContributor>of(new ElasticsearchCatalogProvider(configService, payloadMapper),
-                new KafkaCatalogProvider(configService, payloadMapper), new MongoCatalogProvider(configService, payloadMapper), new FilesystemCatalogProvider(), new HttpCatalogProvider());
+        List<PayloadbuilderCatalogProviderContributor> builtins = List.<PayloadbuilderCatalogProviderContributor>of(new FilesystemCatalogProvider(), new HttpCatalogProvider());
         return new PayloadbuilderCatalogProviderRegistry(builtins, log);
     }
 
@@ -134,7 +130,7 @@ final class PayloadbuilderCatalogProviderRegistry implements com.queryeer.backen
         PayloadbuilderCatalogProviderContributor provider = providersByAction.get(action);
         if (provider == null)
         {
-            // E.g. a built-in catalog's panel calling its action after a plugin replaced that catalog without its frontend
+            // E.g. a plugin's catalog panel calling its action while the plugin's backend isn't loaded
             throw new UnsupportedOperationException("No payloadbuilder catalog provides the action '" + action + "'");
         }
         return provider.invoke(action, payload);
