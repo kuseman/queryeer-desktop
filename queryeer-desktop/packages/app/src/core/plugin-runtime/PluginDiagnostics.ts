@@ -30,5 +30,7 @@ export type PluginDiagnostics = {
     pluginId: string;
     modulePath: string;
     message: string;
+    /** Not loaded on purpose, e.g. its frontend.apiVersion doesn't include this Queryeer; otherwise loading failed. */
+    skipped?: boolean;
   }[];
 };

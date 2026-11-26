@@ -361,4 +361,46 @@ class PluginManifestDiscoveryTest
         Assertions.assertTrue(error.getMessage()
                 .contains("Invalid runtime.shared.parentFirstPackagePrefixes"));
     }
+
+    @Test
+    void skipsABackendThatNeedsANewerJava() throws IOException
+    {
+        Path pluginsDir = tempDir.resolve("plugins");
+        Path future = pluginsDir.resolve("future-plugin");
+        Files.createDirectories(future);
+        Files.writeString(future.resolve("plugin.json"), """
+                {
+                  "schemaVersion": 1,
+                  "id": "future.plugin",
+                  "name": "Future",
+                  "version": "1.0.0",
+                  "backend": { "entrypointClass": "com.example.Plugin", "minJavaVersion": "999" }
+                }
+                """, StandardCharsets.UTF_8);
+
+        PluginClassLoaderFactory classLoaderFactory = new PluginClassLoaderFactory(new SharedClassLoader(List.of(), getClass().getClassLoader()));
+        PluginDiscoveryService service = new PluginDiscoveryService(BackendPlatformServices.fileBased(Map.of(), new SecuritySession()), classLoaderFactory);
+        PluginDiscoveryService.DiscoveryResult result = service.discoverFromPath(pluginsDir.toString());
+
+        Assertions.assertEquals(List.of(), result.backendPlugins());
+        Assertions.assertEquals(1, result.failures()
+                .size());
+        Assertions.assertEquals("future.plugin", result.failures()
+                .get(0)
+                .pluginId());
+        Assertions.assertEquals("Needs Java 999, but Queryeer's backend runs on Java " + Runtime.version()
+                .feature(), result.failures()
+                        .get(0)
+                        .reason());
+    }
+
+    @Test
+    void javaVersionProblemComparesFeatureVersions()
+    {
+        Assertions.assertNull(ManifestBackendPluginResolver.javaVersionProblem(null, 25));
+        Assertions.assertNull(ManifestBackendPluginResolver.javaVersionProblem(" 25 ", 25));
+        Assertions.assertNull(ManifestBackendPluginResolver.javaVersionProblem("21", 25));
+        Assertions.assertEquals("Needs Java 26, but Queryeer's backend runs on Java 25", ManifestBackendPluginResolver.javaVersionProblem("26", 25));
+        Assertions.assertEquals("backend.minJavaVersion must be a Java version such as \"25\", not \"25.0.1\"", ManifestBackendPluginResolver.javaVersionProblem("25.0.1", 25));
+    }
 }

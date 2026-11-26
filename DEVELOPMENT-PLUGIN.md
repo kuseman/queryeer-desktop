@@ -110,7 +110,12 @@ Every plugin **must** have a `plugin.json` file at its root. The schema is versi
 }
 ```
 
-Backend plugins may use `backend.factoryClass` instead of `backend.entrypointClass`. The factory form is recommended when construction needs host services. When `backend.classpath` is present, both `root` and at least one `include` pattern are required; this matches backend manifest validation. `runtime.shared` declares what a plugin needs from the backend's shared layer, where JDBC drivers live: package prefixes that load parent-first from it, and native libraries in `libNative` to preload, e.g. a driver's authentication DLL (`queryeer-backend/SHARED_RUNTIME_PLUGINS.md`). Since 0.24 it applies to installed plugins as well as built-in ones; the SQL Server plugin uses it. Compatibility fields such as `frontend.apiVersion` and `backend.minJavaVersion` are currently descriptive and are not yet enforced during discovery.
+Backend plugins may use `backend.factoryClass` instead of `backend.entrypointClass`. The factory form is recommended when construction needs host services. When `backend.classpath` is present, both `root` and at least one `include` pattern are required; this matches backend manifest validation. `runtime.shared` declares what a plugin needs from the backend's shared layer, where JDBC drivers live: package prefixes that load parent-first from it, and native libraries in `libNative` to preload, e.g. a driver's authentication DLL (`queryeer-backend/SHARED_RUNTIME_PLUGINS.md`). Since 0.24 it applies to installed plugins as well as built-in ones; the SQL Server plugin uses it.
+
+Since 0.24 the compatibility fields are checked when plugins are discovered, and a half that doesn't fit is skipped with the reason, in a notification and in Observability:
+- `frontend.apiVersion` is a range on Queryeer's version, in npm syntax as for `dependencies` (e.g. `">=0.24.0 <1.0.0"`). Only a release build enforces it: a development run or a locally packaged app reports the last release's version, so it only warns.
+- `backend.minJavaVersion` is the lowest Java feature version the backend needs (e.g. `"25"`), compared with the Java Queryeer's backend runs on.
+- Each half is checked on its own: declare ranges that agree, such as `apiVersion` and the range on `queryengine.jdbc`, so both halves load or neither does.
 
 | Property | Required | Description |
 |----------|----------|-------------|
@@ -1730,6 +1735,8 @@ Frontend:
 ## 15. Upgrading Plugins to 0.24.0
 
 Nothing a 0.23 plugin has to change, unless it depends on the built-in SQL Server, SQLite or PostgreSQL dialect, or on payloadbuilder's built-in Elasticsearch, Kafka or MongoDB catalog (below).
+
+**`frontend.apiVersion` and `backend.minJavaVersion` are enforced** (§2): a plugin whose range doesn't include the Queryeer it runs on, or that needs a newer Java, is skipped with the reason instead of failing when used. Check that the ranges in your `plugin.json` are the ones you mean.
 
 Backend:
 

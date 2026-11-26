@@ -136,12 +136,18 @@ record PluginManifest(int schemaVersion, String id, String name, String version,
 
     /**
      * @param exports package prefixes (ending in {@code .}) that plugins declaring a dependency on this one load from this plugin's own jars, e.g. {@code com.queryeer.backend.queryengine.jdbc.}
+     * @param minJavaVersion the lowest Java feature version the backend needs, e.g. {@code "25"}; checked at discovery since 0.24
      */
-    record BackendTarget(String entrypointClass, String factoryClass, Classpath classpath, List<String> exports)
+    record BackendTarget(String entrypointClass, String factoryClass, Classpath classpath, List<String> exports, String minJavaVersion)
     {
         BackendTarget(String entrypointClass, String factoryClass, Classpath classpath)
         {
-            this(entrypointClass, factoryClass, classpath, null);
+            this(entrypointClass, factoryClass, classpath, null, null);
+        }
+
+        BackendTarget(String entrypointClass, String factoryClass, Classpath classpath, List<String> exports)
+        {
+            this(entrypointClass, factoryClass, classpath, exports, null);
         }
 
         List<String> exportsOrEmpty()

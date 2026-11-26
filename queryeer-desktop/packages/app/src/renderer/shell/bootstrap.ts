@@ -261,9 +261,20 @@ export async function bootstrapShell() {
   updateActiveFileScope();
 
   const externalFrontendPlugins = await window.appShell.getExternalFrontendPlugins();
-  const externalManifests = externalFrontendPlugins.map(toPluginManifestFile);
+  // A frontend that can't run on this Queryeer (frontend.apiVersion) is reported, not loaded
+  const skipped = externalFrontendPlugins
+    .filter((plugin) => plugin.skipReason !== undefined)
+    .map((plugin) => ({ pluginId: plugin.id, modulePath: plugin.modulePath, message: plugin.skipReason as string, skipped: true }));
+  const externalManifests = externalFrontendPlugins.filter((plugin) => plugin.skipReason === undefined).map(toPluginManifestFile);
 
   const discovery = await discoverPluginModules(externalManifests);
+  for (const err of skipped) {
+    getNotificationService()?.notify({
+      title: `Plugin skipped: ${err.pluginId}`,
+      message: err.message,
+      severity: "warning"
+    });
+  }
   for (const err of discovery.loadErrors) {
     getNotificationService()?.notify({
       title: `Plugin failed to load: ${err.pluginId}`,
@@ -271,6 +282,7 @@ export async function bootstrapShell() {
       severity: "error"
     });
   }
+  discovery.loadErrors.push(...skipped);
   for (const pluginModule of discovery.modules) {
     host.register(pluginModule.plugin);
   }
