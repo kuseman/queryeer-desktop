@@ -198,7 +198,9 @@ export function buildPluginRows(
   for (const error of diagnostics.externalLoadErrors ?? []) {
     const row = rowFor(error.pluginId);
     row.modulePath ??= error.modulePath;
-    row.frontend = { state: "failed", messages: [...(row.frontend?.messages ?? []), `Failed to load module: ${error.message}`] };
+    row.frontend = error.skipped
+      ? { state: "skipped", messages: [...(row.frontend?.messages ?? []), error.message] }
+      : { state: "failed", messages: [...(row.frontend?.messages ?? []), `Failed to load module: ${error.message}`] };
   }
 
   for (const status of backendStatus?.runtimeStatus?.pluginStatuses ?? []) {

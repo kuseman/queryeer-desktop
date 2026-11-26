@@ -15,6 +15,8 @@ import { FileWatcherMainService } from "./file-watcher/file-watcher-service.js";
 import { DialogMainService } from "./dialog/dialog-service.js";
 import { MenuService } from "./menu/menu-service.js";
 import { discoverExternalFrontendPlugins, discoverFrontendPluginFolders } from "./plugins/frontend-plugin-discovery.js";
+import { checkFrontendCompatibility } from "./plugins/frontend-compatibility.js";
+import { isReleaseBuild } from "./release-build.js";
 import {
   DEV_PLUGINS_ENV,
   DevPluginShadowCopier,
@@ -524,7 +526,7 @@ app.whenReady().then(async () => {
     const developmentIds = new Set(loadable.map((plugin) => plugin.id));
     const managed = (await discoverExternalFrontendPlugins(pluginsDirPath))
       .filter((plugin) => enabledPluginIds.has(plugin.id) && !developmentIds.has(plugin.id));
-    return [...development, ...managed];
+    return checkFrontendCompatibility([...development, ...managed], app.getVersion(), isReleaseBuild(app.getAppPath(), app.isPackaged));
   });
   const driverService = new JdbcDriverArtifactService({
     appDir: appDataDir,

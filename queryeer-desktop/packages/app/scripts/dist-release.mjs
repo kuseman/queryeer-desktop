@@ -23,7 +23,9 @@ run("Build backend jlink runtime", "node scripts/backend-jlink.mjs");
 run("Stage backend release resources", "node scripts/stage-backend-release.mjs");
 run("Test packaged backend", "npm run test:packaged-backend:staged");
 run("Build desktop", "npm run build");
-const versionArgs = releaseVersion ? [`--config.extraMetadata.version=${releaseVersion}`] : [];
+// queryeerRelease: the app enforces plugin version ranges only in a release, whose version is the one it reports.
+// A local package reports package.json's version, the last release's, while its plugins are built for the next one.
+const versionArgs = releaseVersion ? [`--config.extraMetadata.version=${releaseVersion}`, "--config.extraMetadata.queryeerRelease=true"] : [];
 run("Package desktop", ["npx", "electron-builder", "--publish", "never", ...versionArgs, ...builderArgs].join(" "));
 
 console.log("\nRelease distribution build completed.");

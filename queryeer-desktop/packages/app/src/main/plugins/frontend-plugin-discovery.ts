@@ -13,6 +13,7 @@ type PluginManifestV1 = {
   description?: string;
   frontend?: {
     entryModule?: string;
+    apiVersion?: string;
   };
 };
 
@@ -106,6 +107,7 @@ function loadFromFolder(folderPath: string): ExternalFrontendPluginManifest | nu
     name: parsed.name,
     version: parsed.version,
     ...(typeof parsed.description === "string" ? { description: parsed.description } : {}),
+    ...apiVersionOf(parsed),
     modulePath,
     sourcePath: folderPath
   };
@@ -145,9 +147,14 @@ async function loadFromZip(zipPath: string): Promise<ExternalFrontendPluginManif
     name: parsed.name,
     version: parsed.version,
     ...(typeof parsed.description === "string" ? { description: parsed.description } : {}),
+    ...apiVersionOf(parsed),
     modulePath,
     sourcePath: zipPath
   };
+}
+
+function apiVersionOf(parsed: PluginManifestV1): { apiVersion?: string } {
+  return typeof parsed.frontend?.apiVersion === "string" ? { apiVersion: parsed.frontend.apiVersion } : {};
 }
 
 async function extractZipArchive(archive: JSZip, targetRoot: string): Promise<void> {

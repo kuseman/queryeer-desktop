@@ -323,6 +323,7 @@ export class PluginHost {
       pluginId: string;
       modulePath: string;
       message: string;
+      skipped?: boolean;
     }[]
   ): void {
     this.diagnostics = {
