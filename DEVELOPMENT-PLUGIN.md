@@ -110,7 +110,7 @@ Every plugin **must** have a `plugin.json` file at its root. The schema is versi
 }
 ```
 
-Backend plugins may use `backend.factoryClass` instead of `backend.entrypointClass`. The factory form is recommended when construction needs host services. When `backend.classpath` is present, both `root` and at least one `include` pattern are required; this matches backend manifest validation. The checked-in schema also describes trusted shared-runtime declarations used by builtin plugins. Runtime-only manifests are reserved for those builtins and are not an external plugin entrypoint. Compatibility fields such as `frontend.apiVersion` and `backend.minJavaVersion` are currently descriptive and are not yet enforced during discovery.
+Backend plugins may use `backend.factoryClass` instead of `backend.entrypointClass`. The factory form is recommended when construction needs host services. When `backend.classpath` is present, both `root` and at least one `include` pattern are required; this matches backend manifest validation. `runtime.shared` declares what a plugin needs from the backend's shared layer, where JDBC drivers live: package prefixes that load parent-first from it, and native libraries in `libNative` to preload, e.g. a driver's authentication DLL (`queryeer-backend/SHARED_RUNTIME_PLUGINS.md`). Since 0.24 it applies to installed plugins as well as built-in ones; the SQL Server plugin uses it. Compatibility fields such as `frontend.apiVersion` and `backend.minJavaVersion` are currently descriptive and are not yet enforced during discovery.
 
 | Property | Required | Description |
 |----------|----------|-------------|
@@ -969,6 +969,19 @@ const registration = context.editorLanguages.registerDiagnosticsProvider("mongod
 
 Both only help the user write expressions; they don't change how one evaluates. Disposing releases that call's registrations; an entry another plugin registered too stays listed until that plugin's registration is disposed as well.
 
+**Expression functions** (since 0.24): `expressions.registerNamespace(namespace, functions, metadata?)` returns a `Disposable` and adds `functions` as `fn.<namespace>.<name>`, which when-expressions and the `${…}` of action templates (§7.12.2) can call. Queryeer's own are `fn.sql.literal(value)`, `fn.date.add(value, unit, amount)` and `fn.sqlserver.identifier(name)`, which brackets a name (`[a]]b]` for `a]b`).
+
+- Namespaces and names are JavaScript identifiers. A name already registered, by Queryeer or another plugin, throws, and none of that call's functions are added.
+- Expressions run in Queryeer's main process, which gets each function as its source text. A function may use only its arguments and JavaScript's built-ins: not imports, variables or other functions of the plugin. Write an arrow function or a `function` expression: method shorthand (`quote(v) { … }`) and bound functions aren't expressions on their own, so calling one fails with "can't be loaded".
+- Disposing removes them. Actions users made from your templates fail to evaluate while your plugin is disabled.
+
+```ts
+context.expressions.registerNamespace("example", {
+  quote: (value: unknown) => `"${String(value).replace(/"/g, '""')}"`
+});
+// In a template's query: select * from ${fn.example.quote(node.name)}
+```
+
 ### 7.5 Context Menus
 
 | Method | Type | Description |
@@ -1148,7 +1161,7 @@ Execution-context providers and query-event listeners are filtered by the suppli
 
 JDBC dialect frontend plugins can register driver metadata through `jdbcDrivers.registerDriver(contribution)`. The common JDBC settings UI handles status, periodic update checks, notifications, and managed installation. The plugin host records the activating plugin as the contribution owner.
 
-The primary artifact uses Maven Central coordinates. Contributions may add typed, platform-constrained native companion archive declarations. Set `versionLockedToDriver: true` when an applicable companion must share the primary driver's lifecycle and derived release version; the UI keeps separate status rows but exposes one package action. Core manages any plugin's driver, after the user confirms its first install: until then its status has `approvalRequired: true`, and the settings UI shows an approval dialog with the plugin, the Maven coordinates, the companions' sources and the `downloadPageUrl`, so set that to the driver's licence or download page. Changing what the declaration downloads asks again. The builtin SQL Server contribution needs no confirmation, and the main process replaces its metadata with a canonical descriptor. For approved providers, duplicate runtime files are moved to recoverable provider-specific `disabled` folders before Java starts; retained version sets are exposed through `JdbcDriverStatus.disabledSets` and can be restored through the common settings UI. A native companion installs under its archive entry's file name. See [`documentation/JDBC_DRIVER_MANAGEMENT.md`](./documentation/JDBC_DRIVER_MANAGEMENT.md).
+The primary artifact uses Maven Central coordinates. Contributions may add typed, platform-constrained native companion archive declarations. Set `versionLockedToDriver: true` when an applicable companion must share the primary driver's lifecycle and derived release version; the UI keeps separate status rows but exposes one package action. Core manages any plugin's driver, after the user confirms its first install: until then its status has `approvalRequired: true`, and the settings UI shows an approval dialog with the plugin, the Maven coordinates, the companions' sources and the `downloadPageUrl`, so set that to the driver's licence or download page. Changing what the declaration downloads asks again. Since 0.24 there are no built-in drivers that skip it. For approved providers, duplicate runtime files are moved to recoverable provider-specific `disabled` folders before Java starts; retained version sets are exposed through `JdbcDriverStatus.disabledSets` and can be restored through the common settings UI. A native companion installs under its archive entry's file name. See [`documentation/JDBC_DRIVER_MANAGEMENT.md`](./documentation/JDBC_DRIVER_MANAGEMENT.md).
 
 ### 7.12.1 JDBC Dialects
 
@@ -1186,7 +1199,7 @@ public Optional<JdbcConnectionSetupDefinition> connectionSetup()
 | `validate(properties)` | Problems; any problem marks the connection invalid |
 | `supportsQueryPlan` | The backend dialect implements `queryPlanExecutor()`. Turns on Estimated Plan and the Actual Plan toggle for the dialect's files; core then runs the query with the intent `plan.estimated` or `plan.actual` and asks for a plan graph (`{ capability: "plan", kind: "graph" }`), and the backend routes it to `queryPlanExecutor()` |
 
-The built-in SQL Server dialect uses the fields only (in `SqlServerConnectionSetup`, with `visibleWhen` and a Windows-only option). So do the PostgreSQL and SQLite plugins, which moved out of core in 0.24; SQLite's file is a `FILE_PATH` field.
+The SQL Server, PostgreSQL and SQLite plugins, which moved out of core in 0.24, use the fields only: SQL Server's (`SqlServerConnectionSetup`) with `visibleWhen` and a Windows-only option, SQLite's file as a `FILE_PATH` field.
 
 **JDBC connections.** The connections are the setting `core.queryengine.jdbc.connections`, which a plugin reads and writes with `context.settings.getValue` and `setValue`. Until the JDBC frontend has its own API package (`@queryeer/jdbc-api`), this setting is the contract for a plugin that creates a connection, e.g. the SQLite plugin's screen for an opened database file. Its value is an array of:
 
@@ -1716,7 +1729,7 @@ Frontend:
 
 ## 15. Upgrading Plugins to 0.24.0
 
-Nothing a 0.23 plugin has to change, unless it depends on the built-in SQLite or PostgreSQL dialect (below).
+Nothing a 0.23 plugin has to change, unless it depends on the built-in SQL Server, SQLite or PostgreSQL dialect (below).
 
 Backend:
 
@@ -1724,11 +1737,14 @@ Backend:
 - **`PayloadbuilderCatalogProviderContributor.retryAfterFailure`** (§10.1): a catalog can run a failed query once more with changed input properties, e.g. the connection whose endpoint the query set. The default changes nothing.
 - **The SQLite dialect is a plugin** (`com.queryeer.jdbc.sqlite`, from the plugins repository), no longer built in. The built-in plugin id `queryengine.jdbc.dialect.sqlite` is gone: depend on the plugin `com.queryeer.jdbc.sqlite` instead, or require the capability `queryengine.jdbc.dialect.sqlite`, which the plugin provides under the same name. A SQLite driver installed before 0.24 is handed to the plugin once its driver is approved, not downloaded again.
 - **The PostgreSQL dialect is a plugin** (`com.queryeer.jdbc.postgres`), the same way: the built-in plugin id `queryengine.jdbc.dialect.postgres` is gone, the plugin provides the capability `queryengine.jdbc.dialect.postgres`, the dialect id stays `postgres`, and an installed pgJDBC is handed to the plugin once its driver is approved. Its query plans use the public `supportsQueryPlan` and `JdbcDialect.queryPlanExecutor()`.
+- **The SQL Server dialect is a plugin** (`com.queryeer.jdbc.sqlserver`), the same way: the built-in plugin id `queryengine.jdbc.dialect.sqlserver` is gone, the plugin provides the capability `queryengine.jdbc.dialect.sqlserver`, and the dialect id stays `sqlserver`. With it, core has no built-in drivers: the user approves every driver, and an installed mssql-jdbc, with its native authentication library, is handed to the plugin once its driver is approved. Its plan XML setting moved to the plugin's settings (`com.queryeer.jdbc.sqlserver.planXmlOutput`), which copies a saved value once.
+- **`runtime.shared` applies to installed plugins** (§2), not only to built-in ones: parent-first package prefixes, and native libraries to preload. It is how the SQL Server plugin's Windows authentication binds its DLL to the one shared copy of the driver.
 - **JDBC connections are a documented setting** (§7.12.1, "JDBC connections"): a plugin can create one with `context.settings`, as the SQLite plugin does for an opened database file, until `@queryeer/jdbc-api` exists.
 - **The JDBC engine's `jdbc.file.probe` action is gone.** It told whether a file was a SQLite database, and nothing called it.
 
 Frontend:
 
+- **`context.expressions.registerNamespace`** (§7.4) adds functions for when-expressions and action templates, `fn.<namespace>.<name>`. `fn.sqlserver.identifier` stays Queryeer's, for the actions users made from the SQL Server templates while they were built in.
 - **A query can fail with the code `BACKEND_RESTARTED`** (`BackendErrorCode`): the backend stopped while it ran, and Queryeer reports the failure in its place. A plugin that switches over the codes exhaustively has one more to handle.
 
 Payloadbuilder:

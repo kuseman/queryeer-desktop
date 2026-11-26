@@ -92,7 +92,7 @@ type InventoryDocument = {
   disabledSets: DisabledSetEntry[];
   /**
    * Plugin driver contributions the user confirmed before their first install, as they were declared then.
-   * A changed declaration needs a new confirmation. Built-in contributions are approved without one.
+   * A changed declaration needs a new confirmation.
    */
   approved?: RegisteredJdbcManagedDriverContribution[];
 };
@@ -110,43 +110,6 @@ type ActiveArtifactCandidate = {
 };
 
 /**
- * Core's own driver contributions. They are approved without asking, and their declaration here wins over the one
- * the renderer sends, so a plugin cannot change their compatibility policy or companions.
- */
-const BUILTIN_CONTRIBUTIONS: readonly RegisteredJdbcManagedDriverContribution[] = [
-  {
-    ownerPluginId: "core.queryengine.jdbc.sqlserver",
-    dialectId: "sqlserver",
-    groupId: "com.microsoft.sqlserver",
-    artifactId: "mssql-jdbc",
-    driverClassName: "com.microsoft.sqlserver.jdbc.SQLServerDriver",
-    displayName: "Microsoft JDBC Driver for SQL Server",
-    compatibleVersionRegex: "\\.jre11$",
-    downloadPageUrl: "https://learn.microsoft.com/sql/connect/jdbc/download-microsoft-jdbc-driver-for-sql-server",
-    companionArtifacts: [{
-      id: "native-auth",
-      displayName: "Windows Native Authentication",
-      kind: "nativeLibrary",
-      platforms: [{ os: "windows", arch: "x64" }, { os: "windows", arch: "x86" }],
-      source: {
-        type: "githubReleaseArchive",
-        repository: "microsoft/mssql-jdbc",
-        releaseTagTemplate: "v{releaseVersion}",
-        assetName: "mssql-jdbc_auth.zip",
-        driverVersionToReleaseVersion: {
-          pattern: "^([0-9]+\\.[0-9]+\\.[0-9]+)\\.jre[0-9]+$",
-          replacement: "$1"
-        },
-        archiveEntryTemplate: "{arch}/mssql-jdbc_auth-{releaseVersion}.{arch}.dll"
-      },
-      targetDirectory: "libNative",
-      expectedFileExtension: ".dll",
-      versionLockedToDriver: true
-    }]
-  }
-];
-
-/**
  * Built-in dialects that moved out of core into a plugin, old owner id → the plugin's id. The driver a user installed
  * while the dialect was built in, and its retained sets, are re-keyed to the plugin when the inventory is read. Once the
  * user approves the plugin's driver, it adopts that jar instead of refusing to install over it, and startup does not set
@@ -154,7 +117,8 @@ const BUILTIN_CONTRIBUTIONS: readonly RegisteredJdbcManagedDriverContribution[] 
  */
 const MOVED_BUILTIN_DRIVER_OWNERS: Readonly<Record<string, string>> = {
   "core.queryengine.jdbc.sqlite": "com.queryeer.jdbc.sqlite",
-  "core.queryengine.jdbc.postgres": "com.queryeer.jdbc.postgres"
+  "core.queryengine.jdbc.postgres": "com.queryeer.jdbc.postgres",
+  "core.queryengine.jdbc.sqlserver": "com.queryeer.jdbc.sqlserver"
 };
 
 export function defaultJdbcDriverInventoryPath(settingsDir: string): string {
@@ -201,23 +165,20 @@ export class JdbcDriverArtifactService {
   }
 
   /**
-   * The driver classes core manages: the built-in ones and every approved plugin driver. The backend loads one jar
-   * per class from `libShared` when several versions are present.
+   * The driver classes core manages: those of every approved plugin driver. The backend loads one jar per class from
+   * `libShared` when several versions are present.
    */
   public managedDriverClassNames(): string[] {
     return [...new Set(this.managedContributions().map((contribution) => contribution.driverClassName))];
   }
 
-  /** Built-in contributions plus the approved plugin contributions, which startup maintenance runs for. */
+  /** The approved plugin contributions, which startup maintenance runs for. */
   private managedContributions(): RegisteredJdbcManagedDriverContribution[] {
-    const approved = (this.inventory.approved ?? []).filter((contribution) => !BUILTIN_CONTRIBUTIONS.some((builtin) =>
-      sameOwner(builtin, contribution)));
-    return [...BUILTIN_CONTRIBUTIONS, ...approved];
+    return [...(this.inventory.approved ?? [])];
   }
 
   private isApproved(contribution: RegisteredJdbcManagedDriverContribution): boolean {
-    return BUILTIN_CONTRIBUTIONS.includes(contribution)
-      || (this.inventory.approved ?? []).some((approved) => sameDeclaration(approved, contribution));
+    return (this.inventory.approved ?? []).some((approved) => sameDeclaration(approved, contribution));
   }
 
   /** Whether disabled sets of this contribution can be restored: only those of contributions core manages. */
@@ -227,17 +188,10 @@ export class JdbcDriverArtifactService {
 
   /**
    * Why core cannot manage this contribution next to the ones it already manages, or undefined when it can:
-   * - it claims a built-in's plugin ID and dialect with a different declaration;
    * - another managed contribution already uses its driver class, so startup could not tell their jars apart;
    * - one of its native companions has file names that overlap another managed contribution's.
    */
   private managementConflict(contribution: RegisteredJdbcManagedDriverContribution): string | undefined {
-    const builtin = BUILTIN_CONTRIBUTIONS.find((candidate) => sameOwner(candidate, contribution));
-    if (builtin) {
-      return builtin === contribution
-        ? undefined
-        : `This declaration uses the plugin ID of the built-in ${builtin.displayName} with different coordinates`;
-    }
     for (const other of this.managedContributions()) {
       if (sameOwner(other, contribution)) continue;
       if (other.driverClassName === contribution.driverClassName) {
@@ -258,11 +212,11 @@ export class JdbcDriverArtifactService {
 
   /**
    * Records that the user approved core installing this plugin driver, as it is declared now. The renderer asks the
-   * user first (`core.dialog`); install and update refuse a driver without an approval. Built-in drivers need none.
+   * user first (`core.dialog`); install and update refuse a driver without an approval.
    */
   public approve(contributionValue: unknown): Promise<JdbcDriverOperationResult> {
     return this.enqueueMutation(async () => {
-      const contribution = canonicalizeContribution(validateContribution(contributionValue));
+      const contribution = validateContribution(contributionValue);
       const status = (await this.list([contribution]))[0];
       const conflict = this.managementConflict(contribution);
       if (conflict) return rejected(status, conflict);
@@ -894,7 +848,7 @@ export class JdbcDriverArtifactService {
   }
 
   public async list(contributions: unknown): Promise<JdbcDriverStatus[]> {
-    const validated = validateContributions(contributions).map(canonicalizeContribution);
+    const validated = validateContributions(contributions);
     const manual = await this.scanManualDrivers(validated);
     const manualCompanions = await this.scanManualCompanions(validated);
     return validated.map((contribution) => {
@@ -908,7 +862,7 @@ export class JdbcDriverArtifactService {
   }
 
   private async checkInternal(contributions: unknown): Promise<JdbcDriverStatus[]> {
-    const validated = validateContributions(contributions).map(canonicalizeContribution);
+    const validated = validateContributions(contributions);
     for (const contribution of validated) {
       if (this.managementConflict(contribution)) continue;
       const entry = this.getOrCreateEntry(contribution);
@@ -948,7 +902,7 @@ export class JdbcDriverArtifactService {
 
   public restore(contributionValue: unknown, disabledSetIdValue: unknown): Promise<JdbcDriverOperationResult> {
     return this.enqueueMutation(async () => {
-      const contribution = canonicalizeContribution(validateContribution(contributionValue));
+      const contribution = validateContribution(contributionValue);
       const disabledSetId = validateDisabledSetId(disabledSetIdValue);
       let status = (await this.list([contribution]))[0];
       const conflict = this.managementConflict(contribution);
@@ -981,7 +935,7 @@ export class JdbcDriverArtifactService {
 
   public discardRetainedSet(contributionValue: unknown, disabledSetIdValue: unknown): Promise<JdbcDriverOperationResult> {
     return this.enqueueMutation(async () => {
-      const contribution = canonicalizeContribution(validateContribution(contributionValue));
+      const contribution = validateContribution(contributionValue);
       const disabledSetId = validateDisabledSetId(disabledSetIdValue);
       let status = (await this.list([contribution]))[0];
       const conflict = this.managementConflict(contribution);
@@ -1020,7 +974,7 @@ export class JdbcDriverArtifactService {
   }
 
   private async removeInternal(contributionValue: unknown, artifactId?: string): Promise<JdbcDriverOperationResult> {
-    const contribution = canonicalizeContribution(validateContribution(contributionValue));
+    const contribution = validateContribution(contributionValue);
     const status = (await this.list([contribution]))[0];
     const conflict = this.managementConflict(contribution);
     if (conflict) return rejected(status, conflict);
@@ -1047,7 +1001,7 @@ export class JdbcDriverArtifactService {
   }
 
   private async stageInstall(contributionValue: unknown, operation: "install" | "update", artifactId?: string): Promise<JdbcDriverOperationResult> {
-    const contribution = canonicalizeContribution(validateContribution(contributionValue));
+    const contribution = validateContribution(contributionValue);
     let status = (await this.list([contribution]))[0];
     const conflict = this.managementConflict(contribution);
     if (conflict) return rejected(status, conflict);
@@ -1858,19 +1812,6 @@ function companionFileVersion(companion: JdbcDriverCompanionArtifact, name: stri
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function canonicalizeContribution(
-  contribution: RegisteredJdbcManagedDriverContribution
-): RegisteredJdbcManagedDriverContribution {
-  const trusted = BUILTIN_CONTRIBUTIONS.find((candidate) =>
-    candidate.ownerPluginId === contribution.ownerPluginId
-    && candidate.dialectId === contribution.dialectId);
-  if (!trusted) return contribution;
-  const identityMatches = trusted.groupId === contribution.groupId
-    && trusted.artifactId === contribution.artifactId
-    && trusted.driverClassName === contribution.driverClassName;
-  return identityMatches ? trusted : contribution;
 }
 
 function driverKey(contribution: RegisteredJdbcManagedDriverContribution): string {

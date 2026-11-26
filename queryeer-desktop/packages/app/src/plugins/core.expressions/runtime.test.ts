@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ExpressionRuntimeService } from "./runtime";
+import { ExpressionRuntimeService, getExpressionRuntime } from "./runtime";
+import { FunctionRegistry } from "./FunctionRegistry";
 import type { ExpressionBackend, EvaluateRequest } from "./backend";
 
 function createTestBackend(): ExpressionBackend {
@@ -136,6 +137,19 @@ describe("ExpressionRuntimeService synchronous when-expression cache", () => {
     expect(calls[1].functions).toHaveProperty("later");
   });
 
+  it("evaluates again once a function is removed", () => {
+    const { backend, calls } = countingBackend(() => true);
+    const runtime = new ExpressionRuntimeService({ backend, now: () => 0 });
+    const registration = runtime.getFunctionRegistry().registerNamespace("later", { check: () => true });
+
+    runtime.evaluateBooleanSync("fn.later.check()", {});
+    registration.dispose();
+    runtime.evaluateBooleanSync("fn.later.check()", {});
+
+    expect(calls).toHaveLength(2);
+    expect(calls[1].functions).not.toHaveProperty("later");
+  });
+
   it("caches only when-mode results, and never failures", () => {
     let fail = true;
     const { backend, calls } = countingBackend(() => {
@@ -165,5 +179,45 @@ describe("ExpressionRuntimeService synchronous when-expression cache", () => {
     runtime.evaluateBooleanSync("true", cyclic);
 
     expect(calls).toHaveLength(2);
+  });
+});
+
+describe("FunctionRegistry.registerNamespace", () => {
+  it("adds all of a namespace's functions or none of them", () => {
+    const registry = new FunctionRegistry();
+    registry.registerNamespace("plugin", { taken: () => 1 });
+
+    expect(() => registry.registerNamespace("plugin", { fresh: () => 2, taken: () => 3 })).toThrow("'plugin.taken' is already registered");
+    expect(() => registry.registerNamespace("plugin", { "bad-name": () => 2, other: () => 3 })).toThrow("Invalid expression function name 'bad-name'");
+    expect(() => registry.registerNamespace("a.b", { fn: () => 2 })).toThrow("Invalid expression function name 'a.b'");
+    expect(() => registry.registerNamespace("plugin", { notAFunction: "x" as unknown as () => unknown })).toThrow("is not a function");
+    // They would reach Object.prototype when the bindings are built
+    expect(() => registry.registerNamespace("__proto__", { polluted: () => 2 })).toThrow("Invalid expression function name '__proto__'");
+    expect(() => registry.registerNamespace("plugin", JSON.parse('{"constructor": 1}') as Record<string, () => unknown>)).toThrow("'constructor'");
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+
+    expect(registry.listFunctions().map((entry) => entry.fqName)).toEqual(["plugin.taken"]);
+  });
+
+  it("removes only what its registration added", () => {
+    const registry = new FunctionRegistry();
+    const first = registry.registerNamespace("plugin", { a: () => 1 });
+    first.dispose();
+    const second = registry.registerNamespace("plugin", { a: () => 2 });
+
+    first.dispose();
+    expect(registry.listFunctions().map((entry) => entry.fqName)).toEqual(["plugin.a"]);
+    expect(registry.resolveSerializedBindings()).toEqual({ plugin: { a: "() => 2" } });
+
+    second.dispose();
+    expect(registry.listFunctions()).toEqual([]);
+  });
+});
+
+describe("the shared expression runtime", () => {
+  it("offers fn.sqlserver.identifier, which SQL Server templates and actions made from them use", () => {
+    const bindings = getExpressionRuntime().getFunctionRegistry().resolveRuntimeBindings() as { sqlserver: { identifier: (value: unknown) => string } };
+
+    expect(bindings.sqlserver.identifier("Order]Lines")).toBe("[Order]]Lines]");
   });
 });

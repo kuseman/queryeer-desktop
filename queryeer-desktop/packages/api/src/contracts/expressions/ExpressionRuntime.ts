@@ -1,3 +1,5 @@
+import type { Disposable } from "../editor/EditorApi.js";
+
 export type ExpressionMode = "when" | "template" | "value";
 
 export type ExpressionRuntimeOptions = {
@@ -62,4 +64,22 @@ export type RegisteredExpressionFunction = {
   fqName: string;
   fn: ExpressionFunction;
   meta?: ExpressionFunctionMeta;
+};
+
+/**
+ * `context.expressions`: functions for the expressions in templates and when-expressions, called as
+ * `fn.<namespace>.<name>(...)`, e.g. `fn.sqlserver.identifier(node.name)`. Since 0.24.
+ */
+export type ExpressionFunctionRegistry = {
+  /**
+   * Adds `functions` as `fn.<namespace>.<name>`. Namespaces and names are JavaScript identifiers. Expressions run in
+   * Queryeer's main process, which gets each function as its source text: a function may use only its arguments and
+   * JavaScript's built-ins, not imports, variables or other functions of the plugin. Throws, adding none of them, when
+   * a name is invalid or `fn.<namespace>.<name>` is already registered. Disposing removes them.
+   */
+  registerNamespace: (
+    namespace: string,
+    functions: Record<string, ExpressionFunction>,
+    metadata?: Record<string, ExpressionFunctionMeta>
+  ) => Disposable;
 };

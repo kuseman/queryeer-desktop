@@ -23,6 +23,7 @@ import { createJdbcDialectRegistry } from "../../plugins/core.queryengine.jdbc/j
 import { createJdbcTreeActionRegistry } from "../../plugins/core.queryengine.jdbc/tree-action-template-registry";
 import { createSymbolActionRegistry } from "../../plugins/core.queryengine/symbol-action-template-registry";
 import { createWhenExpressionRegistry } from "../../plugins/core.commands/when-expression-variable-registry";
+import { getExpressionRuntime } from "../../plugins/core.expressions/runtime";
 import { getGraphNodeTypeRegistry } from "../../plugins/core.graph/graph-node-type-registry";
 import { registerChangelog } from "../../plugins/core.about/about-service.js";
 import { toDisposable } from "./disposables";
@@ -205,6 +206,10 @@ export class PluginHost {
       jdbcTreeActions: createJdbcTreeActionRegistry(),
       symbolActions: createSymbolActionRegistry(),
       whenExpressions: createWhenExpressionRegistry(),
+      expressions: {
+        registerNamespace: (namespace, functions, metadata) =>
+          getExpressionRuntime().getFunctionRegistry().registerNamespace(namespace, functions, metadata)
+      },
       graphNodeTypes: getGraphNodeTypeRegistry(),
       about: { registerChangelog },
       notifications: getNotificationService(),

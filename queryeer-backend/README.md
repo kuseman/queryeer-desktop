@@ -13,7 +13,6 @@ Standalone Java backend reactor for Queryeer Desktop.
 - `backend-plugin-payloadbuilder-jdbc`: payloadbuilder's jdbc catalog (`queryengine.payloadbuilder.jdbc`), over the JDBC engine's connections
 - `backend-lib-queryengine-sql-parser`: the SQL parser, also the built-in plugin `queryengine.sql.parser`
 - `backend-plugin-jdbc`: JDBC query engine plugin
-- `backend-plugin-dialect-sqlserver`: SQL Server JDBC dialect plugin
 
 ## Build
 
@@ -26,7 +25,7 @@ From repository root:
 Prepare the development backend runner and builtin plugins without tests:
 
 ```bash
-./mvnw -f queryeer-backend/pom.xml -pl backend-runner,backend-lib-queryengine-jdbc-foundation,backend-lib-queryengine-sql-parser,backend-plugin-jdbc,backend-plugin-payloadbuilder,backend-plugin-payloadbuilder-jdbc,backend-plugin-dialect-sqlserver -am -DskipTests=true -DcheckstyleSkip=true install
+./mvnw -f queryeer-backend/pom.xml -pl backend-runner,backend-lib-queryengine-jdbc-foundation,backend-lib-queryengine-sql-parser,backend-plugin-jdbc,backend-plugin-payloadbuilder,backend-plugin-payloadbuilder-jdbc -am -DskipTests=true -DcheckstyleSkip=true install
 ```
 
 The desktop dev transport normally runs that preparation automatically, then starts the backend directly with `java` using `backend-runner/target/classes` plus `backend-runner/target/queryeer-runner-classpath.txt`.
@@ -46,7 +45,7 @@ Use `;` instead of `:` as the classpath separator on Windows.
 - For local dev probe package, staged backend jars should exist in `plugins/dev-query-probe/lib`.
 - Builtin backend plugins are real manifest plugins under `plugins/builtin` during development.
 - Builtin dev manifests point directly at module `target/classes` and Maven-generated `target/queryeer-plugin-deps.txt` files, so a normal backend Maven build refreshes classes and dependency lists without copying plugin classes.
-- Backend plugin ids use the `queryengine.*` namespace, for example `queryengine.jdbc`, `queryengine.payloadbuilder`, and `queryengine.jdbc.dialect.sqlserver`.
+- Backend plugin ids use the `queryengine.*` namespace, for example `queryengine.jdbc`, `queryengine.payloadbuilder`, and `queryengine.sql.parser`.
 - Release packaging should generate a separate production `plugins/builtin` layout under a build output directory. It should not rewrite the repository dev manifests.
 
 ## Backend plugin factory injection

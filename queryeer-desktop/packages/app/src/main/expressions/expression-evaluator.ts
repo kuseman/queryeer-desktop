@@ -8,17 +8,28 @@ type EvaluateExpressionParams = {
   timeoutMs: number;
 };
 
-function materializeFunctions(value: unknown): unknown {
+/**
+ * The registered functions, from their source text. One that doesn't load (e.g. a plugin's method shorthand, `name(v) {}`,
+ * which isn't an expression) throws when it is called, so it doesn't fail every other expression.
+ */
+function materializeFunctions(value: unknown, path = "fn"): unknown {
   if (typeof value === "string") {
-    return runInNewContext(`(${value})`, {});
+    try {
+      return runInNewContext(`(${value})`, {});
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      return () => {
+        throw new Error(`Expression function '${path}' can't be loaded: ${reason}`);
+      };
+    }
   }
   if (Array.isArray(value)) {
-    return value.map((item) => materializeFunctions(item));
+    return value.map((item, index) => materializeFunctions(item, `${path}[${index}]`));
   }
   if (value && typeof value === "object") {
-    const next: Record<string, unknown> = {};
+    const next: Record<string, unknown> = Object.create(null);
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      next[k] = materializeFunctions(v);
+      next[k] = materializeFunctions(v, `${path}.${k}`);
     }
     return next;
   }

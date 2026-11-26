@@ -50,8 +50,8 @@ public final class BackendRunnerModule
         String appDir = config.getOrDefault("queryeer.app.dir", ".");
         String resourcesDir = config.getOrDefault("queryeer.resources.dir", appDir);
         Path builtinsDir = resolveBuiltinsDir(config.get("queryeer.builtins.dir"), Path.of(resourcesDir), Path.of(appDir));
-        List<PluginRuntimeContributionCollector.ManifestSource> builtinManifests = loadBuiltinManifests(builtinsDir);
-        PluginRuntimeContributionCollector.PluginRuntimeContributions runtimeContributions = new PluginRuntimeContributionCollector().collect(builtinManifests);
+        List<PluginRuntimeContributionCollector.ManifestSource> runtimeManifests = loadRuntimeManifests(builtinsDir, config);
+        PluginRuntimeContributionCollector.PluginRuntimeContributions runtimeContributions = new PluginRuntimeContributionCollector().collect(runtimeManifests);
         List<URL> sharedLibUrls = new ArrayList<>(SharedLibraryLoader.collect(config.get("queryeer.app.dir"), SharedLibraryLoader.parseDriverClasses(config.get("queryeer.jdbc.driverClasses"))));
 
         SharedClassLoader sharedLoader = new SharedClassLoader(sharedLibUrls, appClassLoader);
@@ -403,14 +403,66 @@ public final class BackendRunnerModule
                 .toList();
     }
 
-    private List<PluginRuntimeContributionCollector.ManifestSource> loadBuiltinManifests(Path builtinsDir)
+    /**
+     * The manifests whose {@code runtime.shared} section applies to this run: those of the plugins {@link #discoverPlugins} loads, read before it, because the plugin class loaders need the
+     * parent-first prefixes when they are made. Built-ins, then (unless in safe mode) developer folders and installed plugins: a developer folder replaces the installed plugin with its id, and
+     * disabled installed plugins are left out. A manifest that can't be read is skipped here; discovery reports it. Read before discovery, this can't know whether a plugin's backend will load: one
+     * that fails to load, or a broken first copy of an id that discovery skips for a later one, still contributes. An installed plugin's native library never stops startup
+     * ({@link NativeLibraryPreloader.Request#required()}).
+     */
+    static List<PluginRuntimeContributionCollector.ManifestSource> loadRuntimeManifests(Path builtinsDir, Map<String, String> config)
     {
         PluginSourceExplorer sourceExplorer = new PluginSourceExplorer();
         PluginManifestLoader manifestLoader = new PluginManifestLoader();
-        return sourceExplorer.discoverPluginSources(builtinsDir)
+        List<PluginRuntimeContributionCollector.ManifestSource> manifests = new ArrayList<>(sourceExplorer.discoverPluginSources(builtinsDir)
                 .stream()
                 .map(source -> new PluginRuntimeContributionCollector.ManifestSource(manifestLoader.load(source), source))
-                .toList();
+                .toList());
+        if (Boolean.parseBoolean(config.get("queryeer.plugins.safeMode")))
+        {
+            return manifests;
+        }
+
+        Set<String> seenIds = manifests.stream()
+                .map(source -> source.manifest()
+                        .id())
+                .collect(Collectors.toCollection(HashSet::new));
+        Set<String> disabledIds = parseDisabledPluginIds(config.get("queryeer.plugins.disabledIds"));
+        List<Path> sources = new ArrayList<>(parseDevPluginDirs(config.get("queryeer.plugins.devDirs")));
+        int developerFolders = sources.size();
+        String pluginsDir = config.get("queryeer.plugins.dir");
+        if (!isBlank(pluginsDir))
+        {
+            try
+            {
+                sources.addAll(sourceExplorer.discoverPluginSources(Path.of(pluginsDir)));
+            }
+            catch (RuntimeException e)
+            {
+                // Discovery reports an unreadable plugins folder
+            }
+        }
+        for (int i = 0; i < sources.size(); i++)
+        {
+            Path source = sources.get(i);
+            try
+            {
+                PluginManifest manifest = manifestLoader.load(source);
+                boolean installed = i >= developerFolders;
+                if ((installed
+                        && disabledIds.contains(manifest.id()))
+                        || !seenIds.add(manifest.id()))
+                {
+                    continue;
+                }
+                manifests.add(new PluginRuntimeContributionCollector.ManifestSource(manifest, source, false));
+            }
+            catch (RuntimeException e)
+            {
+                // Discovery reports it
+            }
+        }
+        return manifests;
     }
 
     static Path resolveBuiltinsDir(String configuredBuiltinsDir, Path resourcesDir, Path appDir)

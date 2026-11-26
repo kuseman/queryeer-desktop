@@ -28,6 +28,7 @@ import type { JdbcDialectRegistry } from "../queryengine/JdbcDialectExtension.js
 import type { NativeQueryEngineRegistry } from "../queryengine/NativeQueryEngineExtension.js";
 import type { EditorLanguageRegistry } from "../editor/EditorLanguageExtension.js";
 import type { WhenExpressionRegistry } from "../commands/WhenExpressionTypes.js";
+import type { ExpressionFunctionRegistry } from "../expressions/ExpressionRuntime.js";
 import type { SymbolActionRegistry } from "../queryengine/SymbolActionTemplateContribution.js";
 import type { JdbcTreeActionRegistry } from "../settings/TreeActionTemplateContribution.js";
 import type {
@@ -89,6 +90,8 @@ export type PluginContext = {
   symbolActions: SymbolActionRegistry;
   /** Autocompletion variables and ready-made expressions for when-expressions in settings. */
   whenExpressions: WhenExpressionRegistry;
+  /** Functions for expressions in templates and when-expressions (`fn.<namespace>.<name>`). Since 0.24. */
+  expressions: ExpressionFunctionRegistry;
   graphNodeTypes: GraphNodeTypeRegistry;
   about: AboutExtension;
   notifications: NotificationService;
