@@ -420,21 +420,34 @@ jobs:
         working-directory: queryeer-desktop
         shell: bash
         run: |
-          API_VERSION=$(node -p "require('./packages/api/package.json').version")
-          if [ "$API_VERSION" != "$QUERYEER_RELEASE_VERSION" ]; then
-            echo "Desktop API package version $API_VERSION does not match release version $QUERYEER_RELEASE_VERSION."
-            echo "Run the Create Release workflow so the version bump is committed before tagging."
-            exit 1
-          fi
+          for PACKAGE in api jdbc-api payloadbuilder-api; do
+            VERSION=$(node -p "require('./packages/${PACKAGE}/package.json').version")
+            if [ "$VERSION" != "$QUERYEER_RELEASE_VERSION" ]; then
+              echo "@queryeer/${PACKAGE} package version $VERSION does not match release version $QUERYEER_RELEASE_VERSION."
+              echo "Run the Create Release workflow so the version bump is committed before tagging."
+              exit 1
+            fi
+          done
+          for PACKAGE in jdbc-api payloadbuilder-api; do
+            PEER=$(node -p "require('./packages/${PACKAGE}/package.json').peerDependencies['@queryeer/api']")
+            if [ "$PEER" != "^${QUERYEER_RELEASE_VERSION}" ]; then
+              echo "@queryeer/${PACKAGE} needs @queryeer/api $PEER, expected ^${QUERYEER_RELEASE_VERSION}."
+              exit 1
+            fi
+          done
 
-      - name: Build npm package
+      # @queryeer/jdbc-api and @queryeer/payloadbuilder-api re-export from @queryeer/api, so it is built first
+      - name: Build npm packages
         working-directory: queryeer-desktop
-        run: npm run -w @queryeer/api build
+        run: |
+          npm run -w @queryeer/api build
+          npm run -w @queryeer/jdbc-api build
+          npm run -w @queryeer/payloadbuilder-api build
 
       - name: Dry-run npm package publish
         if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
         working-directory: queryeer-desktop
-        run: npm pack -w @queryeer/api --dry-run
+        run: npm pack -w @queryeer/api -w @queryeer/jdbc-api -w @queryeer/payloadbuilder-api --dry-run
 
       # Trusted publishing (OIDC) is configured as stage-only on npmjs.com.
       # The version lands in the stage queue and must be approved by a
@@ -445,25 +458,46 @@ jobs:
         if: github.event_name == 'push'
         run: npm install -g npm@11.21.3
 
-      - name: Stage npm package
+      # Each package has its own trusted publisher on npmjs.com (release.yml, stage-only).
+      # @queryeer/api goes first: the other two need it, so approve it first too.
+      - name: Stage npm packages
         if: github.event_name == 'push'
         working-directory: queryeer-desktop
         shell: bash
         run: |
           set -o pipefail
-          npm stage publish -w @queryeer/api --access public 2>&1 | tee "$RUNNER_TEMP/npm-stage.log"
+          # Tries every package and writes the summary (with the stage ids) even when one fails; a package whose
+          # version is already live is skipped, so a re-run after approving finishes the others
+          FAILED=()
+          for PACKAGE in @queryeer/api @queryeer/jdbc-api @queryeer/payloadbuilder-api; do
+            if npm view "${PACKAGE}@${QUERYEER_RELEASE_VERSION}" version >/dev/null 2>&1; then
+              echo "${PACKAGE}@${QUERYEER_RELEASE_VERSION} is already published; skipped." | tee -a "$RUNNER_TEMP/npm-stage.log"
+              continue
+            fi
+            npm stage publish -w "$PACKAGE" --access public 2>&1 | tee -a "$RUNNER_TEMP/npm-stage.log" || FAILED+=("$PACKAGE")
+          done
           {
-            echo "### npm package staged — approval required"
+            if [ "${#FAILED[@]}" -ne 0 ]; then
+              echo "### npm staging failed for: ${FAILED[*]}"
+              echo
+              echo "Stage them by hand from the release tag (DEVELOPMENT.md, npm Publishing → Manual recovery publish)."
+              echo
+            fi
+            echo "### npm packages staged — approval required"
             echo
-            echo "\`@queryeer/api@${QUERYEER_RELEASE_VERSION}\` is in the npm stage queue and is **not live** until a maintainer approves it."
+            echo "\`@queryeer/api\`, \`@queryeer/jdbc-api\` and \`@queryeer/payloadbuilder-api\` ${QUERYEER_RELEASE_VERSION} are in the npm stage queue and are **not live** until a maintainer approves them, \`@queryeer/api\` first."
             echo
-            echo "- Approve on https://www.npmjs.com/package/@queryeer/api (staged versions), or"
-            echo "- run \`npm stage approve <stage-id>\` (2FA required). Stage id is in the output below."
+            echo "- Approve each on npmjs.com (the package's staged versions), or"
+            echo "- run \`npm stage approve <stage-id>\` (2FA required). Stage ids are in the output below."
             echo
             echo '```'
             cat "$RUNNER_TEMP/npm-stage.log"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${#FAILED[@]}" -ne 0 ]; then
+            echo "npm staging failed for: ${FAILED[*]}"
+            exit 1
+          fi
 
   publish:
     name: Publish GitHub Release
