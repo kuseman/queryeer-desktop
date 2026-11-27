@@ -12,7 +12,7 @@ on:
         default: true
         type: boolean
       release_version:
-        description: Optional version to validate against. Defaults to the package/project version for dry runs.
+        description: Optional version to rehearse, e.g. the next release before Create Release has bumped to it (the version checks are skipped). Defaults to the package/project version.
         required: false
         type: string
 
@@ -62,10 +62,57 @@ jobs:
       - name: Run backend clean verify
         run: ./queryeer-backend/mvnw -f queryeer-backend/pom.xml clean verify
 
+  # Picks the bundled plugins once, so every platform ships the same versions even when a plugin is released during the run
+  bundled-plugins:
+    name: Pick Bundled Plugins
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set release version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          else
+            RELEASE_VERSION="${{ inputs.release_version }}"
+            if [ -z "$RELEASE_VERSION" ]; then
+              RELEASE_VERSION=$(node -p "require('./queryeer-desktop/packages/app/package.json').version")
+            fi
+          fi
+          echo "QUERYEER_RELEASE_VERSION=${RELEASE_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24.22.1"
+
+      # The Java the release ships: the build jobs make its runtime with jlink from the same JDK
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          java-version: "25.0.5+0.3.1"
+          distribution: zulu
+
+      - name: Pick and download the bundled plugins from the plugin catalog
+        run: node queryeer-desktop/packages/app/scripts/bundle-plugins.mjs --java-home "$JAVA_HOME" --out "$RUNNER_TEMP/bundled-plugins"
+
+      - name: Upload bundled plugins
+        uses: actions/upload-artifact@v7
+        with:
+          name: bundled-plugins
+          path: ${{ runner.temp }}/bundled-plugins
+          if-no-files-found: error
+
   build:
     name: Build ${{ matrix.name }} Distribution
     runs-on: ${{ matrix.os }}
-    needs: backend-verify
+    needs:
+      - backend-verify
+      - bundled-plugins
     permissions:
       contents: read
     strategy:
@@ -100,7 +147,9 @@ jobs:
           fi
           echo "QUERYEER_RELEASE_VERSION=${RELEASE_VERSION}" >> "$GITHUB_ENV"
 
+      # A dry run with release_version rehearses a version the packages aren't bumped to yet
       - name: Validate desktop package versions
+        if: github.event_name == 'push' || inputs.release_version == ''
         shell: bash
         run: |
           APP_VERSION=$(node -p "require('./queryeer-desktop/packages/app/package.json').version")
@@ -160,8 +209,16 @@ jobs:
         working-directory: queryeer-desktop
         run: npm run test
 
+      - name: Download bundled plugins
+        uses: actions/download-artifact@v8
+        with:
+          name: bundled-plugins
+          path: ${{ runner.temp }}/bundled-plugins
+
       - name: Build distribution
         working-directory: queryeer-desktop
+        env:
+          QUERYEER_BUNDLED_PLUGINS_FROM: ${{ runner.temp }}/bundled-plugins
         run: npm run dist:release
 
       - name: Verify macOS application signature
@@ -191,7 +248,10 @@ jobs:
   publish-maven-central:
     name: Publish Maven Central
     runs-on: ubuntu-24.04
-    needs: backend-verify
+    # Not before the bundled plugins are picked: a release that can't bundle them must not publish anything
+    needs:
+      - backend-verify
+      - bundled-plugins
     permissions:
       actions: read
       contents: read
@@ -246,6 +306,7 @@ jobs:
           echo "QUERYEER_RELEASE_VERSION=${RELEASE_VERSION}" >> "$GITHUB_ENV"
 
       - name: Validate backend version
+        if: github.event_name == 'push' || inputs.release_version == ''
         shell: bash
         run: |
           BACKEND_VERSION=$(./queryeer-backend/mvnw -q -f queryeer-backend/pom.xml -DforceStdout help:evaluate -Dexpression=project.version)
@@ -318,7 +379,9 @@ jobs:
   publish-npm:
     name: Publish npm Package
     runs-on: ubuntu-24.04
-    needs: backend-verify
+    needs:
+      - backend-verify
+      - bundled-plugins
     permissions:
       contents: read
       id-token: write
@@ -353,6 +416,7 @@ jobs:
           echo "QUERYEER_RELEASE_VERSION=${RELEASE_VERSION}" >> "$GITHUB_ENV"
 
       - name: Validate npm package version
+        if: github.event_name == 'push' || inputs.release_version == ''
         working-directory: queryeer-desktop
         shell: bash
         run: |
@@ -430,9 +494,11 @@ jobs:
       - name: Generate release changelog
         run: node queryeer-desktop/packages/app/scripts/generate-changelog.mjs
 
+      # Only the installers: the bundled-plugins artifact ships inside them
       - name: Download artifacts
         uses: actions/download-artifact@v8
         with:
+          pattern: queryeer-*
           path: release-artifacts
           merge-multiple: true
 

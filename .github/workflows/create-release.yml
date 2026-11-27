@@ -80,6 +80,14 @@ jobs:
           echo "NEXT_SNAPSHOT=${NEXT_SNAPSHOT}" >> "$GITHUB_OUTPUT"
           echo "Releasing version: ${NEW_VERSION}, next backend snapshot: ${NEXT_SNAPSHOT}"
 
+      # Before anything is committed or tagged: the release fails on a bundled plugin that isn't in the plugin catalog
+      # or has no version this release can run, after the tag exists. The release run picks the versions again.
+      - name: Check that the bundled plugins can be bundled
+        shell: bash
+        env:
+          QUERYEER_RELEASE_VERSION: ${{ steps.versions.outputs.NEW_VERSION }}
+        run: node queryeer-desktop/packages/app/scripts/bundle-plugins.mjs --java-home "$JAVA_HOME" --out "$RUNNER_TEMP/bundled-plugins-check"
+
       - name: Install dependencies
         working-directory: queryeer-desktop
         run: npm ci
