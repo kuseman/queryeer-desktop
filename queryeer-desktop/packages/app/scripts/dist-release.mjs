@@ -21,6 +21,9 @@ process.env.QUERYEER_CHANGELOG_FULL = "true";
 run("Generate changelog", "node scripts/generate-changelog.mjs");
 run("Build backend jlink runtime", "node scripts/backend-jlink.mjs");
 run("Stage backend release resources", "node scripts/stage-backend-release.mjs");
+// After staging, which empties the release resources. A release copies the bundle its first job picked
+// (QUERYEER_BUNDLED_PLUGINS_FROM); a local package picks from the catalog itself.
+run("Stage bundled plugins", "node scripts/bundle-plugins.mjs");
 run("Test packaged backend", "npm run test:packaged-backend:staged");
 run("Build desktop", "npm run build");
 // queryeerRelease: the app enforces plugin version ranges only in a release, whose version is the one it reports.

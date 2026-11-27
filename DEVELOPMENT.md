@@ -157,17 +157,19 @@ To try a bundle in a development run, set `QUERYEER_BUNDLED_PLUGINS_DIR` to a fo
 
 Release builds are local-first: the same `queryeer-desktop` scripts used by GitHub Actions can be run on a workstation before creating a real release.
 
-From `queryeer-desktop/`, create a local test release directory build:
+From `queryeer-desktop/`, create a local test release directory build, with the version about to be released (the bundled plugins and the app check their version ranges against it):
 
 ```bash
-QUERYEER_RELEASE_VERSION=0.1.0-test npm run dist:release -- --dir
+QUERYEER_RELEASE_VERSION=0.24.0 npm run dist:release -- --dir
 ```
 
 Build the platform installer/package for the current OS:
 
 ```bash
-QUERYEER_RELEASE_VERSION=0.1.0-test npm run dist:release
+QUERYEER_RELEASE_VERSION=0.24.0 npm run dist:release
 ```
+
+Without `QUERYEER_RELEASE_VERSION` it is a local package: it reports the last release's version, checks no version ranges, and leaves out a bundled plugin it can't bundle (e.g. one not released yet) with a warning, where a release fails. `QUERYEER_SKIP_BUNDLED_PLUGINS=true` packages it without bundled plugins, e.g. offline.
 
 The release build performs these steps:
 
@@ -175,14 +177,15 @@ The release build performs these steps:
 - Builds the Java backend modules and creates a jlink runtime image.
 - Builds backend-owned plugin distributions with Maven Assembly under each plugin module's `target/<pluginId>/` directory.
 - Stages production backend resources under `queryeer-desktop/dist/release-resources/` from those assembled plugin distributions.
+- Stages the bundled plugins under `dist/release-resources/plugins/bundled/` (`scripts/bundle-plugins.mjs`). The plugins are listed in `packages/app/bundled-plugins.json`; for each one it takes the newest version in the [plugin catalog](https://github.com/kuseman/queryeer-desktop-plugins/blob/master/specs/plugin-catalog.md) that is not a prerelease and is compatible by its manifest: `frontend.apiVersion` and the ranges of required dependencies against the release version (or a bundled dependency's chosen version), `backend.minJavaVersion` against the jlink runtime. `requiredCapabilities` aren't checked. It downloads each ZIP, checks it against the catalog's sha256 and writes `bundled-plugins.lock.json`. A plugin that isn't in the catalog or has no compatible version fails the release, so release a plugin the release bundles before the release itself. `QUERYEER_PLUGIN_CATALOG_URL` reads another catalog (a URL or a file).
 - Runs Electron Builder, bundling the generated changelog into the app root so the About dialog can read `CHANGELOG.md`.
 
 The repository `plugins/builtin` directory is development scaffolding only. Release packaging must not rewrite those manifests.
 
 GitHub release automation is split into two workflows:
 
-- `create-release.yml`: manually dispatched with `major`, `minor`, or `patch`. It computes the next `vX.Y.Z`, bumps desktop and backend to that release version, commits and tags the release, then moves the backend Maven reactor to the next `-SNAPSHOT` version.
-- `release.yml`: triggered by `v*` tags. It verifies the backend, uploads the whitelisted public backend artifacts for asynchronous Maven Central publication, stages `@queryeer/api` on npmjs (see [npm Publishing](#npm-publishing)), builds unsigned Windows, macOS, and Linux distributions in a matrix, generates the release changelog, and publishes a real GitHub release with the platform artifacts. GitHub release creation does not wait for Maven Central. Manual `workflow_dispatch` runs exercise the read-only release-history and Central-coordinate checks but skip Maven Central, npmjs, and GitHub release publishing.
+- `create-release.yml`: manually dispatched with `major`, `minor`, or `patch`. It computes the next `vX.Y.Z`, checks that the bundled plugins can be bundled for it (so a missing or incompatible plugin stops the release before anything is tagged), bumps desktop and backend to that release version, commits and tags the release, then moves the backend Maven reactor to the next `-SNAPSHOT` version.
+- `release.yml`: triggered by `v*` tags. It verifies the backend, uploads the whitelisted public backend artifacts for asynchronous Maven Central publication, stages `@queryeer/api` on npmjs (see [npm Publishing](#npm-publishing)), picks the bundled plugins once in its own job (`bundled-plugins`, which the platform builds copy through `QUERYEER_BUNDLED_PLUGINS_FROM`, so every platform ships the same versions; the job summary lists them; Maven Central and npmjs publish only after it succeeds), builds unsigned Windows, macOS, and Linux distributions in a matrix, generates the release changelog, and publishes a real GitHub release with the platform artifacts. GitHub release creation does not wait for Maven Central. Manual `workflow_dispatch` runs exercise the read-only release-history and Central-coordinate checks but skip Maven Central, npmjs, and GitHub release publishing. Their `release_version` rehearses a version the packages aren't bumped to yet, e.g. the next release with its bundled plugins: the installers report that version and the package version checks are skipped. Without it, a dry run builds the packages' version.
 - `recover-maven-release.yml`: manually verifies an existing Central deployment and release coordinates. It waits for in-progress deployments, resumes validated deployments, and only re-uploads after Central reports the original deployment as failed and no release coordinates exist.
 - `recover-release.yml`: manually creates a missing GitHub release from distribution artifacts produced by an earlier release workflow run after verifying that the run commit matches the release tag.
 

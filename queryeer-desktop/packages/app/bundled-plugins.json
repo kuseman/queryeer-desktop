@@ -1,0 +1,12 @@
+{
+  "catalogUrl": "https://kuseman.github.io/queryeer-desktop-plugins/catalog/list.json",
+  "plugins": [
+    "com.queryeer.elasticsearch",
+    "com.queryeer.jdbc.mysql",
+    "com.queryeer.jdbc.postgres",
+    "com.queryeer.jdbc.sqlite",
+    "com.queryeer.jdbc.sqlserver",
+    "com.queryeer.kafka",
+    "com.queryeer.mongodb"
+  ]
+}
