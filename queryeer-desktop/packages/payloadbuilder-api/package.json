@@ -1,0 +1,39 @@
+{
+  "name": "@queryeer/payloadbuilder-api",
+  "version": "0.23.0",
+  "description": "TypeScript API for Queryeer Desktop plugins that extend its payloadbuilder query engine",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kuseman/queryeer-desktop.git",
+    "directory": "queryeer-desktop/packages/payloadbuilder-api"
+  },
+  "bugs": {
+    "url": "https://github.com/kuseman/queryeer-desktop/issues"
+  },
+  "homepage": "https://github.com/kuseman/queryeer-desktop#readme",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "peerDependencies": {
+    "@queryeer/api": "^0.23.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts"
+  }
+}

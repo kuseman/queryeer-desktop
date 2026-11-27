@@ -95,8 +95,16 @@ jobs:
       - name: Set desktop release version
         working-directory: queryeer-desktop
         run: |
-          npm version -w @queryeer/app ${{ steps.versions.outputs.NEW_VERSION }} --no-git-tag-version --allow-same-version
-          npm version -w @queryeer/api ${{ steps.versions.outputs.NEW_VERSION }} --no-git-tag-version --allow-same-version
+          # The engine API packages are versioned with @queryeer/api and need it at that version. npm version reifies
+          # the workspace, so the order matters: their peer range moves first (the old ^0.23.0 excludes 0.24.0 and
+          # fails with ERESOLVE), then @queryeer/api (until it is at the new version npm looks for it on the registry,
+          # ETARGET), then the rest. npm pkg set doesn't touch the lock; the npm version calls after it update it.
+          for PACKAGE in @queryeer/jdbc-api @queryeer/payloadbuilder-api; do
+            npm pkg set -w "$PACKAGE" "peerDependencies.@queryeer/api=^${{ steps.versions.outputs.NEW_VERSION }}"
+          done
+          for PACKAGE in @queryeer/api @queryeer/jdbc-api @queryeer/payloadbuilder-api @queryeer/app; do
+            npm version -w "$PACKAGE" ${{ steps.versions.outputs.NEW_VERSION }} --no-git-tag-version --allow-same-version
+          done
 
       - name: Update @queryeer/api ranges in examples and plugin guide
         shell: bash
@@ -128,7 +136,7 @@ jobs:
 
       - name: Commit and tag release
         run: |
-          git add queryeer-desktop/package.json queryeer-desktop/package-lock.json queryeer-desktop/packages/app/package.json queryeer-desktop/packages/api/package.json queryeer-backend plugins-examples DEVELOPMENT-PLUGIN.md
+          git add queryeer-desktop/package.json queryeer-desktop/package-lock.json queryeer-desktop/packages/app/package.json queryeer-desktop/packages/api/package.json queryeer-desktop/packages/jdbc-api/package.json queryeer-desktop/packages/payloadbuilder-api/package.json queryeer-backend plugins-examples DEVELOPMENT-PLUGIN.md
           git commit -m "release: v${{ steps.versions.outputs.NEW_VERSION }}"
           git tag v${{ steps.versions.outputs.NEW_VERSION }}
 

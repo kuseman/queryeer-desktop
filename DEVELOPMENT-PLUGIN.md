@@ -508,6 +508,8 @@ copy-item -Recurse .\dist\ "$env:APPDATA\queryeer-desktop\plugins\my-plugin"
 # 7. Launch Queryeer — the plugin is discovered and activated automatically
 ```
 
+A plugin that extends a query engine also installs that engine's API package (since 0.24), versioned with `@queryeer/api`: `@queryeer/jdbc-api` for JDBC dialects, drivers and tree contributions, `@queryeer/payloadbuilder-api` for payloadbuilder catalogs. For now they re-export those types from `@queryeer/api`; import them from the engine package, and the imports stay the same when the definitions move there.
+
 ZIP archives can also be placed directly in the same managed plugins directory.
 
 ---
@@ -1206,7 +1208,7 @@ public Optional<JdbcConnectionSetupDefinition> connectionSetup()
 
 The SQL Server, PostgreSQL and SQLite plugins, which moved out of core in 0.24, use the fields only: SQL Server's (`SqlServerConnectionSetup`) with `visibleWhen` and a Windows-only option, SQLite's file as a `FILE_PATH` field.
 
-**JDBC connections.** The connections are the setting `core.queryengine.jdbc.connections`, which a plugin reads and writes with `context.settings.getValue` and `setValue`. Until the JDBC frontend has its own API package (`@queryeer/jdbc-api`), this setting is the contract for a plugin that creates a connection, e.g. the SQLite plugin's screen for an opened database file. Its value is an array of:
+**JDBC connections.** The connections are the setting `core.queryengine.jdbc.connections`, which a plugin reads and writes with `context.settings.getValue` and `setValue`. Until `@queryeer/jdbc-api` has a connections API (since 0.24 it has the JDBC types only), this setting is the contract for a plugin that creates a connection, e.g. the SQLite plugin's screen for an opened database file. Its value is an array of:
 
 | Field | Description |
 |-------|-------------|
@@ -1746,7 +1748,7 @@ Backend:
 - **The PostgreSQL dialect is a plugin** (`com.queryeer.jdbc.postgres`), the same way: the built-in plugin id `queryengine.jdbc.dialect.postgres` is gone, the plugin provides the capability `queryengine.jdbc.dialect.postgres`, the dialect id stays `postgres`, and an installed pgJDBC is handed to the plugin once its driver is approved. Its query plans use the public `supportsQueryPlan` and `JdbcDialect.queryPlanExecutor()`.
 - **The SQL Server dialect is a plugin** (`com.queryeer.jdbc.sqlserver`), the same way: the built-in plugin id `queryengine.jdbc.dialect.sqlserver` is gone, the plugin provides the capability `queryengine.jdbc.dialect.sqlserver`, and the dialect id stays `sqlserver`. With it, core has no built-in drivers: the user approves every driver, and an installed mssql-jdbc, with its native authentication library, is handed to the plugin once its driver is approved. Its plan XML setting moved to the plugin's settings (`com.queryeer.jdbc.sqlserver.planXmlOutput`), which copies a saved value once.
 - **`runtime.shared` applies to installed plugins** (§2), not only to built-in ones: parent-first package prefixes, and native libraries to preload. It is how the SQL Server plugin's Windows authentication binds its DLL to the one shared copy of the driver.
-- **JDBC connections are a documented setting** (§7.12.1, "JDBC connections"): a plugin can create one with `context.settings`, as the SQLite plugin does for an opened database file, until `@queryeer/jdbc-api` exists.
+- **JDBC connections are a documented setting** (§7.12.1, "JDBC connections"): a plugin can create one with `context.settings`, as the SQLite plugin does for an opened database file, until `@queryeer/jdbc-api` has a connections API.
 - **The JDBC engine's `jdbc.file.probe` action is gone.** It told whether a file was a SQLite database, and nothing called it.
 
 Frontend:

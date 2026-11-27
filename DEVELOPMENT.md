@@ -191,11 +191,15 @@ GitHub release automation is split into two workflows:
 
 #### npm Publishing
 
-`@queryeer/api` is published with npm trusted publishing (GitHub OIDC); no npm token is stored in the repository. The trusted publisher on npmjs.com is `kuseman/queryeer-desktop`, workflow `release.yml`, and it is configured as **stage-only**: the `publish-npm` job runs `npm stage publish`, which puts the version in the npm stage queue instead of making it live.
+`@queryeer/api`, `@queryeer/jdbc-api` and `@queryeer/payloadbuilder-api` are published with npm trusted publishing (GitHub OIDC); no npm token is stored in the repository. Each package has its own trusted publisher on npmjs.com: `kuseman/queryeer-desktop`, workflow `release.yml`, configured as **stage-only**: the `publish-npm` job runs `npm stage publish` for each, which puts the version in the npm stage queue instead of making it live.
 
-After every release run, a maintainer must approve the staged version (2FA required), either:
+The two engine API packages (since 0.24) are versioned with `@queryeer/api` and need it at the same version (`peerDependencies`, set by `create-release.yml`). For now they re-export the JDBC and payloadbuilder types from `@queryeer/api`, so plugins can import from them already; the definitions move into them later.
 
-- on https://www.npmjs.com/package/@queryeer/api (staged versions), or
+A new npm package can only get a trusted publisher once it exists, so its first version is published by hand (a placeholder `0.0.0`, as for the engine API packages), and npm asks for a first publish from the workflow within a few days to validate the trusted publisher. If that window passes, remove the trusted publisher and add it again shortly before the release.
+
+After every release run, a maintainer must approve each staged version (2FA required), `@queryeer/api` first, either:
+
+- on the package's page on npmjs.com (staged versions), e.g. https://www.npmjs.com/package/@queryeer/api, or
 - with `npm stage approve <stage-id>`. The stage id is in the `publish-npm` job summary.
 
 Approval waits for npm's malware scan. The GitHub Release and Maven Central do not wait for approval, so approve right after the run; until then plugins cannot install the new `@queryeer/api` version.
@@ -209,8 +213,10 @@ git checkout vX.Y.Z
 cd queryeer-desktop
 npm ci
 npm run -w @queryeer/api build
+npm run -w @queryeer/jdbc-api build
+npm run -w @queryeer/payloadbuilder-api build
 npm login                 # opens the browser to sign in
-npm publish -w @queryeer/api --access public
+npm publish -w @queryeer/api --access public   # then the same for each engine API package the job didn't stage
 ```
 
 Use `npm stage publish` instead of `npm publish` to keep the approval step. 2FA works as follows:
