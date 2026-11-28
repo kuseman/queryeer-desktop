@@ -365,7 +365,7 @@ export class JdbcDriverArtifactService {
         if (!companionEntry?.managedFile || !companionEntry.installedSha256 || existsSync(companionEntry.managedFile)) continue;
         let expectedVersion: string;
         try {
-          expectedVersion = this.installedCompanionVersion(companion, driverEntry, companionEntry, driverEntry.installedVersion);
+          expectedVersion = this.releaseVersion(companion, driverEntry.installedVersion);
         } catch {
           continue;
         }
@@ -535,9 +535,8 @@ export class JdbcDriverArtifactService {
         if (selectedDriver?.version) {
           let releaseVersion: string | undefined;
           try {
-            releaseVersion = inventoryEntry
-              ? this.installedCompanionVersion(companion, inventoryEntry, companionEntry, selectedDriver.version)
-              : this.releaseVersion(companion, selectedDriver.version);
+            // Only the library of the driver's own version loads; a managed one from another release is set aside
+            releaseVersion = this.releaseVersion(companion, selectedDriver.version);
           } catch {
             releaseVersion = undefined;
           }
@@ -718,12 +717,6 @@ export class JdbcDriverArtifactService {
     if (!candidate.version || candidate.kind === "nativeLibrary") return candidate.version;
     const companion = candidate.contribution.companionArtifacts?.find((artifact) => artifact.versionLockedToDriver);
     if (!companion) return candidate.version;
-    const driverEntry = this.findEntry(candidate.contribution);
-    const companionEntry = driverEntry ? this.findCompanionEntry(driverEntry, companion.id) : undefined;
-    if (candidate.file === driverEntry?.managedFile && driverEntry.installedVersion === candidate.version
-      && companionEntry?.installedForDriverVersion === candidate.version && companionEntry.installedVersion) {
-      return companionEntry.installedVersion;
-    }
     try {
       return this.releaseVersion(companion, candidate.version);
     } catch {
@@ -867,9 +860,18 @@ export class JdbcDriverArtifactService {
       if (this.managementConflict(contribution)) continue;
       const entry = this.getOrCreateEntry(contribution);
       try {
-        entry.latestVersion = await this.fetchLatestVersion(contribution);
+        const lockedCompanions = this.lockedCompanions(contribution);
+        const lockedPackage = await this.resolveLockedPackage(contribution, lockedCompanions);
+        entry.latestVersion = lockedPackage.driverVersion;
         for (const companion of contribution.companionArtifacts ?? []) {
           const companionEntry = this.getOrCreateCompanionEntry(entry, companion.id);
+          const lockedIndex = lockedCompanions.indexOf(companion);
+          if (lockedIndex >= 0) {
+            companionEntry.latestVersion = lockedPackage.companionReleases[lockedIndex].version;
+            companionEntry.error = undefined;
+            companionEntry.lastCheckedAt = entry.lastCheckedAt;
+            continue;
+          }
           const requestedVersion = this.releaseVersion(companion, entry.latestVersion);
           companionEntry.latestVersion = this.isApplicable(companion)
             ? (await this.resolveCompanionRelease(companion, requestedVersion)).version
@@ -1087,16 +1089,16 @@ export class JdbcDriverArtifactService {
     const bundleId = `${contribution.dialectId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const stagedFiles: string[] = [];
     try {
-      const driverVersion = await this.fetchLatestVersion(contribution);
-      const companionReleases = await Promise.all(companions.map((companion) =>
-        this.resolveCompanionRelease(companion, this.releaseVersion(companion, driverVersion))));
+      const { driverVersion, companionReleases } = await this.resolveLockedPackage(contribution, companions);
       const versions = [driverVersion, ...companionReleases.map((release) => release.version)];
       const membersHealthy = await Promise.all(members.map(async (entry, index) => Boolean(entry.managedFile
         && entry.installedVersion === versions[index]
         && entry.installedSha256
         && existsSync(entry.managedFile)
         && await fileSha256(entry.managedFile) === entry.installedSha256)));
-      if (operation === "update" && membersHealthy.every(Boolean)) {
+      // An update goes to an older driver only to repair a package whose versions don't match
+      const older = Boolean(driverEntry.installedVersion && compareVersions(driverVersion, driverEntry.installedVersion) < 0);
+      if (operation === "update" && (membersHealthy.every(Boolean) || (older && !initialStatus.versionMismatch))) {
         return rejected(initialStatus, "The managed JDBC driver package is already at the latest compatible version");
       }
       const contents = await Promise.all([
@@ -1172,6 +1174,11 @@ export class JdbcDriverArtifactService {
   }
 
   private async fetchLatestVersion(contribution: RegisteredJdbcManagedDriverContribution): Promise<string> {
+    return (await this.fetchCompatibleVersions(contribution)).at(-1)!;
+  }
+
+  /** The driver's compatible release versions on Maven Central, oldest first; never empty. */
+  private async fetchCompatibleVersions(contribution: RegisteredJdbcManagedDriverContribution): Promise<string[]> {
     const path = `${contribution.groupId.replaceAll(".", "/")}/${contribution.artifactId}/maven-metadata.xml`;
     const response = await this.fetchFixed(`${MAVEN_ROOT}/${path}`);
     if (!response.ok) throw new Error(`Maven metadata request failed with HTTP ${response.status}`);
@@ -1185,10 +1192,99 @@ export class JdbcDriverArtifactService {
         && !/snapshot/i.test(version)
         && !/(?:^|[.-])(?:alpha|beta|rc|cr|milestone|preview|ea|m)\d*(?:[.-]|$)/i.test(version)
         && (!compatible || compatible.test(version)))
-      .sort(compareVersions)
-      .at(-1);
-    if (!selected) throw new Error("Maven metadata contains no compatible release version");
+      .sort(compareVersions);
+    if (selected.length === 0) throw new Error("Maven metadata contains no compatible release version");
     return selected;
+  }
+
+  /**
+   * The newest driver version whose version-locked companions all have a release of exactly the mapped version, with
+   * those releases. A driver loads its native library by a name built from its own version (SQL Server's 13.6.3 loads
+   * `mssql-jdbc_auth-13.6.3.x64`), so a companion from another release never loads; when a driver patch reaches Maven
+   * Central before its native release, the package stays on the previous driver until the release exists.
+   */
+  private async resolveLockedPackage(
+    contribution: RegisteredJdbcManagedDriverContribution,
+    companions: JdbcDriverCompanionArtifact[]
+  ): Promise<{ driverVersion: string; companionReleases: ResolvedCompanionRelease[] }> {
+    const versions = await this.fetchCompatibleVersions(contribution);
+    const latest = versions.at(-1)!;
+    if (companions.length === 0) return { driverVersion: latest, companionReleases: [] };
+
+    // The newest driver usually has its releases: one request per companion
+    const exact = await Promise.all(companions.map((companion) => {
+      let releaseVersion: string;
+      try {
+        releaseVersion = this.releaseVersion(companion, latest);
+      } catch {
+        return undefined;
+      }
+      return this.fetchExactCompanionRelease(companion, releaseVersion);
+    }));
+    if (exact.every((release) => release !== undefined)) {
+      return { driverVersion: latest, companionReleases: exact as ResolvedCompanionRelease[] };
+    }
+
+    // Otherwise one release listing per companion, searched from the newest driver down
+    const published = await Promise.all(companions.map((companion) => this.fetchPublishedCompanionReleases(companion)));
+    for (const driverVersion of [...versions].reverse()) {
+      const releases: ResolvedCompanionRelease[] = [];
+      for (let index = 0; index < companions.length; index += 1) {
+        let releaseVersion: string;
+        try {
+          releaseVersion = this.releaseVersion(companions[index], driverVersion);
+        } catch {
+          break;
+        }
+        const metadata = published[index].get(releaseVersion);
+        if (!metadata) break;
+        releases.push({ version: releaseVersion, metadata });
+      }
+      if (releases.length === companions.length) return { driverVersion, companionReleases: releases };
+    }
+    const names = companions.map((companion) => companion.displayName).join(", ");
+    throw new Error(`No version of ${contribution.displayName} has a matching ${names} release`);
+  }
+
+  /** The release of exactly this version, or undefined when GitHub has none. */
+  private async fetchExactCompanionRelease(
+    companion: JdbcDriverCompanionArtifact,
+    releaseVersion: string
+  ): Promise<ResolvedCompanionRelease | undefined> {
+    const tag = companion.source.releaseTagTemplate.replace("{releaseVersion}", releaseVersion);
+    const response = await this.fetchGitHub(
+      `${GITHUB_API_ORIGIN}/repos/${companion.source.repository}/releases/tags/${encodeURIComponent(tag)}`,
+      false
+    );
+    if (response.status === 404) return undefined;
+    if (!response.ok) throw new Error(`GitHub release metadata request failed with HTTP ${response.status}`);
+    const metadata = await response.json() as GitHubReleaseMetadata;
+    // The same releases the listing accepts
+    return metadata.draft !== true && metadata.prerelease !== true
+      && metadata.assets?.some((asset) => asset.name === companion.source.assetName)
+      ? { version: releaseVersion, metadata }
+      : undefined;
+  }
+
+  /** The companion's published releases that carry its asset, by release version. */
+  private async fetchPublishedCompanionReleases(companion: JdbcDriverCompanionArtifact): Promise<Map<string, GitHubReleaseMetadata>> {
+    const markerIndex = companion.source.releaseTagTemplate.indexOf("{releaseVersion}");
+    if (markerIndex < 0) throw new Error(`${companion.displayName}'s release tag template has no {releaseVersion}`);
+    const prefix = companion.source.releaseTagTemplate.slice(0, markerIndex);
+    const suffix = companion.source.releaseTagTemplate.slice(markerIndex + "{releaseVersion}".length);
+    const response = await this.fetchGitHub(
+      `${GITHUB_API_ORIGIN}/repos/${companion.source.repository}/releases?per_page=100`,
+      false
+    );
+    if (!response.ok) throw new Error(`GitHub releases request failed with HTTP ${response.status}`);
+    const published = new Map<string, GitHubReleaseMetadata>();
+    for (const metadata of await response.json() as GitHubReleaseMetadata[]) {
+      if (metadata.draft === true || metadata.prerelease === true || typeof metadata.tag_name !== "string"
+        || !metadata.tag_name.startsWith(prefix) || !metadata.tag_name.endsWith(suffix)
+        || !metadata.assets?.some((asset) => asset.name === companion.source.assetName)) continue;
+      published.set(metadata.tag_name.slice(prefix.length, suffix ? -suffix.length : undefined), metadata);
+    }
+    return published;
   }
 
   private async downloadAndVerify(contribution: RegisteredJdbcManagedDriverContribution, version: string): Promise<Buffer> {
@@ -1465,13 +1561,10 @@ export class JdbcDriverArtifactService {
       let mismatch = false;
       if (primary.installedVersion) {
         try {
+          // Strict: the driver loads only the companion of its own version. Earlier versions could pair a driver patch
+          // with the previous patch's library; such a package shows as mismatched, and its update repairs it.
           mismatch = !companionStatus.installedVersion
-            || companionStatus.installedVersion !== this.installedCompanionVersion(
-              declaration,
-              entry,
-              entry ? this.findCompanionEntry(entry, declaration.id) : undefined,
-              primary.installedVersion
-            );
+            || companionStatus.installedVersion !== this.releaseVersion(declaration, primary.installedVersion);
         } catch {
           mismatch = true;
         }
@@ -1574,19 +1667,6 @@ export class JdbcDriverArtifactService {
     const expression = new RegExp(companion.source.driverVersionToReleaseVersion.pattern);
     if (!expression.test(driverVersion)) throw new Error(`Driver version '${driverVersion}' cannot be mapped to a native release`);
     return driverVersion.replace(expression, companion.source.driverVersionToReleaseVersion.replacement);
-  }
-
-  private installedCompanionVersion(
-    companion: JdbcDriverCompanionArtifact,
-    driverEntry: InventoryEntry | undefined,
-    companionEntry: CompanionInventoryEntry | undefined,
-    driverVersion: string
-  ): string {
-    if (companionEntry?.installedForDriverVersion === driverVersion && companionEntry.installedVersion) {
-      return companionEntry.installedVersion;
-    }
-    if (driverEntry?.latestVersion === driverVersion && companionEntry?.latestVersion) return companionEntry.latestVersion;
-    return this.releaseVersion(companion, driverVersion);
   }
 
   private async readInventory(): Promise<InventoryDocument> {

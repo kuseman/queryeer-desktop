@@ -125,6 +125,35 @@ function sqlServerFetch(
   }) as typeof fetch;
 }
 
+/** Maven Central with these SQL Server driver jars, and GitHub with native releases of these versions. */
+function sqlServerLineFetch(jars: Record<string, Buffer>, nativeZips: Record<string, Buffer>): typeof fetch {
+  const releases = Object.entries(nativeZips).map(([version, zip]) => ({
+    tag_name: `v${version}`,
+    assets: [{
+      name: "mssql-jdbc_auth.zip",
+      browser_download_url: `https://github.com/microsoft/mssql-jdbc/releases/download/v${version}/mssql-jdbc_auth.zip`,
+      digest: `sha256:${createHash("sha256").update(zip).digest("hex")}`
+    }]
+  }));
+  return vi.fn(async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.endsWith("maven-metadata.xml")) {
+      const versions = Object.keys(jars).map((version) => `<version>${version}</version>`).join("");
+      return new Response(`<metadata><versioning><versions>${versions}</versions></versioning></metadata>`);
+    }
+    const jarVersion = Object.keys(jars).find((version) => url.endsWith(`/mssql-jdbc-${version}.jar`)
+      || url.endsWith(`/mssql-jdbc-${version}.jar.sha256`));
+    if (jarVersion && url.endsWith(".jar.sha256")) return new Response(createHash("sha256").update(jars[jarVersion]).digest("hex"));
+    if (jarVersion) return new Response(Uint8Array.from(jars[jarVersion]));
+    const release = releases.find((candidate) => url === `https://api.github.com/repos/microsoft/mssql-jdbc/releases/tags/${candidate.tag_name}`);
+    if (release) return Response.json(release);
+    if (url === "https://api.github.com/repos/microsoft/mssql-jdbc/releases?per_page=100") return Response.json(releases);
+    const zipVersion = Object.keys(nativeZips).find((version) => url.endsWith(`/v${version}/mssql-jdbc_auth.zip`));
+    if (zipVersion) return new Response(Uint8Array.from(nativeZips[zipVersion]));
+    return new Response(null, { status: 404 });
+  }) as typeof fetch;
+}
+
 function mavenFetch(versions: string[], jar: Buffer, checksum = createHash("sha256").update(jar).digest("hex")): typeof fetch {
   return vi.fn(async (input: string | URL | Request) => {
     const url = String(input);
@@ -150,6 +179,8 @@ describe("JdbcDriverArtifactService", () => {
         "13.0.0-rc1.jre11",
         "13.0.0.jre11-SNAPSHOT"
       ], jar),
+      // Maven selection only: on Windows the native library's release would also decide the version
+      platform: "linux",
       now: () => new Date("2026-08-15T12:00:00.000Z")
     });
     await service.initialize();
@@ -622,47 +653,165 @@ describe("JdbcDriverArtifactService", () => {
     expect(readdirSync(join(appDir, "libNative")).filter((name) => name.includes("queryeer-managed"))).toEqual([]);
   });
 
-  it("uses the 13.6.0 native release for the Java-only 13.6.1 SQL Server patch", async () => {
-    const zip = await nativeArchive("x64/mssql-jdbc_auth-13.6.0.x64.dll");
-    const jar = await driverJar(sqlServer.driverClassName, "13.6.1.jre11");
-    const fetch = sqlServerFetch(zip, jar, undefined, "13.6.1.jre11", "13.6.0");
+  it("stays on the 13.6.0 SQL Server driver while the 13.6.1 patch has no native release", async () => {
+    const jars = {
+      "13.6.0.jre11": await driverJar(sqlServer.driverClassName, "13.6.0.jre11"),
+      "13.6.1.jre11": await driverJar(sqlServer.driverClassName, "13.6.1.jre11")
+    };
+    const nativeZips: Record<string, Buffer> = { "13.6.0": await nativeArchive("x64/mssql-jdbc_auth-13.6.0.x64.dll") };
+    const fetch = sqlServerLineFetch(jars, nativeZips);
     const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch, platform: "win32", arch: "x64" });
     await service.initialize();
 
+    const checked = (await service.check([sqlServer]))[0];
+    expect(checked.latestVersion).toBe("13.6.0.jre11");
+    expect(checked.artifacts?.find((artifact) => artifact.id === "native-auth")).toMatchObject({ latestVersion: "13.6.0" });
+
     const install = await service.install(sqlServer);
 
+    // The 13.6.1 driver loads only mssql-jdbc_auth-13.6.1, so the package is the 13.6.0 pair
     expect(install.accepted).toBe(true);
     expect(install.status.artifacts).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: "mssql-jdbc", installedVersion: "13.6.1.jre11" }),
+      expect.objectContaining({ id: "mssql-jdbc", installedVersion: "13.6.0.jre11" }),
       expect.objectContaining({ id: "native-auth", installedVersion: "13.6.0" })
     ]));
-    expect(fetch).toHaveBeenCalledWith(
-      "https://api.github.com/repos/microsoft/mssql-jdbc/releases/tags/v13.6.1",
-      expect.anything()
-    );
-    expect(fetch).toHaveBeenCalledWith(
-      "https://api.github.com/repos/microsoft/mssql-jdbc/releases?per_page=100",
-      expect.anything()
-    );
-
+    expect(fetch).toHaveBeenCalledWith("https://api.github.com/repos/microsoft/mssql-jdbc/releases/tags/v13.6.1", expect.anything());
+    expect(fetch).toHaveBeenCalledWith("https://api.github.com/repos/microsoft/mssql-jdbc/releases?per_page=100", expect.anything());
     await service.applyPending();
-    const exactZip = await nativeArchive("x64/mssql-jdbc_auth-13.6.1.x64.dll");
-    const exactFetch = sqlServerFetch(exactZip, jar, undefined, "13.6.1.jre11", "13.6.1");
-    const restarted = new JdbcDriverArtifactService({ appDir, settingsDir, fetch: exactFetch, platform: "win32", arch: "x64" });
-    await restarted.initialize();
-    const restartedStatus = (await restarted.list([sqlServer]))[0];
-    expect(restartedStatus.versionMismatch).toBeUndefined();
-    expect(restartedStatus.warning).toBeUndefined();
+    expect(readdirSync(join(appDir, "libShared"))).toContain("000-queryeer-managed-mssql-jdbc-13.6.0.jre11.jar");
+    expect(readdirSync(join(appDir, "libNative"))).toContain("mssql-jdbc_auth-13.6.0.x64.dll");
 
-    const checked = (await restarted.check([sqlServer]))[0];
-    expect(checked.versionMismatch).toBeUndefined();
-    expect(checked.artifacts?.find((artifact) => artifact.id === "native-auth"))
-      .toMatchObject({ installedVersion: "13.6.0", latestVersion: "13.6.1", updateAvailable: true });
+    // Once the 13.6.1 native release exists, the 13.6.1 pair is the update
+    nativeZips["13.6.1"] = await nativeArchive("x64/mssql-jdbc_auth-13.6.1.x64.dll");
+    const restarted = new JdbcDriverArtifactService({
+      appDir, settingsDir, fetch: sqlServerLineFetch(jars, nativeZips), platform: "win32", arch: "x64"
+    });
+    await restarted.initialize();
+    expect((await restarted.list([sqlServer]))[0].versionMismatch).toBeUndefined();
+    const rechecked = (await restarted.check([sqlServer]))[0];
+    expect(rechecked).toMatchObject({ installedVersion: "13.6.0.jre11", latestVersion: "13.6.1.jre11", updateAvailable: true });
+    expect(rechecked.versionMismatch).toBeUndefined();
 
     const update = await restarted.update(sqlServer);
     expect(update.accepted).toBe(true);
     expect(update.status.artifacts?.find((artifact) => artifact.id === "native-auth"))
       .toMatchObject({ latestVersion: "13.6.1", pendingOperation: "update" });
+    await restarted.applyPending();
+    expect(readdirSync(join(appDir, "libShared")).filter((name) => name.startsWith("000-queryeer-managed-mssql")))
+      .toEqual(["000-queryeer-managed-mssql-jdbc-13.6.1.jre11.jar"]);
+    expect(readdirSync(join(appDir, "libNative")).filter((name) => name.endsWith(".dll")))
+      .toEqual(["mssql-jdbc_auth-13.6.1.x64.dll"]);
+  });
+
+  it("doesn't update a matching SQL Server package to an older driver", async () => {
+    const jars = {
+      "13.6.0.jre11": await driverJar(sqlServer.driverClassName, "13.6.0.jre11"),
+      "13.6.1.jre11": await driverJar(sqlServer.driverClassName, "13.6.1.jre11")
+    };
+    const service = new JdbcDriverArtifactService({
+      appDir,
+      settingsDir,
+      fetch: sqlServerLineFetch(jars, { "13.6.1": await nativeArchive("x64/mssql-jdbc_auth-13.6.1.x64.dll") }),
+      platform: "win32",
+      arch: "x64"
+    });
+    await service.initialize();
+    expect((await service.install(sqlServer)).accepted).toBe(true);
+    await service.applyPending();
+
+    // 13.6.2 has no native release yet, and the 13.6.1 release is past the listing's first page: only 13.6.0 is found
+    const restarted = new JdbcDriverArtifactService({
+      appDir,
+      settingsDir,
+      fetch: sqlServerLineFetch(
+        { ...jars, "13.6.2.jre11": await driverJar(sqlServer.driverClassName, "13.6.2.jre11") },
+        { "13.6.0": await nativeArchive("x64/mssql-jdbc_auth-13.6.0.x64.dll") }
+      ),
+      platform: "win32",
+      arch: "x64"
+    });
+    await restarted.initialize();
+
+    const update = await restarted.update(sqlServer);
+
+    expect(update.accepted).toBe(false);
+    expect(update.reason).toBe("The managed JDBC driver package is already at the latest compatible version");
+    expect(readdirSync(join(appDir, "libShared")).filter((name) => name.startsWith("000-queryeer-managed-mssql")))
+      .toEqual(["000-queryeer-managed-mssql-jdbc-13.6.1.jre11.jar"]);
+  });
+
+  it("ignores a native prerelease for the newest SQL Server driver", async () => {
+    const jars = {
+      "13.6.0.jre11": await driverJar(sqlServer.driverClassName, "13.6.0.jre11"),
+      "13.6.1.jre11": await driverJar(sqlServer.driverClassName, "13.6.1.jre11")
+    };
+    const fetchStable = sqlServerLineFetch(jars, { "13.6.0": await nativeArchive("x64/mssql-jdbc_auth-13.6.0.x64.dll") });
+    const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input) === "https://api.github.com/repos/microsoft/mssql-jdbc/releases/tags/v13.6.1") {
+        return Response.json({ tag_name: "v13.6.1", prerelease: true, assets: [{ name: "mssql-jdbc_auth.zip" }] });
+      }
+      return fetchStable(input, init);
+    }) as typeof globalThis.fetch;
+    const service = new JdbcDriverArtifactService({ appDir, settingsDir, fetch, platform: "win32", arch: "x64" });
+    await service.initialize();
+
+    const [status] = await service.check([sqlServer]);
+
+    expect(status.latestVersion).toBe("13.6.0.jre11");
+  });
+
+  it("repairs a SQL Server package whose native library is from another patch", async () => {
+    const jars = {
+      "13.6.0.jre11": await driverJar(sqlServer.driverClassName, "13.6.0.jre11"),
+      "13.6.1.jre11": await driverJar(sqlServer.driverClassName, "13.6.1.jre11")
+    };
+    const zip = await nativeArchive("x64/mssql-jdbc_auth-13.6.0.x64.dll");
+    // What earlier versions installed: the 13.6.1 driver with the 13.6.0 library, which that driver never loads
+    const jarPath = join(appDir, "libShared", "000-queryeer-managed-mssql-jdbc-13.6.1.jre11.jar");
+    const nativePath = join(appDir, "libNative", "mssql-jdbc_auth-13.6.0.x64.dll");
+    const dll = Buffer.from([0x4d, 0x5a, 0x01, 0x02]);
+    mkdirSync(join(appDir, "libShared"), { recursive: true });
+    mkdirSync(join(appDir, "libNative"), { recursive: true });
+    writeFileSync(jarPath, jars["13.6.1.jre11"]);
+    writeFileSync(nativePath, dll);
+    writeFileSync(defaultJdbcDriverInventoryPath(settingsDir), JSON.stringify({
+      version: 2,
+      approved: [sqlServer],
+      disabledSets: [],
+      drivers: [{
+        ownerPluginId: sqlServer.ownerPluginId,
+        dialectId: sqlServer.dialectId,
+        managedFile: jarPath,
+        installedVersion: "13.6.1.jre11",
+        installedSha256: createHash("sha256").update(jars["13.6.1.jre11"]).digest("hex"),
+        latestVersion: "13.6.1.jre11",
+        companions: [{
+          id: "native-auth",
+          managedFile: nativePath,
+          installedVersion: "13.6.0",
+          installedSha256: createHash("sha256").update(dll).digest("hex"),
+          installedForDriverVersion: "13.6.1.jre11",
+          latestVersion: "13.6.0"
+        }]
+      }]
+    }));
+    const service = new JdbcDriverArtifactService({
+      appDir, settingsDir, fetch: sqlServerLineFetch(jars, { "13.6.0": zip }), platform: "win32", arch: "x64"
+    });
+    await service.initialize();
+
+    const status = (await service.list([sqlServer]))[0];
+    expect(status).toMatchObject({ versionMismatch: true, updateAvailable: true });
+
+    const update = await service.update(sqlServer);
+    expect(update.accepted).toBe(true);
+    await service.applyPending();
+    expect(readdirSync(join(appDir, "libShared")).filter((name) => name.startsWith("000-queryeer-managed-mssql")))
+      .toEqual(["000-queryeer-managed-mssql-jdbc-13.6.0.jre11.jar"]);
+    const repaired = (await service.list([sqlServer]))[0];
+    expect(repaired).toMatchObject({ installedVersion: "13.6.0.jre11" });
+    expect(repaired.versionMismatch).toBeUndefined();
+    expect(repaired.artifacts?.find((artifact) => artifact.id === "native-auth")).toMatchObject({ installedVersion: "13.6.0" });
   });
 
   it("prefers an exact SQL Server native release when it becomes available", async () => {
