@@ -1,6 +1,6 @@
 {
   "name": "@queryeer/payloadbuilder-api",
-  "version": "0.23.0",
+  "version": "0.24.0",
   "description": "TypeScript API for Queryeer Desktop plugins that extend its payloadbuilder query engine",
   "license": "MIT",
   "type": "module",
@@ -29,7 +29,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "peerDependencies": {
-    "@queryeer/api": "^0.23.0"
+    "@queryeer/api": "^0.24.0"
   },
   "scripts": {
     "build": "tsc",
